@@ -3,7 +3,7 @@
 ## What it does
 
 `LAZPANEL` opens a dialog with one button per headline calofin command
--- 90 of them across 204 buttons, because the pages come in two kinds
+-- 91 of them across 206 buttons, because the pages come in two kinds
 and a tool that serves two jobs sits on both. (Both numbers are
 *checked*, not counted by hand: `tools/check_registry.py` computes them
 off the tree and `make check` fails when the prose disagrees.)

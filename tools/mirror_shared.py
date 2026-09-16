@@ -877,6 +877,62 @@ TOOLS = {
         # table the twin no longer carries
         'replace': [(FONT_PROSE, FONT_PROSE_SHARED)],
     },
+    'LAZSIDE': {
+        'src': 'lisp/lazside/LAZSIDE.lsp',
+        # The fourth chart form, and the same kit: it draws into a DCL
+        # image tile, which takes line segments and nothing else, so it
+        # carries the same copy of the machinery the other three did.
+        # The library has it; these are the swaps, and the map is also
+        # the written statement that the copies are the same code --
+        # let one drift and --check fails on the next regeneration.
+        'swap': {
+            # the ink table: one body, and the library's is it
+            'lzv:ink': 'cal:ink',
+            'lzv:glyph': 'cal:imgglyph',
+            'lzv:text': 'cal:imgtext',
+            'lzv:textw': 'cal:imgtextw',
+            'lzv:texth': 'cal:imgtexth',
+            'lzv:plinepx': 'cal:imgpline',
+            'lzv:flatten': 'cal:imgflatten',
+            'lzv:arcpts': 'cal:imgarcpts',
+            'lzv:trim': 'cal:trim',
+            'lzv:answer': 'cal:formanswer',
+            'lzv:plural': 'cal:plural',
+            'lzv:join': 'cal:andjoin',
+            # the key=value record a recalled sheet is stored as
+            'lzv:kvsplit': 'cal:kvsplit',
+            'lzv:kvhas': 'cal:kvhas',
+            'lzv:kvpack': 'cal:kvpack',
+            'lzv:kvunpack': 'cal:kvunpack',
+        },
+        # the font, its metrics and the tile palette are constants, so
+        # they move as globals: dropped here, renamed at every mention
+        # by 'symbols' below (a bare global is never "(name", so the
+        # swap map's call-site rewrite would not see it)
+        'drop_globals': ['lzv:*font*', 'lzv:*font-w*',
+                         'lzv:*font-h*', 'lzv:*font-adv*',
+                         'lzv:*col-line*', 'lzv:*col-back*',
+                         'lzv:*col-dim*', 'lzv:*col-val*',
+                         'lzv:*col-hi*'],
+        'symbols': {
+            # the prose names it too, and prose that names a helper the
+            # twin does not define is the drift this file exists to stop
+            'lzv:answer': 'cal:formanswer',
+            'lzv:*font-adv*': 'cal:*imgfont-adv*',
+            'lzv:*font-w*': 'cal:*imgfont-w*',
+            'lzv:*font-h*': 'cal:*imgfont-h*',
+            'lzv:*font*': 'cal:*imgfont*',
+            'lzv:*col-line*': 'cal:*imgcol-line*',
+            'lzv:*col-back*': 'cal:*imgcol-back*',
+            'lzv:*col-dim*': 'cal:*imgcol-dim*',
+            'lzv:*col-val*': 'cal:*imgcol-val*',
+            'lzv:*col-hi*': 'cal:*imgcol-hi*',
+        },
+        # the section header survives the drop -- top_span stops at a
+        # ;;; block -- so the prose under it would be left explaining a
+        # table the twin no longer carries
+        'replace': [(FONT_PROSE, FONT_PROSE_SHARED)],
+    },
     'LAZSTEP': {
         'src': 'lisp/lazstep/LAZSTEP.lsp',
         # THE CHART-FORM KIT.  All three forms draw into a DCL image

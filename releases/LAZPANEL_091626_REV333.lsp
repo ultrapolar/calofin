@@ -348,6 +348,7 @@
     ("LAZDIAG"          "Error report for the last failure")
     ("LAZFORM"          "Pool from a filled-in chart")
     ("LAZLOG"           "What every command has done lately")
+    ("LAZSIDE"          "Side view from a filled-in section")
     ("LAZTXT"           "The same form, drawn in tiles")
     ("LAZFORMCOVER"     "Chart to pool, no bottom")
     ("LAZSPA"           "Spa from a filled-in chart")
@@ -442,6 +443,7 @@
      ("Shape"
       "POOL"
       "POOLSIDE"
+      "LAZSIDE"
       "LAZFORM"
       "LAZTXT"
       "OASIS"
@@ -619,6 +621,7 @@
       "LAZFORM"
       "LAZTXT"
       "LAZFORMCOVER"
+      "LAZSIDE"
       "LAZSPA"
       "SPA"
       "SPACOVCREATE"

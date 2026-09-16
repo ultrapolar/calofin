@@ -52,10 +52,16 @@
 ;;;  POOL-NOTES (notes) -- so a POOLSIDE section drops under a POOL
 ;;;  plan without a layer to reconcile.
 ;;;
+;;;  A FORM CAN ANSWER ALL OF IT.  LAZSIDE fills a section in and hands
+;;;  the answers over in psd:*form*; every question below looks there
+;;;  first, so a filled-in sheet leaves nothing at the command line but
+;;;  the base point.  See "form answers" below for the three states and
+;;;  why an answer is REMOVED as it is read.
+;;;
 ;;;  A self-contained file: it carries its own helpers.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.5")
+(setq *poolside-version* "v1.6")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -288,6 +294,95 @@
 
 (defun psd:osdown () (setvar "OSMODE" 0))
 
+;;; -------------------- form answers -----------------------------------
+;;;
+;;;  A form -- LAZSIDE, or the VB palette -- can answer some or all of
+;;;  POOLSIDE's questions before the run starts.  It leaves them in
+;;;  psd:*form* as (key . value) and the ask helpers below look there
+;;;  first, so a filled-in sheet drives the whole run and a half-filled
+;;;  one simply shortens it.  This is POOL's own store, same shape and
+;;;  same three states, because the two tools ask for the same letters
+;;;  and a sheet ought to mean the same thing to both.
+;;;
+;;;    key absent      the form did not answer it   -> ask, as usual
+;;;    (key . nil)     the form answered NA         -> nil, no prompt
+;;;    (key . 84.0)    the form answered it         -> 84.0, no prompt
+;;;
+;;;  (assoc key ...) tells those apart; (cdr (assoc ...)) alone cannot.
+;;;
+;;;  THE KEYS are the letters, lower-cased: b, c, d, c2 and one per run
+;;;  (h g f e, or e2 f2 g f1 e1 on a Sport) -- psd:key is what spells
+;;;  them, so the form and the prompts cannot drift.  style is the
+;;;  bottom type, as one of the keywords psd:*btypes* lists, and mirror
+;;;  is the Yes or No that swaps the section end for end.  The base
+;;;  POINT is never form-answered: it is picked in the drawing with the
+;;;  operator's own snaps live, which is the one thing a form cannot do
+;;;  for them.
+;;;
+;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used -- removed.
+;;;  Otherwise Back deadlocks: step back onto a form-answered question,
+;;;  it answers itself instantly and walks forward again, and there is
+;;;  no key to press to get out.  Consuming is also what gives the two
+;;;  RANGE CHECKS their way out -- a D that is not deeper than C is
+;;;  re-asked through psd:ask, and the second pass finds the store
+;;;  empty and lets the operator type the correction rather than being
+;;;  re-fed the same bad number for ever.
+
+(setq psd:*form* nil)
+
+;; Did the form answer KEY at all?  This is the absent/nil distinction
+;; that (cdr (assoc ...)) throws away.
+(defun psd:fhas (key) (if (assoc key psd:*form*) t nil))
+
+;; The form's answer for KEY, removed from the store as it is read.
+(defun psd:ftake (key / p)
+  (setq p (assoc key psd:*form*))
+  (setq psd:*form* (vl-remove p psd:*form*))
+  (cdr p))
+
+(defun psd:fclear () (setq psd:*form* nil))
+
+;; The form's NUMBER for KEY, spent as it is read.  Anything that is
+;; not a positive number is no answer at all: a sheet cannot talk the
+;; run into a zero-length pool, and a nil here means NA, which every
+;; caller of this one handles for itself.
+(defun psd:fnum (key / v)
+  (setq v (psd:ftake key))
+  (if (and (numberp v) (> v 0.0)) v))
+
+;; The canonical spelling of V in the space-separated list KWS, or nil
+;; when it is not one of them -- so a word the live prompt would not
+;; accept falls through to the prompt instead of being forced through.
+(defun psd:fkword (v kws / i n c w out)
+  (setq i 1 n (strlen kws) w "" v (strcase v))
+  (while (<= i (1+ n))
+    (setq c (if (<= i n) (substr kws i 1) " "))
+    (if (= c " ")
+        (progn
+          (if (and (/= w "") (= (strcase w) v)) (setq out w))
+          (setq w ""))
+        (setq w (strcat w c)))
+    (setq i (1+ i)))
+  out)
+
+;; The form's keyword for KEY against the live list KWS: the canonical
+;; keyword, DFLT when the form said nil (what Enter means at every
+;; keyword prompt here), or nil when the form did not answer -- which
+;; is the caller's cue to ask.
+(defun psd:fkw (key kws dflt / v)
+  (if (psd:fhas key)
+    (progn
+      (setq v (psd:ftake key))
+      (cond ((null v) dflt)
+            ((and (= (type v) 'STR) (setq v (psd:fkword v kws))) v)))))
+
+;; Run POOLSIDE with a form's answers already in hand.  Nothing here
+;; is a command the operator types: a form sets psd:*form* itself and
+;; calls c:POOLSIDE, which is what the tests do.
+(defun psd:run-with-answers (answers)
+  (setq psd:*form* answers)
+  (c:POOLSIDE))
+
 ;; Keyword question.  kws is the initget string, shown the bracketed
 ;; list, dflt the Enter answer (nil = an answer is required).  Returns
 ;; the keyword or PSD-BACK.  Undo is a hidden synonym of Back.
@@ -356,11 +451,30 @@
   (foreach p ans (if (not (eq (car p) key)) (setq out (cons p out))))
   (reverse (cons (cons key v) out)))
 
+;; Is V an answer this KIND of question would have accepted?  REQ
+;; takes a positive measurement and nothing else; NAX takes that or NA
+;; (nil); ZER takes zero as well.  These are the same three rules
+;; psd:asks hands initget, written out so a FORM answer is held to
+;; exactly what the prompt would have held it to -- a sheet cannot talk
+;; the run into a negative run or a zero-length pool.
+(defun psd:fok (kind v)
+  (cond ((eq kind 'REQ) (and (numberp v) (> v 0.0)))
+        ((eq kind 'ZER) (or (null v) (and (numberp v) (>= v 0.0))))
+        (t              (or (null v) (and (numberp v) (> v 0.0))))))
+
 (defun psd:askseq (items / ans i n it v asked)
   (setq ans nil i 0 n (length items) asked nil)
   (while (< i n)
-    (setq it (nth i items)
-          v (psd:asks (cadr it) (caddr it) (cadddr it) (if asked t nil)))
+    (setq it (nth i items))
+    ;; THE FORM ANSWERS FIRST, and its answer is SPENT as it is read:
+    ;; an answer the prompt would have refused is spent too and then
+    ;; asked for properly, and stepping Back onto a form-answered
+    ;; question finds the store empty and prompts, which is what keeps
+    ;; Back from deadlocking on a filled-in sheet.
+    (setq v (if (psd:fhas (car it)) (psd:ftake (car it)) 'PSD-ASK))
+    (if (not (psd:fok (cadr it) v)) (setq v 'PSD-ASK))
+    (if (eq v 'PSD-ASK)
+      (setq v (psd:asks (cadr it) (caddr it) (cadddr it) (if asked t nil))))
     (if (eq v 'PSD-BACK)
         ;; Back is not offered on the first question, so there is
         ;; always somewhere to step back to
@@ -660,7 +774,7 @@
 
 (defun c:POOLSIDE ( / *error* undo-open style base total doff th chain pv ans
                       wh dp c2 runs cv fixed sta segs mir sgn i s p q
-                      maxd ydim odl xc xd xb y m)
+                      maxd ydim odl xc xd xb y m fv)
 
   (defun *error* (msg)
     (if (and msg
@@ -672,6 +786,7 @@
     (psd:pvkill)
     (if undo-open (setq undo-open (psd:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (psd:fclear)                        ; both exits clear the form store
     (if lzd:report (lzd:report "POOLSIDE" *poolside-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "POOLSIDE" *poolside-version*))
@@ -696,8 +811,11 @@
   ;; run is shaped by
   (setq base 'RETRY)
   (while (eq base 'RETRY)
-    (setq style (psd:askkw "Bottom type" psd:*btypes* psd:*btshown*
-                           "Normal" nil))
+    ;; the form can name the bottom; anything psd:*btypes* does not
+    ;; list falls through to the prompt rather than being forced in
+    (if (null (setq style (psd:fkw 'style psd:*btypes* "Normal")))
+      (setq style (psd:askkw "Bottom type" psd:*btypes* psd:*btshown*
+                             "Normal" nil)))
     ;; the base point is picked with the user's own snaps still live;
     ;; only afterwards do snaps drop for the command-fed drawing work.
     ;; It is the top LEFT of the section -- the waterline at the left
@@ -717,7 +835,9 @@
   (psd:ensure-layer "DIMENSION" 2)
   (psd:ensure-layer "POOL-NOTES" 3)
 
-  (setq total (psd:ask "B - overall length, wall to wall")
+  (setq total (if (setq fv (psd:fnum 'b))
+                  fv
+                  (psd:ask "B - overall length, wall to wall"))
         doff  (max 12.0 (/ total 18.0))
         th    (max 3.0 (/ total 70.0))
         chain (psd:chain style)
@@ -761,7 +881,12 @@
   ;; the deep end is drawn on the left, the way the letters are
   ;; measured; mirroring swaps the section end for end and the run
   ;; dimensions with it, so the letters keep meaning what they meant
-  (setq mir (psd:askyn "Put the deep end on the RIGHT?" "No" nil)
+  ;; the form can answer it too, as the same Yes or No a click on the
+  ;; bracket would send; anything else falls through to the prompt
+  (setq fv  (psd:fkw 'mirror "Yes No" "No")
+        mir (if fv
+                (= fv "Yes")
+                (psd:askyn "Put the deep end on the RIGHT?" "No" nil))
         sgn (if mir -1.0 1.0)
         sta (psd:stations style runs wh dp c2)
         segs (psd:segs chain fixed))
@@ -828,6 +953,7 @@
   (if undo-open (setq undo-open (psd:undoend)))
   (psd:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
+  (psd:fclear)                          ; both exits clear the form store
   (if lzd:end (lzd:end "POOLSIDE"))
   (princ))
 

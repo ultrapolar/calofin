@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.15, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.16, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 69 files, 202 commands:
+;;; 70 files, 204 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABLOBF
@@ -27,23 +27,23 @@
 ;;;   G2MCONVVER  G2MRECONV  HEMISTEP  HEMISTEPVER  HONEFILLET  HONEFILLETVER
 ;;;   LAZASCII  LAZBUTTON  LAZDIAG  LAZDIAGVER  LAZFORM  LAZFORMCOVER
 ;;;   LAZFORMVER  LAZHIDE  LAZICON  LAZLOG  LAZNAME  LAZPANEL
-;;;   LAZPANELVER  LAZPIN  LAZSET  LAZSPA  LAZSPAVER  LAZSTEP
-;;;   LAZSTEPVER  LAZTXT  LHD  LHDVER  LINCHECK  LINCHECKVER
-;;;   LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN
-;;;   LINGUTTERVER  LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN
-;;;   LOBF  LOBFVER  MOHAMADDLE  MOHAMADDLEVER  NORMIESTEP  NORMIESTEPVER
-;;;   OASIS  OASISVER  OLAUTO  OLAUTOVER  PADDLE  PADDLEVER
-;;;   PERPMARK  PERPMARKVER  PERPPTS  PERPPTSVER  POINTRENAMER  POINTRENAMERVER
-;;;   POOL  POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE  POOLSIDEVER
-;;;   POOLVER  SIMPABHD  SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER
-;;;   SORECONV  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER
-;;;   SPACOVCREATE  SPACOVCREATEVER  SPAVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG
-;;;   STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP
-;;;   TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP
-;;;   TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL
-;;;   TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE  VSCONV
-;;;   VSCONVVER  VSRECONV  WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP
-;;;   XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
+;;;   LAZPANELVER  LAZPIN  LAZSET  LAZSIDE  LAZSIDEVER  LAZSPA
+;;;   LAZSPAVER  LAZSTEP  LAZSTEPVER  LAZTXT  LHD  LHDVER
+;;;   LINCHECK  LINCHECKVER  LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN
+;;;   LINGUTTER  LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN
+;;;   LITELINFINSCAN  LITESPACHECKSCAN  LOBF  LOBFVER  MOHAMADDLE  MOHAMADDLEVER
+;;;   NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER  OLAUTO  OLAUTOVER
+;;;   PADDLE  PADDLEVER  PERPMARK  PERPMARKVER  PERPPTS  PERPPTSVER
+;;;   POINTRENAMER  POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO  POOLDEMOVER
+;;;   POOLSIDE  POOLSIDEVER  POOLVER  SIMPABHD  SMARTFILLET  SMARTFILLETVER
+;;;   SOCONV  SOCONVVER  SORECONV  SPA  SPACHECK  SPACHECKRESCUE
+;;;   SPACHECKSCAN  SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER  SPAVER  STAIRDIM
+;;;   STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB
+;;;   TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK
+;;;   TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE
+;;;   TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER
+;;;   TYLERDRONESUITE  VSCONV  VSCONVVER  VSRECONV  WCALST  WCALSTVER
+;;;   XFTCONV  XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -11992,10 +11992,16 @@
 ;;;  POOL-NOTES (notes) -- so a POOLSIDE section drops under a POOL
 ;;;  plan without a layer to reconcile.
 ;;;
+;;;  A FORM CAN ANSWER ALL OF IT.  LAZSIDE fills a section in and hands
+;;;  the answers over in psd:*form*; every question below looks there
+;;;  first, so a filled-in sheet leaves nothing at the command line but
+;;;  the base point.  See "form answers" below for the three states and
+;;;  why an answer is REMOVED as it is read.
+;;;
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.5")
+(setq *poolside-version* "v1.6")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -12108,6 +12114,95 @@
 ;;; -------------------- user input -------------------------------------
 ;;; The ask layer of STANDARDS.md section 4, under this file's prefix.
 
+;;; -------------------- form answers -----------------------------------
+;;;
+;;;  A form -- LAZSIDE, or the VB palette -- can answer some or all of
+;;;  POOLSIDE's questions before the run starts.  It leaves them in
+;;;  psd:*form* as (key . value) and the ask helpers below look there
+;;;  first, so a filled-in sheet drives the whole run and a half-filled
+;;;  one simply shortens it.  This is POOL's own store, same shape and
+;;;  same three states, because the two tools ask for the same letters
+;;;  and a sheet ought to mean the same thing to both.
+;;;
+;;;    key absent      the form did not answer it   -> ask, as usual
+;;;    (key . nil)     the form answered NA         -> nil, no prompt
+;;;    (key . 84.0)    the form answered it         -> 84.0, no prompt
+;;;
+;;;  (assoc key ...) tells those apart; (cdr (assoc ...)) alone cannot.
+;;;
+;;;  THE KEYS are the letters, lower-cased: b, c, d, c2 and one per run
+;;;  (h g f e, or e2 f2 g f1 e1 on a Sport) -- psd:key is what spells
+;;;  them, so the form and the prompts cannot drift.  style is the
+;;;  bottom type, as one of the keywords psd:*btypes* lists, and mirror
+;;;  is the Yes or No that swaps the section end for end.  The base
+;;;  POINT is never form-answered: it is picked in the drawing with the
+;;;  operator's own snaps live, which is the one thing a form cannot do
+;;;  for them.
+;;;
+;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used -- removed.
+;;;  Otherwise Back deadlocks: step back onto a form-answered question,
+;;;  it answers itself instantly and walks forward again, and there is
+;;;  no key to press to get out.  Consuming is also what gives the two
+;;;  RANGE CHECKS their way out -- a D that is not deeper than C is
+;;;  re-asked through psd:ask, and the second pass finds the store
+;;;  empty and lets the operator type the correction rather than being
+;;;  re-fed the same bad number for ever.
+
+(setq psd:*form* nil)
+
+;; Did the form answer KEY at all?  This is the absent/nil distinction
+;; that (cdr (assoc ...)) throws away.
+(defun psd:fhas (key) (if (assoc key psd:*form*) t nil))
+
+;; The form's answer for KEY, removed from the store as it is read.
+(defun psd:ftake (key / p)
+  (setq p (assoc key psd:*form*))
+  (setq psd:*form* (vl-remove p psd:*form*))
+  (cdr p))
+
+(defun psd:fclear () (setq psd:*form* nil))
+
+;; The form's NUMBER for KEY, spent as it is read.  Anything that is
+;; not a positive number is no answer at all: a sheet cannot talk the
+;; run into a zero-length pool, and a nil here means NA, which every
+;; caller of this one handles for itself.
+(defun psd:fnum (key / v)
+  (setq v (psd:ftake key))
+  (if (and (numberp v) (> v 0.0)) v))
+
+;; The canonical spelling of V in the space-separated list KWS, or nil
+;; when it is not one of them -- so a word the live prompt would not
+;; accept falls through to the prompt instead of being forced through.
+(defun psd:fkword (v kws / i n c w out)
+  (setq i 1 n (strlen kws) w "" v (strcase v))
+  (while (<= i (1+ n))
+    (setq c (if (<= i n) (substr kws i 1) " "))
+    (if (= c " ")
+        (progn
+          (if (and (/= w "") (= (strcase w) v)) (setq out w))
+          (setq w ""))
+        (setq w (strcat w c)))
+    (setq i (1+ i)))
+  out)
+
+;; The form's keyword for KEY against the live list KWS: the canonical
+;; keyword, DFLT when the form said nil (what Enter means at every
+;; keyword prompt here), or nil when the form did not answer -- which
+;; is the caller's cue to ask.
+(defun psd:fkw (key kws dflt / v)
+  (if (psd:fhas key)
+    (progn
+      (setq v (psd:ftake key))
+      (cond ((null v) dflt)
+            ((and (= (type v) 'STR) (setq v (psd:fkword v kws))) v)))))
+
+;; Run POOLSIDE with a form's answers already in hand.  Nothing here
+;; is a command the operator types: a form sets psd:*form* itself and
+;; calls c:POOLSIDE, which is what the tests do.
+(defun psd:run-with-answers (answers)
+  (setq psd:*form* answers)
+  (c:POOLSIDE))
+
 ;; A plain required measurement, no guide highlight and no Back -- the
 ;; re-ask after a range check, where Back would step out of the check.
 (defun psd:ask (msg / v)
@@ -12157,11 +12252,30 @@
   (foreach p ans (if (not (eq (car p) key)) (setq out (cons p out))))
   (reverse (cons (cons key v) out)))
 
+;; Is V an answer this KIND of question would have accepted?  REQ
+;; takes a positive measurement and nothing else; NAX takes that or NA
+;; (nil); ZER takes zero as well.  These are the same three rules
+;; psd:asks hands initget, written out so a FORM answer is held to
+;; exactly what the prompt would have held it to -- a sheet cannot talk
+;; the run into a negative run or a zero-length pool.
+(defun psd:fok (kind v)
+  (cond ((eq kind 'REQ) (and (numberp v) (> v 0.0)))
+        ((eq kind 'ZER) (or (null v) (and (numberp v) (>= v 0.0))))
+        (t              (or (null v) (and (numberp v) (> v 0.0))))))
+
 (defun psd:askseq (items / ans i n it v asked)
   (setq ans nil i 0 n (length items) asked nil)
   (while (< i n)
-    (setq it (nth i items)
-          v (psd:asks (cadr it) (caddr it) (cadddr it) (if asked t nil)))
+    (setq it (nth i items))
+    ;; THE FORM ANSWERS FIRST, and its answer is SPENT as it is read:
+    ;; an answer the prompt would have refused is spent too and then
+    ;; asked for properly, and stepping Back onto a form-answered
+    ;; question finds the store empty and prompts, which is what keeps
+    ;; Back from deadlocking on a filled-in sheet.
+    (setq v (if (psd:fhas (car it)) (psd:ftake (car it)) 'PSD-ASK))
+    (if (not (psd:fok (cadr it) v)) (setq v 'PSD-ASK))
+    (if (eq v 'PSD-ASK)
+      (setq v (psd:asks (cadr it) (caddr it) (cadddr it) (if asked t nil))))
     (if (eq v 'CAL-BACK)
         ;; Back is not offered on the first question, so there is
         ;; always somewhere to step back to
@@ -12428,7 +12542,7 @@
 
 (defun c:POOLSIDE ( / *error* undo-open style base total doff th chain pv ans
                       wh dp c2 runs cv fixed sta segs mir sgn i s p q
-                      maxd ydim odl xc xd xb y m)
+                      maxd ydim odl xc xd xb y m fv)
 
   (defun *error* (msg)
     (if (and msg
@@ -12440,6 +12554,7 @@
     (psd:pvkill)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    (psd:fclear)                        ; both exits clear the form store
     (if lzd:report (lzd:report "POOLSIDE" *poolside-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "POOLSIDE" *poolside-version*))
@@ -12464,8 +12579,11 @@
   ;; run is shaped by
   (setq base 'RETRY)
   (while (eq base 'RETRY)
-    (setq style (cal:askkw "Bottom type" psd:*btypes* psd:*btshown*
-                           "Normal" nil))
+    ;; the form can name the bottom; anything psd:*btypes* does not
+    ;; list falls through to the prompt rather than being forced in
+    (if (null (setq style (psd:fkw 'style psd:*btypes* "Normal")))
+      (setq style (cal:askkw "Bottom type" psd:*btypes* psd:*btshown*
+                             "Normal" nil)))
     ;; the base point is picked with the user's own snaps still live;
     ;; only afterwards do snaps drop for the command-fed drawing work.
     ;; It is the top LEFT of the section -- the waterline at the left
@@ -12485,7 +12603,9 @@
   (cal:ensure-layer "DIMENSION" 2)
   (cal:ensure-layer "POOL-NOTES" 3)
 
-  (setq total (psd:ask "B - overall length, wall to wall")
+  (setq total (if (setq fv (psd:fnum 'b))
+                  fv
+                  (psd:ask "B - overall length, wall to wall"))
         doff  (max 12.0 (/ total 18.0))
         th    (max 3.0 (/ total 70.0))
         chain (psd:chain style)
@@ -12529,7 +12649,12 @@
   ;; the deep end is drawn on the left, the way the letters are
   ;; measured; mirroring swaps the section end for end and the run
   ;; dimensions with it, so the letters keep meaning what they meant
-  (setq mir (cal:askyn "Put the deep end on the RIGHT?" "No" nil)
+  ;; the form can answer it too, as the same Yes or No a click on the
+  ;; bracket would send; anything else falls through to the prompt
+  (setq fv  (psd:fkw 'mirror "Yes No" "No")
+        mir (if fv
+                (= fv "Yes")
+                (cal:askyn "Put the deep end on the RIGHT?" "No" nil))
         sgn (if mir -1.0 1.0)
         sta (psd:stations style runs wh dp c2)
         segs (psd:segs chain fixed))
@@ -12596,6 +12721,7 @@
   (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
+  (psd:fclear)                          ; both exits clear the form store
   (if lzd:end (lzd:end "POOLSIDE"))
   (princ))
 
@@ -12642,6 +12768,1094 @@
 (if (not *calofin-quiet*)
   (princ (strcat "\nPOOLSIDE " *poolside-version*
                  " loaded.  Type POOLSIDE to run.")))
+(princ)
+
+
+;;; ======================================================================
+;;; >>> LAZSIDE.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; LAZSIDE.lsp  --  fill the pool SIDE VIEW in and draw it
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  LAZSIDE     fill the side view in and run POOLSIDE
+;;;            LAZSIDEVER  print the loaded version
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;; THE SECTION IS THE FORM.  LAZFORM's argument, applied to the side
+;;; view alone: the longitudinal section stands on the LEFT as one
+;;; whole picture, and every dimension it carries has a labelled box in
+;;; the column beside it with its letter as a button in front of it.
+;;; The picture is read, the column is typed into, and the letter is
+;;; what ties the two together.  Press Insert and POOLSIDE draws it,
+;;; asking for nothing but the base point.
+;;;
+;;; ONE PAGE PER BOTTOM TYPE, on a tab strip: Normal, Sport, Wedge,
+;;; SLope, MOdflat and SHallow are six different floors and so six
+;;; different chains of letters, and picking the type on the sheet is
+;;; the same answer POOLSIDE's first prompt asks for.  Nothing here is
+;;; a stored picture: lzv:chart builds the section from the type's own
+;;; run chain, depth stations and nominal proportions -- POOLSIDE's
+;;; three tables, carried across, and tests/test_lazside.py holds them
+;;; against POOLSIDE's own so they cannot drift.
+;;;
+;;; THE LETTERS ARE POOL'S, so a field sheet transcribes straight
+;;; across:
+;;;
+;;;     B    overall length, wall to wall     C    wall height
+;;;     D    deep end depth                   C2   depth at the break
+;;;
+;;;     Normal / SHallow   H  G  F  E     hopper: slope, pad, slope, flat
+;;;     SLope              H  F  E        no pad -- a deep line at H
+;;;     Wedge              H  F           deep line at H, floor to the wall
+;;;     MOdflat            H  G  F        one pad, no shallow flat
+;;;     Sport              E2 F2 G F1 E1  symmetric, a flat at each end
+;;;
+;;; THE THREE STATES, which are LAZFORM's and STANDARDS.md's:
+;;;
+;;;    box left empty   the key is not sent  -> POOLSIDE asks
+;;;    NA typed in it   (key . nil) is sent  -> what NA means there
+;;;    a measurement    (key . 84.0) is sent -> taken, no prompt
+;;;
+;;; NA in a RUN means "not measured" and is read back off B -- two of
+;;; them split the remainder evenly, which is POOLSIDE's own rule and
+;;; the reason a sheet with a hole in it still draws.  NA in a DEPTH is
+;;; not a thing POOLSIDE has: C, D and C2 are required measurements, so
+;;; an NA in one of them is demoted to an empty box and asked for.
+;;;
+;;; THE STATE LINE SAYS WHAT INSERT IS ABOUT TO DO, and holds the
+;;; button back while it cannot do it.  Two ways a sheet is not ready:
+;;; a box holding something that is neither a measurement nor NA --
+;;; the chart draws the STRING, so a typo looks exactly like an answer
+;;; until the line names it -- and a DEPTH PAIR POOLSIDE would refuse.
+;;; D must be deeper than C and C2 must sit between them; POOLSIDE
+;;; loops at the prompt until they do, and a form that can see both
+;;; numbers at once should say so here instead of handing over a sheet
+;;; that stops halfway through drawing.
+;;;
+;;; WHAT NEVER COMES OFF THE FORM: the base point.  It is picked in the
+;;; drawing with the operator's own snaps live, which is the one thing
+;;; a dialog cannot do for them.
+;;;
+;;; ZERO INSTALL, like LAZFORM, LAZSTEP and LAZPANEL: the dialog is
+;;; plain DCL written to the temp folder at run time and the section is
+;;; drawn with vector_image, so there is no artwork file to ship and
+;;; nothing to NETLOAD.
+;;;
+;;; The chart is a PASSIVE image tile and must stay one.  A DCL image
+;;; tile is not retained by AutoCAD: any repaint clears it to its own
+;;; colour attribute and there is no expose callback to redraw from.
+;;; An image_button repaints on mouse-enter and mouse-leave, so the
+;;; drawing would vanish the first time the cursor crossed it.
+;;; ======================================================================
+
+(vl-load-com)
+
+(setq *lazside-version* "v1.0")
+
+;;; -------------------- tunables ----------------------------------------
+;;;  Every knob in one place.  Each is a plain literal a person changes
+;;;  by hand; the reasoning behind each sits with the code that reads
+;;;  it, further down, under the same name.
+;;;
+;;;  Also editable, but living beside the rule that reads them:
+;;;    lzv:*types*     the six bottom types and what the tabs call them
+;;;    lzv:*chain*     the run chain each one is measured by
+;;;    lzv:*depths*    the depth each station between the runs sits at
+;;;    lzv:*nominal*   the proportions the picture is drawn at
+;;;
+;;;  NOT tunable here, and deliberately: the stroke font and the image
+;;;  tile's colours (cal:*imgfont*, lzv:*font-*, lzv:*col-*).  The grouped
+;;;  build drops those and takes CALOFIN-LIB.lsp's cal:*imgfont* and
+;;;  cal:*imgcol-* instead, so a change made only here would show on
+;;;  the standalone file and vanish from LAZPASS.lsp.
+
+;;  THE FRAME THE SECTION IS DRAWN IN.  Everything is in PER-MILLE of
+;;  the picture, x and y, y DOWN -- the same convention as an image
+;;  tile, so the only conversion at draw time is a multiply.  Integers,
+;;  so nothing depends on float formatting and two runs of the
+;;  generator agree to the unit.
+;;
+;;  The picture reads the way the section does: the overall B along the
+;;  top, the pool between the two walls under it, and the run chain on
+;;  one baseline below the floor.
+(setq lzv:*b-y*      120)       ; the overall B, across the top
+(setq lzv:*water-y*  230)       ; the waterline: the top of both walls
+(setq lzv:*sec-x0*    90)       ; the left wall...
+(setq lzv:*sec-x1*   910)       ; ...and the right one
+(setq lzv:*shal-y*   430)       ; the floor at depth C
+(setq lzv:*brk-y*    530)       ; ...at C2, the SHallow break
+(setq lzv:*deep-y*   660)       ; ...and at D, the deep end
+(setq lzv:*chain-y*  810)       ; the run chain's baseline
+(setq lzv:*c-x*       45)       ; where C stands, outside the left wall
+
+;; The chart column: width in cells, and its height as a DCL aspect
+;; ratio (height / width of the tile itself).  A section is a wide,
+;; shallow thing and the picture follows it.
+(setq lzv:*chart-w* 58)
+(setq lzv:*chart-a* "0.62")
+
+;;  How wide the hint and state lines are, in character cells.  Wider
+;;  than the picture beside them, because every sentence that does not
+;;  fit on one line is another row of the dialog's height; the section
+;;  and its column of boxes are wider than this, so nothing here
+;;  decides how wide the dialog comes out.
+(setq lzv:*hint-w* 92)
+
+;; Where the dialog remembers its position between restarts (the
+;; AutoCAD profile, via setenv), and where a sheet's last accepted
+;; answers are kept for Recall -- one registry value per BOTTOM TYPE,
+;; because a Sport's E2/F2/F1/E1 mean nothing on a Normal's H/G/F/E.
+(setq lzv:*poskey* "LazSide_Pos")
+(setq lzv:*recallkey* "HKEY_CURRENT_USER\\Software\\Calofin\\LazSide")
+
+;;; -------------------- the stroke font ---------------------------------
+;;;  THIS build takes the table, its metrics, the tile palette and the
+;;;  seven drawing helpers from CALOFIN-LIB.lsp -- cal:*imgfont*, the
+;;;  three cal:*imgfont-* sizes, cal:*imgcol-* and cal:img* -- shared
+;;;  with the other two chart forms, which carried the same copy.  The
+;;;  standalone file keeps its own, because it has to load alone.
+;;;  DCL has no way to draw text into an image tile -- vector_image draws
+;;;  line segments and that is the whole of it -- so the letters and the
+;;;  numbers on the chart are stroked out of segments.
+;;;
+;;;  One entry per character, in the library: the glyph as a list of
+;;;  polylines, each a flat list of x y x y ... in TENTHS of a font
+;;;  unit, on a cell 4 wide and 6 tall with y running DOWN the way
+;;;  image-tile pixels do.
+
+
+
+;;; -------------------- the six bottoms ----------------------------------
+;;;  POOLSIDE's three tables, carried across: the run chain a bottom is
+;;;  measured by, the depth each station between the runs sits at, and
+;;;  the proportions of B the picture is drawn at before an answer is
+;;;  in.  They are what separates one bottom from another and they are
+;;;  all the picture needs.
+;;;
+;;;  They are a COPY, because a lisp/ file has to load alone and
+;;;  POOLSIDE may not be in the session when this one is.  A copy is a
+;;;  thing that drifts, so tests/test_lazside.py re-reads psd:chain,
+;;;  psd:depths and psd:nominal out of POOLSIDE.lsp and holds all three
+;;;  against these entry by entry -- the same bargain LAZFORM strikes
+;;;  with OASIS's reference outlines.
+
+;; The keyword POOLSIDE answers with, and what the tab calls it.  The
+;; spelling is POOLSIDE's own (psd:*btypes*), capitals and all: it is
+;; the answer that travels, not a label.
+(setq lzv:*types*
+  '(("Normal"  "Normal hopper")
+    ("Sport"   "Sport")
+    ("Wedge"   "Wedge")
+    ("SLope"   "Slope")
+    ("MOdflat" "Mod flat")
+    ("SHallow" "Shallow slope")))
+
+;; The run chain, left to right, as (letter what-it-measures).  The
+;; runs always sum to B.
+(setq lzv:*chain*
+  '(("Normal"
+     ("H" "left end to the hopper")
+     ("G" "hopper pad length")
+     ("F" "pad to the slope break")
+     ("E" "slope break to the right end"))
+    ("SHallow"
+     ("H" "left end to the hopper")
+     ("G" "hopper pad length")
+     ("F" "pad to the slope break")
+     ("E" "break to the right end"))
+    ("SLope"
+     ("H" "left end to the deep line")
+     ("F" "deep line to the slope break")
+     ("E" "slope break to the right end"))
+    ("Wedge"
+     ("H" "left end to the deep line")
+     ("F" "deep line to the right wall"))
+    ("MOdflat"
+     ("H" "left end to the flat pad")
+     ("G" "flat pad length")
+     ("F" "pad to the right end"))
+    ("Sport"
+     ("E2" "left end to the slope")
+     ("F2" "slope to the deep flat")
+     ("G"  "deep flat length")
+     ("F1" "deep flat to the slope")
+     ("E1" "slope to the right end"))))
+
+;; The depth each station sits at, one more than there are runs: "c" is
+;; the wall height, "d" the deep end, "c2" the SHallow break.
+(setq lzv:*depths*
+  '(("Normal"  "c" "d" "d" "c" "c")
+    ("SHallow" "c" "d" "d" "c2" "c")
+    ("SLope"   "c" "d" "c" "c")
+    ("Wedge"   "c" "d" "c")
+    ("MOdflat" "c" "d" "d" "c")
+    ("Sport"   "c" "c" "d" "d" "c" "c")))
+
+;; Guide proportions of B, before a single run has been answered.  The
+;; picture is drawn at these until a number replaces a letter -- it is
+;; a chart and not a scale drawing, so they never move.
+(setq lzv:*nominal*
+  '(("Normal"  0.12 0.20 0.40 0.28)
+    ("SHallow" 0.12 0.20 0.40 0.28)
+    ("SLope"   0.12 0.58 0.30)
+    ("Wedge"   0.12 0.88)
+    ("MOdflat" 0.10 0.70 0.20)
+    ("Sport"   0.12 0.20 0.30 0.26 0.12)))
+
+(defun lzv:title (ty / p)
+  (if (setq p (assoc ty lzv:*types*)) (cadr p) ty))
+
+(defun lzv:chain (ty) (cdr (assoc ty lzv:*chain*)))
+
+(defun lzv:depths (ty) (cdr (assoc ty lzv:*depths*)))
+
+(defun lzv:nominal (ty) (cdr (assoc ty lzv:*nominal*)))
+
+;; Is POOLSIDE in this session?  An unbound symbol reads as nil, so
+;; this is the same test LAZFORM makes of POOL.
+(defun lzv:loaded ( ) (if psd:run-with-answers T))
+
+;; The form key a letter is stored under: "E2" -> e2, "H" -> h.  The
+;; same spelling POOLSIDE's psd:key makes, which is what lets a sheet
+;; be handed straight over.
+(defun lzv:key (s) (strcase s t))
+
+;;; -------------------- generating the chart -----------------------------
+;;;  A chart is (style title (outline ...) (dimension ...)).
+;;;
+;;;  A dimension is (letter key x1 y1 x2 y2 side label), where side is
+;;;  "h" or "v" -- which way the measurement runs, and so where its text
+;;;  sits.  The arrow, the letter and the typed value all come off those
+;;;  two endpoints, so there is no separate position table that could
+;;;  fall out of step with the drawing.  It is LAZFORM's and LAZSTEP's
+;;;  record, unchanged, because it is the same picture engine.
+
+;; The per-mille y a depth code sits at.
+(defun lzv:depthy (code)
+  (cond ((= code "d")  lzv:*deep-y*)
+        ((= code "c2") lzv:*brk-y*)
+        (t             lzv:*shal-y*)))
+
+;; The stations between the runs, left to right, as (x y): one more than
+;; there are runs.  x walks the nominal proportions across the section,
+;; y is whatever depth that station sits at.
+(defun lzv:stations (ty / out nom deps run x i p)
+  (setq nom  (lzv:nominal ty)
+        deps (lzv:depths ty)
+        run  (- lzv:*sec-x1* lzv:*sec-x0*)
+        x    0.0
+        i    0
+        out  (list (list lzv:*sec-x0* (lzv:depthy (nth 0 deps)))))
+  (foreach p nom
+    (setq x   (+ x p)
+          i   (1+ i)
+          out (cons (list (+ lzv:*sec-x0* (fix (* run x)))
+                          (lzv:depthy (nth i deps)))
+                    out)))
+  (reverse out))
+
+;; The section itself, as one closed polyline: down the left wall,
+;; along the floor station by station, up the right wall and back along
+;; the waterline.
+(defun lzv:outline (ty / sta out s)
+  ;; out is consed newest-first and reversed once at the end, so the
+  ;; seed reads BACKWARDS: y before x, or the waterline starts at
+  ;; (230 . 90) instead of (90 . 230)
+  (setq sta (lzv:stations ty)
+        out (list lzv:*water-y* lzv:*sec-x0*))
+  (foreach s sta
+    (setq out (cons (cadr s) (cons (car s) out))))
+  (setq out (cons lzv:*water-y* (cons lzv:*sec-x1* out)))
+  (setq out (cons lzv:*water-y* (cons lzv:*sec-x0* out)))
+  (list (reverse out)))
+
+;; The deepest station, and the SHallow break: where D and C2 are
+;; measured.  Read off the depth codes rather than listed, so a table
+;; edit moves the dimension with the floor it measures.
+(defun lzv:stationof (ty code / deps i out c)
+  (setq deps (lzv:depths ty) i 0)
+  (foreach c deps
+    (if (and (null out) (= c code)) (setq out i))
+    (setq i (1+ i)))
+  out)
+
+;; Every dimension the section carries: B across the top, the run chain
+;; along its own baseline, and C, D and C2 where they fall.
+(defun lzv:dims (ty / out sta i c n x)
+  (setq sta (lzv:stations ty))
+  ;; the overall, across the top
+  (setq out (list (list "B" "b" lzv:*sec-x0* lzv:*b-y* lzv:*sec-x1* lzv:*b-y*
+                        "h" "overall length, wall to wall")))
+  ;; the run chain, one dimension per run, end to end on one baseline
+  (setq i 0)
+  (foreach c (lzv:chain ty)
+    (setq out (cons (list (car c) (lzv:key (car c))
+                          (car (nth i sta)) lzv:*chain-y*
+                          (car (nth (1+ i) sta)) lzv:*chain-y*
+                          "h" (cadr c))
+                    out)
+          i   (1+ i)))
+  ;; C, outside the left wall: the wall height, which is the shallow
+  ;; depth everywhere the floor is at "c"
+  (setq out (cons (list "C" "c" lzv:*c-x* lzv:*water-y* lzv:*c-x* lzv:*shal-y*
+                        "v" "wall height (shallow depth)")
+                  out))
+  ;; D, AT the first station the floor is deep at, not beside it: the
+  ;; floor turns its corner there, so a dimension dropped on that x
+  ;; lands on the point it measures.  Stand it off by a hair and it
+  ;; misses -- on a Wedge and a SLope the floor is already climbing one
+  ;; per-mille later, so the foot of the line would hang below it
+  (setq n (lzv:stationof ty "d")
+        x (car (nth n sta)))
+  (setq out (cons (list "D" "d" x lzv:*water-y* x lzv:*deep-y*
+                        "v" "deep end depth")
+                  out))
+  ;; C2, only where the style has a break to measure it at
+  (if (setq n (lzv:stationof ty "c2"))
+    (progn
+      (setq x (car (nth n sta)))
+      (setq out (cons (list "C2" "c2" x lzv:*water-y* x lzv:*brk-y*
+                            "v" "depth where the shallow floor meets the break")
+                      out))))
+  (reverse out))
+
+;; The chart for a bottom type.  This is the whole of the picture --
+;; everything downstream reads it as data.
+(defun lzv:chart (ty)
+  (list ty (lzv:title ty) (lzv:outline ty) (lzv:dims ty)))
+
+(defun lzv:c-type (c) (nth 0 c))
+(defun lzv:c-title (c) (nth 1 c))
+(defun lzv:c-outline (c) (nth 2 c))
+(defun lzv:c-dims (c) (nth 3 c))
+
+;; Every key the chart can answer, in drawing order.
+(defun lzv:keys (c / d out)
+  (foreach d (lzv:c-dims c) (setq out (cons (cadr d) out)))
+  (reverse out))
+
+;; Is this key a depth?  The three that POOLSIDE requires a measurement
+;; for, which is what makes NA in one of them an empty box rather than
+;; an answer.
+(defun lzv:depthkey (k) (if (member k '("c" "d" "c2")) T))
+
+;; ...and a run?  Everything that is neither a depth nor the overall,
+;; which is the set NA means "read it back off B" in.
+(defun lzv:runkey (k) (and (/= k "b") (not (lzv:depthkey k))))
+
+;;; -------------------- the answers -------------------------------------
+;;;  What is typed is kept as the STRING the user typed, so the chart can
+;;;  show it back exactly as entered -- 2'6" stays 2'6" -- and it is only
+;;;  turned into a number when POOLSIDE is handed the form.
+
+;;;  ONE QUESTION ON THIS SHEET IS NOT A LETTER.  POOLSIDE draws the
+;;;  deep end on the left, the way the letters are measured, and asks
+;;;  whether to swap the section end for end -- which is a fact about
+;;;  the sheet the section is going under and not a measurement, so it
+;;;  is a dropdown rather than a box.  "(ask)" at the head of it is the
+;;;  form's version of an empty box, and the only honest default: the
+;;;  prompt has a keyboard default of its own.
+
+(setq lzv:*asks*
+  '(("mirror" "Put the deep end on the RIGHT" ("(ask)" "Yes" "No"))))
+
+(setq lzv:*vals* nil)           ; ((key . "typed") ...)
+(setq lzv:*sel* nil)            ; ((stem . index) ...) for the dropdowns
+(setq lzv:*type* "Normal")      ; which bottom is being filled in
+(setq lzv:*chart* nil)          ; the chart for it
+(setq lzv:*focus* nil)          ; the key whose box has the caret
+(setq lzv:*pos* nil)            ; where the dialog was last standing
+(setq lzv:*go* nil)             ; the type a tab click asked for
+
+(defun lzv:get (key / p)
+  (if (setq p (assoc key lzv:*vals*)) (cdr p) ""))
+
+(defun lzv:put (key v / out p)
+  (foreach p lzv:*vals* (if (/= (car p) key) (setq out (cons p out))))
+  (setq lzv:*vals* (reverse (cons (cons key v) out))))
+
+;; A dropdown's selected index, 0 -- "(ask)" -- until one is picked.
+(defun lzv:sel (stem / p)
+  (if (setq p (assoc stem lzv:*sel*)) (cdr p) 0))
+
+(defun lzv:sput (stem i / out p)
+  (foreach p lzv:*sel* (if (/= (car p) stem) (setq out (cons p out))))
+  (setq lzv:*sel* (reverse (cons (cons stem i) out))))
+
+;; ...and the WORD it is standing on, or nil for "(ask)", which sends
+;; nothing at all and leaves the prompt to ask.
+(defun lzv:selword (stem / d i)
+  (setq d (assoc stem lzv:*asks*) i (lzv:sel stem))
+  (if (and d (> i 0)) (nth i (caddr d))))
+
+;;; -------------------- remembering the last sheet -----------------------
+;;;  A sheet you have just drawn is very often the shape of the next one:
+;;;  the same pool from a different survey, or the same one corrected.
+;;;  Recall puts the last accepted answers for THIS BOTTOM TYPE back
+;;;  into the boxes -- and only into the EMPTY ones, so it can never
+;;;  overwrite a number you have just typed, and pressing it twice does
+;;;  nothing the first press did not.
+;;;
+;;;  It is a BUTTON and never a default.  Pre-filling a sheet on open
+;;;  would put the last section's numbers on this one, and a wrong
+;;;  number that looks answered is worse than an empty box: the state
+;;;  line would call the sheet finished, and POOLSIDE would never ask.
+;;;
+;;;  The button is greyed when this bottom type has nothing stored,
+;;;  which is the whole of the "nothing happened" case -- no message
+;;;  needed, and the state line reports the fill by moving on its own.
+
+;;  (lzv:*recallkey* itself is set in the TUNABLES block at the top of the file.)
+
+;;  A sheet is stored as one string, "key=typed;key=typed".  A value
+;;  carrying ";" or "=" would read back as two pairs or the wrong pair,
+;;  so it is dropped rather than written -- nothing a box legitimately
+;;  holds contains either, so this guards the impossible.
+
+;; Store this chart's answers under its own value name, so one chart's
+;; sheet can never come back on another's.
+(defun lzv:recall-save (slot / s)
+  (setq s (cal:kvpack lzv:*vals*))
+  (if (/= s "")
+    (vl-catch-all-apply 'vl-registry-write
+                        (list lzv:*recallkey* slot s)))
+  s)
+
+(defun lzv:recall-read (slot / s)
+  (setq s (vl-catch-all-apply 'vl-registry-read
+                              (list lzv:*recallkey* slot)))
+  (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR))
+    (cal:kvunpack s)))
+
+;;; -------------------- what the sheet still owes ------------------------
+;;;  LAZFORM's state line.  Nothing here changes what is SENT --
+;;;  lzv:form is still the only thing that decides that.  It reports
+;;;  what lzv:form is about to do, and holds Insert back when that
+;;;  would not be a run.
+
+;; Every box on this sheet.  There is no greying here: a bottom type is
+;; a page of its own, so a letter that does not apply is not on it.
+(defun lzv:livekeys ( ) (lzv:keys lzv:*chart*))
+
+;; A box holding something that is neither a measurement nor NA.  The
+;; chart draws the STRING, so a typo looks exactly like an answer until
+;; its letter is named here.
+(defun lzv:unreadable ( / out k v)
+  (foreach k (lzv:livekeys)
+    (setq v (cal:trim (lzv:get k)))
+    (if (and (/= v "")
+             (or (eq (cal:formanswer v) 'SKIP)
+                 ;; POOLSIDE has no NA for a depth: C, D and C2 are
+                 ;; required measurements, so NA in one is not an
+                 ;; answer it could take
+                 (and (lzv:depthkey k) (null (cal:formanswer v)))))
+      (setq out (cons k out))))
+  (reverse out))
+
+(defun lzv:togo ( / out k)
+  (foreach k (lzv:livekeys)
+    (if (= (cal:trim (lzv:get k)) "") (setq out (cons k out))))
+  (reverse out))
+
+;; A box is named by the LETTER the drawing shows, not by its key: a
+;; key would send the drafter hunting for something the picture does
+;; not print.
+(defun lzv:tagof (key / d out)
+  (foreach d (lzv:c-dims lzv:*chart*)
+    (if (and (not out) (= (cadr d) key)) (setq out (car d))))
+  (if out out (strcase key)))
+
+(defun lzv:taglist (keys / n i named k)
+  (setq n (length keys) i 0)
+  (foreach k keys
+    (if (< i 3) (setq named (cons (lzv:tagof k) named) i (1+ i))))
+  (setq named (reverse named))
+  (if (> n 3)
+    (strcat (cal:andjoin named nil) " and " (itoa (- n 3)) " more")
+    (cal:andjoin named t)))
+
+;; The number in a box, or nil when there is not one there.
+(defun lzv:num (key / v)
+  (setq v (cal:formanswer (cal:trim (lzv:get key))))
+  (if (numberp v) v))
+
+;;  THE DEPTH PAIR POOLSIDE WOULD REFUSE.  A deep end that is not deeper
+;;  than the wall is not a deep end, and the SHallow break sits between
+;;  them.  POOLSIDE loops at the prompt until they do -- which is the
+;;  right thing at a prompt and the wrong thing to hand a sheet to: the
+;;  run would draw half a section and then stop to argue.  A form can
+;;  see both numbers at once, so it says so here instead.
+(defun lzv:depthbad ( / cv dv c2v)
+  (setq cv (lzv:num "c") dv (lzv:num "d") c2v (lzv:num "c2"))
+  (cond
+    ((and cv dv (<= dv cv))
+     "D must be deeper than C - the deep end is not deeper than the wall.")
+    ((and cv c2v dv (or (< c2v cv) (> c2v dv)))
+     "C2 must be between C and D - the break cannot sit outside them.")))
+
+;; Why this box is not an answer, as the rest of the sentence its
+;; letter starts.  Three cases and they want three different things
+;; said: NA in a depth is the sharp one, because NA is a word the form
+;; itself tells you to type -- just not there.
+(defun lzv:whybad (k / v)
+  (setq v (cal:formanswer (cal:trim (lzv:get k))))
+  (cond
+    ((and (lzv:depthkey k) (null v))
+     " is NA, and a depth has no NA - type a number, or clear it.")
+    ((lzv:depthkey k)
+     " is not a measurement - a depth takes a number or an empty box.")
+    (t " is not a measurement - type a number, or NA, or clear it.")))
+
+(defun lzv:state ( / bad togo n)
+  (setq bad  (lzv:unreadable)
+        togo (lzv:togo)
+        n    (length (lzv:livekeys)))
+  (cond
+    ((cdr bad)
+     (strcat (lzv:taglist bad)
+             " are not measurements - type a number, or NA, or clear them."))
+    (bad (strcat (lzv:taglist bad) (lzv:whybad (car bad))))
+    ((lzv:depthbad))
+    ((not togo)
+     (strcat "All " (cal:plural n "box" "boxes")
+             " filled - POOLSIDE will ask only for the base point."))
+    ((= (length togo) n)
+     (strcat "Nothing filled yet - POOLSIDE will ask for all "
+             (cal:plural n "box" "boxes") ", plus the base point."))
+    (t
+     (strcat (itoa (- n (length togo))) " of "
+             (cal:plural n "box" "boxes") " filled - POOLSIDE will ask for "
+             (lzv:taglist togo) ", plus the base point."))))
+
+;; The line, and the button it holds back.  Two reasons Insert cannot
+;; go: a box that would be dropped, and a depth pair POOLSIDE would
+;; refuse.  Both are on the line that greys it, so the button is never
+;; grey for a reason the page does not give.
+(defun lzv:restate ( / )
+  (set_tile "state" (lzv:state))
+  (mode_tile "accept" (if (or (lzv:unreadable) (lzv:depthbad)) 1 0))
+  (princ))
+
+;; The slot a sheet's answers are stored under.  A bottom type is a
+;; different chain of letters, so a Sport's sheet must never come back
+;; on a Normal one.
+(defun lzv:recall-slot ( ) lzv:*type*)
+
+;; Fill the EMPTY boxes from the stored sheet, and repaint.  Only the
+;; empty ones: a recall must never overwrite a number just typed, and
+;; pressing it twice must do nothing the first press did not.
+(defun lzv:recall ( / had n k v)
+  (setq had (lzv:recall-read (lzv:recall-slot)) n 0)
+  (foreach k (lzv:livekeys)
+    (if (and (= (cal:trim (lzv:get k)) "")
+             (setq v (cdr (assoc k had))))
+      (progn (lzv:put k v) (set_tile k v) (setq n (1+ n)))))
+  (lzv:redraw)
+  (lzv:restate)
+  n)
+
+;;; -------------------- what POOLSIDE is handed --------------------------
+;;;
+;;;  THE BOTTOM TYPE GOES FIRST, and it is the page itself: whichever
+;;;  tab is open is the answer POOLSIDE's first prompt gets, so a sheet
+;;;  can never be filled in for one floor and drawn as another.
+;;;
+;;;  Then the letters, in the order the drawing carries them.  Every
+;;;  key is POOLSIDE's own, spelled by lzv:key exactly as psd:key
+;;;  spells it, so the alist is handed straight over.
+
+(defun lzv:form ( / out k a d v)
+  (setq out (list (cons 'style lzv:*type*)))
+  ;; the dropdowns first: a word on the wire, or nothing when the
+  ;; sheet was left saying "(ask)"
+  (foreach d lzv:*asks*
+    (if (setq v (lzv:selword (car d)))
+      (setq out (cons (cons (read (car d)) v) out))))
+  (foreach k (lzv:livekeys)
+    (setq a (cal:formanswer (cal:trim (lzv:get k))))
+    ;; a depth has no NA at the prompt, so an NA in one counts as an
+    ;; empty box: sending nil would be sending an answer POOLSIDE
+    ;; cannot use, and the run would stop to ask anyway
+    (if (and (null a) (lzv:depthkey k)) (setq a 'SKIP))
+    (if (not (eq a 'SKIP))
+      (setq out (cons (cons (read k) a) out))))
+  (reverse out))
+
+;;; -------------------- drawing the chart -------------------------------
+;;;  Pixel coordinates, origin top-left, y down -- image-tile convention,
+;;;  which is why the per-mille data is generated that way too and needs
+;;;  no flipping here.  dimx_tile / dimy_tile report the LARGEST legal
+;;;  coordinate, not the size, and are only answerable while the dialog
+;;;  is up, so everything below runs between new_dialog and start_dialog.
+
+(setq lzv:*dx* 0)               ; the tile's extent this time round
+(setq lzv:*dy* 0)
+
+                                ; picked for the dialog, which is what
+                                ; -16 and -15 above already follow --
+                                ; a plain 8 is swallowed by a dark one
+                                ; The one colour here that reads either
+                                ; way round, so it stays a number
+                                ; is blue on a light dialog and a
+                                ; brighter cyan on a dark one, where
+                                ; blue 5 is very nearly the background
+
+;; per-mille -> pixels
+(defun lzv:px (v) (fix (/ (* v lzv:*dx*) 1000.0)))
+(defun lzv:py (v) (fix (/ (* v lzv:*dy*) 1000.0)))
+
+;;  An outline element is either a POLYLINE -- a flat list of per-mille
+;;  numbers, x y x y ... -- or an ARC, written
+;;
+;;      ("A" cx cy rx ry from to)
+;;
+;;  with the centre and both radii in per-mille and the angles in
+;;  degrees.  A section is all straight lines, so nothing here draws an
+;;  arc today; the two helpers are the library's and are carried so the
+;;  picture engine is the same one the other three forms use.
+
+;; A polyline given as a flat per-mille list, in pixels.
+(defun lzv:pline (flat col / a b)
+  (while (and flat (cddr flat))
+    (setq a (list (lzv:px (car flat)) (lzv:py (cadr flat)))
+          b (list (lzv:px (caddr flat)) (lzv:py (cadddr flat))))
+    (vector_image (car a) (cadr a) (car b) (cadr b) col)
+    (setq flat (cddr flat))))
+
+;; The dimension line, in per-mille, with an arrowhead at each end.
+;; The head shapes are the whole of it because a section has no
+;; diagonal dimension: every letter on it runs either along the pool or
+;; down into it.
+(defun lzv:arrow (x1 y1 x2 y2 col / a b p q)
+  (vector_image (lzv:px x1) (lzv:py y1) (lzv:px x2) (lzv:py y2) col)
+  (setq a 6 b 3)
+  (if (= y1 y2)
+    (progn                              ; horizontal: heads point in
+      (setq p (list (lzv:px (min x1 x2)) (lzv:py y1))
+            q (list (lzv:px (max x1 x2)) (lzv:py y1)))
+      (vector_image (car p) (cadr p) (+ (car p) a) (- (cadr p) b) col)
+      (vector_image (car p) (cadr p) (+ (car p) a) (+ (cadr p) b) col)
+      (vector_image (car q) (cadr q) (- (car q) a) (- (cadr q) b) col)
+      (vector_image (car q) (cadr q) (- (car q) a) (+ (cadr q) b) col))
+    (progn                              ; vertical
+      (setq p (list (lzv:px x1) (lzv:py (min y1 y2)))
+            q (list (lzv:px x1) (lzv:py (max y1 y2))))
+      (vector_image (car p) (cadr p) (- (car p) b) (+ (cadr p) a) col)
+      (vector_image (car p) (cadr p) (+ (car p) b) (+ (cadr p) a) col)
+      (vector_image (car q) (cadr q) (- (car q) b) (- (cadr q) a) col)
+      (vector_image (car q) (cadr q) (+ (car q) b) (- (cadr q) a) col))))
+
+;; Where one dimension's text belongs, and what it says: the LETTER
+;; until a value is typed, then the value in the letter's place.  A
+;; value too wide for its own span is shrunk to fit rather than allowed
+;; to run into its neighbours -- H, G, F and E sit shoulder to shoulder
+;; along the chain and every one of them can carry a feet-and-inches
+;; number.
+(defun lzv:label (d / letter key x1 y1 x2 y2 side txt sc w h lx ly span mx my)
+  (setq letter (car d) key (cadr d)
+        x1 (lzv:px (nth 2 d)) y1 (lzv:py (nth 3 d))
+        x2 (lzv:px (nth 4 d)) y2 (lzv:py (nth 5 d))
+        side (nth 6 d)
+        txt (lzv:get key)
+        mx (/ (+ x1 x2) 2) my (/ (+ y1 y2) 2))
+  (if (= txt "")
+      (setq txt letter sc (lzv:basesc))
+      (setq sc (/ (* (lzv:basesc) 90) 100)))
+  (setq w (cal:imgtextw txt sc))
+  (if (and (= side "h") (> w 0))
+      (progn
+        (setq span (abs (- x2 x1)))
+        (if (> w span)
+            (progn
+              (setq sc (/ (* sc span) w))
+              (if (< sc (/ (* (lzv:basesc) 55) 100))
+                  (setq sc (/ (* (lzv:basesc) 55) 100)))
+              (setq w (cal:imgtextw txt sc))))))
+  (setq h (cal:imgtexth sc))
+  (if (= side "h")
+      (setq lx (- mx (/ w 2)) ly (- y1 h 4))
+      ;; a vertical dimension labels at the TOP of its span, centred on
+      ;; its own line, EXCEPT when that would run off the left edge --
+      ;; C stands outside the left wall with no room on its outside
+      (progn
+        (setq ly (+ (min y1 y2) 5))
+        (setq lx (if (< (- mx (/ w 2)) 2) (+ mx 4) (- mx (/ w 2))))))
+  ;; and nothing is allowed off the edge of the picture
+  (if (< lx 2) (setq lx 2))
+  (if (> (+ lx w) (- lzv:*dx* 2)) (setq lx (- lzv:*dx* w 2)))
+  (if (< ly 2) (setq ly 2))
+  (if (> (+ ly h) (- lzv:*dy* 2)) (setq ly (- lzv:*dy* h 2)))
+  ;; blank the strip behind it so the dimension line does not run
+  ;; through the characters
+  (fill_image (- lx 3) (- ly 2) (+ w 6) (+ h 4) cal:*imgcol-back*)
+  (if (= key lzv:*focus*)
+      (cal:imgpline (list (- lx 3) (- ly 2) (+ lx w 3) (- ly 2)
+                         (+ lx w 3) (+ ly h 2) (- lx 3) (+ ly h 2)
+                         (- lx 3) (- ly 2))
+                   (cal:ink cal:*imgcol-hi* 'hi)))
+  (cal:imgtext txt lx ly sc
+            (if (= (lzv:get key) "") cal:*imgcol-line* cal:*imgcol-val*)))
+
+;; The whole picture, start to end.  Every vector goes between one
+;; start_image and one end_image so the tile is painted once: the
+;; outline first, then every dimension's line, then every dimension's
+;; text over the top of it -- the text blanks the strip behind itself,
+;; so a letter never has a dimension line running through it.
+(defun lzv:redraw ( / c poly d col)
+  (setq c        lzv:*chart*
+        lzv:*dx* (dimx_tile "chart")
+        lzv:*dy* (dimy_tile "chart")
+        ;; resolved once, before the loop: the measurement behind 'auto
+        ;; is a COM round trip, and there is one dimension per letter
+        col      (cal:ink cal:*imgcol-dim* 'dim))
+  (start_image "chart")
+  (fill_image 0 0 lzv:*dx* lzv:*dy* cal:*imgcol-back*)
+  (foreach poly (lzv:c-outline c)
+    (lzv:pline (cal:imgflatten poly) cal:*imgcol-line*))
+  (foreach d (lzv:c-dims c)
+    (lzv:arrow (nth 2 d) (nth 3 d) (nth 4 d) (nth 5 d) col))
+  (foreach d (lzv:c-dims c) (lzv:label d))
+  (end_image)
+  (princ))
+
+;; The size to letter the chart at.  Derived from the tile rather than
+;; fixed: an image tile's pixel size falls out of the user's dialog font
+;; and display DPI, and is not knowable until the dialog is up.
+(defun lzv:basesc ( / sc)
+  (setq sc (/ (* lzv:*dy* 100) 1560))
+  (if (< sc 12) 12 sc))
+
+;;; -------------------- the generated DCL --------------------------------
+;;  Two columns: the section on the left as a passive image, the boxes
+;;  on the right in the picture's own order, each labelled with its
+;;  letter so the list and the picture read as one thing.
+
+;; The DCL name of a bottom type's page.
+(defun lzv:dlgname (ty) (strcat "lazside_" (strcase ty t)))
+
+;; The tab strip: one button per bottom type, the current one disabled
+;; so it reads as the page you are on rather than as somewhere to go.
+(defun lzv:tabstrip (cur / out d)
+  (setq out (list "  : row {"))
+  (foreach d lzv:*types*
+    (setq out (append out
+                (list (strcat "    : button { key = \"tab_" (car d)
+                              "\"; label = \"" (cadr d) "\";"
+                              (if (= (car d) cur) " is_enabled = false;" "")
+                              " }")))))
+  (append out (list "  }")))
+
+;; One column row: the letter as a button, then the box.  Clicking the
+;; letter puts the caret in that box and rings the dimension on the
+;; chart -- which is as close to clicking the drawing itself as DCL
+;; allows, and the button sits against the box it fills.
+(defun lzv:colcell (d / out)
+  (list "        : row {"
+        (strcat "          : button { key = \"pick_" (cadr d)
+                "\"; label = \"" (car d) "\"; fixed_width = true; }")
+        (strcat "          : edit_box { key = \"" (cadr d)
+                "\"; edit_width = 9; label = \"" (nth 7 d) "\"; }")
+        "        }"))
+
+;; ONE PAGE: the section, and every letter it carries with a box.
+(defun lzv:dcl-one (c / out ty d l)
+  ;; out is consed newest-first and reversed once at the end, so this
+  ;; seed list reads BACKWARDS: the label second here puts it second in
+  ;; the file, after the line that opens the dialog.  The other way
+  ;; round emits an attribute before its own dialog, which is not DCL.
+  (setq ty  (lzv:c-type c)
+        out (list (strcat "  label = \"LazSide - " (lzv:c-title c) "\";")
+                  (strcat (lzv:dlgname ty) " : dialog {")))
+  (foreach l (lzv:tabstrip ty) (setq out (cons l out)))
+  (setq out (cons "  : row {" out))
+  ;; A PASSIVE image tile, deliberately -- see the header for what an
+  ;; image_button costs -- and ONE of them: the whole section, whole.
+  (setq out (cons (strcat "    : image { key = \"chart\"; width = "
+                          (itoa lzv:*chart-w*) "; aspect_ratio = "
+                          lzv:*chart-a* "; fixed_width = true; "
+                          "fixed_height = true; color = -15; }")
+                  out))
+  (setq out (cons "    : column {" out))
+  (setq out (cons "      : boxed_column {" out))
+  (setq out (cons "        label = \"Overall\";" out))
+  (foreach d (lzv:c-dims c)
+    (if (= (cadr d) "b")
+      (foreach l (lzv:colcell d) (setq out (cons l out)))))
+  (setq out (cons "      }" out))
+  (setq out (cons "      : boxed_column {" out))
+  (setq out (cons "        label = \"Floor runs, left to right\";" out))
+  (foreach d (lzv:c-dims c)
+    (if (lzv:runkey (cadr d))
+      (foreach l (lzv:colcell d) (setq out (cons l out)))))
+  (setq out (cons "      }" out))
+  (setq out (cons "      : boxed_column {" out))
+  (setq out (cons "        label = \"Depths\";" out))
+  (foreach d (lzv:c-dims c)
+    (if (lzv:depthkey (cadr d))
+      (foreach l (lzv:colcell d) (setq out (cons l out)))))
+  (setq out (cons "      }" out))
+  (setq out (cons "      : boxed_column {" out))
+  (setq out (cons "        label = \"The rest of the run\";" out))
+  (foreach d lzv:*asks*
+    (setq out (cons (strcat "        : popup_list { key = \"" (car d)
+                            "\"; label = \"" (cadr d)
+                            "\"; edit_width = 8; }")
+                    out)))
+  (setq out (cons "      }" out))
+  (setq out (cons "    }" out))
+  (setq out (cons "  }" out))
+  (setq out (cons "  spacer;" out))
+  (foreach l (list (strcat "Read the letters off the section and type the"
+                           " numbers in the column beside it.")
+                   (strcat "NA in a RUN means not measured: it is read back"
+                           " off B, and two of them split what is left.")
+                   (strcat "A depth has no NA - C, D and C2 are measured or"
+                           " they are asked for at the prompt.")
+                   (strcat "A box takes 24, or a feet-and-inches spelling -"
+                           " both read.  The base point stays a pick."))
+    (setq out (cons (strcat "  : text { width = " (itoa lzv:*hint-w*)
+                            "; label = \"" l "\"; }")
+                    out)))
+  ;; The state line.  It carries no label here: it is written before
+  ;; the dialog is shown and rewritten on every change, so a label in
+  ;; the file would only be the wrong answer for an instant.
+  (setq out (cons (strcat "  : text { key = \"state\"; width = "
+                          (itoa lzv:*hint-w*) "; }") out))
+  (setq out (cons "  : row {" out))
+  (setq out (cons (strcat "    : button { key = \"recall\"; "
+                          "label = \"Recall last\"; fixed_width = true; }")
+                  out))
+  (setq out (cons (strcat "    : button { key = \"accept\"; label = \"Insert\";"
+                          " is_default = true; fixed_width = true; }")
+                  out))
+  (setq out (cons (strcat "    : button { key = \"cancel\"; label = \"Cancel\";"
+                          " is_cancel = true; fixed_width = true; }")
+                  out))
+  (setq out (cons "  }" out))
+  (reverse (cons "}" out)))
+
+;; Every bottom type's page, in one file -- so a tab click needs
+;; nothing from disk that opening the form did not already write.
+(defun lzv:dcl-lines ( / out d)
+  (foreach d lzv:*types*
+    (setq out (append out (lzv:dcl-one (lzv:chart (car d))) (list ""))))
+  out)
+
+(defun lzv:write-lines (fh / l)
+  (foreach l (lzv:dcl-lines) (write-line l fh)))
+
+(defun lzv:write-dcl ( / f fh err)
+  (setq f (vl-filename-mktemp "lazside" nil ".dcl"))
+  (if (and f (setq fh (open f "w")))
+    (progn
+      (setq err (vl-catch-all-apply 'lzv:write-lines (list fh)))
+      (close fh)
+      (cond
+        ((vl-catch-all-error-p err) (vl-file-delete f) nil)
+        (t f)))))
+
+;; WHERE THE DIALOG COMES BACK UP.  done_dialog reports the position it
+;; closed at, and that is the only chance to find out -- DCL cannot ask
+;; an open dialog where it is.  Held in lzv:*pos* alone that answer lasts
+;; until the file is reloaded, so the point also goes into the AutoCAD
+;; profile as "x,y" and is read back at the next open: come back after a
+;; restart and the dialog is still where it was left.
+(defun lzv:pos-save (p)                 ; answers with what it was given,
+  (if (and p (listp p) (= (length p) 2) ; so it can wrap a done_dialog
+           (numberp (car p)) (numberp (cadr p)))
+    (setenv lzv:*poskey*
+            (strcat (itoa (fix (car p))) "," (itoa (fix (cadr p))))))
+  p)
+
+;; The saved point, or nil when there is nothing worth trusting.  Only a
+;; string this build could have written is taken -- the parse has to
+;; round-trip -- so a hand-edited or foreign profile value can do no
+;; more than centre the dialog, which is what it did before.  The clamp
+;; is a rescue and not a fence: a point saved on a second monitor that
+;; has since been unplugged would otherwise put the dialog where the
+;; mouse cannot reach it.  SCREENSIZE is the drawing area rather than
+;; the desktop, so the clamp can only ever pull one IN.
+(defun lzv:pos-read ( / s i x y scr)
+  (setq s (getenv lzv:*poskey*))
+  (if (and s (setq i (vl-string-search "," s)) (> i 0))
+    (progn
+      (setq x (atoi (substr s 1 i))
+            y (atoi (substr s (+ i 2))))
+      (if (= s (strcat (itoa x) "," (itoa y)))
+        (progn
+          (setq scr (getvar "SCREENSIZE"))
+          (if (and scr (listp scr) (= (length scr) 2)
+                   (numberp (car scr)) (numberp (cadr scr)))
+            (setq x (max 0 (min x (fix (- (car scr) 100.0))))
+                  y (max 0 (min y (fix (- (cadr scr) 100.0))))))
+          (list x y))))))
+
+;; Open a page where the user last had the dialog.  new_dialog takes a
+;; position back, but only in its four-argument form -- and a build
+;; answering done_dialog with something other than a point would poison
+;; every reopen, so the shape is checked before it is trusted and the
+;; plain two-argument call is the fallback.  lzv:*pos* is this session's
+;; answer; the profile is the one the last session left behind.
+(defun lzv:newdlg (name dcl / p)
+  (setq p (if lzv:*pos* lzv:*pos* (lzv:pos-read)))
+  (if (and p (listp p) (= (length p) 2)
+           (numberp (car p)) (numberp (cadr p)))
+      (new_dialog name dcl "" p)
+      (new_dialog name dcl)))
+
+;; start_dialog, then keep where the dialog was left.  Saving here
+;; rather than in the six action tiles keeps setenv out of a dialog
+;; callback and gives the profile write one place to go wrong.
+(defun lzv:rundlg ( / rc)
+  (setq rc (start_dialog))
+  (lzv:pos-save lzv:*pos*)
+  rc)
+
+;;; -------------------- the page ----------------------------------------
+
+(defun lzv:page (dcl / d k)
+  (cond
+    ((not (lzv:newdlg (lzv:dlgname lzv:*type*) dcl)) 9)
+    (t
+     ;; the tabs -- each closes this page and names the next
+     (foreach d lzv:*types*
+       (action_tile (strcat "tab_" (car d))
+         (strcat "(setq lzv:*go* \"" (car d) "\" lzv:*pos* (done_dialog 4))")))
+     ;; the dropdowns.  A pick changes nothing that is greyed and
+     ;; nothing on the picture, so it only has to restate
+     (foreach d lzv:*asks*
+       (start_list (car d))
+       (foreach k (caddr d) (add_list k))
+       (end_list)
+       (set_tile (car d) (itoa (lzv:sel (car d))))
+       (action_tile (car d)
+         (strcat "(lzv:sput \"" (car d) "\" (atoi $value)) (lzv:restate)")))
+     ;; put back what was typed the last time this sheet was on screen
+     (foreach d (lzv:keys lzv:*chart*)
+       (set_tile d (lzv:get d))
+       (action_tile d
+         (strcat "(lzv:put \"" d "\" $value) (setq lzv:*focus* \"" d "\")"
+                 " (lzv:redraw) (lzv:restate)")))
+     (foreach d (lzv:c-dims lzv:*chart*)
+       (action_tile (strcat "pick_" (cadr d))
+         (strcat "(setq lzv:*focus* \"" (cadr d) "\") (lzv:redraw)"
+                 " (mode_tile \"" (cadr d) "\" 2)"
+                 " (mode_tile \"" (cadr d) "\" 3)")))
+     ;; the chart takes no action at all -- it is a passive image tile.
+     ;; Recall does NOT close the page: it fills the empty boxes where
+     ;; you are standing, and the state line moves to say so
+     (action_tile "recall" "(lzv:recall)")
+     (if (not (lzv:recall-read (lzv:recall-slot))) (mode_tile "recall" 1))
+     (action_tile "accept" "(setq lzv:*pos* (done_dialog 1))")
+     (action_tile "cancel" "(setq lzv:*pos* (done_dialog 0))")
+     (lzv:redraw)
+     (lzv:restate)
+     (lzv:rundlg))))
+
+;;; -------------------- the run -----------------------------------------
+;;  A helper rather than the command body, so its localized *error* is
+;;  out of scope by the time POOLSIDE is started: it installs its own,
+;;  and a POOLSIDE that fails must report as POOLSIDE.
+
+(defun lzv:show ( / *error* f dcl rc done out)
+  (defun *error* (msg)
+    (term_dialog)
+    (if (and dcl (>= dcl 0)) (unload_dialog dcl))
+    (setq dcl nil)
+    (if f (vl-file-delete f))
+    (setq f nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZSIDE error: " msg)))
+    (if lzd:report (lzd:report "LAZSIDE" *lazside-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZSIDE" *lazside-version*))
+  (setq lzv:*vals*  nil
+        lzv:*sel*   nil
+        lzv:*chart* nil
+        lzv:*focus* nil
+        lzv:*pos*   nil)                ; the profile decides where this
+                                        ; run opens, not the last page
+  ;; THE PAGE LOOP.  DCL has no tab tile and no way to rebuild a dialog
+  ;; that is already up, so a change of bottom type closes this page
+  ;; and opens the next -- and because done_dialog hands back where the
+  ;; dialog was standing, it reopens exactly there instead of wandering
+  ;; off to the middle of the screen.  Everything typed lives in
+  ;; lzv:*vals*, keyed, so a letter both floors carry still holds what
+  ;; was typed against it when the tab comes back.
+  (while (not done)
+    (setq lzv:*chart* (lzv:chart lzv:*type*)
+          f           (lzv:write-dcl))
+    (cond
+      ((null f)
+       (princ "\nLAZSIDE error: could not write the dialog file.")
+       (setq done T))
+      ((< (setq dcl (load_dialog f)) 0)
+       (princ "\nLAZSIDE error: could not load the dialog file.")
+       (vl-file-delete f)
+       (setq f nil done T))
+      (t
+       (setq rc (lzv:page dcl))
+       (unload_dialog dcl)
+       (setq dcl nil)
+       (vl-file-delete f)
+       (setq f nil)
+       (cond
+         ((= rc 9)
+          (princ "\nLAZSIDE error: could not open the form.")
+          (setq done T))
+         ((= rc 0) (setq done T))
+         ((= rc 4) (setq lzv:*type* lzv:*go* lzv:*focus* nil))
+         ((= rc 1)
+          ;; an accepted sheet is what gets remembered -- a cancelled
+          ;; one was not a section anybody used
+          (lzv:recall-save (lzv:recall-slot))
+          (setq out (lzv:form) done T))
+         (t (setq done T))))))
+  out)
+
+;;; -------------------- commands ----------------------------------------
+
+;; The form, then POOLSIDE with what it collected.  POOLSIDE has to be
+;; here to receive it, so say so plainly rather than opening a form
+;; whose Insert button could only fail.
+(defun c:LAZSIDE ( / form)
+  (cond
+    ((not (lzv:loaded))
+     (princ "\nLAZSIDE: POOLSIDE is not loaded in this session -- APPLOAD")
+     (princ "\n         lisp/poolside/POOLSIDE.lsp, or LAZPASS.lsp, which")
+     (princ "\n         carries it."))
+    (t
+     (setq form (lzv:show))
+     (cond
+       ((null form) (princ "\nLAZSIDE: cancelled, nothing drawn."))
+       (t
+        (princ (strcat "\nLAZSIDE: " (itoa (length form))
+                       " answers to POOLSIDE for a " lzv:*type*
+                       " bottom; it will ask for whatever is left."))
+        (psd:run-with-answers form)))))
+  (princ))
+
+(defun c:LAZSIDEVER ()
+  (princ (strcat "\nLAZSIDE " *lazside-version* " (LAZSIDE.lsp) - "
+                 (itoa (length lzv:*types*)) " bottom type(s)."))
+  (princ))
+
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nLAZSIDE " *lazside-version*
+                 " loaded.  Type LAZSIDE to fill a side view in.")))
 (princ)
 
 
@@ -51101,7 +52315,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.6") ; printed on load and at command start so a
+(setq *cs-version* "v4.7") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -51526,6 +52740,12 @@
 ;;;  questions; a keyword is checked against the live prompt's own
 ;;;  list and falls through to the prompt when it does not fit.
 ;;;  Selections and point picks are never form-answered.
+;;;
+;;;  BEADING IS THREE KEYS, not one.  bead is whether to bead at all,
+;;;  beadsides is All/Some/None along the step side walls, and
+;;;  beadnums is the step numbers Some asks for, as the string the
+;;;  prompt would have taken ("1 3 5").  The whole chain comes off a
+;;;  sheet now; the side to bead TOWARD is a pick and stays here.
 ;;;
 ;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used - removed.
 ;;;  Otherwise Back deadlocks: step back onto a form-answered question,
@@ -52594,13 +53814,21 @@
                (progn
                  ;; every tread but the last is beaded - the side walls
                  ;; are the question, and None leaves them bare
-                 (initget "All Some None Back Undo")
-                 (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
-                                      (getkword (strcat "\nWhich steps have"
-                                                        " beaded side walls?"
-                                                        " [All/Some/None/Back]"
-                                                        " <All>: "))))
-                                   ("All")))
+                 ;; the form can answer this one: a sheet that said
+                 ;; All or None has nothing left to ask here.  Back is
+                 ;; not reachable from a form answer -- there is no
+                 ;; prompt to step back from, and the question above it
+                 ;; came off the same sheet
+                 (if (null (setq bside (cs-fkw 'beadsides
+                                               "All Some None" "All")))
+                   (progn
+                     (initget "All Some None Back Undo")
+                     (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+                                          (getkword (strcat "\nWhich steps have"
+                                                            " beaded side walls?"
+                                                            " [All/Some/None/Back]"
+                                                            " <All>: "))))
+                                       ("All")))))
                  (if (member bside '("Back" "Undo"))
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 1))
@@ -52610,9 +53838,17 @@
                (setq bstep 4)
                (progn
                  (princ (strcat "\n  Steps drawn: " (cs-numsay btreads)))
-                 (setq s (getstring T (strcat "\nStep numbers with"
-                                              " beaded sides (B = back): ")))
-                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
+                 ;; ...and this one, as the string the prompt would
+                 ;; have taken: "1 3 5".  Anything that is not a string
+                 ;; is no answer at all rather than one the number
+                 ;; reader would have to guess at
+                 (if (cs-fhas 'beadnums)
+                   (progn (setq s (cs-ftake 'beadnums))
+                          (if (/= (type s) 'STR) (setq s "")))
+                   (progn
+                     (setq s (getstring T (strcat "\nStep numbers with"
+                                                  " beaded sides (B = back): ")))
+                     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)))
                  (if (cs-back-word s)
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 2))
@@ -53108,7 +54344,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.17") ; printed on load and at command start so a
+(setq *hs-version* "v3.18") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -53641,6 +54877,12 @@
 ;;;  keyword is checked against the live prompt's own list and falls
 ;;;  through to the prompt when it does not fit.  Selections and
 ;;;  point picks are never form-answered.
+;;;
+;;;  BEADING IS THREE KEYS, not one.  bead is whether to bead at all,
+;;;  beadsides is All/Some/None along the step side walls, and
+;;;  beadnums is the step numbers Some asks for, as the string the
+;;;  prompt would have taken ("1 3 5").  The whole chain comes off a
+;;;  sheet now; the side to bead TOWARD is a pick and stays here.
 ;;;
 ;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used - removed.
 ;;;  Otherwise Back deadlocks: step back onto a form-answered question,
@@ -54443,13 +55685,21 @@
                (progn
                  ;; every tread but the last is beaded - the side walls
                  ;; are the question, and None leaves them bare
-                 (initget "All Some None Back Undo")
-                 (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
-                                      (getkword (strcat "\nWhich steps have"
-                                                        " beaded side walls?"
-                                                        " [All/Some/None/Back]"
-                                                        " <All>: "))))
-                                   ("All")))
+                 ;; the form can answer this one: a sheet that said
+                 ;; All or None has nothing left to ask here.  Back is
+                 ;; not reachable from a form answer -- there is no
+                 ;; prompt to step back from, and the question above it
+                 ;; came off the same sheet
+                 (if (null (setq bside (hs-fkw 'beadsides
+                                               "All Some None" "All")))
+                   (progn
+                     (initget "All Some None Back Undo")
+                     (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+                                          (getkword (strcat "\nWhich steps have"
+                                                            " beaded side walls?"
+                                                            " [All/Some/None/Back]"
+                                                            " <All>: "))))
+                                       ("All")))))
                  (if (member bside '("Back" "Undo"))
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 1))
@@ -54459,9 +55709,17 @@
                (setq bstep 4)
                (progn
                  (princ (strcat "\n  Steps drawn: " (hs-numsay btreads)))
-                 (setq s (getstring T (strcat "\nStep numbers with"
-                                              " beaded sides (B = back): ")))
-                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
+                 ;; ...and this one, as the string the prompt would
+                 ;; have taken: "1 3 5".  Anything that is not a string
+                 ;; is no answer at all rather than one the number
+                 ;; reader would have to guess at
+                 (if (hs-fhas 'beadnums)
+                   (progn (setq s (hs-ftake 'beadnums))
+                          (if (/= (type s) 'STR) (setq s "")))
+                   (progn
+                     (setq s (getstring T (strcat "\nStep numbers with"
+                                                  " beaded sides (B = back): ")))
+                     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)))
                  (if (hs-back-word s)
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 2))
@@ -54957,7 +56215,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.10") ; printed on load and at command start so a
+(setq *ns-version* "v3.11") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -55495,6 +56753,12 @@
 ;;;  checked against the live prompt's own list and falls through to
 ;;;  the prompt when it does not fit.  Selections and point picks are
 ;;;  never form-answered.
+;;;
+;;;  BEADING IS THREE KEYS, not one.  bead is whether to bead at all,
+;;;  beadsides is All/Some/None along the step side walls, and
+;;;  beadnums is the step numbers Some asks for, as the string the
+;;;  prompt would have taken ("1 3 5").  The whole chain comes off a
+;;;  sheet now; the side to bead TOWARD is a pick and stays here.
 ;;;
 ;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used - removed.
 ;;;  Otherwise Back deadlocks: step back onto a form-answered question,
@@ -56471,13 +57735,21 @@
                (progn
                  ;; every tread but the last is beaded - the side walls
                  ;; are the question, and None leaves them bare
-                 (initget "All Some None Back Undo")
-                 (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
-                                      (getkword (strcat "\nWhich steps have"
-                                                        " beaded side walls?"
-                                                        " [All/Some/None/Back]"
-                                                        " <All>: "))))
-                                   ("All")))
+                 ;; the form can answer this one: a sheet that said
+                 ;; All or None has nothing left to ask here.  Back is
+                 ;; not reachable from a form answer -- there is no
+                 ;; prompt to step back from, and the question above it
+                 ;; came off the same sheet
+                 (if (null (setq bside (ns-fkw 'beadsides
+                                               "All Some None" "All")))
+                   (progn
+                     (initget "All Some None Back Undo")
+                     (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+                                          (getkword (strcat "\nWhich steps have"
+                                                            " beaded side walls?"
+                                                            " [All/Some/None/Back]"
+                                                            " <All>: "))))
+                                       ("All")))))
                  (if (member bside '("Back" "Undo"))
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 1))
@@ -56487,9 +57759,17 @@
                (setq bstep 4)
                (progn
                  (princ (strcat "\n  Steps drawn: " (ns-numsay btreads)))
-                 (setq s (getstring T (strcat "\nStep numbers with"
-                                              " beaded sides (B = back): ")))
-                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
+                 ;; ...and this one, as the string the prompt would
+                 ;; have taken: "1 3 5".  Anything that is not a string
+                 ;; is no answer at all rather than one the number
+                 ;; reader would have to guess at
+                 (if (ns-fhas 'beadnums)
+                   (progn (setq s (ns-ftake 'beadnums))
+                          (if (/= (type s) 'STR) (setq s "")))
+                   (progn
+                     (setq s (getstring T (strcat "\nStep numbers with"
+                                                  " beaded sides (B = back): ")))
+                     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)))
                  (if (ns-back-word s)
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 2))
@@ -56757,25 +58037,44 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; LAZSTEP.lsp  --  say how many steps, then fill the drawing in
+;;; LAZSTEP.lsp  --  type the step count and the drawing follows it
 ;;; ----------------------------------------------------------------------
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
 ;;;
-;;; Commands:  LAZSTEP        pick a step type, say how many steps, fill
+;;; Commands:  LAZSTEP        pick a step type, type the step count, fill
 ;;;                           the drawing in and run the step routine
 ;;;            LAZSTEPVER     print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
-;;; TWO PAGES, AND THE SECOND ONE IS BUILT FROM THE FIRST.  Page one
-;;; asks which of the three step routines this is -- CORNERSTP,
-;;; HEMISTEP or NORMIESTEP -- HOW MANY STEPS, and the handful of
-;;; questions that routine asks once for the whole run.  Page two is a
-;;; DRAWING GENERATED FOR THAT COUNT: three steps draw three treads,
-;;; eight draw eight, and every dimension the count implies is on it
-;;; with a box against it.  Nothing here is a stored picture; the chart
-;;; is built by lzt:chart from the type and the number.
+;;; ONE PAGE, AND THE COUNT IS ON IT.  The drawing stands on the LEFT
+;;; and everything asked about it in the column beside it: which of the
+;;; three step routines this is -- CORNERSTP, HEMISTEP or NORMIESTEP --
+;;; HOW MANY STEPS, the handful of questions that routine asks once for
+;;; the whole run, and a box against every dimension the count implies.
+;;; Nothing here is a stored picture; the chart is built by lzt:chart
+;;; from the type and the number.
+;;;
+;;; TYPE THE COUNT AND THE PICTURE FOLLOWS IT.  Three steps draw three
+;;; treads, eight draw eight, and the boxes come with them: put 5 in
+;;; the count and there are five tread boxes, five width boxes and six
+;;; depth boxes to fill in, no more and no fewer.  Until a count is
+;;; given the picture is a NOMINAL one (lzt:*steps-nominal*) and every
+;;; dimension box on it is greyed, because a box that has no step to
+;;; belong to is not a box anybody should be typing into.  That is what
+;;; the count being a field rather than a page of its own buys: the
+;;; drawing is the answer to the question standing next to it.
+;;;
+;;; It used to be two pages -- the count on the first, the drawing on
+;;; the second -- so the picture the count describes was the one thing
+;;; you could not see while typing it, and changing a 5 to a 6 meant
+;;; Back, retype, Next.  DCL cannot add a tile to a dialog that is
+;;; already up, so a new count still closes the page and reopens it;
+;;; what changed is that it reopens as ITSELF, in the same place, with
+;;; everything typed still in it (lzt:*vals* is keyed and outlives the
+;;; rebuild) -- so the count reads as a field that redraws rather than
+;;; as a page boundary.
 ;;;
 ;;; That is the whole point.  At the command line the step count is
 ;;; never a question -- the tread loop repeats until Enter -- so the
@@ -56786,6 +58085,14 @@
 ;;; waiting for an Enter nobody typed, and a form of N rows drives a
 ;;; run of N steps.
 ;;;
+;;; BEADING IS ASKED HERE TOO, and all of it: whether to bead at all,
+;;; which steps carry the bead along their side walls, and which step
+;;; numbers when that answer is Some.  The three routines hand the
+;;; beading itself to AUTOBEAD and ask those three questions in a chain
+;;; at the end of the run; every one of them now takes a form answer,
+;;; so a sheet that says No beads nothing and never mentions it again.
+;;; The side to bead TOWARD stays a pick in the drawing.
+;;;
 ;;; WHAT THE DRAWING SHOWS.  A plan view of the type picked, and under
 ;;; it the side profile every one of the three draws the same way --
 ;;; the flight in elevation, reading down and to the left, N risers and
@@ -56794,32 +58101,36 @@
 ;;; depth chain is the part that is hardest to hold in your head at the
 ;;; command line, and it is exactly what the routines ask for.
 ;;;
-;;; EACH PAGE SAYS WHAT IT IS ABOUT TO DO.  Page one carries boxes with
-;;; two different readers -- a measurement goes through cal:formanswer, the
-;;; step count and the bench step through lzt:int -- and both turn what
-;;; they cannot use into "not answered".  "3.5" is the case that
-;;; separates them: a perfectly good measurement, and not a step number
-;;; at all.  A state line on each page names a box in that position and
-;;; holds Next or Insert back until it is fixed; page one's is the same
-;;; tile the count refusal writes to, and lzt:countwhy is the one rule
-;;; both the live warning and that refusal read, so they cannot come to
-;;; different conclusions.  With nothing wrong, page two's line is the
-;;; hand-off: how many dimensions are filled and which letters the
-;;; routine will still ask for.
+;;; THE PAGE SAYS WHAT IT IS ABOUT TO DO, ON TWO LINES.  The form
+;;; carries boxes with two different readers -- a measurement goes
+;;; through cal:formanswer, the step count and the bench step through
+;;; lzt:int -- and both turn what they cannot use into "not answered".
+;;; "3.5" is the case that separates them: a perfectly good
+;;; measurement, and not a step number at all.  The line under the
+;;; count (lzt:p1state) is the run's: the count, then a once-only box
+;;; that will be dropped.  The line above the buttons (lzt:p2state) is
+;;; the hand-off: how many dimensions are filled and which letters the
+;;; routine will still ask for.  INSERT IS HELD BACK BY EITHER of them,
+;;; and lzt:countwhy is the one rule all three of the count's readers
+;;; use -- the live warning, the redraw and the refusal at the gate --
+;;; so they cannot come to different conclusions.
 ;;;
 ;;; ZERO INSTALL, like LAZFORM and LAZPANEL: the dialog is plain DCL
 ;;; written to the temp folder at run time and the chart is drawn with
 ;;; vector_image, so there is no artwork file to ship and nothing to
-;;; NETLOAD.  Unlike LAZFORM the file is rewritten each time a page is
-;;; opened, because page two's DCL depends on the count -- N rows of
-;;; boxes cannot be a static dialog.
+;;; NETLOAD.  Unlike LAZFORM the file is rewritten each time the page
+;;; is opened, because its DCL depends on the count -- N rows of boxes
+;;; cannot be a static dialog.
 ;;;
 ;;; DCL HEIGHT IS A HARD FAILURE MODE.  A dialog taller than the screen
 ;;; does not open, and nothing here can measure a screen: N rows of
 ;;; boxes grow the page linearly, so the count is capped (lzt:*max-
-;;; steps*, 8) and the depth boxes are packed two to a row.  A larger
-;;; number is refused on page one with a message rather than opening a
-;;; page that might not fit.
+;;; steps*, 8), the depth boxes are packed two to a row, and the answer
+;;; column SPLITS IN TWO once it is taller than lzt:*colbudget* -- the
+;;; page is as tall as its longest column, so a column that has grown
+;;; past the budget is wrapped rather than shipped.  A count past the
+;;; ceiling is refused with a message on the line under the box rather
+;;; than by building a page that might not open.
 ;;;
 ;;; WHY THE BOXES SIT WHERE THEY DO.  DCL packs tiles into rows and
 ;;; columns -- no absolute positioning, no overlapping, no z-order --
@@ -56862,7 +58173,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.8")
+(setq *lazstep-version* "v2.0")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -56917,11 +58228,36 @@
 ;;  was generated for, up to this number (ChartCatalog.MaxSteps).
 (setq lzt:*max-steps* 8)
 
+;;  WHAT THE PICTURE SHOWS BEFORE A COUNT IS TYPED.  The page opens with
+;;  the count box empty -- the form invents no answers, and steps is an
+;;  answer that TRAVELS -- but a page with no drawing on it would be a
+;;  page with nothing to read.  So the chart is drawn for this many
+;;  steps and every dimension box on it is greyed until a real count
+;;  is given, which is also what makes "type the count and the boxes
+;;  come alive" the first thing the page teaches.
+(setq lzt:*steps-nominal* 3)
+
 ;; The chart column: width in cells, its total height in rows spread
 ;; over the bands, and the edit_width of a box wedged into the drawing.
 (setq lzt:*chart-w* 58)
 (setq lzt:*chart-h* 20)
 (setq lzt:*wedge-ed* 5)
+
+;;  HOW TALL THE ANSWER COLUMN MAY GET before it is split in two.  The
+;;  page is as tall as its longest column and the count, the once-only
+;;  questions, the widths and the depths now share one page, so the
+;;  column that carries them all grows past the chart beside it at the
+;;  larger counts.  In LINES of generated DCL rather than rows on
+;;  screen -- which is what lzt:packcols counts -- so it is a budget to
+;;  tune against tools/check_dcl.py, not a measurement.
+(setq lzt:*colbudget* 34)
+
+;;  How wide the hint and state lines are, in character cells.  Wider
+;;  than the boxes they sit under, because the page is as tall as its
+;;  longest column and every sentence that does not fit on one line is
+;;  another row of that height; the drawing and two columns of boxes
+;;  are wider than this, so nothing here decides the dialog's width.
+(setq lzt:*hint-w* 96)
 
 ;; Where the dialog remembers its position between restarts (the
 ;; AutoCAD profile, via setenv), and where a sheet's last accepted
@@ -57231,10 +58567,25 @@
 ;;;  prompt does not list falls through to the prompt anyway, and the
 ;;;  hint says they are ignored on a plain corner.
 
+;;;  BEADING IS THREE QUESTIONS, not one.  All three routines end the
+;;;  same way: bead at all, which steps carry the bead along their side
+;;;  walls, and -- for Some -- which step numbers.  They were a chain of
+;;;  live prompts with only the first of them form-answerable, so a
+;;;  sheet that said "Yes" still stopped twice at the command line after
+;;;  the drawing was finished.  All three take a form answer now.  The
+;;;  side to bead TOWARD is a pick and stays in the drawing.
+;;;
+;;;  A TEXT row is a box whose answer is passed through as the string it
+;;;  was typed as: "1 3 5" is a list of step numbers and neither a
+;;;  measurement nor a whole number, so neither reader would take it.
+
 (setq lzt:*ask-common*
-  '(("dims"    "LIST" "Dimension the steps"   ("(ask)" "Yes" "No"))
-    ("profile" "LIST" "Add a side profile"    ("(ask)" "Yes" "No"))
-    ("bead"    "LIST" "Bead the steps"        ("(ask)" "Yes" "No"))))
+  '(("dims"      "LIST" "Dimension the steps"   ("(ask)" "Yes" "No"))
+    ("profile"   "LIST" "Add a side profile"    ("(ask)" "Yes" "No"))
+    ("bead"      "LIST" "Beading required"      ("(ask)" "Yes" "No"))
+    ("beadsides" "LIST" "Beaded side walls on"
+     ("(ask)" "All" "Some" "None"))
+    ("beadnums"  "TEXT" "...those step numbers" ())))
 
 (setq lzt:*asks*
   '(("CORNERSTP"
@@ -57254,8 +58605,13 @@
      ("crown"       "DIST" "Last step to the crown (NA = none)" ())
      ("boundary"    "LIST" "Draw the boundary"
       ("(ask)" "Yes" "No")))
+    ;; NORMIESTEP's ONE WIDTH IS NOT HERE.  It is a dimension on the
+    ;; drawing -- the letter W, standing off the run it measures -- so
+    ;; the drawing carries its box.  It used to be in both places
+    ;; because the count and the drawing were separate pages and you
+    ;; could meet either first; on one page that is two tiles with one
+    ;; key, which is not a dialog DCL will open.
     ("NORMIESTEP"
-     ("width"       "DIST" "Step width, the whole run" ())
      ("treat"       "LIST" "Corner treatment"
       ("(ask)" "Square" "Radius" "Cut" "NotGiven"))
      ("treat-sz"    "DIST" "Treatment size" ())
@@ -57279,7 +58635,6 @@
 (setq lzt:*chart* nil)          ; the chart generated for that count
 (setq lzt:*focus* nil)          ; the key whose box has the caret
 (setq lzt:*pos* nil)            ; where the dialog was last standing
-(setq lzt:*page* 1)             ; which page is open
 (setq lzt:*go* nil)             ; the type a tab click asked for
 (setq lzt:*msg* "")             ; what page one has to say about the count
 
@@ -57387,9 +58742,28 @@
       (if (not (member tr '("Radius" "Cut")))
         (setq out (cons "treat-sz" out)))
       (if (not (= tr "Cut")) (setq out (cons "cutgiven" out)))))
-  (if (and lzt:*chart* (= (lzt:selword "profile") "No"))
-    (foreach dd (lzt:c-dims lzt:*chart*)
-      (if (lzt:depthkey (cadr dd)) (setq out (cons (cadr dd) out)))))
+  ;; the bead chain closes behind its own answers: nothing is asked
+  ;; about side walls on a run that is not being beaded, and the step
+  ;; numbers are only a question when the answer is Some.  "(ask)" at
+  ;; the head of it leaves both open -- the prompt's own default is
+  ;; Yes, so a chain greyed on an unanswered question would hide the
+  ;; questions the run is most likely to reach
+  (if (= (lzt:selword "bead") "No")
+    (setq out (append (list "beadsides" "beadnums") out))
+    (if (/= (lzt:selword "beadsides") "Some")
+      (setq out (cons "beadnums" out))))
+  ;; UNTIL A COUNT IS GIVEN the drawing is the nominal one, and not one
+  ;; of its dimensions is a question this run will reach: nothing on it
+  ;; is live, nothing on it is complained about, nothing on it travels.
+  ;; One rule, so the greying, the state line and lzt:form cannot come
+  ;; apart.  A run with no side profile asks for no depths either.
+  (if lzt:*chart*
+    (if (null lzt:*steps*)
+      (foreach dd (lzt:c-dims lzt:*chart*)
+        (setq out (cons (cadr dd) out)))
+      (if (= (lzt:selword "profile") "No")
+        (foreach dd (lzt:c-dims lzt:*chart*)
+          (if (lzt:depthkey (cadr dd)) (setq out (cons (cadr dd) out)))))))
   out)
 
 ;; Grey what page one carries and this run will not ask about.  Only
@@ -57405,14 +58779,24 @@
   (foreach d (lzt:keys lzt:*chart*)
     (mode_tile d (if (member d noask) 1 0))))
 
+;; Both halves of one page.  They touch disjoint sets of keys -- the
+;; once-only questions and the dimensions on the drawing -- and both
+;; read the same lzt:skip, so a dropdown that opens or closes a
+;; question moves whichever half owns it.
+(defun lzt:grey ( )
+  (lzt:p1grey)
+  (lzt:p2grey))
+
 ;; A dropdown changed: remember it, and re-grey what that answer opens
 ;; or closes.
 (defun lzt:p1pick (stem v)
   (lzt:sput stem (atoi v))
-  (lzt:p1grey)
-  ;; direction, bench and the corner treatment all move lzt:skip, so a
-  ;; box that was greyed a moment ago may be live now
-  (lzt:p1restate)
+  ;; direction, bench, the corner treatment and the bead chain all move
+  ;; lzt:skip, so a box that was greyed a moment ago may be live now --
+  ;; and profile moves the DEPTH boxes on the drawing, which is why the
+  ;; whole page is re-greyed rather than the run block alone
+  (lzt:grey)
+  (lzt:restate)
   (princ))
 
 ;;; -------------------- what the page still owes -------------------------
@@ -57448,12 +58832,15 @@
 
 ;;  -------- page one --------
 
-;; The typed boxes page one carries: a LIST is a dropdown and cannot be
-;; mistyped, and a greyed question is not asked at all.
+;; The typed boxes the run block carries whose contents can be WRONG.
+;; A LIST is a dropdown and cannot be mistyped; a TEXT box is passed
+;; through as the string it holds, so it has no reader to fail either.
+;; A greyed question is not asked at all.
 (defun lzt:p1boxes ( / noask out d)
   (setq noask (lzt:skip))
   (foreach d (lzt:asks)
-    (if (and (/= (cadr d) "LIST") (not (member (car d) noask)))
+    (if (and (not (member (cadr d) '("LIST" "TEXT")))
+             (not (member (car d) noask)))
       (setq out (cons d out))))
   (reverse out))
 
@@ -57482,13 +58869,19 @@
              "\" " (cdr bad) "."))
     (t
      (setq n (lzt:int (lzt:get "steps")))
-     (strcat (itoa n) (if (= n 1) " step" " steps")
-             " - Next builds the drawing to fill in."))))
+     (strcat (cal:plural n "step" "steps")
+             " - the drawing and its boxes are built for that many."))))
 
 ;; Hold Next back while the count is unusable or a box will be dropped.
-(defun lzt:p1restate ( / )
+;; BOTH LINES, AND THE ONE BUTTON THEY SHARE.  Insert is held back by
+;; either of them: a count that cannot be used and a box that would be
+;; silently dropped are both reasons the sheet is not ready to go, and
+;; a page with one button cannot have two opinions about it.
+(defun lzt:restate ( / )
   (set_tile "msg" (lzt:p1state))
-  (mode_tile "accept" (if (or (lzt:countwhy) (lzt:p1bad)) 1 0))
+  (set_tile "state" (lzt:p2state))
+  (mode_tile "accept"
+             (if (or (lzt:countwhy) (lzt:p1bad) (lzt:unreadable)) 1 0))
   (princ))
 
 ;;  -------- page two --------
@@ -57526,6 +58919,9 @@
     (bad
      (strcat (lzt:taglist bad)
              " is not a measurement - type a number, or NA, or clear it."))
+    ((null lzt:*steps*)
+     (strcat "Type a step count and the boxes come alive - one per tread,"
+             " one per width, one per drop."))
     ((zerop n)
      (strcat "Nothing on this drawing is live - " lzt:*type*
              " will ask for all of it."))
@@ -57557,13 +58953,9 @@
              (setq v (cdr (assoc k had))))
       (progn (lzt:put k v) (set_tile k v) (setq n (1+ n)))))
   (lzt:redraw)
-  (lzt:p2restate)
+  (lzt:restate)
   n)
 
-(defun lzt:p2restate ( / )
-  (set_tile "state" (lzt:p2state))
-  (mode_tile "accept" (if (lzt:unreadable) 1 0))
-  (princ))
 
 
 ;;; -------------------- what the routine is handed -----------------------
@@ -57583,6 +58975,12 @@
            (setq out (cons (cons (read (car k)) v) out))))
         ((= (cadr k) "INT")
          (if (setq v (lzt:int (lzt:get (car k))))
+           (setq out (cons (cons (read (car k)) v) out))))
+        ;; a TEXT answer is a STRING and travels as one: "1 3 5" is a
+        ;; list of step numbers the routine parses for itself, and an
+        ;; empty box is no answer at all rather than an empty list
+        ((= (cadr k) "TEXT")
+         (if (/= (setq v (cal:trim (lzt:get (car k)))) "")
            (setq out (cons (cons (read (car k)) v) out))))
         (t
          (setq a (cal:formanswer (lzt:get (car k))))
@@ -57839,77 +59237,42 @@
     (setq i (1+ i)))
   out)
 
-;; The DCL name of a page.
-(defun lzt:dlgname (p ty)
-  (strcat "lazstep_p" (itoa p) "_" (strcase ty t)))
+;; The DCL name of the page for a type.  One page now, so the type is
+;; the whole of the name.
+(defun lzt:dlgname (ty)
+  (strcat "lazstep_" (strcase ty t)))
 
 ;; One page-one field.
-(defun lzt:p1tile (d)
-  (if (= (cadr d) "LIST")
-      (strcat "    : popup_list { key = \"" (car d) "\"; label = \""
-              (caddr d) "\"; edit_width = 12; }")
-      (strcat "    : edit_box { key = \"" (car d) "\"; label = \""
-              (caddr d) "\"; edit_width = 8; }")))
+(defun lzt:p1tile (d ind)
+  (cond
+    ((= (cadr d) "LIST")
+     (strcat ind ": popup_list { key = \"" (car d) "\"; label = \""
+             (caddr d) "\"; edit_width = 12; }"))
+    ((= (cadr d) "TEXT")
+     (strcat ind ": edit_box { key = \"" (car d) "\"; label = \""
+             (caddr d) "\"; edit_width = 12; }"))
+    (t
+     (strcat ind ": edit_box { key = \"" (car d) "\"; label = \""
+             (caddr d) "\"; edit_width = 8; }"))))
 
-;; PAGE ONE: the type, the count, and the questions asked once.
-(defun lzt:dcl-p1 (ty / out d)
-  ;; out is consed newest-first and reversed once at the end, so this
-  ;; seed list reads BACKWARDS: the label second here puts it second in
-  ;; the file, after the line that opens the dialog.  The other way
-  ;; round emits an attribute before its own dialog, which is not DCL.
-  (setq out (list (strcat "  label = \"LazStep - " (lzt:title ty) "\";")
-                  (strcat (lzt:dlgname 1 ty) " : dialog {")))
-  (setq out (cons "  : row {" out))
-  (foreach d lzt:*types*
-    (setq out (cons (strcat "    : button { key = \"tab_" (car d)
-                            "\"; label = \"" (cadr d) "\"; }")
-                    out)))
-  (setq out (cons "  }" out))
-  (setq out (cons "  : boxed_column {" out))
-  (setq out (cons "    label = \"How many steps\";" out))
-  (setq out (cons (strcat "    : edit_box { key = \"steps\"; label = \""
-                          "Number of steps (1-" (itoa lzt:*max-steps*)
-                          ")\"; edit_width = 4; fixed_width = true; }")
-                  out))
-  ;; The state line, under the box it is mostly about.  The label here
-  ;; is only what it says before the page opens: lzt:p1restate rewrites
-  ;; it before the dialog is shown and on every change after that.
-  (setq out (cons (strcat "    : text { key = \"msg\"; width = 60; label = \""
-                          "The next page is a drawing built for that many"
-                          " steps, with a box on every dimension.\"; }")
-                  out))
-  (setq out (cons "  }" out))
-  (setq out (cons "  : boxed_column {" out))
-  (setq out (cons (strcat "    label = \"" (lzt:title ty) " (" ty
-                          ") - asked once for the run\";")
-                  out))
-  (foreach d (lzt:asks-of ty)
-    (setq out (cons (lzt:p1tile d) out)))
-  (setq out (cons "  }" out))
-  (setq out (cons "  spacer;" out))
-  (foreach d (lzt:hints ty)
-    (setq out (cons (strcat "  : text { width = 60; label = \"" d "\"; }")
-                    out)))
-  (setq out (cons "  : row {" out))
-  (setq out (cons (strcat "    : button { key = \"accept\"; label = \"Next >\";"
-                          " is_default = true; fixed_width = true; }")
-                  out))
-  (setq out (cons (strcat "    : button { key = \"cancel\"; label = \"Cancel\";"
-                          " is_cancel = true; fixed_width = true; }")
-                  out))
-  (setq out (cons "  }" out))
-  (reverse (cons "}" out)))
-
-;; What page one has to say, per type.
+;; What the page has to say in its static lines, per type.  Kept SHORT
+;; and set against lzt:*hint-w* rather than the narrower column the
+;; boxes are in: every one of these is a row of the page's height, and
+;; the page is now carrying the count, the run and the drawing at once.
 (defun lzt:hints (ty / out)
-  (setq out (list (strcat "The walls, the curve, the side to draw toward and"
-                          " the profile's pick all stay")
-                  "in the drawing.  Leave a box empty and the routine asks."))
+  (setq out (list (strcat "Type the step count and the drawing follows it:"
+                          " that many treads, widths and drops.")
+                  (strcat "The walls, the curve, the side to draw toward"
+                          " and the profile's pick stay in the drawing.")
+                  (strcat "NA in a width fits it to the walls or the curve."
+                          "  D1 drops into step 1, DA after the last.")
+                  (strcat "An empty box is asked at the command line - a box"
+                          " takes 24, or a feet-and-inches spelling.")))
   (if (= ty "CORNERSTP")
     (setq out (append out
-                (list (strcat "Measure and Steps-run are asked only when the"
-                              " selection turns up a corner diagonal or")
-                      "fillet; on a plain corner they are ignored."))))
+                (list (strcat "Measure and Steps-run matter only on a corner"
+                              " diagonal or fillet; a plain corner ignores"
+                              " them.")))))
   (if (= ty "HEMISTEP")
     (setq out (append out
                 (list "NA at the wall width or the crown means none."))))
@@ -57925,12 +59288,78 @@
         (strcat "          : edit_box { key = \"" (cadr d)
                 "\"; edit_width = " (itoa ed) "; label = \"" lbl "\"; }")))
 
-;; PAGE TWO: the drawing built for the count, with the boxes on it.
-(defun lzt:dcl-p2 (c / out d wk widths depths pair l)
-  (setq out (list (strcat "  label = \"LazStep - " (lzt:c-title c) ", "
-                          (itoa (length (lzt:treads c))) " steps\";")
-                  (strcat (lzt:dlgname 2 (lzt:c-type c)) " : dialog {")))
+;; The brace depth one generated line adds or removes.  Braces inside a
+;; quoted label are not structure -- a caption may legitimately hold
+;; one -- so the scan steps over the strings.
+(defun lzt:brace (s / i n d ch)
+  (setq i 1 n (strlen s) d 0)
+  (while (<= i n)
+    (setq ch (substr s i 1))
+    (cond
+      ((= ch "\"")
+       (setq i (1+ i))
+       (while (and (<= i n) (/= (substr s i 1) "\"")) (setq i (1+ i))))
+      ((= ch "{") (setq d (1+ d)))
+      ((= ch "}") (setq d (1- d))))
+    (setq i (1+ i)))
+  d)
+
+;; The answer column, split in two once it is past the budget.  The
+;; page is as tall as its longest column, and the count, the once-only
+;; questions, the widths and the depths now share one page: at eight
+;; steps that column runs well past the chart beside it.  Splitting is
+;; done on WHOLE BOXES -- a boxed_column cut in half is not a box --
+;; which is why the lines are gathered into brace-balanced blocks
+;; first.  LAZFORM makes the same split for the same reason.
+(defun lzt:packcols (lines / blocks blk d l tot run half a b out)
+  (setq blocks nil blk nil d 0)
+  (foreach l lines
+    (setq blk (cons l blk) d (+ d (lzt:brace l)))
+    (if (= d 0) (setq blocks (cons (reverse blk) blocks) blk nil)))
+  (if blk (setq blocks (cons (reverse blk) blocks)))
+  (setq blocks (reverse blocks) tot 0)
+  (foreach blk blocks (setq tot (+ tot (length blk))))
+  (if (or (<= tot lzt:*colbudget*) (< (length blocks) 2))
+    ;; short enough, or nothing to split it on: the column as it was
+    (append (list "    : column {") lines (list "    }"))
+    (progn
+      ;; greedy: keep filling the first column while doing so leaves it
+      ;; no further past halfway than stopping would leave it short
+      (setq run 0 half (/ tot 2) a nil b nil)
+      (foreach blk blocks
+        (if (and (<= (+ run (length blk)) half) (null b))
+          (setq a (append a blk) run (+ run (length blk)))
+          (setq b (append b blk))))
+      (if (null a) (setq a (car blocks) b (apply 'append (cdr blocks))))
+      (setq out (append (list "    : column {") a (list "    }")))
+      (append out (list "    : column {") b (list "    }")))))
+
+;; THE PAGE: the drawing on the left, everything asked about it in the
+;; column beside it.  The tread chain runs across the drawing and is
+;; wedged into it as real boxes; the widths and the depths run the
+;; other way and a box cannot stand sideways, so they sit in the answer
+;; column with their values drawn onto the chart in the letter's place.
+(defun lzt:dcl-one (c / out ty d wk widths depths pair l col)
+  ;; out is consed newest-first and reversed once at the end, so this
+  ;; seed list reads BACKWARDS: the label second here puts it second in
+  ;; the file, after the line that opens the dialog.  The other way
+  ;; round emits an attribute before its own dialog, which is not DCL.
+  (setq ty (lzt:c-type c))
+  (setq out (list (strcat "  label = \"LazStep - " (lzt:c-title c)
+                          (if lzt:*steps*
+                              (strcat ", " (itoa lzt:*steps*)
+                                      (if (= lzt:*steps* 1) " step" " steps"))
+                              "")
+                          "\";")
+                  (strcat (lzt:dlgname ty) " : dialog {")))
   (setq wk (lzt:wedge-keys c))
+  ;; the tabs -- one per routine, each a page of its own
+  (setq out (cons "  : row {" out))
+  (foreach d lzt:*types*
+    (setq out (cons (strcat "    : button { key = \"tab_" (car d)
+                            "\"; label = \"" (cadr d) "\"; }")
+                    out)))
+  (setq out (cons "  }" out))
   (setq out (cons "  : row {" out))
   ;; PASSIVE image tiles, deliberately, stacked with the wedge rows
   ;; between them -- see the header for what an image_button costs.
@@ -57938,7 +59367,26 @@
   (foreach l (lzt:bandtiles c)
     (setq out (cons l out)))
   (setq out (cons "    }" out))
-  (setq out (cons "    : column {" out))
+  ;; ---- the answer column, built into COL so it can be shared out
+  ;; between two columns once its size is known
+  (setq col nil)
+  ;; THE COUNT FIRST.  It is the field the rest of the page is built
+  ;; from, so it stands at the head of the column with the drawing it
+  ;; drives beside it.
+  (setq col (cons "      : boxed_column {" col))
+  (setq col (cons "        label = \"How many steps\";" col))
+  (setq col (cons (strcat "        : edit_box { key = \"steps\"; label = \""
+                          "Steps (1-" (itoa lzt:*max-steps*)
+                          ")\"; edit_width = 4; fixed_width = true; }")
+                  col))
+  (setq col (cons "      }" col))
+  (setq col (cons "      : boxed_column {" col))
+  (setq col (cons (strcat "        label = \"" (lzt:title ty) " (" ty
+                          ") - asked once for the run\";")
+                  col))
+  (foreach d (lzt:asks-of ty)
+    (setq col (cons (lzt:p1tile d "        ") col)))
+  (setq col (cons "      }" col))
   ;; the widths: one row each, labelled, because what a width means
   ;; differs between the three types
   (foreach d (lzt:c-dims c)
@@ -57947,13 +59395,13 @@
   (setq widths (reverse widths))
   (if widths
     (progn
-      (setq out (cons "      : boxed_column {" out))
-      (setq out (cons "        label = \"Step widths\";" out))
+      (setq col (cons "      : boxed_column {" col))
+      (setq col (cons "        label = \"Step widths\";" col))
       (foreach d widths
-        (setq out (cons "        : row {" out))
-        (foreach l (lzt:colcell d (nth 7 d) 8) (setq out (cons l out)))
-        (setq out (cons "        }" out)))
-      (setq out (cons "      }" out))))
+        (setq col (cons "        : row {" col))
+        (foreach l (lzt:colcell d (nth 7 d) 8) (setq col (cons l col)))
+        (setq col (cons "        }" col)))
+      (setq col (cons "      }" col))))
   ;; the depths: TWO TO A ROW.  One row each would add N+1 rows to a
   ;; page that already grows with N, and a dialog taller than the
   ;; screen does not open at all.
@@ -57962,39 +59410,42 @@
   (setq depths (reverse depths))
   (if depths
     (progn
-      (setq out (cons "      : boxed_column {" out))
-      (setq out (cons "        label = \"Depths, top step first\";" out))
+      (setq col (cons "      : boxed_column {" col))
+      (setq col (cons "        label = \"Depths, top step first\";" col))
       (setq pair nil)
       (foreach d depths
         (if (null pair)
-          (setq out  (cons "        : row {" out)
+          (setq col  (cons "        : row {" col)
                 pair d)
           (setq pair nil))
-        (foreach l (lzt:colcell d "" 7) (setq out (cons l out)))
-        (if (null pair) (setq out (cons "        }" out))))
-      (if pair (setq out (cons "        }" out)))
-      (setq out (cons "      }" out))))
-  (setq out (cons "    }" out))
+        (foreach l (lzt:colcell d "" 7) (setq col (cons l col)))
+        (if (null pair) (setq col (cons "        }" col))))
+      (if pair (setq col (cons "        }" col)))
+      (setq col (cons "      }" col))))
+  (setq out (append (reverse (lzt:packcols (reverse col))) out))
   (setq out (cons "  }" out))
   (setq out (cons "  spacer;" out))
-  (foreach l (list (strcat "D1 is the drop into step 1; DA is the drop after"
-                           " the last tread.")
-                   (strcat "NA in a width means fit to the walls or the"
-                           " curve.  An empty box is asked for at the")
-                   "command line, where the picks and the selections are."
-                   "A box takes 24, or a feet-and-inches spelling - both read.")
-    (setq out (cons (strcat "  : text { width = 66; label = \"" l "\"; }")
+  (foreach l (lzt:hints ty)
+    (setq out (cons (strcat "  : text { width = " (itoa lzt:*hint-w*)
+                            "; label = \"" l "\"; }")
                     out)))
-  (setq out (cons "  : text { key = \"state\"; width = 66; }" out))
+  ;; THE TWO STATE LINES, and they carry no label here: both are
+  ;; written before the dialog is shown and rewritten on every change,
+  ;; so a label in the file would only be the wrong answer for an
+  ;; instant.  msg is the run's line -- the count, and a once-only box
+  ;; that would be dropped -- and state is the hand-off.  They stand
+  ;; full width under the picture rather than inside the answer column,
+  ;; where a refusal long enough to be useful would not fit.
+  (setq out (cons (strcat "  : text { key = \"msg\"; width = "
+                          (itoa lzt:*hint-w*) "; }") out))
+  (setq out (cons (strcat "  : text { key = \"state\"; width = "
+                          (itoa lzt:*hint-w*) "; }") out))
   (setq out (cons "  : row {" out))
   (setq out (cons (strcat "    : button { key = \"recall\"; "
                           "label = \"Recall last\"; fixed_width = true; }")
                   out))
   (setq out (cons (strcat "    : button { key = \"accept\"; label = \"Insert\";"
                           " is_default = true; fixed_width = true; }")
-                  out))
-  (setq out (cons (strcat "    : button { key = \"back\"; label = \"< Back\";"
-                          " fixed_width = true; }")
                   out))
   (setq out (cons (strcat "    : button { key = \"cancel\"; label = \"Cancel\";"
                           " is_cancel = true; fixed_width = true; }")
@@ -58009,14 +59460,19 @@
     (if (lzt:treadkey (cadr d)) (setq out (cons d out))))
   (reverse out))
 
-;; Every page, in one file.  Page one for all three types -- so a tab
-;; switch needs nothing from disk -- and page two for the chart the
-;; count has generated, when there is one.
-(defun lzt:dcl-lines ( / out ty)
+;; The count the page is drawn for: the one that was given, or the
+;; nominal picture that stands in until one is.
+(defun lzt:drawncount ( )
+  (if lzt:*steps* lzt:*steps* lzt:*steps-nominal*))
+
+;; Every type's page, in one file, each built for the count that is in
+;; hand -- so a tab click is a change of routine and not of count, and
+;; whatever was typed against the steps still comes back.
+(defun lzt:dcl-lines ( / out ty n)
+  (setq n (lzt:drawncount))
   (foreach ty lzt:*types*
-    (setq out (append out (lzt:dcl-p1 (car ty)) (list ""))))
-  (if lzt:*chart*
-    (setq out (append out (lzt:dcl-p2 lzt:*chart*) (list ""))))
+    (setq out (append out (lzt:dcl-one (lzt:chart (car ty) n))
+                      (list ""))))
   out)
 
 (defun lzt:write-lines (fh / l)
@@ -58091,10 +59547,11 @@
   (lzt:pos-save lzt:*pos*)
   rc)
 
-(defun lzt:page1 (dcl / d k)
+(defun lzt:page (dcl / d k wk)
   (cond
-    ((not (lzt:newdlg (lzt:dlgname 1 lzt:*type*) dcl)) 9)
+    ((not (lzt:newdlg (lzt:dlgname lzt:*type*) dcl)) 9)
     (t
+     (setq wk (lzt:wedge-keys lzt:*chart*))
      ;; the tabs -- each closes this page and names the next.  A type
      ;; whose routine is not in this session is greyed rather than
      ;; offered: its Insert could only fail.
@@ -58103,8 +59560,10 @@
          (strcat "(setq lzt:*go* \"" (car d) "\" lzt:*pos* (done_dialog 4))"))
        (if (not (lzt:loaded (car d)))
          (mode_tile (strcat "tab_" (car d)) 1)))
+     ;; THE COUNT, and it is the field the rest of the page follows
      (set_tile "steps" (lzt:get "steps"))
-     (action_tile "steps" "(lzt:put \"steps\" $value) (lzt:p1restate)")
+     (action_tile "steps" "(lzt:count $value)")
+     ;; the questions asked once for the whole run
      (foreach d (lzt:asks)
        (cond
          ((= (cadr d) "LIST")
@@ -58117,28 +59576,14 @@
          (t
           (set_tile (car d) (lzt:get (car d)))
           (action_tile (car d)
-            (strcat "(lzt:put \"" (car d) "\" $value) (lzt:p1restate)")))))
-     (action_tile "accept" "(setq lzt:*pos* (done_dialog 1))")
-     (action_tile "cancel" "(setq lzt:*pos* (done_dialog 0))")
-     (lzt:p1grey)
-     (lzt:p1restate)
-     ;; a refusal from the last time round still wins the line: it says
-     ;; why the page did not move on, which is what the user is looking
-     ;; for.  The first keystroke replaces it with the live state.
-     (if (/= lzt:*msg* "") (set_tile "msg" lzt:*msg*))
-     (lzt:rundlg))))
-
-(defun lzt:page2 (dcl / d wk)
-  (cond
-    ((not (lzt:newdlg (lzt:dlgname 2 lzt:*type*) dcl)) 9)
-    (t
-     (setq wk (lzt:wedge-keys lzt:*chart*))
-     ;; put back what was typed the last time this count was on screen
+            (strcat "(lzt:put \"" (car d) "\" $value) (lzt:restate)")))))
+     ;; the dimensions on the drawing: what was typed the last time this
+     ;; count was on screen goes back into them
      (foreach d (lzt:keys lzt:*chart*)
        (set_tile d (lzt:get d))
        (action_tile d
          (strcat "(lzt:put \"" d "\" $value) (setq lzt:*focus* \"" d "\")"
-                 " (lzt:redraw) (lzt:p2restate)")))
+                 " (lzt:redraw) (lzt:restate)")))
      ;; a wedge dim has no pick button -- its box already sits on the
      ;; drawing where the letter was
      (foreach d (lzt:c-dims lzt:*chart*)
@@ -58147,18 +59592,48 @@
            (strcat "(setq lzt:*focus* \"" (cadr d) "\") (lzt:redraw)"
                    " (mode_tile \"" (cadr d) "\" 2)"
                    " (mode_tile \"" (cadr d) "\" 3)"))))
-     ;; the chart takes no action at all -- it is a passive image tile
+     ;; the chart takes no action at all -- it is a passive image tile.
      ;; Recall does NOT close the page: it fills the empty boxes where
      ;; you are standing, and the state line moves to say so
      (action_tile "recall" "(lzt:recall)")
      (if (not (lzt:recall-read (lzt:recall-slot))) (mode_tile "recall" 1))
-     (action_tile "back" "(setq lzt:*pos* (done_dialog 5))")
      (action_tile "accept" "(setq lzt:*pos* (done_dialog 1))")
      (action_tile "cancel" "(setq lzt:*pos* (done_dialog 0))")
      (lzt:redraw)
-     (lzt:p2grey)
-     (lzt:p2restate)
+     (lzt:grey)
+     (lzt:restate)
+     ;; a refusal from the last time round still wins the line: it says
+     ;; why the page came back, which is what the user is looking for.
+     ;; The first keystroke replaces it with the live state.
+     (if (/= lzt:*msg* "") (set_tile "msg" lzt:*msg*))
      (lzt:rundlg))))
+
+;; THE COUNT BOX CHANGED.  Remember it, and -- when it is a number this
+;; page can be built for and is not the number it was built for already
+;; -- close the page and reopen it for the new one.  DCL cannot add or
+;; remove a tile from a dialog that is up, so N boxes for N steps means
+;; a new dialog; it comes back in the same place (done_dialog hands the
+;; position over) with everything typed still in it (lzt:*vals* is
+;; keyed and outlives the rebuild), which is what makes the count read
+;; as a field that redraws rather than as a page boundary.
+;;
+;; A count that cannot be used rebuilds nothing: the line under the
+;; picture says why and Insert stays greyed, which is what lzt:restate
+;; is for.
+(defun lzt:count (v / n)
+  (lzt:put "steps" v)
+  ;; the count is LIVE from the keystroke that makes it usable, not
+  ;; from the rebuild: a number that matches the drawing already on
+  ;; screen rebuilds nothing, and its boxes still have to come alive.
+  ;; It goes back to nil the moment the box stops holding a count, so
+  ;; a half-deleted number greys the drawing again rather than leaving
+  ;; boxes live against a step that is no longer there
+  (setq n            (if (lzt:countwhy) nil (lzt:int (cal:trim v)))
+        lzt:*steps*  n)
+  (if (and n (/= n (length (lzt:treads lzt:*chart*))))
+    (setq lzt:*pos* (done_dialog 6))
+    (progn (lzt:grey) (lzt:restate)))
+  (princ))
 
 ;; The count, checked before a page is built for it.  Nothing here can
 ;; measure a screen and N rows of boxes grow the page linearly, so a
@@ -58166,10 +59641,11 @@
 ;; opening a dialog that might not fit on it.
 
 ;; Why this count cannot be used, or nil when it can.  One function,
-;; two callers: the state line says it while the number is being typed
-;; and holds Next back, and count-ok is still the gate that refuses to
-;; build a page for it -- so the live warning and the refusal cannot
-;; come to different conclusions.
+;; three callers: the state line says it while the number is being
+;; typed and holds Insert back, lzt:count reads it before rebuilding
+;; the page for a new number, and count-ok is still the gate that sets
+;; lzt:*steps* -- so the live warning, the redraw and the refusal
+;; cannot come to different conclusions.
 (defun lzt:countwhy ( / n)
   (setq n (lzt:int (lzt:get "steps")))
   (cond
@@ -58210,22 +59686,31 @@
   (if lzd:begin (lzd:begin "LAZSTEP" *lazstep-version*))
   (setq lzt:*vals*  nil
         lzt:*sel*   nil
-        lzt:*steps* nil
+        lzt:*steps* nil                 ; no count is an ANSWER the form
+                                        ; invents: the drawing opens on
+                                        ; the nominal picture with every
+                                        ; box on it greyed
         lzt:*chart* nil
         lzt:*focus* nil
         lzt:*pos*   nil                 ; the profile decides where this
                                         ; run opens, not the last page
-        lzt:*msg*   ""
-        lzt:*page*  1)
-  ;; THE PAGE LOOP.  DCL has no tab tile and no way to rebuild a dialog
-  ;; that is already up, so a page change closes this one and opens the
-  ;; next -- and because done_dialog hands back where the dialog was
-  ;; standing, it reopens exactly there instead of wandering off to the
-  ;; middle of the screen.  Everything typed lives in lzt:*vals*, keyed,
-  ;; so it survives the switch: change the count, come back, and the
-  ;; steps that still exist still carry what was typed against them.
+        lzt:*msg*   "")
+  ;; THE PAGE LOOP.  DCL has no way to add a tile to a dialog that is
+  ;; already up, so a change of COUNT or of TYPE closes this page and
+  ;; opens the one that answer needs -- and because done_dialog hands
+  ;; back where the dialog was standing, it reopens exactly there
+  ;; instead of wandering off to the middle of the screen.  Everything
+  ;; typed lives in lzt:*vals*, keyed, so it survives the rebuild:
+  ;; change the count, and the
+  ;; steps that still exist still carry what was typed
+  ;; against them -- while what was typed against the ones that went
+  ;; away is still there if the number goes back up.
   (while (not done)
-    (setq f (lzt:write-dcl))
+    ;; the drawing this page is built for, generated here and nowhere
+    ;; else: the count when there is one, the nominal picture until
+    ;; there is
+    (setq lzt:*chart* (lzt:chart lzt:*type* (lzt:drawncount))
+          f           (lzt:write-dcl))
     (cond
       ((null f)
        (princ "\nLAZSTEP error: could not write the dialog file.")
@@ -58235,7 +59720,7 @@
        (vl-file-delete f)
        (setq f nil done T))
       (t
-       (setq rc (if (= lzt:*page* 1) (lzt:page1 dcl) (lzt:page2 dcl)))
+       (setq rc (lzt:page dcl))
        (unload_dialog dcl)
        (setq dcl nil)
        (vl-file-delete f)
@@ -58245,24 +59730,33 @@
           (princ "\nLAZSTEP error: could not open the form.")
           (setq done T))
          ((= rc 0) (setq done T))
-         ((and (= lzt:*page* 1) (= rc 4))
-          (setq lzt:*type* lzt:*go* lzt:*msg* ""))
-         ((and (= lzt:*page* 1) (= rc 1))
-          ;; the drawing is generated HERE, from the count that was
-          ;; just accepted -- come back with a different number and a
-          ;; different drawing is built for it
-          (if (lzt:count-ok)
-            (setq lzt:*chart* (lzt:chart lzt:*type* lzt:*steps*)
-                  lzt:*focus* nil
-                  lzt:*msg*   ""
-                  lzt:*page*  2)))
-         ((and (= lzt:*page* 2) (= rc 5))
-          (setq lzt:*page* 1 lzt:*msg* "" lzt:*focus* nil))
-         ((and (= lzt:*page* 2) (= rc 1))
-          ;; an accepted drawing is what gets remembered -- a cancelled
-          ;; one was not a drawing anybody used
-          (lzt:recall-save (lzt:recall-slot))
-          (setq out (lzt:form) done T))
+         ((= rc 4)                      ; a tab: the same count, drawn
+          (setq lzt:*type* lzt:*go* lzt:*msg* "" lzt:*focus* nil))
+         ((= rc 6)                      ; the count moved: redraw for it
+          (lzt:count-ok)
+          (setq lzt:*msg* "" lzt:*focus* nil))
+         ((= rc 1)
+          (cond
+            ;; Insert with a count the page cannot be built for: the
+            ;; refusal goes on the line and the page comes back.  The
+            ;; button is greyed for this, so it takes a keyboard
+            ;; default to reach -- which is exactly why it is checked
+            ((not (lzt:count-ok)))
+            ;; Insert typed straight over a NEW count, before the box
+            ;; ever lost focus: the drawing on screen is not the one
+            ;; the number asks for, so it is rebuilt and the sheet is
+            ;; handed over on the next press rather than against a
+            ;; picture nobody has seen
+            ((/= lzt:*steps* (length (lzt:treads lzt:*chart*)))
+             (setq lzt:*msg*
+                   (strcat (cal:plural lzt:*steps* "step" "steps")
+                           " - the drawing has been rebuilt for that"
+                           " many.  Press Insert again to draw it.")))
+            (t
+             ;; an accepted drawing is what gets remembered -- a
+             ;; cancelled one was not a drawing anybody used
+             (lzt:recall-save (lzt:recall-slot))
+             (setq out (lzt:form) done T))))
          (t (setq done T))))))
   out)
 
@@ -85720,63 +87214,93 @@
 ;;; Workflow
 ;;;   1. Select a LINE (a polyline is also accepted, so work started in
 ;;;      an earlier session can be resumed).
-;;;   2. Say whether the overall width has changed: Grew, Shrank, New
-;;;      or Unchanged.  The width meant is the distance straight across,
-;;;      end to end, not the length of the object; half of any
-;;;      difference is added to (or taken off) each end, and the line in
-;;;      the drawing is resized to match.
-;;;   3. Click a point to set the direction:
+;;;   2. Click a point to set the direction:
 ;;;        - the line end nearest the click becomes START, the far end
-;;;          FINISH, fixing the order the lengths are entered in;
+;;;          FINISH, fixing the order the lengths are entered in; a red
+;;;          arrow marks START for the whole run;
 ;;;        - the side of the line the click lands on is the side the new
 ;;;          points are offset toward.
-;;;   4. Enter how many values (points) are required  (>= 2).
-;;;   5. Enter a length for each point, in order START -> FINISH.
+;;;   3. Say whether the overall width has changed: Grew, Shrank, New
+;;;      or Unchanged.  The width meant is the distance straight across,
+;;;      end to end, not the length of the object.  The change is split
+;;;      evenly, half at each end, unless you say otherwise -- then you
+;;;      give the amount at the START end (the arrowed one) and the rest
+;;;      goes on at FINISH -- and the line in the drawing is resized to
+;;;      match.
+;;;   4. Optionally select a BOUNDARY for the offsets -- a property line,
+;;;      a house wall, a deck edge already drawn -- and say whether the
+;;;      offsets STOP at it (Limit: a typed length past it is brought
+;;;      back to it) or RUN OUT TO MEET it (Meet: every point with the
+;;;      boundary ahead of it lands on the boundary, and no length is
+;;;      asked for it).  Enter takes None and nothing is capped.
+;;;   5. Enter how many values (points) are required  (>= 2).
+;;;   6. Enter a length for each point, in order START -> FINISH.
 ;;;      Press Enter to reuse the previous length when it repeats, or
 ;;;      type B (Back) to step back and re-enter the previous point
-;;;      (U, the old keyword, is still accepted).
-;;;   6. Say how the points are joined: Straight (every segment a
+;;;      (U, the old keyword, is still accepted).  With a Limit boundary
+;;;      the prompt names the distance to it and takes M (Max) to go
+;;;      exactly that far; a longer length is brought back to it.
+;;;   7. Say how the points are joined: Straight (every segment a
 ;;;      line, which is what the routine has always drawn), Arcs (every
 ;;;      segment an arc), or Mixed, which then asks which segment
 ;;;      numbers are arcs -- "1 3-5" -- and leaves the rest straight.
 ;;;      The question is only asked once there are three points or
 ;;;      more, and the answer becomes the default for the next round.
-;;;   7. Say whether the overall width of the line just drawn has
-;;;      changed -- step 2's question, asked of the course this round
-;;;      built.  It is resized the same way, half the difference at
-;;;      each end, before anything is measured off it.
-;;;   8. Choose whether to repeat on the new polyline.  If so, enter a
-;;;      new point count and repeat from step 5 with the new polyline as
+;;;   8. Say whether the overall width of the line just drawn has
+;;;      changed -- step 3's question, asked of the course this round
+;;;      built.  It is resized the same way, split the same way, before
+;;;      anything is measured off it.
+;;;   9. Choose whether to repeat on the new polyline.  If so, enter a
+;;;      new point count and repeat from step 6 with the new polyline as
 ;;;      the path.
-;;;   9. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
+;;;  10. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
 ;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
 ;;;
-;;; The offset side is fixed once from the direction click in step 3 and
+;;; The offset side is fixed once from the direction click in step 2 and
 ;;; reused for every round, so all offsets stay on the same side of the
 ;;; original line and every dimension stays perpendicular to it -- until
-;;; a round corrects its width at step 7, which moves its new points
+;;; a round corrects its width at step 8, which moves its new points
 ;;; along the resized line and leaves that round's dimensions reading
 ;;; the corrected drawing instead.
 ;;;
+;;; Steps 1 to 4 are one chain: Back at the click re-opens the
+;;; selection, Back at the width question re-opens the click, and Back
+;;; at the Limit/Meet question re-opens the boundary selection.  The
+;;; boundary selection itself offers no Back, because the resize step 3
+;;; made is already in the drawing by then.
+;;;
 ;;; The overall width
 ;;;   Walls get re-measured, and the number that comes back is the
-;;;   distance straight across, end to end.  That is what steps 2 and 7
+;;;   distance straight across, end to end.  That is what steps 3 and 8
 ;;;   ask for -- never the developed length of the OBJECT, which on
 ;;;   anything bowed runs further than the width it spans.  Grew and
 ;;;   Shrank take the difference, New takes the width itself, and
 ;;;   Unchanged (the default, and Enter) leaves everything exactly as it
 ;;;   was.
 ;;;
-;;;   A new width is made true by scaling the object about the midpoint
-;;;   of its two ends, so exactly half the difference lands at each end
-;;;   and the shape between them is carried along.  The object in the
-;;;   drawing is resized too, not just the numbers behind it: the
-;;;   offsets and their dimensions are measured off it, so leaving it at
-;;;   the old width would put every base point somewhere the drawing
-;;;   says nothing is.  The base points and dimensions then follow the
-;;;   resized object, since they are spaced along it after the resize.
-;;;   The whole thing sits inside the command's undo group, so one U
-;;;   puts the width back.
+;;;   A change is then SHARED between the two ends, and the question
+;;;   after the amount is how.  Enter (Yes) splits it evenly, half at
+;;;   each end, which is what a wall re-measured as a whole usually
+;;;   means; No asks how much of it is at the START end -- the end the
+;;;   red arrow points at -- and the rest goes on at FINISH.  Zero is an
+;;;   answer (all of it at FINISH) and so is the whole amount (all of it
+;;;   at START); more than the whole amount would move FINISH the other
+;;;   way, which is a different change from the one just given, and is
+;;;   refused.  Growing and shrinking are handled alike: the amount is
+;;;   what each end moves by, outward or inward.
+;;;
+;;;   A new width is made true by scaling the object about a point on
+;;;   the line through its two ends: the midpoint for an even split,
+;;;   nearer START the more of the change goes to FINISH, and ON an end
+;;;   when that end holds still.  One uniform scale, whatever the split,
+;;;   so the shape between the ends is carried along unchanged in
+;;;   proportion.  The object in the drawing is resized too, not just
+;;;   the numbers behind it: the offsets and their dimensions are
+;;;   measured off it, so leaving it at the old width would put every
+;;;   base point somewhere the drawing says nothing is.  The base points
+;;;   and dimensions then follow the resized object, since they are
+;;;   spaced along it after the resize.  The whole thing sits inside the
+;;;   command's undo group, so one U puts the width back.
 ;;;
 ;;;   Every line gets that question, not just the one selected: each
 ;;;   round draws the next course out, and a course is re-measured the
@@ -85784,16 +87308,57 @@
 ;;;   as wide as the typed offsets add up to, so ends measured a little
 ;;;   long or a little short leave it that much wide or narrow -- and
 ;;;   the next round spaces its base points along it, which is the same
-;;;   reason step 2 resizes the selected object rather than only
-;;;   remembering a number.  Step 7 asks after the polyline is drawn,
+;;;   reason step 3 resizes the selected object rather than only
+;;;   remembering a number.  Step 8 asks after the polyline is drawn,
 ;;;   because that is when there is a width to compare against, and
 ;;;   before its dimensions are recorded: a round that corrects its
 ;;;   width has its new points moved with the line, so each dimension
 ;;;   reads the distance the corrected drawing really has rather than
 ;;;   the length that was typed into it.  A resize the drawing will not
-;;;   take stops step 2 -- nothing is drawn yet, so re-running costs a
-;;;   click -- but at step 7 it leaves the line at the width it drew and
+;;;   take stops step 3 -- nothing is drawn yet, so re-running costs a
+;;;   click -- but at step 8 it leaves the line at the width it drew and
 ;;;   says so, because whole rounds of typed lengths sit behind it.
+;;;
+;;; The boundary
+;;;   A wall is not always free to run as far as the tape says: there
+;;;   is a property line, a house, a deck edge already drawn, and the
+;;;   course being built has to answer to it.  Step 4 takes that object
+;;;   once, and then asks which of two things it is.
+;;;
+;;;   Limit: the boundary is the most any offset may reach.  At each
+;;;   point a ray is cast from the base point along the offset normal
+;;;   and the nearest crossing ahead of it is that point's maximum --
+;;;   per point, not one number for the run, because a boundary at an
+;;;   angle to the line is nearer at one end than at the other.  The
+;;;   length prompt names it, M (Max) takes it exactly, and a longer
+;;;   length is brought back to it and said so; the number typed is
+;;;   still what Enter repeats at the next point, since the tape has
+;;;   not changed, only where this one point may reach.
+;;;
+;;;   Meet: the boundary is where every offset ENDS.  A point with the
+;;;   boundary ahead of it is placed on the boundary and dimensioned to
+;;;   it, and no length is asked -- the offset is the distance to the
+;;;   boundary and nothing else.  Back at a length that IS asked steps
+;;;   back to the last length typed, taking every point that ran out to
+;;;   the boundary in between with it, and to the count question when
+;;;   nothing was typed in front of it.
+;;;
+;;;   Either way, where the ray never meets the boundary -- it is behind
+;;;   the offset side, or stops short of that end of the run -- the
+;;;   point has no maximum and no landing, and the prompt is the one it
+;;;   always was (Meet says "no boundary ahead" so the silence is not
+;;;   mistaken for a landing).  A boundary covering part of a run
+;;;   answers for the part it covers.
+;;;
+;;;   Two things neither mode is.  It holds the measured POINTS at or
+;;;   inside the boundary, and an arc segment between two of them is
+;;;   fitted to the points' own curvature: where a boundary bends away
+;;;   between two points the arc can still bow past it, and the answer
+;;;   is a point there rather than a different arc.  And it is not
+;;;   re-applied by the width correction at step 8, which scales the
+;;;   whole line: that is the drafter's own measurement and is not
+;;;   second-guessed, but a correction that carries points past a Limit
+;;;   boundary, or off a Meet one, says how many.
 ;;;
 ;;; Straight lines, arcs, or both
 ;;;   A measured wall is rarely all one or all the other: a radiused
@@ -85839,7 +87404,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.15")
+(setq *perp-version* "v0.16")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -86142,10 +87707,13 @@
 ;; Widths get re-measured, and the number that comes back is the
 ;; distance straight across, end to end -- NOT the developed length of
 ;; the object on the drawing, which on anything bowed is the longer of
-;; the two.  Making that width true is one scale about the midpoint of
-;; the two ends: exactly half the difference lands at each end, the
-;; direction of travel and the offset side are left alone, and the shape
-;; between the ends is carried along with it.
+;; the two.  Making that width true is one scale of the whole object
+;; about a point on the line through its two ends: the shape between
+;; them is carried along, the direction of travel and the offset side
+;; are left alone, and WHERE on that line the centre sits is what
+;; decides how the change is shared out.  The midpoint puts exactly
+;; half of it at each end; a centre nearer START moves START less and
+;; FINISH more, and a centre ON an end holds that end still.
 
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getdist/getpoint/getint hand a keyword back as
@@ -86153,59 +87721,129 @@
 (defun perp:back-kw (v)
   (and (= (type v) 'STR) (member v '("Back" "Undo"))))
 
-;; Ask whether the overall width has changed.  Returns the width to work
-;; to, or nil when it has not -- so an unchanged answer skips the resize
-;; altogether and the command behaves exactly as it always did.  d is
-;; the width the drawing carries now, and lbl heads the line that
-;; reports it: the question is asked of the selected object AND of every
-;; line a round draws, so it has to say which one it means.
-(defun perp:ask-width (lbl d / kws ans v w out done)
+;; Ask whether the overall width has changed, and how the change is
+;; shared between the two ends.  Returns (width frac) -- the width to
+;; work to, and the share of the change that lands at the START end,
+;; 0.5 when it is split evenly -- or nil when nothing has changed, so
+;; an unchanged answer skips the resize altogether, or PERP-BACK when
+;; the first question was answered Back (only offered when back is
+;; set).  d is the width the drawing carries now, and lbl heads the
+;; line that reports it: the question is asked of the selected object
+;; AND of every line a round draws, so it has to say which one it
+;; means.
+;;
+;; Four questions walked with a step counter, so Back at any of them
+;; re-asks the one in front of it rather than abandoning the resize:
+;;   1  Grew / Shrank / New / Unchanged
+;;   2  the amount (or the new width itself)
+;;   3  split it evenly, half at each end?
+;;   4  how much of it at the START end -- the rest goes on at FINISH
+(defun perp:ask-width (lbl d back / kws step kind ans v w diff frac out)
   (princ (strcat "\n" lbl ", end to end: " (rtos d) "."))
-  (setq kws "Grew Shrank New Unchanged" done nil out nil)
-  ;; the amount is a second question, so Back at it re-asks the first
-  ;; rather than abandoning the resize
-  (while (null done)
-    (setq done T w nil)
-    (initget kws)
-    (setq ans (getkword (strcat "\nHas that width changed? ["
-                                (vl-string-translate " " "/" kws)
-                                "] <Unchanged>: ")))
-    ;; the label, not the helper name: one helper asks this of the
-    ;; selected object and of every line a round draws, and a report
-    ;; that cannot tell them apart cannot say which one died
-    (if lzd:ask (lzd:ask lbl ans) ans)
+  (setq kws "Grew Shrank New Unchanged" step 1 out nil w nil frac 0.5)
+  (while (and (> step 0) (< step 5))
     (cond
-      ((or (null ans) (= ans "Unchanged")) (setq out nil))
-      ((= ans "Grew")
-       (initget 7 "Back Undo")                ; a real, positive amount
-       (setq v (getdist "\nHow much wider? [Back]: "))
-       (if lzd:ask (lzd:ask "\nHow much wider? [Back]: " v) v)
-       (if (perp:back-kw v)
-         (progn (princ "\nStepping back one question.") (setq done nil))
-         (setq out (+ d v))))
-      ((= ans "Shrank")
-       (while (and done (null w))
-         (initget 7 "Back Undo")
-         (setq v (getdist "\nHow much narrower? [Back]: "))
-         (if lzd:ask (lzd:ask "\nHow much narrower? [Back]: " v) v)
-         (cond
-           ((perp:back-kw v)
-            (princ "\nStepping back one question.")
-            (setq done nil))
-           ((< v d) (setq w (- d v)))
-           (T (princ "\nThat is the whole width or more - nothing would be left."))))
-       (setq out w))
-      (T                                      ; New: the width itself
-       (initget 6 "Back Undo")                ; Enter keeps what is drawn
-       (setq v (getdist (strcat "\nNew overall width <" (rtos d) "> [Back]: ")))
+      ;; --- 1. has it changed at all?
+      ((= step 1)
+       (initget (strcat kws (if back " Back Undo" "")))
+       (setq kind (getkword (strcat "\nHas that width changed? ["
+                                    (vl-string-translate " " "/" kws)
+                                    (if back "/Back" "")
+                                    "] <Unchanged>: ")))
+       ;; the label, not the helper name: one helper asks this of the
+       ;; selected object and of every line a round draws, and a report
+       ;; that cannot tell them apart cannot say which one died
+       (if lzd:ask (lzd:ask lbl kind) kind)
+       (cond
+         ((or (null kind) (= kind "Unchanged")) (setq out nil step 5))
+         ((member kind '("Back" "Undo")) (setq out 'PERP-BACK step 0))
+         (t (setq step 2))))
+      ;; --- 2. by how much?
+      ((= step 2)
+       (cond
+         ((= kind "Grew")
+          (initget 7 "Back Undo")                ; a real, positive amount
+          (setq v (getdist "\nHow much wider? [Back]: "))
+          (if lzd:ask (lzd:ask "\nHow much wider? [Back]: " v) v)
+          (if (perp:back-kw v)
+            (progn (princ "\nStepping back one question.") (setq step 1))
+            (setq w (+ d v) step 3)))
+         ((= kind "Shrank")
+          (initget 7 "Back Undo")
+          (setq v (getdist "\nHow much narrower? [Back]: "))
+          (if lzd:ask (lzd:ask "\nHow much narrower? [Back]: " v) v)
+          (cond
+            ((perp:back-kw v)
+             (princ "\nStepping back one question.")
+             (setq step 1))
+            ((< v d) (setq w (- d v) step 3))
+            (T (princ "\nThat is the whole width or more - nothing would be left."))))
+         (T                                      ; New: the width itself
+          (initget 6 "Back Undo")                ; Enter keeps what is drawn
+          (setq v (getdist (strcat "\nNew overall width <" (rtos d) "> [Back]: ")))
+          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v)
+          (cond
+            ((perp:back-kw v)
+             (princ "\nStepping back one question.")
+             (setq step 1))
+            ((or (null v) (equal v d 1e-9)) (setq out nil step 5))
+            (T (setq w v step 3))))))
+      ;; --- 3. half at each end, or not?
+      ((= step 3)
+       (setq diff (abs (- w d)))
+       (initget "Yes No Back Undo")
+       (setq ans (getkword (strcat "\nSplit the " (rtos diff)
+                                   " evenly, half at each end?"
+                                   " [Yes/No/Back] <Yes>: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
+       (cond
+         ((member ans '("Back" "Undo"))
+          (princ "\nStepping back one question.")
+          (setq step 2))
+         ((= ans "No") (setq step 4))
+         (t (setq frac 0.5 out (list w frac) step 5))))
+      ;; --- 4. how much of it at START?  Zero is an answer - all of it
+      ;; at FINISH - and so is the whole amount; more than that would
+      ;; move FINISH the other way, which is a different change from
+      ;; the one just given
+      ((= step 4)
+       (initget 5 "Back Undo")                  ; no Enter, no negative
+       (setq v (getdist (strcat "\nHow much of the " (rtos diff)
+                                " at the START end (the arrowed end)?"
+                                " [Back]: ")))
        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v)
        (cond
          ((perp:back-kw v)
           (princ "\nStepping back one question.")
-          (setq done nil))
-         ((or (null v) (equal v d 1e-9)) (setq out nil))
-         (T (setq out v))))))
+          (setq step 3))
+         ((> v (+ diff 1e-9))
+          (princ (strcat "\nThat is more than the whole " (rtos diff)
+                         " - the FINISH end would have to move the"
+                         " other way.")))
+         (t
+          (setq frac (/ v diff) out (list w frac) step 5)
+          (princ (strcat "\nThe other " (rtos (- diff v))
+                         " goes at the FINISH end.")))))))
   out)
+
+;; The point to scale about so that FRAC of the change lands at START
+;; and the rest at FINISH: that far along the line from START to
+;; FINISH.  0.5 is the midpoint, 0 holds START still, 1 holds FINISH
+;; still.  z is START's, carried through untouched.
+(defun perp:scale-ctr (ps pf frac)
+  (list (+ (car ps)  (* frac (- (car pf)  (car ps))))
+        (+ (cadr ps) (* frac (- (cadr pf) (cadr ps))))
+        (caddr ps)))
+
+;; The one line that says what a resize did to each end.
+(defun perp:width-line (wOld wNew frac / diff verb)
+  (setq diff (abs (- wNew wOld))
+        verb (if (> wNew wOld) "added" "taken off"))
+  (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
+          (if (equal frac 0.5 1e-9)
+            (strcat (rtos (/ diff 2.0)) " " verb " at each end.")
+            (strcat (rtos (* frac diff)) " " verb " at the START end, "
+                    (rtos (* (- 1.0 frac) diff)) " at the FINISH end."))))
 
 ;; Scale en about ctr (a point in the current UCS) by k.  T when the
 ;; drawing took it, nil when it would not -- a locked, frozen or
@@ -86232,6 +87870,145 @@
   (foreach p pts (setq out (cons (perp:scale-pt p ctr k) out)))
   (reverse out))
 
+;; --- the START arrow -------------------------------------------------
+;; Three red lines on the guide layer: a shaft coming in from outside
+;; the line along the FINISH->START extension with its tip on START,
+;; and two barbs.  It marks the end the lengths are entered from for
+;; the whole run, and it is what the width question means by "the
+;; arrowed end".  Returns the three enames so the caller can track and
+;; redraw them: a resize moves START, and an arrow left where START was
+;; would point at nothing.
+(defun perp:arrow (p ux uy dlen / sz arlen hlen tailx taily ca sa bkx bky
+                                  b1x b1y b2x b2y seg out)
+  (setq sz    (caddr p)
+        arlen (* dlen 0.15))                    ; shaft length
+  (if (< arlen 1e-6) (setq arlen 1.0))
+  (setq hlen  (* arlen 0.35)                    ; arrowhead barb length
+        ;; tail = START minus (shaft along the line direction), tip = START
+        tailx (- (car p)  (* ux arlen))
+        taily (- (cadr p) (* uy arlen))
+        ;; barbs: rotate the "back" vector b = (-ux,-uy) by +/-25 degrees
+        ca    0.9063 sa 0.4226                  ; cos/sin 25 deg
+        bkx   (- ux) bky (- uy)
+        b1x   (+ (car p)  (* hlen (- (* bkx ca) (* bky sa))))
+        b1y   (+ (cadr p) (* hlen (+ (* bkx sa) (* bky ca))))
+        b2x   (+ (car p)  (* hlen (+ (* bkx ca) (* bky sa))))
+        b2y   (+ (cadr p) (* hlen (+ (* (- bkx) sa) (* bky ca))))
+        out   '())
+  ;; entmade LINE points are WCS, so convert from the current UCS
+  (foreach seg (list (list (list tailx taily sz) p)
+                     (list p (list b1x b1y sz))
+                     (list p (list b2x b2y sz)))
+    (entmake (list '(0 . "LINE") '(8 . "PERPPTS-TEMP") '(62 . 1)
+                   (cons 10 (trans (car seg)  1 0))
+                   (cons 11 (trans (cadr seg) 1 0))))
+    (setq out (cons (entlast) out)))
+  out)
+
+;; --- the boundary the offsets answer to ------------------------------
+;; A wall is not always free to run as far as the tape says: there is a
+;; property line, a house, a deck edge already drawn, and the course
+;; being built has to answer to it.  Selecting that object once turns
+;; it into either the maximum for EVERY offset (Limit) or the place
+;; every offset ends (Meet) -- per point either way, since a boundary
+;; that runs at an angle to the line is nearer at one end than the
+;; other, and one number could not say where.
+
+;; is this entity something AutoCAD can measure along?
+(defun perp:curve-p (e / r)
+  (setq r (vl-catch-all-apply 'vlax-curve-getEndParam (list e)))
+  (and r (not (vl-catch-all-error-p r))))
+
+;; How far p may travel along the unit vector u before it meets bnd:
+;; the nearest crossing strictly ahead of p, or nil when the ray never
+;; reaches the boundary -- it lies behind the offset side, or off the
+;; end of the run, and that point simply has no maximum.
+;;
+;; A ray is not something AutoCAD can intersect, so one is drawn.  The
+;; temporary line is made long enough to reach any point of bnd -- the
+;; distance to the nearest point of it plus its own length, which no
+;; point on it can be further off than -- and IntersectWith reports the
+;; crossings.  The line is erased before this returns, whatever came
+;; back, so a run cannot litter the drawing one probe at a time.
+(defun perp:capdist (bnd p u / near far prev ln rtn lst q d best)
+  ;; the nearest point of bnd may not be readable on a degenerate
+  ;; curve; its own length alone still reaches a boundary that crosses
+  ;; the run, which is the case a cap is wanted for
+  (setq near (vlax-curve-getClosestPointTo bnd (trans p 1 0))
+        far  (+ (if near (distance p (trans near 0 1)) 0.0)
+                (vlax-curve-getDistAtParam bnd (vlax-curve-getEndParam bnd))))
+  (if (< far 1e-9) (setq far 1.0))
+  (setq prev (entlast))
+  (entmake (list '(0 . "LINE") '(8 . "PERPPTS-TEMP")
+                 (cons 10 (trans p 1 0))
+                 (cons 11 (trans (list (+ (car p)  (* far (car u)))
+                                       (+ (cadr p) (* far (cadr u)))
+                                       (caddr p))
+                                 1 0))))
+  (setq ln (entlast))
+  ;; entlast is unmoved when entmake was refused, and erasing on that
+  ;; would take whatever WAS last out of the drawing.  No ray, no cap.
+  (if (eq ln prev)
+    nil
+    (progn
+      (setq rtn (vl-catch-all-apply
+                  'vlax-invoke
+                  (list (vlax-ename->vla-object ln) 'IntersectWith
+                        (vlax-ename->vla-object bnd)
+                        ;; acExtendNone: neither object is stretched to
+                        ;; reach the other.  The symbol is AutoCAD's own
+                        ;; and is nil where it was never loaded, so the
+                        ;; number it stands for is spelled out behind it.
+                        (cond (acExtendNone) (0)))))
+      (entdel ln)
+      (if (or (vl-catch-all-error-p rtn) (null rtn))
+        nil
+        (progn
+          ;; a flat list of WCS x y z, one triple per crossing
+          (setq lst rtn best nil)
+          (while (>= (length lst) 3)
+            (setq q (trans (list (car lst) (cadr lst) (caddr lst)) 0 1)
+                  d (+ (* (- (car q)  (car p))  (car u))
+                       (* (- (cadr q) (cadr p)) (cadr u))))
+            (if (and (> d 1e-8) (or (null best) (< d best))) (setq best d))
+            (setq lst (cdddr lst)))
+          best)))))
+
+;; How many of pts sit past bnd, each measured along the ray from the
+;; base it was offset from.  Every length was capped as it was typed,
+;; so this can only come back above zero after a width correction: that
+;; scales the whole line and can carry a point that was sitting ON the
+;; boundary out beyond it.  A line that quietly crosses a boundary the
+;; drafter asked it to respect is worth a line of its own.
+(defun perp:past-bnd (bnd bases pts / i n a b dx dy d u cap out)
+  (setq i 0 n (min (length bases) (length pts)) out 0)
+  (while (< i n)
+    (setq a  (nth i bases)
+          b  (nth i pts)
+          dx (- (car b)  (car a))
+          dy (- (cadr b) (cadr a))
+          d  (sqrt (+ (* dx dx) (* dy dy))))
+    (if (> d 1e-9)
+      (progn
+        (setq u   (list (/ dx d) (/ dy d))
+              cap (perp:capdist bnd a u))
+        (if (and cap (> d (+ cap 1e-8))) (setq out (1+ out)))))
+    (setq i (1+ i)))
+  out)
+
+;; How many of pts no longer sit ON bnd -- the Meet answer's version of
+;; the count above.  Every one of them was run out to the boundary as it
+;; was placed, so only the width correction can have moved it off, and
+;; a line that no longer meets the boundary it was told to meet is
+;; worth a line of its own too.
+(defun perp:off-bnd (bnd pts / p q out)
+  (setq out 0)
+  (foreach p pts
+    (setq q (vlax-curve-getClosestPointTo bnd (trans p 1 0)))
+    (if (or (null q) (> (distance p (trans q 0 1)) 1e-6))
+      (setq out (1+ out))))
+  out)
+
 ;; --- command ---------------------------------------------------------
 
 ;; ahead of the command on purpose: the structural tests scan from
@@ -86241,24 +88018,34 @@
   (princ (strcat "\nPERPPTS " *perp-version*))
   (princ))
 
-(defun c:PERPPTS (/ *error* perp:kill perp:finish
+(defun c:PERPPTS (/ *error* perp:kill perp:unplace perp:finish
                     os ce pd plt clay cec celt celw celts cdim undoOpen
                     tmpEnts
                     srcData srcLayer srcColor srcLtype srcLw srcLts
                     dimPairs dimStyle pr
-                    sel ent etype verts p1 p2 pStart pFinish click
-                    dx dy dlen ux uy cross fuzz nx ny sz
-                    arlen hlen tailx taily ca sa bkx bky b1x b1y b2x b2y
+                    sel ent etype verts pStart pFinish click
+                    dx dy dlen ux uy cross fuzz nx ny
                     path pathEnt n lastN basePts newPts guideEnts total
-                    len lastLen i base np again ans iter p e seg
+                    len lastLen i base np again ans iter p e
                     join lastJoin kws nseg picks reply tangs plEnt
-                    wOld wNew mid fac)
+                    wOld wNew wres mid fac qstep arrow bnd bmode cap over
+                    rstep askd tgt)
 
   ;; erase one temporary entity and forget it
   (defun perp:kill (e)
     (if e
       (progn (if (entget e) (entdel e))
              (setq tmpEnts (vl-remove e tmpEnts)))))
+
+  ;; take back the points placed from index tgt on - guide nodes and
+  ;; all - so the prompt for point tgt can be asked again; tgt 0 takes
+  ;; back the whole round
+  (defun perp:unplace (tgt)
+    (while (> i tgt)
+      (perp:kill (car guideEnts))
+      (setq guideEnts (cdr guideEnts)
+            newPts    (cdr newPts)
+            i         (1- i))))
 
   ;; single cleanup path shared by normal exit, Esc and errors
   (defun perp:finish (/ guard)
@@ -86340,67 +88127,152 @@
   ;; guide points must be visible whatever the drawing's PDMODE is
   (if (member pd '(0 1)) (setvar "PDMODE" 3))
 
-  ;; --- 1. select a line (re-prompts until valid) -----------------------
-  (setq ent nil)
-  (while (null ent)
-    (setq sel (entsel "\nSelect a line or polyline: "))
-    (if lzd:ask (lzd:ask "\nSelect a line or polyline: " sel) sel)
-    (if lzd:watch (lzd:watch sel) sel)
+  ;; --- prepare the layers ---------------------------------------------
+  ;; Guides live on their own layer so a locked current layer cannot stop
+  ;; them being erased; the START arrow and the boundary probe both draw
+  ;; on it.  Offset polylines go on the source object's own layer;
+  ;; dimensions go on DIMENSIONS.  Made once, ahead of the chain below,
+  ;; which can come back through the click step more than once.
+  (cal:ensure-layer "PERPPTS-TEMP" 1)     ; guides, erased before the command ends
+  (cal:ensure-layer "DIMENSIONS"   4)
+
+  ;; --- 1 to 3: the selection, the click and the width ------------------
+  ;; One chain walked with a step counter: Back at the click re-opens
+  ;; the selection, and Back at the width question re-opens the click.
+  ;; The click comes BEFORE the width question because the width
+  ;; question may have to name an end -- how much of a change is at
+  ;; START -- and it is the click that says which end that is.
+  (setq qstep 1 arrow nil)
+  (while (< qstep 4)
     (cond
-      ((null sel)
-       (princ "\nNothing selected - try again, or press Esc to quit."))
-      (t
-       (setq etype (cdr (assoc 0 (entget (car sel))))
-             verts (perp:verts (car sel)))
+      ;; --- 1. select a line (re-prompts until valid) -------------------
+      ((= qstep 1)
+       (setq ent nil)
+       (while (null ent)
+         (setq sel (entsel "\nSelect a line or polyline: "))
+         (if lzd:ask (lzd:ask "\nSelect a line or polyline: " sel) sel)
+         (if lzd:watch (lzd:watch sel) sel)
+         (cond
+           ((null sel)
+            (princ "\nNothing selected - try again, or press Esc to quit."))
+           (t
+            (setq etype (cdr (assoc 0 (entget (car sel))))
+                  verts (perp:verts (car sel)))
+            (cond
+              ((null verts)
+               (princ (strcat "\nA " etype " is not a line or polyline.")))
+              ((< (length (setq verts (perp:dedupe verts))) 2)
+               (princ "\nThat object has no usable length."))
+              ((<= (distance (car verts) (last verts)) 1e-9)
+               (princ "\nStart and end coincide - a closed shape has no direction."))
+              (t (setq ent (car sel)))))))
+       (setq qstep 2))
+
+      ;; --- 2. click to set direction (START/FINISH) and offset side ----
+      ((= qstep 2)
+       ;; Snapping is off so the click cannot be pulled onto the line
+       ;; itself, which would make "which side" ambiguous.
+       (setvar "OSMODE" 0)
+       (setq click nil)
+       (while (null click)
+         (initget "Back Undo")
+         (setq click (getpoint "\nClick to pick direction / offset side [Back]: "))
+         (if lzd:ask (lzd:ask "\nClick to pick direction / offset side [Back]: " click) click)
+         (cond
+           ((null click)
+            (princ "\nA point is required - click one side of the line."))
+           ((perp:back-kw click)
+            (princ "\nStepping back one question.")
+            (setq qstep 1))
+           (t
+            ;; nearest endpoint to the click = START
+            (if (<= (distance click (car verts)) (distance click (last verts)))
+              (setq pStart (car verts)  pFinish (last verts))
+              (setq pStart (last verts) pFinish (car verts)))
+            (setq dx   (- (car pFinish)  (car pStart))
+                  dy   (- (cadr pFinish) (cadr pStart))
+                  dlen (sqrt (+ (* dx dx) (* dy dy))))
+            (cond
+              ((equal dlen 0.0 1e-9)
+               (princ "\nSelected object has zero length.")
+               (perp:finish)
+               (exit))
+              (t
+               (setq ux (/ dx dlen)
+                     uy (/ dy dlen))
+               ;; cross = signed distance from the infinite line;
+               ;; >0 => click is on the left.
+               (setq cross (- (* ux (- (cadr click) (cadr pStart)))
+                              (* uy (- (car click)  (car pStart))))
+                     fuzz  (max 1e-8 (* dlen 1e-6)))
+               (if (< (abs cross) fuzz)
+                 (progn
+                   (princ "\nThat point is on the line - click clearly to one side.")
+                   (setq click nil))
+                 (setq qstep 3)))))))
+       (if (= qstep 3)
+         (progn
+           ;; perpendicular unit vector, chosen toward the clicked side.
+           ;; This is fixed for the whole command: every offset and
+           ;; dimension in every round is measured along this direction,
+           ;; i.e. perpendicular to the ORIGINAL line -- never to a later
+           ;; polyline.
+           (if (>= cross 0.0)
+             (setq nx (- uy) ny ux)          ; left normal
+             (setq nx uy     ny (- ux)))     ; right normal
+           ;; the red arrow at START, kept until the command finishes so
+           ;; the entry order stays clear across repeat rounds -- and so
+           ;; the width question can say "the arrowed end" and be
+           ;; understood
+           (setq arrow   (perp:arrow pStart ux uy dlen)
+                 tmpEnts (append arrow tmpEnts)))))
+
+      ;; --- 3. has the overall width changed? ---------------------------
+      ;; The width asked about is the distance straight across, end to
+      ;; end, not the developed length of the object -- a bowed polyline
+      ;; runs further than the width it spans, and it is the width that
+      ;; gets re-measured.  Making a new one true is a scale about a
+      ;; point on the line through the two ends: the midpoint when the
+      ;; change is split evenly, nearer START the more of it goes to
+      ;; FINISH.  The drawing is resized too: the offsets and their
+      ;; dimensions are measured off this object, so leaving it at the
+      ;; old width would put every base point somewhere the drawing
+      ;; says nothing is.  It is all inside the command's undo group, so
+      ;; one U puts the width back.  dlen is that width: the click step
+      ;; refused a plan projection with none.
+      ((= qstep 3)
+       (setq wOld dlen
+             wres (perp:ask-width "Overall width" wOld T))
        (cond
-         ((null verts)
-          (princ (strcat "\nA " etype " is not a line or polyline.")))
-         ((< (length (setq verts (perp:dedupe verts))) 2)
-          (princ "\nThat object has no usable length."))
-         ((<= (distance (car verts) (last verts)) 1e-9)
-          (princ "\nStart and end coincide - a closed shape has no direction."))
-         (t (setq ent (car sel)))))))
-
-  (setq p1 (car verts)                       ; first endpoint (UCS)
-        p2 (last verts))                     ; last endpoint  (UCS)
-
-  ;; --- 2. has the overall width changed? -------------------------------
-  ;; The width asked about is the distance straight across, end to end,
-  ;; not the developed length of the object -- a bowed polyline runs
-  ;; further than the width it spans, and it is the width that gets
-  ;; re-measured.  Making a new one true is a scale about the midpoint of
-  ;; the two ends, so exactly half the difference lands at each end.  The
-  ;; drawing is resized too: the offsets and their dimensions are
-  ;; measured off this object, so leaving it at the old width would put
-  ;; every base point somewhere the drawing says nothing is.  It is all
-  ;; inside the command's undo group, so one U puts the width back.
-  (setq dx   (- (car p2)  (car p1))
-        dy   (- (cadr p2) (cadr p1))
-        wOld (sqrt (+ (* dx dx) (* dy dy)))
-        ;; a plan projection with no width at all has nothing to
-        ;; ask about; the direction click below is where that
-        ;; gets reported
-        wNew (if (> wOld 1e-9) (perp:ask-width "Overall width" wOld)))
-  (if wNew
-    (progn
-      (setq mid (list (/ (+ (car p1)  (car p2))  2.0)
-                      (/ (+ (cadr p1) (cadr p2)) 2.0)
-                      (caddr p1))
-            fac (/ wNew wOld))
-      (if (not (perp:rescale ent mid fac))
-        (progn
-          (princ (strcat "\nThe line could not be resized - it is most"
-                         " likely on a locked, frozen or switched-off"
-                         " layer.  Free the layer and run PERPPTS again."))
-          (perp:finish)
-          (exit)))
-      (setq verts (perp:scale-pts verts mid fac)
-            p1    (car verts)
-            p2    (last verts))
-      (princ (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
-                     (rtos (/ (abs (- wNew wOld)) 2.0))
-                     (if (> wNew wOld) " added at" " taken off")
-                     " each end."))))
+         ((eq wres 'PERP-BACK)
+          ;; back to the click - the arrow goes with it, since the click
+          ;; is what placed it
+          (princ "\nStepping back one question.")
+          (foreach e arrow (perp:kill e))
+          (setq arrow nil qstep 2))
+         (t
+          (if wres
+            (progn
+              (setq wNew (car wres)
+                    mid  (perp:scale-ctr pStart pFinish (cadr wres))
+                    fac  (/ wNew wOld))
+              (if (not (perp:rescale ent mid fac))
+                (progn
+                  (princ (strcat "\nThe line could not be resized - it is most"
+                                 " likely on a locked, frozen or switched-off"
+                                 " layer.  Free the layer and run PERPPTS again."))
+                  (perp:finish)
+                  (exit)))
+              (setq verts   (perp:scale-pts verts mid fac)
+                    pStart  (perp:scale-pt pStart mid fac)
+                    pFinish (perp:scale-pt pFinish mid fac)
+                    dlen    wNew)
+              (princ (perp:width-line wOld wNew (cadr wres)))
+              ;; START moved, so the arrow is drawn again where it now is
+              (foreach e arrow (perp:kill e))
+              (setq arrow   (perp:arrow pStart ux uy dlen)
+                    tmpEnts (append arrow tmpEnts))))
+          (setq qstep 4))))))
 
   ;; --- properties to give the offset polylines -------------------------
   ;; The new polylines are drawn with the same layer, colour, linetype,
@@ -86415,85 +88287,61 @@
         srcLw    (cond ((cdr (assoc 370 srcData))) (-1))
         srcLts   (cond ((cdr (assoc 48 srcData))) (1.0)))
 
-  ;; --- 3. click to set direction (START/FINISH) and offset side -------
-  ;; Snapping is off so the click cannot be pulled onto the line itself,
-  ;; which would make "which side" ambiguous.
-  (setvar "OSMODE" 0)
-  (setq click nil)
-  (while (null click)
-    (setq click (getpoint "\nClick to pick direction / offset side: "))
-    (if lzd:ask (lzd:ask "\nClick to pick direction / offset side: " click) click)
+  ;; --- 4. the boundary the offsets answer to (optional) ---------------
+  ;; Asked after the direction click because the click is what fixes
+  ;; which way the offsets run, and a boundary is only a boundary on the
+  ;; side they run toward; and after the width question, because the
+  ;; resize is already in the drawing by now, which is also why this
+  ;; selection offers no Back.  Enter takes None and the command behaves
+  ;; exactly as it did before there was one.  A boundary then gets one
+  ;; more question -- a limit the offsets stop at, or the line every one
+  ;; of them runs out to meet -- and Back there re-opens the selection.
+  (setq qstep 1 bnd nil bmode nil)
+  (while (< qstep 3)
     (cond
-      ((null click)
-       (princ "\nA point is required - click one side of the line."))
-      (t
-       ;; nearest endpoint to the click = START
-       (if (<= (distance click p1) (distance click p2))
-         (setq pStart p1 pFinish p2)
-         (setq pStart p2 pFinish p1))
-       (setq dx   (- (car pFinish)  (car pStart))
-             dy   (- (cadr pFinish) (cadr pStart))
-             dlen (sqrt (+ (* dx dx) (* dy dy))))
+      ((= qstep 1)
+       (setq bnd 'RETRY)
+       (while (eq bnd 'RETRY)
+         (initget "None")
+         (setq sel (entsel "\nSelect a boundary for the offsets [None] <None>: "))
+         (if lzd:ask (lzd:ask "\nSelect a boundary for the offsets [None] <None>: " sel) sel)
+         (if lzd:watch (lzd:watch sel) sel)
+         (cond
+           ;; entsel answers nil for Enter AND for a click that hit nothing.
+           ;; ERRNO 7 is what tells them apart, and without asking, a click
+           ;; that missed would quietly drop the boundary the drafter was
+           ;; reaching for and cap nothing all run.
+           ((and (null sel) (= 7 (getvar "ERRNO")))
+            (princ "\nNothing there - click the boundary itself, or press Enter for none."))
+           ((or (null sel) (= (type sel) 'STR)) (setq bnd nil))
+           ((not (perp:curve-p (car sel)))
+            (princ (strcat "\nA " (cdr (assoc 0 (entget (car sel))))
+                           " cannot be a boundary - pick a curve, or press"
+                           " Enter for none.")))
+           ((eq (car sel) ent)
+            (princ (strcat "\nThat is the line being offset from - a run"
+                           " cannot be bounded by where it starts.")))
+           (t (setq bnd (car sel)))))
+       (setq qstep (if bnd 2 3)))
+      ((= qstep 2)
+       (initget "Limit Meet Back Undo")
+       (setq bmode (getkword (strcat "\nDo the offsets stop at the boundary,"
+                                     " or run out to meet it?"
+                                     " [Limit/Meet/Back] <Limit>: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") bmode) bmode)
        (cond
-         ((equal dlen 0.0 1e-9)
-          (princ "\nSelected object has zero length.")
-          (perp:finish)
-          (exit))
+         ((member bmode '("Back" "Undo"))
+          (princ "\nStepping back one question.")
+          (setq qstep 1))
          (t
-          (setq ux (/ dx dlen)
-                uy (/ dy dlen))
-          ;; cross = signed distance from the infinite line;
-          ;; >0 => click is on the left.
-          (setq cross (- (* ux (- (cadr click) (cadr pStart)))
-                         (* uy (- (car click)  (car pStart))))
-                fuzz  (max 1e-8 (* dlen 1e-6)))
-          (if (< (abs cross) fuzz)
-            (progn
-              (princ "\nThat point is on the line - click clearly to one side.")
-              (setq click nil))))))))
-
-  ;; perpendicular unit vector, chosen toward the clicked side.  This is
-  ;; fixed for the whole command: every offset and dimension in every
-  ;; round is measured along this direction, i.e. perpendicular to the
-  ;; ORIGINAL line -- never to a later polyline.
-  (if (>= cross 0.0)
-    (setq nx (- uy) ny ux)          ; left normal
-    (setq nx uy     ny (- ux)))     ; right normal
-
-  ;; --- prepare the layers ---------------------------------------------
-  ;; Guides live on their own layer so a locked current layer cannot stop
-  ;; them being erased.  Offset polylines go on the source object's own
-  ;; layer; dimensions go on DIMENSIONS.
-  (cal:ensure-layer "PERPPTS-TEMP" 1)     ; guides, erased before the command ends
-  (cal:ensure-layer "DIMENSIONS"   4)
-
-  ;; --- draw an arrow pointing at the START end ------------------------
-  ;; The arrow comes in from outside the line (along the FINISH->START
-  ;; extension) with its tip on the START point.  Drawn in red so it is
-  ;; visible on any background, and kept until the command finishes so the
-  ;; entry order stays clear across repeat rounds.
-  (setq sz (caddr pStart))
-  (setq arlen (* dlen 0.15))                ; shaft length
-  (if (< arlen 1e-6) (setq arlen 1.0))
-  (setq hlen (* arlen 0.35))                ; arrowhead barb length
-  ;; tail = START minus (shaft along the line direction), tip = START
-  (setq tailx (- (car pStart)  (* ux arlen))
-        taily (- (cadr pStart) (* uy arlen)))
-  ;; barbs: rotate the "back" vector b = (-ux,-uy) by +/-25 degrees
-  (setq ca 0.9063 sa 0.4226                 ; cos/sin 25 deg
-        bkx (- ux) bky (- uy))
-  (setq b1x (+ (car pStart)  (* hlen (- (* bkx ca) (* bky sa))))
-        b1y (+ (cadr pStart) (* hlen (+ (* bkx sa) (* bky ca))))
-        b2x (+ (car pStart)  (* hlen (+ (* bkx ca) (* bky sa))))
-        b2y (+ (cadr pStart) (* hlen (+ (* (- bkx) sa) (* bky ca)))))
-  ;; entmade LINE points are WCS, so convert from the current UCS
-  (foreach seg (list (list (list tailx taily sz) pStart)
-                     (list pStart (list b1x b1y sz))
-                     (list pStart (list b2x b2y sz)))
-    (entmake (list '(0 . "LINE") '(8 . "PERPPTS-TEMP") '(62 . 1)
-                   (cons 10 (trans (car seg)  1 0))
-                   (cons 11 (trans (cadr seg) 1 0))))
-    (setq tmpEnts (cons (entlast) tmpEnts)))
+          (if (null bmode) (setq bmode "Limit"))
+          (setq qstep 3))))))
+  (if bnd
+    (princ (strcat "\nBoundary set: "
+                   (if (equal bmode "Meet")
+                     "every offset runs out to that "
+                     "no offset will cross that ")
+                   (cdr (assoc 0 (entget bnd))) ".")))
 
   ;; --- offset rounds --------------------------------------------------
   ;; the path the points are spaced along.  Round 1 uses the selected
@@ -86505,145 +88353,201 @@
         total 0)
 
   (while (equal again "Yes")
-    (setq iter (1+ iter))
+    (setq iter (1+ iter) rstep 1)
 
-    ;; --- how many values / points for this round ---------------------
-    ;; Enter reuses the previous round's count.
-    (setq n nil)
-    (while (null n)
-      (initget 6)                            ; no zero, no negative
-      (setq n (getint (strcat "\nRound " (itoa iter)
-                              " - how many values (points) are required?"
-                              (if lastN (strcat " <" (itoa lastN) ">") "")
-                              " ")))
-      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") n) n)
-      (if (null n) (setq n lastN))           ; Enter = same count as last round
+    ;; The count, the lengths and the join are one chain walked with a
+    ;; step counter.  Back at a length re-asks the last length TYPED --
+    ;; a point that ran out to the boundary was never asked, so it is
+    ;; taken back on the way past -- and re-asks the count when nothing
+    ;; was typed in front of it; Back at the join does the same from
+    ;; the far end.
+    (while (< rstep 4)
       (cond
-        ((null n)
-         (princ "\nA number is required."))
-        ((< n 2)
-         (princ "\nNeed at least 2 points.")
-         (setq n nil))
-        ((> n 100)
-         ;; guard against a mistyped count creating thousands of entities;
-         ;; Back is listed because it is what a hand reaches for here, and
-         ;; it means what No means - ask the count again
-         (initget "Yes No Back Undo")
-         (setq ans (getkword
-                     (strcat "\n" (itoa n) " points means " (itoa n)
-                             " dimensions. Continue? [Yes/No/Back] <No>: ")))
-         (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
-         (if (not (equal ans "Yes")) (setq n nil)))))
-    (setq lastN n)
-
-    ;; base points, equally spaced along the current path.  The offset
-    ;; side (nx,ny) was fixed from the direction click and is reused for
-    ;; every round, so all rounds offset to the same side.  A path drawn
-    ;; with arcs is measured along the curve itself (pathEnt); a
-    ;; straight one is measured along its own points, which is the same
-    ;; walk over the chords.
-    (setq basePts (cond ((and pathEnt (perp:ent-pts pathEnt n)))
-                        ((perp:sample path n))))
-
-    ;; --- length per point + build the new perpendicular points -------
-    ;; Enter reuses the last length entered (shown as the prompt
-    ;; default), since runs of equal lengths are common; the last value
-    ;; carries across rounds.  Back steps back a point (Undo is kept as
-    ;; a hidden synonym for old habits).  Zero and negative lengths are
-    ;; rejected, so a dimension is never degenerate and the offset can
-    ;; never flip to the wrong side.
-    (setvar "CLAYER" "PERPPTS-TEMP")
-    ;; the lengths and the join are one chain: Back at the join takes
-    ;; back the last point - guide node and all - and asks for it again
-    (setq newPts '() guideEnts '() i 0 join 'RETRY)
-    (while (eq join 'RETRY)
-     (while (< i n)
-      (setq base (nth i basePts))
-      (initget 6 "Back Undo")                ; no zero, no negative
-      (setq len (getdist (strcat "\nLength for point " (itoa (1+ i))
-                                 " of " (itoa n)
-                                 (if lastLen
-                                   (strcat " <" (rtos lastLen) ">")
-                                   "")
-                                 " [Back]: ")))
-      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") len) len)
-      (if (null len) (setq len lastLen))     ; Enter = same as last time
-      (cond
-        ;; step back one point and re-enter it (getdist returned "Back",
-        ;; or "Undo" - the old keyword, kept as a synonym)
-        ((eq (type len) 'STR)
-         (if (> i 0)
-           (progn
-             (setq i (1- i))
-             (perp:kill (car guideEnts))
-             (setq guideEnts (cdr guideEnts)
-                   newPts    (cdr newPts))
-             (princ "\nStepping back one point."))
-           (princ "\nAlready at the first point.")))
-        ((null len)
-         (princ "\nA length is required."))
-        (t
-         (setq lastLen len
-               np      (list (+ (car base)  (* len nx))
-                             (+ (cadr base) (* len ny))
-                             (caddr base)))
-         (setq newPts (cons np newPts))
-         ;; temporary POINT node at the new location as a guide
-         (command "._POINT" np)
-         (setq guideEnts (cons (entlast) guideEnts)
-               tmpEnts   (cons (entlast) tmpEnts))
-         (setq i (1+ i)))))
-
-    ;; --- straight lines, arcs, or both -------------------------------
-    ;; Straight is what this routine has always drawn and stays the
-    ;; opening default; Arcs curves every segment; Mixed asks which
-    ;; segment numbers to curve and leaves the rest as lines.  Two
-    ;; points make one segment with no neighbouring point to take a
-    ;; curvature from, so below three points there is nothing to ask.
-    ;; The answer carries across rounds as the offered default.
-    (setq nseg  (1- n)
-          kws   "Straight Arcs Mixed"
-          picks nil)
-    (if (null lastJoin) (setq lastJoin "Straight"))
-    (if (< n 3)
-      (progn
-        (princ "\nTwo points make one straight segment - nothing to curve.")
-        (setq join "Straight"))
-      (setq join nil))
-    (while (null join)
-      (initget (strcat kws " Back Undo"))
-      (setq join (getkword (strcat "\nRound " (itoa iter)
-                                   " - how should the points be joined? ["
-                                   (vl-string-translate " " "/" kws)
-                                   "/Back] <" lastJoin ">: ")))
-      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") join) join)
-      (if (null join) (setq join lastJoin))   ; Enter = same as last round
-      (cond
-        ;; back to the length that was just given: the guide node goes
-        ;; with it, and the outer loop re-enters the length prompt
-        ((member join '("Back" "Undo"))
-         (setq i (1- i))
-         (perp:kill (car guideEnts))
-         (setq guideEnts (cdr guideEnts)
-               newPts    (cdr newPts))
-         (princ "\nStepping back one point.")
-         (setq join 'RETRY))
-        ;; Mixed is not an answer on its own - it needs the segment list,
-        ;; and Back returns to the question above rather than guessing
-        ((equal join "Mixed")
-         (while (and join (null picks))
-           (setq reply (getstring T
-                         (strcat "\nWhich segments are arcs (1 to "
-                                 (itoa nseg) ", e.g. 1 3-5)? (B = back): ")))
-           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") reply) reply)
+        ;; --- how many values / points for this round -------------------
+        ;; Enter reuses the previous round's count.
+        ((= rstep 1)
+         (setq n nil)
+         (while (null n)
+           (initget 6)                            ; no zero, no negative
+           (setq n (getint (strcat "\nRound " (itoa iter)
+                                   " - how many values (points) are required?"
+                                   (if lastN (strcat " <" (itoa lastN) ">") "")
+                                   " ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") n) n)
+           (if (null n) (setq n lastN))           ; Enter = same count as last round
            (cond
-             ((member (strcase reply) '("B" "BACK" "U" "UNDO"))
-              (setq join nil))
-             ((setq picks (perp:parse-segs reply nseg)))
-             (t (princ (strcat "\nSegment numbers run 1 to " (itoa nseg)
-                               " - single numbers, ranges like 3-5, or"
-                               " both."))))))))
-     )
+             ((null n)
+              (princ "\nA number is required."))
+             ((< n 2)
+              (princ "\nNeed at least 2 points.")
+              (setq n nil))
+             ((> n 100)
+              ;; guard against a mistyped count creating thousands of entities;
+              ;; Back is listed because it is what a hand reaches for here, and
+              ;; it means what No means - ask the count again
+              (initget "Yes No Back Undo")
+              (setq ans (getkword
+                          (strcat "\n" (itoa n) " points means " (itoa n)
+                                  " dimensions. Continue? [Yes/No/Back] <No>: ")))
+              (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
+              (if (not (equal ans "Yes")) (setq n nil)))))
+         (setq lastN n)
+
+         ;; base points, equally spaced along the current path.  The offset
+         ;; side (nx,ny) was fixed from the direction click and is reused for
+         ;; every round, so all rounds offset to the same side.  A path drawn
+         ;; with arcs is measured along the curve itself (pathEnt); a
+         ;; straight one is measured along its own points, which is the same
+         ;; walk over the chords.
+         (setq basePts (cond ((and pathEnt (perp:ent-pts pathEnt n)))
+                             ((perp:sample path n))))
+         (setvar "CLAYER" "PERPPTS-TEMP")
+         (setq newPts '() guideEnts '() askd '() i 0 rstep 2))
+
+        ;; --- length per point + build the new perpendicular points -----
+        ;; Enter reuses the last length entered (shown as the prompt
+        ;; default), since runs of equal lengths are common; the last value
+        ;; carries across rounds.  Back steps back a point (Undo is kept as
+        ;; a hidden synonym).  Zero and negative lengths are rejected, so a
+        ;; dimension is never degenerate and the offset can never flip to
+        ;; the wrong side.  askd remembers which points were ASKED, which
+        ;; is where Back goes.
+        ((= rstep 2)
+         (if (>= i n)
+           (setq rstep 3)
+           (progn
+             (setq base (nth i basePts)
+                   ;; How far this point may go before it meets the
+                   ;; boundary, measured along the fixed normal.  nil
+                   ;; when the ray never reaches it, and then nothing
+                   ;; below changes.
+                   cap  (if bnd (perp:capdist bnd base (list nx ny))))
+             (cond
+               ;; Meet: a boundary ahead IS the length, so nothing is asked
+               ((and cap (equal bmode "Meet"))
+                (setq np (list (+ (car base)  (* cap nx))
+                               (+ (cadr base) (* cap ny))
+                               (caddr base)))
+                (princ (strcat "\nPoint " (itoa (1+ i)) " of " (itoa n)
+                               " runs out to the boundary: " (rtos cap) "."))
+                (setq newPts (cons np newPts))
+                (command "._POINT" np)
+                (setq guideEnts (cons (entlast) guideEnts)
+                      tmpEnts   (cons (entlast) tmpEnts))
+                (setq i (1+ i)))
+               (t
+                ;; Max is offered only where there is a boundary ahead of
+                ;; this point to reach
+                (initget 6 (if cap "Back Undo Max" "Back Undo"))
+                (setq len (getdist (strcat "\nLength for point " (itoa (1+ i))
+                                           " of " (itoa n)
+                                           (cond
+                                             (cap (strcat ", boundary at " (rtos cap)))
+                                             ((equal bmode "Meet") " (no boundary ahead)")
+                                             (t ""))
+                                           (if lastLen
+                                             (strcat " <" (rtos lastLen) ">")
+                                             "")
+                                           (if cap " [Back/Max]: " " [Back]: "))))
+                (if lzd:ask (lzd:ask (getvar "LASTPROMPT") len) len)
+                (if (null len) (setq len lastLen))     ; Enter = same as last time
+                (if (equal len "Max") (setq len cap))
+                ;; The typed number is what Enter repeats, not the capped
+                ;; one: the tape still says what it says, and the next
+                ;; point has its own boundary to meet it against.
+                (if (numberp len) (setq lastLen len))
+                (if (and cap (numberp len) (> len cap))
+                  (progn
+                    (princ (strcat "\n" (rtos len) " would cross the boundary -"
+                                   " point " (itoa (1+ i)) " is capped at "
+                                   (rtos cap) "."))
+                    (setq len cap)))
+                (cond
+                  ;; step back to the last length typed and re-enter it
+                  ;; (getdist returned "Back", or "Undo" - the old keyword,
+                  ;; kept as a synonym); with nothing typed in front of this
+                  ;; point the count question is the one to go back to
+                  ((eq (type len) 'STR)
+                   (cond
+                     (askd
+                      (setq tgt (car askd) askd (cdr askd))
+                      (perp:unplace tgt)
+                      (princ "\nStepping back one point."))
+                     (t
+                      (perp:unplace 0)
+                      (princ "\nStepping back one question.")
+                      (setq rstep 1))))
+                  ((null len)
+                   (princ "\nA length is required."))
+                  (t
+                   (setq np (list (+ (car base)  (* len nx))
+                                  (+ (cadr base) (* len ny))
+                                  (caddr base)))
+                   (setq newPts (cons np newPts)
+                         askd   (cons i askd))
+                   ;; temporary POINT node at the new location as a guide
+                   (command "._POINT" np)
+                   (setq guideEnts (cons (entlast) guideEnts)
+                         tmpEnts   (cons (entlast) tmpEnts))
+                   (setq i (1+ i)))))))))
+
+        ;; --- straight lines, arcs, or both -----------------------------
+        ;; Straight is what this routine has always drawn and stays the
+        ;; opening default; Arcs curves every segment; Mixed asks which
+        ;; segment numbers to curve and leaves the rest as lines.  Two
+        ;; points make one segment with no neighbouring point to take a
+        ;; curvature from, so below three points there is nothing to ask.
+        ;; The answer carries across rounds as the offered default.
+        ((= rstep 3)
+         (setq nseg  (1- n)
+               kws   "Straight Arcs Mixed"
+               picks nil)
+         (if (null lastJoin) (setq lastJoin "Straight"))
+         (if (< n 3)
+           (progn
+             (princ "\nTwo points make one straight segment - nothing to curve.")
+             (setq join "Straight"))
+           (setq join nil))
+         (while (null join)
+           (initget (strcat kws " Back Undo"))
+           (setq join (getkword (strcat "\nRound " (itoa iter)
+                                        " - how should the points be joined? ["
+                                        (vl-string-translate " " "/" kws)
+                                        "/Back] <" lastJoin ">: ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") join) join)
+           (if (null join) (setq join lastJoin))   ; Enter = same as last round
+           (cond
+             ;; back to the last length typed: its guide node goes with
+             ;; it, and the chain re-enters the length prompt - or the
+             ;; count, when every point ran out to the boundary
+             ((member join '("Back" "Undo"))
+              (cond
+                (askd
+                 (setq tgt (car askd) askd (cdr askd))
+                 (perp:unplace tgt)
+                 (princ "\nStepping back one point.")
+                 (setq rstep 2))
+                (t
+                 (perp:unplace 0)
+                 (princ "\nStepping back one question.")
+                 (setq rstep 1)))
+              (setq join 'RETRY))
+             ;; Mixed is not an answer on its own - it needs the segment list,
+             ;; and Back returns to the question above rather than guessing
+             ((equal join "Mixed")
+              (while (and join (null picks))
+                (setq reply (getstring T
+                              (strcat "\nWhich segments are arcs (1 to "
+                                      (itoa nseg) ", e.g. 1 3-5)? (B = back): ")))
+                (if lzd:ask (lzd:ask (getvar "LASTPROMPT") reply) reply)
+                (cond
+                  ((member (strcase reply) '("B" "BACK" "U" "UNDO"))
+                   (setq join nil))
+                  ((setq picks (perp:parse-segs reply nseg)))
+                  (t (princ (strcat "\nSegment numbers run 1 to " (itoa nseg)
+                                    " - single numbers, ranges like 3-5, or"
+                                    " both."))))))))
+         (if (not (eq join 'RETRY)) (setq rstep 4)))))
     (setq newPts (reverse newPts))
     (setq lastJoin join)
 
@@ -86679,32 +88583,31 @@
     (setq guideEnts nil)
 
     ;; --- has the width of the line just drawn changed? ---------------
-    ;; Step 2's question, asked again of the line this round built.  It
+    ;; Step 3's question, asked again of the line this round built.  It
     ;; is the next course out and it was re-measured too, and the typed
     ;; offsets only reach the width they happen to add up to: a course
     ;; whose ends were measured a little long or a little short comes
     ;; out that much wide or narrow, and everything taken off it after
     ;; -- this round's dimensions, and the base points of every round
     ;; that follows -- would be measured off a width the wall does not
-    ;; have.  So it is resized here, before any of that: half the
-    ;; difference at each end, scaled about the midpoint of the two, the
-    ;; same correction and the same undo group as step 2.  Unchanged is
-    ;; the default and the Enter answer, which leaves the round exactly
-    ;; as it drew.
+    ;; have.  So it is resized here, before any of that: the same
+    ;; correction, the same split and the same undo group as step 3,
+    ;; with the polyline's first point as START (it sits at the arrowed
+    ;; end).  Unchanged is the default and the Enter answer, which
+    ;; leaves the round exactly as it drew.  No Back: the line is drawn.
     (setq dx   (- (car  (last newPts)) (car  (car newPts)))
           dy   (- (cadr (last newPts)) (cadr (car newPts)))
           wOld (sqrt (+ (* dx dx) (* dy dy)))
           ;; ends that land on top of each other span no width, so there
           ;; is nothing to ask about and nothing to scale about either
-          wNew (if (> wOld 1e-9)
-                 (perp:ask-width "Overall width of the new polyline" wOld)))
-    (if wNew
+          wres (if (> wOld 1e-9)
+                 (perp:ask-width "Overall width of the new polyline" wOld nil)))
+    (if wres
       (progn
-        (setq mid (list (/ (+ (car  (car newPts)) (car  (last newPts))) 2.0)
-                        (/ (+ (cadr (car newPts)) (cadr (last newPts))) 2.0)
-                        (caddr (car newPts)))
-              fac (/ wNew wOld))
-        ;; A refused resize stops step 2 outright: nothing is drawn yet
+        (setq wNew (car wres)
+              mid  (perp:scale-ctr (car newPts) (last newPts) (cadr wres))
+              fac  (/ wNew wOld))
+        ;; A refused resize stops step 3 outright: nothing is drawn yet
         ;; there, so re-running costs one click.  Here rounds of typed
         ;; lengths sit behind it and not one dimension is written, so
         ;; the line is left at the width it drew and the drafter is told
@@ -86713,10 +88616,28 @@
         (if (perp:rescale plEnt mid fac)
           (progn
             (setq newPts (perp:scale-pts newPts mid fac))
-            (princ (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
-                           (rtos (/ (abs (- wNew wOld)) 2.0))
-                           (if (> wNew wOld) " added at" " taken off")
-                           " each end.")))
+            (princ (perp:width-line wOld wNew (cadr wres)))
+            ;; every length was capped, or run out to the boundary, as
+            ;; it was placed; this scales the whole line and can carry a
+            ;; point that was sitting ON the boundary out past it, or
+            ;; off it.  The correction is the drafter's measurement and
+            ;; is not second-guessed -- but a line that crosses a
+            ;; boundary it was told to respect, or leaves one it was
+            ;; told to meet, does not go without saying.
+            (if bnd
+              (progn
+                (setq over (if (equal bmode "Meet")
+                             (perp:off-bnd bnd newPts)
+                             (perp:past-bnd bnd basePts newPts)))
+                (if (> over 0)
+                  (princ (strcat "\n" (itoa over) " of " (itoa (length newPts))
+                                 (if (equal bmode "Meet")
+                                   (strcat " points no longer sit on the"
+                                           " boundary - the width correction"
+                                           " moved the line off it.")
+                                   (strcat " points now sit past the"
+                                           " boundary - the width correction"
+                                           " carried the line beyond it."))))))))
           (princ (strcat "\nThe new polyline could not be resized - it is"
                          " most likely on a locked, frozen or switched-off"
                          " layer.  It is left at the " (rtos wOld)
@@ -86757,7 +88678,7 @@
             (progn (princ "\nStepping back one question.")
                    (setq again 'RETRY)))))))
 
-  ;; --- 8. draw every dimension in the chosen style --------------------
+  ;; --- 10. draw every dimension in the chosen style -------------------
   (setq dimStyle (if (equal ans "SIde") "SIDE STANDARD" "STANDARD INCHES"))
   (if (tblsearch "DIMSTYLE" dimStyle)
     (command "._-DIMSTYLE" "_Restore" dimStyle)
@@ -86823,77 +88744,114 @@
 ;;;
 ;;; Workflow
 ;;;   1. Select a curve (open, i.e. not a closed loop).
-;;;   2. Say whether the overall width has changed: Grew, Shrank, New
-;;;      or Unchanged.  The width meant is the distance straight across,
-;;;      end to end, not the length of the curve; half of any difference
-;;;      is added to (or taken off) each end, and the curve in the
-;;;      drawing is resized to match.
-;;;   3. Click a point to set the direction:
+;;;   2. Click a point to set the direction:
 ;;;        - the curve end nearest the click becomes START, the far end
-;;;          FINISH, fixing the order the lengths are entered in;
+;;;          FINISH, fixing the order the lengths are entered in; a red
+;;;          arrow marks START for the whole run;
 ;;;        - the side of the curve the click lands on is the side the
 ;;;          new points are offset toward.
-;;;   4. Optionally select a BOUNDARY the offsets may not cross -- a
-;;;      property line, a house wall, a deck edge already drawn.  Enter
-;;;      takes None and nothing is capped.
+;;;   3. Say whether the overall width has changed: Grew, Shrank, New
+;;;      or Unchanged.  The width meant is the distance straight across,
+;;;      end to end, not the length of the curve.  The change is split
+;;;      evenly, half at each end, unless you say otherwise -- then you
+;;;      give the amount at the START end (the arrowed one) and the rest
+;;;      goes on at FINISH -- and the curve in the drawing is resized to
+;;;      match.
+;;;   4. Optionally select a BOUNDARY for the offsets -- a property line,
+;;;      a house wall, a deck edge already drawn -- and say whether the
+;;;      offsets STOP at it (Limit: a typed length past it is brought
+;;;      back to it) or RUN OUT TO MEET it (Meet: every point with the
+;;;      boundary ahead of it lands on the boundary, and no length is
+;;;      asked for it).  Enter takes None and nothing is capped.
 ;;;   5. Enter how many values (points) are required  (>= 2).
 ;;;   6. Enter a length for each point, in order START -> FINISH.
 ;;;      Press Enter to reuse the previous length when it repeats, or
 ;;;      type B (Back) to step back and re-enter the previous point
-;;;      (U, the old keyword, is still accepted).  With a boundary in
-;;;      force the prompt names the distance to it and takes M (Max) to
-;;;      go exactly that far; a longer length is brought back to it.
+;;;      (U, the old keyword, is still accepted).  With a Limit boundary
+;;;      the prompt names the distance to it and takes M (Max) to go
+;;;      exactly that far; a longer length is brought back to it.
 ;;;   7. Say whether the overall width of the curve just drawn has
-;;;      changed -- step 2's question, asked of the course this round
-;;;      built.  It is resized the same way, half the difference at
-;;;      each end, before anything is measured off it.
+;;;      changed -- step 3's question, asked of the course this round
+;;;      built.  It is resized the same way, split the same way, before
+;;;      anything is measured off it.
 ;;;   8. Choose whether to repeat on the new polyline.  If so, enter a
 ;;;      new point count and repeat from step 6 with the new polyline as
 ;;;      the path.
 ;;;   9. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
 ;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
 ;;;
+;;; Steps 1 to 4 are one chain: Back at the click re-opens the
+;;; selection, Back at the width question re-opens the click, and Back
+;;; at the Limit/Meet question re-opens the boundary selection.  The
+;;; boundary selection itself offers no Back, because the resize step 3
+;;; made is already in the drawing by then.
+;;;
 ;;; The boundary
 ;;;   A wall is not always free to run as far as the tape says: there
 ;;;   is a property line, a house, a deck edge already drawn, and the
-;;;   course being built has to stop at it.  Step 4 takes that object
-;;;   once and turns it into the maximum for every offset in every
-;;;   round -- per point, not one number for the run, because a
-;;;   boundary at an angle to the curve is nearer at one end than at
-;;;   the other.
+;;;   course being built has to answer to it.  Step 4 takes that object
+;;;   once, and then asks which of two things it is.
 ;;;
-;;;   At each point a ray is cast from the base point along the offset
-;;;   normal and the nearest crossing ahead of it is that point's
-;;;   maximum.  The length prompt names it, M (Max) takes it exactly,
-;;;   and a longer length is brought back to it and said so -- the
-;;;   number typed is still what Enter repeats at the next point, since
-;;;   the tape has not changed, only where this one point may reach.
-;;;   Where the ray never meets the boundary -- it is behind the offset
-;;;   side, or stops short of that end of the run -- the point has no
-;;;   maximum and the prompt is the one it always was.
+;;;   Limit: the boundary is the most any offset may reach.  At each
+;;;   point a ray is cast from the base point along the offset normal
+;;;   and the nearest crossing ahead of it is that point's maximum --
+;;;   per point, not one number for the run, because a boundary at an
+;;;   angle to the curve is nearer at one end than at the other.  The
+;;;   length prompt names it, M (Max) takes it exactly, and a longer
+;;;   length is brought back to it and said so; the number typed is
+;;;   still what Enter repeats at the next point, since the tape has
+;;;   not changed, only where this one point may reach.
 ;;;
-;;;   Two things the cap is not.  It holds the measured POINTS inside
-;;;   the boundary, and the arcs between them are fitted to the curve's
-;;;   tangents: where a boundary bends away between two points, the arc
-;;;   joining them can still bow past it, and the answer is a point
-;;;   there rather than a different arc.  And it is not re-applied by
-;;;   the width correction at step 7, which scales the whole curve
-;;;   about the midpoint of its ends: that is the drafter's own
-;;;   measurement and is not second-guessed, but a correction that
-;;;   carries points past the boundary says how many.
+;;;   Meet: the boundary is where every offset ENDS.  A point with the
+;;;   boundary ahead of it is placed on the boundary and dimensioned to
+;;;   it, and no length is asked -- the offset is the distance to the
+;;;   boundary along that point's own normal and nothing else.  Back at
+;;;   a length that IS asked steps back to the last length typed, taking
+;;;   every point that ran out to the boundary in between with it, and
+;;;   to the count question when nothing was typed in front of it.
+;;;
+;;;   Either way, where the ray never meets the boundary -- it is behind
+;;;   the offset side, or stops short of that end of the run -- the
+;;;   point has no maximum and no landing, and the prompt is the one it
+;;;   always was (Meet says "no boundary ahead" so the silence is not
+;;;   mistaken for a landing).  A boundary covering part of a run
+;;;   answers for the part it covers.
+;;;
+;;;   Two things neither mode is.  It holds the measured POINTS at or
+;;;   inside the boundary, and the arcs between them are fitted to the
+;;;   curve's tangents: where a boundary bends away between two points,
+;;;   the arc joining them can still bow past it, and the answer is a
+;;;   point there rather than a different arc.  And it is not re-applied
+;;;   by the width correction at step 7, which scales the whole curve:
+;;;   that is the drafter's own measurement and is not second-guessed,
+;;;   but a correction that carries points past a Limit boundary, or
+;;;   off a Meet one, says how many.
 ;;;
 ;;; The overall width
 ;;;   Walls get re-measured, and the number that comes back is the
-;;;   distance straight across, end to end.  That is what steps 2 and 7
+;;;   distance straight across, end to end.  That is what steps 3 and 7
 ;;;   ask for -- never the developed length of the CURVE, which on
 ;;;   anything bowed runs further than the width it spans.  Grew and
 ;;;   Shrank take the difference, New takes the width itself, and
 ;;;   Unchanged (the default, and Enter) leaves everything exactly as it
 ;;;   was.
 ;;;
-;;;   A new width is made true by scaling the curve about the midpoint
-;;;   of its two ends, so exactly half the difference lands at each end
-;;;   and the curve keeps its shape: an arc stays that arc, scaled.  The
+;;;   A change is then SHARED between the two ends, and the question
+;;;   after the amount is how.  Enter (Yes) splits it evenly, half at
+;;;   each end, which is what a wall re-measured as a whole usually
+;;;   means; No asks how much of it is at the START end -- the end the
+;;;   red arrow points at -- and the rest goes on at FINISH.  Zero is an
+;;;   answer (all of it at FINISH) and so is the whole amount (all of it
+;;;   at START); more than the whole amount would move FINISH the other
+;;;   way, which is a different change from the one just given, and is
+;;;   refused.  Growing and shrinking are handled alike: the amount is
+;;;   what each end moves by, outward or inward.
+;;;
+;;;   A new width is made true by scaling the curve about a point on
+;;;   the line through its two ends: the midpoint for an even split,
+;;;   nearer START the more of the change goes to FINISH, and ON an end
+;;;   when that end holds still.  One uniform scale, whatever the split,
+;;;   so the curve keeps its shape: an arc stays that arc, scaled.  The
 ;;;   curve in the drawing is resized too, not just the numbers behind
 ;;;   it -- the offsets and their dimensions are measured off it, so
 ;;;   leaving it at the old width would put every base point somewhere
@@ -86908,14 +88866,14 @@
 ;;;   ever as wide as the typed offsets add up to, so ends measured a
 ;;;   little long or a little short leave it that much wide or narrow --
 ;;;   and the next round spaces its base points along it and reads its
-;;;   tangents, which is the same reason step 2 resizes the selected
+;;;   tangents, which is the same reason step 3 resizes the selected
 ;;;   curve rather than only remembering a number.  Step 7 asks after
 ;;;   the polyline is drawn, because that is when there is a width to
 ;;;   compare against, and before its dimensions are recorded: a round
 ;;;   that corrects its width has its new points moved with the curve,
 ;;;   so each dimension reads the distance the corrected drawing really
 ;;;   has rather than the length that was typed into it.  A resize the
-;;;   drawing will not take stops step 2 -- nothing is drawn yet, so
+;;;   drawing will not take stops step 3 -- nothing is drawn yet, so
 ;;;   re-running costs a click -- but at step 7 it leaves the curve at
 ;;;   the width it drew and says so, because whole rounds of typed
 ;;;   lengths sit behind it.
@@ -86970,7 +88928,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.15")
+(setq *cperp-version* "v0.16")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -87090,10 +89048,13 @@
 ;; Widths get re-measured, and the number that comes back is the
 ;; distance straight across, end to end -- NOT the developed length of
 ;; the object on the drawing, which on anything bowed is the longer of
-;; the two.  Making that width true is one scale about the midpoint of
-;; the two ends: exactly half the difference lands at each end, the
-;; direction of travel and the offset side are left alone, and the shape
-;; between the ends is carried along with it.
+;; the two.  Making that width true is one scale of the whole curve
+;; about a point on the line through its two ends: the shape between
+;; them is carried along, the direction of travel and the offset side
+;; are left alone, and WHERE on that line the centre sits is what
+;; decides how the change is shared out.  The midpoint puts exactly
+;; half of it at each end; a centre nearer START moves START less and
+;; FINISH more, and a centre ON an end holds that end still.
 
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getdist/getpoint/getint hand a keyword back as
@@ -87101,59 +89062,129 @@
 (defun cperp:back-kw (v)
   (and (= (type v) 'STR) (member v '("Back" "Undo"))))
 
-;; Ask whether the overall width has changed.  Returns the width to work
-;; to, or nil when it has not -- so an unchanged answer skips the resize
-;; altogether and the command behaves exactly as it always did.  d is
-;; the width the drawing carries now, and lbl heads the line that
-;; reports it: the question is asked of the selected curve AND of every
-;; curve a round draws, so it has to say which one it means.
-(defun cperp:ask-width (lbl d / kws ans v w out done)
+;; Ask whether the overall width has changed, and how the change is
+;; shared between the two ends.  Returns (width frac) -- the width to
+;; work to, and the share of the change that lands at the START end,
+;; 0.5 when it is split evenly -- or nil when nothing has changed, so
+;; an unchanged answer skips the resize altogether, or CPERP-BACK when
+;; the first question was answered Back (only offered when back is
+;; set).  d is the width the drawing carries now, and lbl heads the
+;; line that reports it: the question is asked of the selected curve
+;; AND of every curve a round draws, so it has to say which one it
+;; means.
+;;
+;; Four questions walked with a step counter, so Back at any of them
+;; re-asks the one in front of it rather than abandoning the resize:
+;;   1  Grew / Shrank / New / Unchanged
+;;   2  the amount (or the new width itself)
+;;   3  split it evenly, half at each end?
+;;   4  how much of it at the START end -- the rest goes on at FINISH
+(defun cperp:ask-width (lbl d back / kws step kind ans v w diff frac out)
   (princ (strcat "\n" lbl ", end to end: " (rtos d) "."))
-  (setq kws "Grew Shrank New Unchanged" done nil out nil)
-  ;; the amount is a second question, so Back at it re-asks the first
-  ;; rather than abandoning the resize
-  (while (null done)
-    (setq done T w nil)
-    (initget kws)
-    (setq ans (getkword (strcat "\nHas that width changed? ["
-                                (vl-string-translate " " "/" kws)
-                                "] <Unchanged>: ")))
-    ;; the label, not the helper name: one helper asks this of the
-    ;; selected object and of every line a round draws, and a report
-    ;; that cannot tell them apart cannot say which one died
-    (if lzd:ask (lzd:ask lbl ans) ans)
+  (setq kws "Grew Shrank New Unchanged" step 1 out nil w nil frac 0.5)
+  (while (and (> step 0) (< step 5))
     (cond
-      ((or (null ans) (= ans "Unchanged")) (setq out nil))
-      ((= ans "Grew")
-       (initget 7 "Back Undo")                ; a real, positive amount
-       (setq v (getdist "\nHow much wider? [Back]: "))
-       (if lzd:ask (lzd:ask "\nHow much wider? [Back]: " v) v)
-       (if (cperp:back-kw v)
-         (progn (princ "\nStepping back one question.") (setq done nil))
-         (setq out (+ d v))))
-      ((= ans "Shrank")
-       (while (and done (null w))
-         (initget 7 "Back Undo")
-         (setq v (getdist "\nHow much narrower? [Back]: "))
-         (if lzd:ask (lzd:ask "\nHow much narrower? [Back]: " v) v)
-         (cond
-           ((cperp:back-kw v)
-            (princ "\nStepping back one question.")
-            (setq done nil))
-           ((< v d) (setq w (- d v)))
-           (T (princ "\nThat is the whole width or more - nothing would be left."))))
-       (setq out w))
-      (T                                      ; New: the width itself
-       (initget 6 "Back Undo")                ; Enter keeps what is drawn
-       (setq v (getdist (strcat "\nNew overall width <" (rtos d) "> [Back]: ")))
+      ;; --- 1. has it changed at all?
+      ((= step 1)
+       (initget (strcat kws (if back " Back Undo" "")))
+       (setq kind (getkword (strcat "\nHas that width changed? ["
+                                    (vl-string-translate " " "/" kws)
+                                    (if back "/Back" "")
+                                    "] <Unchanged>: ")))
+       ;; the label, not the helper name: one helper asks this of the
+       ;; selected object and of every line a round draws, and a report
+       ;; that cannot tell them apart cannot say which one died
+       (if lzd:ask (lzd:ask lbl kind) kind)
+       (cond
+         ((or (null kind) (= kind "Unchanged")) (setq out nil step 5))
+         ((member kind '("Back" "Undo")) (setq out 'CPERP-BACK step 0))
+         (t (setq step 2))))
+      ;; --- 2. by how much?
+      ((= step 2)
+       (cond
+         ((= kind "Grew")
+          (initget 7 "Back Undo")                ; a real, positive amount
+          (setq v (getdist "\nHow much wider? [Back]: "))
+          (if lzd:ask (lzd:ask "\nHow much wider? [Back]: " v) v)
+          (if (cperp:back-kw v)
+            (progn (princ "\nStepping back one question.") (setq step 1))
+            (setq w (+ d v) step 3)))
+         ((= kind "Shrank")
+          (initget 7 "Back Undo")
+          (setq v (getdist "\nHow much narrower? [Back]: "))
+          (if lzd:ask (lzd:ask "\nHow much narrower? [Back]: " v) v)
+          (cond
+            ((cperp:back-kw v)
+             (princ "\nStepping back one question.")
+             (setq step 1))
+            ((< v d) (setq w (- d v) step 3))
+            (T (princ "\nThat is the whole width or more - nothing would be left."))))
+         (T                                      ; New: the width itself
+          (initget 6 "Back Undo")                ; Enter keeps what is drawn
+          (setq v (getdist (strcat "\nNew overall width <" (rtos d) "> [Back]: ")))
+          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v)
+          (cond
+            ((cperp:back-kw v)
+             (princ "\nStepping back one question.")
+             (setq step 1))
+            ((or (null v) (equal v d 1e-9)) (setq out nil step 5))
+            (T (setq w v step 3))))))
+      ;; --- 3. half at each end, or not?
+      ((= step 3)
+       (setq diff (abs (- w d)))
+       (initget "Yes No Back Undo")
+       (setq ans (getkword (strcat "\nSplit the " (rtos diff)
+                                   " evenly, half at each end?"
+                                   " [Yes/No/Back] <Yes>: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
+       (cond
+         ((member ans '("Back" "Undo"))
+          (princ "\nStepping back one question.")
+          (setq step 2))
+         ((= ans "No") (setq step 4))
+         (t (setq frac 0.5 out (list w frac) step 5))))
+      ;; --- 4. how much of it at START?  Zero is an answer - all of it
+      ;; at FINISH - and so is the whole amount; more than that would
+      ;; move FINISH the other way, which is a different change from
+      ;; the one just given
+      ((= step 4)
+       (initget 5 "Back Undo")                  ; no Enter, no negative
+       (setq v (getdist (strcat "\nHow much of the " (rtos diff)
+                                " at the START end (the arrowed end)?"
+                                " [Back]: ")))
        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v)
        (cond
          ((cperp:back-kw v)
           (princ "\nStepping back one question.")
-          (setq done nil))
-         ((or (null v) (equal v d 1e-9)) (setq out nil))
-         (T (setq out v))))))
+          (setq step 3))
+         ((> v (+ diff 1e-9))
+          (princ (strcat "\nThat is more than the whole " (rtos diff)
+                         " - the FINISH end would have to move the"
+                         " other way.")))
+         (t
+          (setq frac (/ v diff) out (list w frac) step 5)
+          (princ (strcat "\nThe other " (rtos (- diff v))
+                         " goes at the FINISH end.")))))))
   out)
+
+;; The point to scale about so that FRAC of the change lands at START
+;; and the rest at FINISH: that far along the line from START to
+;; FINISH.  0.5 is the midpoint, 0 holds START still, 1 holds FINISH
+;; still.  z is START's, carried through untouched.
+(defun cperp:scale-ctr (ps pf frac)
+  (list (+ (car ps)  (* frac (- (car pf)  (car ps))))
+        (+ (cadr ps) (* frac (- (cadr pf) (cadr ps))))
+        (caddr ps)))
+
+;; The one line that says what a resize did to each end.
+(defun cperp:width-line (wOld wNew frac / diff verb)
+  (setq diff (abs (- wNew wOld))
+        verb (if (> wNew wOld) "added" "taken off"))
+  (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
+          (if (equal frac 0.5 1e-9)
+            (strcat (rtos (/ diff 2.0)) " " verb " at each end.")
+            (strcat (rtos (* frac diff)) " " verb " at the START end, "
+                    (rtos (* (- 1.0 frac) diff)) " at the FINISH end."))))
 
 ;; Scale en about ctr (a point in the current UCS) by k.  T when the
 ;; drawing took it, nil when it would not -- a locked, frozen or
@@ -87183,11 +89214,58 @@
   (foreach p pts (setq out (cons (cperp:scale-pt p ctr k) out)))
   (reverse out))
 
-;; --- the boundary a run may not cross --------------------------------
+;; --- the START arrow -------------------------------------------------
+;; Three red lines on the guide layer: a shaft running back from START
+;; along the curve's tangent there, so the arrow sits outside the curve
+;; pointing at the end the lengths are entered from, and two barbs.  It
+;; is kept for the whole run, and it is what the width question means
+;; by "the arrowed end".  Returns the three enames so the caller can
+;; track and redraw them: a resize moves START, and an arrow left where
+;; START was would point at nothing.  rev says START is the curve's far
+;; end; tot is the curve's length.
+(defun cperp:arrow (crv rev tot / p p2 sz tx ty arlen hlen tailx taily
+                                 ca sa bkx bky b1x b1y b2x b2y seg out)
+  (setq p  (trans (if rev (vlax-curve-getEndPoint crv)
+                          (vlax-curve-getStartPoint crv))
+                  0 1)
+        sz (caddr p)
+        ;; a point a little way along the traversal gives the start tangent
+        p2 (cperp:pt-at-dist crv
+                             (if rev (- tot (* tot 0.001)) (* tot 0.001))
+                             tot))
+  (setq tx (- (car p2)  (car p))
+        ty (- (cadr p2) (cadr p)))
+  (if (< (distance p p2) 1e-9)
+    (setq tx 1.0 ty 0.0)
+    (setq tx (/ tx (distance p p2))
+          ty (/ ty (distance p p2))))
+  (setq arlen (* tot 0.15))
+  (if (< arlen 1e-6) (setq arlen 1.0))
+  (setq hlen  (* arlen 0.35)
+        tailx (- (car p)  (* tx arlen))
+        taily (- (cadr p) (* ty arlen))
+        ca    0.9063 sa 0.4226                 ; cos/sin 25 deg
+        bkx   (- tx) bky (- ty)
+        b1x   (+ (car p)  (* hlen (- (* bkx ca) (* bky sa))))
+        b1y   (+ (cadr p) (* hlen (+ (* bkx sa) (* bky ca))))
+        b2x   (+ (car p)  (* hlen (+ (* bkx ca) (* bky sa))))
+        b2y   (+ (cadr p) (* hlen (+ (* (- bkx) sa) (* bky ca))))
+        out   '())
+  (foreach seg (list (list (list tailx taily sz) p)
+                     (list p (list b1x b1y sz))
+                     (list p (list b2x b2y sz)))
+    (entmake (list '(0 . "LINE") '(8 . "PERPPTS-TEMP") '(62 . 1)
+                   (cons 10 (trans (car seg)  1 0))
+                   (cons 11 (trans (cadr seg) 1 0))))
+    (setq out (cons (entlast) out)))
+  out)
+
+;; --- the boundary the offsets answer to ------------------------------
 ;; A wall is not always free to run as far as the tape says: there is a
 ;; property line, a house, a deck edge already drawn, and the course
-;; being built has to stop at it.  Selecting that object once turns it
-;; into the maximum for EVERY offset -- per point, since a boundary
+;; being built has to answer to it.  Selecting that object once turns
+;; it into either the maximum for EVERY offset (Limit) or the place
+;; every offset ends (Meet) -- per point either way, since a boundary
 ;; that runs at an angle to the curve is nearer at one end than the
 ;; other, and one number could not say where.
 
@@ -87249,10 +89327,9 @@
 ;; How many of pts sit past bnd, each measured along the ray from the
 ;; base it was offset from.  Every length was capped as it was typed,
 ;; so this can only come back above zero after a width correction: that
-;; scales the whole curve about the midpoint of its ends and can carry
-;; a point that was sitting ON the boundary out beyond it.  A curve
-;; that quietly crosses a boundary the drafter asked it to respect is
-;; worth a line of its own.
+;; scales the whole curve and can carry a point that was sitting ON the
+;; boundary out beyond it.  A curve that quietly crosses a boundary the
+;; drafter asked it to respect is worth a line of its own.
 (defun cperp:past-bnd (bnd bases pts / i n a b dx dy d u cap out)
   (setq i 0 n (min (length bases) (length pts)) out 0)
   (while (< i n)
@@ -87269,6 +89346,19 @@
     (setq i (1+ i)))
   out)
 
+;; How many of pts no longer sit ON bnd -- the Meet answer's version of
+;; the count above.  Every one of them was run out to the boundary as it
+;; was placed, so only the width correction can have moved it off, and
+;; a curve that no longer meets the boundary it was told to meet is
+;; worth a line of its own too.
+(defun cperp:off-bnd (bnd pts / p q out)
+  (setq out 0)
+  (foreach p pts
+    (setq q (vlax-curve-getClosestPointTo bnd (trans p 1 0)))
+    (if (or (null q) (> (distance p (trans q 0 1)) 1e-6))
+      (setq out (1+ out))))
+  out)
+
 ;; --- command ---------------------------------------------------------
 
 ;; ahead of the command on purpose: the structural tests scan from
@@ -87278,24 +89368,37 @@
   (princ (strcat "\nCPERPPTS " *cperp-version*))
   (princ))
 
-(defun c:CPERPPTS (/ *error* cperp:kill cperp:finish
+(defun c:CPERPPTS (/ *error* cperp:kill cperp:unplace cperp:finish
                      os ce pd clay cec celt celw celts cdim undoOpen tmpEnts
                      srcData srcLayer srcColor srcLtype srcLw srcLts
                      dimPairs dimStyle pr
                      sel crv etype sp ep click rev side tot
-                     tng prj cross fuzz nrm sz
-                     arlen hlen p2 tx ty tailx taily ca sa bkx bky
-                     b1x b1y b2x b2y
+                     tng prj cross fuzz nrm tx ty
                      curCrv curRev n lastN basePts newPts usedBases idxs
                      tangs tg guideEnts total len lastLen i base np again
-                     ans iter plt p e seg
-                     wOld wNew mid fac bnd cap over)
+                     ans iter plt p e
+                     wOld wNew wres mid fac qstep arrow bnd bmode cap over
+                     rstep askd tgt)
 
   ;; erase one temporary entity and forget it
   (defun cperp:kill (e)
     (if e
       (progn (if (entget e) (entdel e))
              (setq tmpEnts (vl-remove e tmpEnts)))))
+
+  ;; take back every point placed from index tgt on - guide nodes and
+  ;; all - so the prompt for point tgt can be asked again; tgt 0 takes
+  ;; back the whole round.  idxs holds each created point's index, so
+  ;; skipped points are stepped over on the way back too
+  (defun cperp:unplace (tgt)
+    (while (and idxs (>= (car idxs) tgt))
+      (cperp:kill (car guideEnts))
+      (setq guideEnts (cdr guideEnts)
+            newPts    (cdr newPts)
+            usedBases (cdr usedBases)
+            tangs     (cdr tangs)
+            idxs      (cdr idxs)))
+    (setq i tgt))
 
   ;; single cleanup path shared by normal exit, Esc and errors
   (defun cperp:finish (/ guard)
@@ -87375,71 +89478,152 @@
       (setq undoOpen T)))
   (if (member pd '(0 1)) (setvar "PDMODE" 3))
 
-  ;; --- 1. select a curve (re-prompts until valid) ----------------------
-  (setq crv nil)
-  (while (null crv)
-    (setq sel (entsel "\nSelect a curve (polyline, arc, spline...): "))
-    (if lzd:ask (lzd:ask "\nSelect a curve (polyline, arc, spline...): " sel) sel)
-    (if lzd:watch (lzd:watch sel) sel)
+  ;; --- prepare the layers ---------------------------------------------
+  ;; PERPPTS-TEMP first: the START arrow and the boundary probe both draw
+  ;; on it, and a locked current layer cannot stop them being erased
+  ;; there.  Made once, ahead of the chain below, which can come back
+  ;; through the click step more than once.
+  (cal:ensure-layer "PERPPTS-TEMP" 1)
+  (cal:ensure-layer "DIMENSIONS"   4)
+
+  ;; --- 1 to 3: the selection, the click and the width ------------------
+  ;; One chain walked with a step counter: Back at the click re-opens
+  ;; the selection, and Back at the width question re-opens the click.
+  ;; The click comes BEFORE the width question because the width
+  ;; question may have to name an end -- how much of a change is at
+  ;; START -- and it is the click that says which end that is.
+  (setq qstep 1 arrow nil)
+  (while (< qstep 4)
     (cond
-      ((null sel)
-       (princ "\nNothing selected - try again, or press Esc to quit."))
-      (t
-       (setq etype (cdr (assoc 0 (entget (car sel)))))
+      ;; --- 1. select a curve (re-prompts until valid) ------------------
+      ((= qstep 1)
+       (setq crv nil)
+       (while (null crv)
+         (setq sel (entsel "\nSelect a curve (polyline, arc, spline...): "))
+         (if lzd:ask (lzd:ask "\nSelect a curve (polyline, arc, spline...): " sel) sel)
+         (if lzd:watch (lzd:watch sel) sel)
+         (cond
+           ((null sel)
+            (princ "\nNothing selected - try again, or press Esc to quit."))
+           (t
+            (setq etype (cdr (assoc 0 (entget (car sel)))))
+            (cond
+              ((not (cperp:curve-p (car sel)))
+               (princ (strcat "\nA " etype " is not a curve.")))
+              ((< (cperp:curvelen (car sel)) 1e-9)
+               (princ "\nThat curve has no length."))
+              ((equal (vlax-curve-getStartPoint (car sel))
+                      (vlax-curve-getEndPoint (car sel)) 1e-9)
+               (princ (strcat "\nThat curve is closed, so it has no start or"
+                              " end - use an open curve.")))
+              (t (setq crv (car sel)))))))
+       (setq tot (cperp:curvelen crv)
+             sp  (trans (vlax-curve-getStartPoint crv) 0 1)
+             ep  (trans (vlax-curve-getEndPoint crv) 0 1)
+             qstep 2))
+
+      ;; --- 2. click to set direction (START/FINISH) and offset side ----
+      ;; The side is measured against the direction of travel (START ->
+      ;; FINISH), so later rounds -- whose curves are built in travel
+      ;; order -- inherit the same side directly.
+      ((= qstep 2)
+       (setvar "OSMODE" 0)
+       (setq click nil)
+       (while (null click)
+         (initget "Back Undo")
+         (setq click (getpoint "\nClick to pick direction / offset side [Back]: "))
+         (if lzd:ask (lzd:ask "\nClick to pick direction / offset side [Back]: " click) click)
+         (cond
+           ((null click)
+            (princ "\nA point is required - click one side of the curve."))
+           ((cperp:back-kw click)
+            (princ "\nStepping back one question.")
+            (setq qstep 1))
+           (t
+            ;; nearest end of the curve to the click = START
+            (setq rev (> (distance click sp) (distance click ep)))
+            (cond
+              ((null (setq tng (cperp:tangent crv click rev)))
+               (princ "\nCannot read the curve direction there - click elsewhere.")
+               (setq click nil))
+              (t
+               ;; signed offset of the click from the tangent line at the
+               ;; projection of the click onto the curve
+               (setq prj (trans (vlax-curve-getClosestPointTo
+                                  crv (trans click 1 0))
+                                0 1))
+               (setq cross (- (* (car tng)  (- (cadr click) (cadr prj)))
+                              (* (cadr tng) (- (car click)  (car prj))))
+                     fuzz  (max 1e-8 (* tot 1e-6)))
+               (if (< (abs cross) fuzz)
+                 (progn
+                   (princ "\nThat point is on the curve - click clearly to one side.")
+                   (setq click nil))
+                 (setq qstep 3)))))))
+       (if (= qstep 3)
+         (progn
+           (setq side (if (>= cross 0.0) 1.0 -1.0))
+           ;; the red arrow at START, kept until the command finishes so
+           ;; the entry order stays clear across repeat rounds -- and so
+           ;; the width question can say "the arrowed end" and be
+           ;; understood
+           (setq arrow   (cperp:arrow crv rev tot)
+                 tmpEnts (append arrow tmpEnts)))))
+
+      ;; --- 3. has the overall width changed? ---------------------------
+      ;; The width asked about is the distance straight across, end to
+      ;; end -- NOT the length of the curve, which on anything bowed runs
+      ;; a good deal further than the width it spans, and it is the width
+      ;; that gets re-measured.  Making a new one true is a scale about a
+      ;; point on the line through the two ends -- the midpoint when the
+      ;; change is split evenly, nearer START the more of it goes to
+      ;; FINISH -- and the curve keeps its shape: an arc stays that arc,
+      ;; scaled.  The drawing is resized too: the offsets and their
+      ;; dimensions are measured off this curve, so leaving it at the old
+      ;; width would put every base point somewhere the drawing says
+      ;; nothing is.  It is all inside the command's undo group, so one U
+      ;; puts the width back.
+      ((= qstep 3)
+       (setq tx   (- (car ep)  (car sp))
+             ty   (- (cadr ep) (cadr sp))
+             wOld (sqrt (+ (* tx tx) (* ty ty)))
+             ;; a plan projection with no width at all has nothing to
+             ;; ask about
+             wres (if (> wOld 1e-9) (cperp:ask-width "Overall width" wOld T)))
        (cond
-         ((not (cperp:curve-p (car sel)))
-          (princ (strcat "\nA " etype " is not a curve.")))
-         ((< (cperp:curvelen (car sel)) 1e-9)
-          (princ "\nThat curve has no length."))
-         ((equal (vlax-curve-getStartPoint (car sel))
-                 (vlax-curve-getEndPoint (car sel)) 1e-9)
-          (princ (strcat "\nThat curve is closed, so it has no start or"
-                         " end - use an open curve.")))
-         (t (setq crv (car sel)))))))
-
-  (setq tot (cperp:curvelen crv)
-        sp  (trans (vlax-curve-getStartPoint crv) 0 1)
-        ep  (trans (vlax-curve-getEndPoint crv) 0 1))
-
-  ;; --- 2. has the overall width changed? -------------------------------
-  ;; The width asked about is the distance straight across, end to end --
-  ;; NOT the length of the curve, which on anything bowed runs a good
-  ;; deal further than the width it spans, and it is the width that gets
-  ;; re-measured.  Making a new one true is a scale about the midpoint of
-  ;; the two ends, so exactly half the difference lands at each end and
-  ;; the curve keeps its shape: an arc stays that arc, scaled.  The
-  ;; drawing is resized too -- the offsets and their dimensions are
-  ;; measured off this curve, so leaving it at the old width would put
-  ;; every base point somewhere the drawing says nothing is.  It is all
-  ;; inside the command's undo group, so one U puts the width back.
-  (setq tx   (- (car ep)  (car sp))
-        ty   (- (cadr ep) (cadr sp))
-        wOld (sqrt (+ (* tx tx) (* ty ty)))
-        ;; a plan projection with no width at all has nothing to
-        ;; ask about; the direction click below is where that
-        ;; gets reported
-        wNew (if (> wOld 1e-9) (cperp:ask-width "Overall width" wOld)))
-  (if wNew
-    (progn
-      (setq mid (list (/ (+ (car sp)  (car ep))  2.0)
-                      (/ (+ (cadr sp) (cadr ep)) 2.0)
-                      (caddr sp))
-            fac (/ wNew wOld))
-      (if (not (cperp:rescale crv mid fac))
-        (progn
-          (princ (strcat "\nThe curve could not be resized - it is most"
-                         " likely on a locked, frozen or switched-off"
-                         " layer.  Free the layer and run CPERPPTS again."))
-          (cperp:finish)
-          (exit)))
-      ;; re-read: the curve itself is what every round measures along
-      (setq tot (cperp:curvelen crv)
-            sp  (trans (vlax-curve-getStartPoint crv) 0 1)
-            ep  (trans (vlax-curve-getEndPoint crv) 0 1))
-      (princ (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
-                     (rtos (/ (abs (- wNew wOld)) 2.0))
-                     (if (> wNew wOld) " added at" " taken off")
-                     " each end."))))
+         ((eq wres 'CPERP-BACK)
+          ;; back to the click - the arrow goes with it, since the click
+          ;; is what placed it
+          (princ "\nStepping back one question.")
+          (foreach e arrow (cperp:kill e))
+          (setq arrow nil qstep 2))
+         (t
+          (if wres
+            (progn
+              (setq wNew (car wres)
+                    ;; START is the end the click chose, whichever end of
+                    ;; the curve that is
+                    mid  (if rev
+                           (cperp:scale-ctr ep sp (cadr wres))
+                           (cperp:scale-ctr sp ep (cadr wres)))
+                    fac  (/ wNew wOld))
+              (if (not (cperp:rescale crv mid fac))
+                (progn
+                  (princ (strcat "\nThe curve could not be resized - it is most"
+                                 " likely on a locked, frozen or switched-off"
+                                 " layer.  Free the layer and run CPERPPTS again."))
+                  (cperp:finish)
+                  (exit)))
+              ;; re-read: the curve itself is what every round measures along
+              (setq tot (cperp:curvelen crv)
+                    sp  (trans (vlax-curve-getStartPoint crv) 0 1)
+                    ep  (trans (vlax-curve-getEndPoint crv) 0 1))
+              (princ (cperp:width-line wOld wNew (cadr wres)))
+              ;; START moved, so the arrow is drawn again where it now is
+              (foreach e arrow (cperp:kill e))
+              (setq arrow   (cperp:arrow crv rev tot)
+                    tmpEnts (append arrow tmpEnts))))
+          (setq qstep 4))))))
 
   ;; --- properties to give the offset polylines -------------------------
   (setq srcData  (entget crv)
@@ -87449,113 +89633,61 @@
         srcLw    (cond ((cdr (assoc 370 srcData))) (-1))
         srcLts   (cond ((cdr (assoc 48 srcData))) (1.0)))
 
-  ;; --- 3. click to set direction (START/FINISH) and offset side -------
-  ;; The side is measured against the direction of travel (START ->
-  ;; FINISH), so later rounds -- whose curves are built in travel order
-  ;; -- inherit the same side directly.
-  (setvar "OSMODE" 0)
-  (setq click nil)
-  (while (null click)
-    (setq click (getpoint "\nClick to pick direction / offset side: "))
-    (if lzd:ask (lzd:ask "\nClick to pick direction / offset side: " click) click)
-    (cond
-      ((null click)
-       (princ "\nA point is required - click one side of the curve."))
-      (t
-       ;; nearest end of the curve to the click = START
-       (setq rev (> (distance click sp) (distance click ep)))
-       (cond
-         ((null (setq tng (cperp:tangent crv click rev)))
-          (princ "\nCannot read the curve direction there - click elsewhere.")
-          (setq click nil))
-         (t
-          ;; signed offset of the click from the tangent line at the
-          ;; projection of the click onto the curve
-          (setq prj (trans (vlax-curve-getClosestPointTo
-                             crv (trans click 1 0))
-                           0 1))
-          (setq cross (- (* (car tng)  (- (cadr click) (cadr prj)))
-                         (* (cadr tng) (- (car click)  (car prj))))
-                fuzz  (max 1e-8 (* tot 1e-6)))
-          (if (< (abs cross) fuzz)
-            (progn
-              (princ "\nThat point is on the curve - click clearly to one side.")
-              (setq click nil))))))))
-
-  (setq side (if (>= cross 0.0) 1.0 -1.0))
-
-  ;; --- prepare the layers ---------------------------------------------
-  ;; PERPPTS-TEMP first: the boundary probe below draws its ray on that
-  ;; layer, and the question that picks the boundary comes after it
-  (cal:ensure-layer "PERPPTS-TEMP" 1)
-  (cal:ensure-layer "DIMENSIONS"   4)
-
-  ;; --- 4. the boundary the offsets may not cross (optional) -----------
+  ;; --- 4. the boundary the offsets answer to (optional) ---------------
   ;; Asked after the direction click because the click is what fixes
   ;; which way the offsets run, and a boundary is only a boundary on the
-  ;; side they run toward.  Enter takes None and the command behaves
-  ;; exactly as it did before there was one.
-  (setq bnd 'RETRY)
-  (while (eq bnd 'RETRY)
-    (initget "None")
-    (setq sel (entsel (strcat "\nSelect a boundary the offsets may not"
-                              " cross [None] <None>: ")))
-    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
-    (if lzd:watch (lzd:watch sel) sel)
+  ;; side they run toward; and after the width question, because the
+  ;; resize is already in the drawing by now, which is also why this
+  ;; selection offers no Back.  Enter takes None and the command behaves
+  ;; exactly as it did before there was one.  A boundary then gets one
+  ;; more question -- a limit the offsets stop at, or the line every one
+  ;; of them runs out to meet -- and Back there re-opens the selection.
+  (setq qstep 1 bnd nil bmode nil)
+  (while (< qstep 3)
     (cond
-      ;; entsel answers nil for Enter AND for a click that hit nothing.
-      ;; ERRNO 7 is what tells them apart, and without asking, a click
-      ;; that missed would quietly drop the boundary the drafter was
-      ;; reaching for and cap nothing all run.
-      ((and (null sel) (= 7 (getvar "ERRNO")))
-       (princ "\nNothing there - click the boundary itself, or press Enter for none."))
-      ((or (null sel) (= (type sel) 'STR)) (setq bnd nil))
-      ((not (cperp:curve-p (car sel)))
-       (princ (strcat "\nA " (cdr (assoc 0 (entget (car sel))))
-                      " cannot be crossed - pick a curve, or press Enter"
-                      " for none.")))
-      ((eq (car sel) crv)
-       (princ (strcat "\nThat is the curve being offset from - a run"
-                      " cannot be bounded by where it starts.")))
-      (t (setq bnd (car sel)))))
+      ((= qstep 1)
+       (setq bnd 'RETRY)
+       (while (eq bnd 'RETRY)
+         (initget "None")
+         (setq sel (entsel "\nSelect a boundary for the offsets [None] <None>: "))
+         (if lzd:ask (lzd:ask "\nSelect a boundary for the offsets [None] <None>: " sel) sel)
+         (if lzd:watch (lzd:watch sel) sel)
+         (cond
+           ;; entsel answers nil for Enter AND for a click that hit nothing.
+           ;; ERRNO 7 is what tells them apart, and without asking, a click
+           ;; that missed would quietly drop the boundary the drafter was
+           ;; reaching for and cap nothing all run.
+           ((and (null sel) (= 7 (getvar "ERRNO")))
+            (princ "\nNothing there - click the boundary itself, or press Enter for none."))
+           ((or (null sel) (= (type sel) 'STR)) (setq bnd nil))
+           ((not (cperp:curve-p (car sel)))
+            (princ (strcat "\nA " (cdr (assoc 0 (entget (car sel))))
+                           " cannot be a boundary - pick a curve, or press"
+                           " Enter for none.")))
+           ((eq (car sel) crv)
+            (princ (strcat "\nThat is the curve being offset from - a run"
+                           " cannot be bounded by where it starts.")))
+           (t (setq bnd (car sel)))))
+       (setq qstep (if bnd 2 3)))
+      ((= qstep 2)
+       (initget "Limit Meet Back Undo")
+       (setq bmode (getkword (strcat "\nDo the offsets stop at the boundary,"
+                                     " or run out to meet it?"
+                                     " [Limit/Meet/Back] <Limit>: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") bmode) bmode)
+       (cond
+         ((member bmode '("Back" "Undo"))
+          (princ "\nStepping back one question.")
+          (setq qstep 1))
+         (t
+          (if (null bmode) (setq bmode "Limit"))
+          (setq qstep 3))))))
   (if bnd
-    (princ (strcat "\nBoundary set: no offset will cross that "
+    (princ (strcat "\nBoundary set: "
+                   (if (equal bmode "Meet")
+                     "every offset runs out to that "
+                     "no offset will cross that ")
                    (cdr (assoc 0 (entget bnd))) ".")))
-
-  ;; --- draw an arrow pointing at the START end ------------------------
-  ;; The shaft runs back from START along the curve's tangent there, so
-  ;; the arrow sits outside the curve pointing at the end the lengths
-  ;; are entered from.
-  (setq p  (if rev ep sp)
-        sz (caddr p))
-  ;; a point a little way along the traversal gives the start tangent
-  (setq p2 (cperp:pt-at-dist crv
-                             (if rev (- tot (* tot 0.001)) (* tot 0.001))
-                             tot))
-  (setq tx (- (car p2)  (car p))
-        ty (- (cadr p2) (cadr p)))
-  (if (< (distance p p2) 1e-9)
-    (setq tx 1.0 ty 0.0)
-    (setq tx (/ tx (distance p p2))
-          ty (/ ty (distance p p2))))
-  (setq arlen (* tot 0.15))
-  (if (< arlen 1e-6) (setq arlen 1.0))
-  (setq hlen  (* arlen 0.35)
-        tailx (- (car p)  (* tx arlen))
-        taily (- (cadr p) (* ty arlen)))
-  (setq ca 0.9063 sa 0.4226                 ; cos/sin 25 deg
-        bkx (- tx) bky (- ty))
-  (setq b1x (+ (car p)  (* hlen (- (* bkx ca) (* bky sa))))
-        b1y (+ (cadr p) (* hlen (+ (* bkx sa) (* bky ca))))
-        b2x (+ (car p)  (* hlen (+ (* bkx ca) (* bky sa))))
-        b2y (+ (cadr p) (* hlen (+ (* (- bkx) sa) (* bky ca)))))
-  (foreach seg (list (list (list tailx taily sz) p)
-                     (list p (list b1x b1y sz))
-                     (list p (list b2x b2y sz)))
-    (entmake (list '(0 . "LINE") '(8 . "PERPPTS-TEMP") '(62 . 1)
-                   (cons 10 (trans (car seg)  1 0))
-                   (cons 11 (trans (cadr seg) 1 0))))
-    (setq tmpEnts (cons (entlast) tmpEnts)))
 
   ;; --- offset rounds --------------------------------------------------
   ;; Every round samples and offsets from the NEWEST curve: the selected
@@ -87569,118 +89701,151 @@
         total  0)
 
   (while (equal again "Yes")
-    (setq iter (1+ iter))
+    (setq iter (1+ iter) rstep 1)
 
-    ;; --- how many values / points for this round ---------------------
-    (setq n nil)
-    (while (null n)
-      (initget 6)
-      (setq n (getint (strcat "\nRound " (itoa iter)
-                              " - how many values (points) are required?"
-                              (if lastN (strcat " <" (itoa lastN) ">") "")
-                              " ")))
-      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") n) n)
-      (if (null n) (setq n lastN))
+    ;; The count and the lengths are one chain walked with a step
+    ;; counter.  Back at a length re-asks the last length TYPED -- a
+    ;; point that ran out to the boundary was never asked, so it is
+    ;; taken back on the way past -- and re-asks the count when nothing
+    ;; was typed in front of it.
+    (while (< rstep 3)
       (cond
-        ((null n)
-         (princ "\nA number is required."))
-        ((< n 2)
-         (princ "\nNeed at least 2 points.")
-         (setq n nil))
-        ((> n 100)
-         ;; Back is listed because it is what a hand reaches for here,
-         ;; and it means what No means - ask the count again
-         (initget "Yes No Back Undo")
-         (setq ans (getkword
-                     (strcat "\n" (itoa n) " points means " (itoa n)
-                             " dimensions. Continue? [Yes/No/Back] <No>: ")))
-         (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
-         (if (not (equal ans "Yes")) (setq n nil)))))
-    (setq lastN n)
+        ;; --- how many values / points for this round -------------------
+        ((= rstep 1)
+         (setq n nil)
+         (while (null n)
+           (initget 6)
+           (setq n (getint (strcat "\nRound " (itoa iter)
+                                   " - how many values (points) are required?"
+                                   (if lastN (strcat " <" (itoa lastN) ">") "")
+                                   " ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") n) n)
+           (if (null n) (setq n lastN))
+           (cond
+             ((null n)
+              (princ "\nA number is required."))
+             ((< n 2)
+              (princ "\nNeed at least 2 points.")
+              (setq n nil))
+             ((> n 100)
+              ;; Back is listed because it is what a hand reaches for here,
+              ;; and it means what No means - ask the count again
+              (initget "Yes No Back Undo")
+              (setq ans (getkword
+                          (strcat "\n" (itoa n) " points means " (itoa n)
+                                  " dimensions. Continue? [Yes/No/Back] <No>: ")))
+              (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
+              (if (not (equal ans "Yes")) (setq n nil)))))
+         (setq lastN n)
 
-    ;; base points, equally spaced by true arc length along the newest
-    ;; curve, START first
-    (setq basePts (cperp:curve-pts curCrv n curRev))
+         ;; base points, equally spaced by true arc length along the newest
+         ;; curve, START first
+         (setq basePts (cperp:curve-pts curCrv n curRev))
+         ;; usedBases collects the base of each created point so bases and
+         ;; new points stay paired even when a point is skipped; tangs
+         ;; holds the travel tangent under each created point (it becomes
+         ;; the arc direction of the new polyline there); idxs records each
+         ;; created point's position so Back returns to the right prompt
+         ;; even across skipped points; askd records which of them were
+         ;; ASKED, which is where Back goes.
+         (setvar "CLAYER" "PERPPTS-TEMP")
+         (setq newPts '() usedBases '() tangs '() idxs '() askd '()
+               guideEnts '() i 0 rstep 2))
 
-    ;; --- length per point + build the new perpendicular points -------
-    ;; usedBases collects the base of each created point so bases and
-    ;; new points stay paired even when a point is skipped; tangs holds
-    ;; the travel tangent under each created point (it becomes the arc
-    ;; direction of the new polyline there); idxs records each created
-    ;; point's position so Back returns to the right prompt even across
-    ;; skipped points.
-    (setvar "CLAYER" "PERPPTS-TEMP")
-    (setq newPts '() usedBases '() tangs '() idxs '() guideEnts '() i 0)
-    (while (< i n)
-      (setq base (nth i basePts)
-            tg   (cperp:tangent curCrv base curRev)
-            nrm  (if tg (list (* side (- (cadr tg))) (* side (car tg)))))
-      (cond
-        ;; no readable tangent under this point - skip it rather than
-        ;; place the offset in an arbitrary direction
-        ((null nrm)
-         (princ (strcat "\nSkipping point " (itoa (1+ i))
-                        ": the curve direction cannot be read there."))
-         (setq i (1+ i)))
-        (t
-         ;; How far this point may go before it meets the boundary.
-         ;; Measured per point along its own normal: a boundary running
-         ;; at an angle to the curve is nearer at one end than at the
-         ;; other, and one number could not say where.  nil when the ray
-         ;; never reaches it, and then nothing below changes.
-         (setq cap (if bnd (cperp:capdist bnd base nrm)))
-         ;; Undo kept as a hidden synonym; Max is offered only where
-         ;; there is a boundary ahead of this point to reach
-         (initget 6 (if cap "Back Undo Max" "Back Undo"))
-         (setq len (getdist (strcat "\nLength for point " (itoa (1+ i))
-                                    " of " (itoa n)
-                                    (if cap
-                                      (strcat ", boundary at " (rtos cap))
-                                      "")
-                                    (if lastLen
-                                      (strcat " <" (rtos lastLen) ">")
-                                      "")
-                                    (if cap " [Back/Max]: " " [Back]: "))))
-         (if lzd:ask (lzd:ask (getvar "LASTPROMPT") len) len)
-         (if (null len) (setq len lastLen))
-         (if (equal len "Max") (setq len cap))
-         ;; The typed number is what Enter repeats, not the capped one:
-         ;; the tape still says what it says, and the next point has its
-         ;; own boundary to meet it against.
-         (if (numberp len) (setq lastLen len))
-         (if (and cap (numberp len) (> len cap))
+        ;; --- length per point + build the new perpendicular points -----
+        ((= rstep 2)
+         (if (>= i n)
+           (setq rstep 3)
            (progn
-             (princ (strcat "\n" (rtos len) " would cross the boundary -"
-                            " point " (itoa (1+ i)) " is capped at "
-                            (rtos cap) "."))
-             (setq len cap)))
-         (cond
-           ((eq (type len) 'STR)
-            (if newPts
-              (progn
-                (setq i (car idxs))          ; back to that point's prompt
-                (cperp:kill (car guideEnts))
-                (setq guideEnts (cdr guideEnts)
-                      newPts    (cdr newPts)
-                      usedBases (cdr usedBases)
-                      tangs     (cdr tangs)
-                      idxs      (cdr idxs))
-                (princ "\nStepping back one point."))
-              (princ "\nAlready at the first point.")))
-           ((null len)
-            (princ "\nA length is required."))
-           (t
-            (setq np      (list (+ (car base)  (* len (car nrm)))
-                                (+ (cadr base) (* len (cadr nrm)))
-                                (caddr base)))
-            (setq newPts    (cons np newPts)
-                  usedBases (cons base usedBases)
-                  tangs     (cons tg tangs)
-                  idxs      (cons i idxs))
-            (command "._POINT" np)
-            (setq guideEnts (cons (entlast) guideEnts)
-                  tmpEnts   (cons (entlast) tmpEnts))
-            (setq i (1+ i)))))))
+             (setq base (nth i basePts)
+                   tg   (cperp:tangent curCrv base curRev)
+                   nrm  (if tg (list (* side (- (cadr tg))) (* side (car tg)))))
+             (cond
+               ;; no readable tangent under this point - skip it rather than
+               ;; place the offset in an arbitrary direction
+               ((null nrm)
+                (princ (strcat "\nSkipping point " (itoa (1+ i))
+                               ": the curve direction cannot be read there."))
+                (setq i (1+ i)))
+               (t
+                ;; How far this point may go before it meets the boundary.
+                ;; Measured per point along its own normal: a boundary
+                ;; running at an angle to the curve is nearer at one end
+                ;; than at the other, and one number could not say where.
+                ;; nil when the ray never reaches it, and then nothing
+                ;; below changes.
+                (setq cap (if bnd (cperp:capdist bnd base nrm)))
+                (cond
+                  ;; Meet: a boundary ahead IS the length, so nothing is asked
+                  ((and cap (equal bmode "Meet"))
+                   (setq np (list (+ (car base)  (* cap (car nrm)))
+                                  (+ (cadr base) (* cap (cadr nrm)))
+                                  (caddr base)))
+                   (princ (strcat "\nPoint " (itoa (1+ i)) " of " (itoa n)
+                                  " runs out to the boundary: " (rtos cap) "."))
+                   (setq newPts    (cons np newPts)
+                         usedBases (cons base usedBases)
+                         tangs     (cons tg tangs)
+                         idxs      (cons i idxs))
+                   (command "._POINT" np)
+                   (setq guideEnts (cons (entlast) guideEnts)
+                         tmpEnts   (cons (entlast) tmpEnts))
+                   (setq i (1+ i)))
+                  (t
+                   ;; Undo kept as a hidden synonym; Max is offered only
+                   ;; where there is a boundary ahead of this point to reach
+                   (initget 6 (if cap "Back Undo Max" "Back Undo"))
+                   (setq len (getdist (strcat "\nLength for point " (itoa (1+ i))
+                                              " of " (itoa n)
+                                              (cond
+                                                (cap (strcat ", boundary at " (rtos cap)))
+                                                ((equal bmode "Meet") " (no boundary ahead)")
+                                                (t ""))
+                                              (if lastLen
+                                                (strcat " <" (rtos lastLen) ">")
+                                                "")
+                                              (if cap " [Back/Max]: " " [Back]: "))))
+                   (if lzd:ask (lzd:ask (getvar "LASTPROMPT") len) len)
+                   (if (null len) (setq len lastLen))
+                   (if (equal len "Max") (setq len cap))
+                   ;; The typed number is what Enter repeats, not the capped
+                   ;; one: the tape still says what it says, and the next
+                   ;; point has its own boundary to meet it against.
+                   (if (numberp len) (setq lastLen len))
+                   (if (and cap (numberp len) (> len cap))
+                     (progn
+                       (princ (strcat "\n" (rtos len) " would cross the boundary -"
+                                      " point " (itoa (1+ i)) " is capped at "
+                                      (rtos cap) "."))
+                       (setq len cap)))
+                   (cond
+                     ;; Back: to the last length typed - or to the count
+                     ;; when nothing was typed in front of this point
+                     ((eq (type len) 'STR)
+                      (cond
+                        (askd
+                         (setq tgt (car askd) askd (cdr askd))
+                         (cperp:unplace tgt)
+                         (princ "\nStepping back one point."))
+                        (t
+                         (cperp:unplace 0)
+                         (princ "\nStepping back one question.")
+                         (setq rstep 1))))
+                     ((null len)
+                      (princ "\nA length is required."))
+                     (t
+                      (setq np (list (+ (car base)  (* len (car nrm)))
+                                     (+ (cadr base) (* len (cadr nrm)))
+                                     (caddr base)))
+                      (setq newPts    (cons np newPts)
+                            usedBases (cons base usedBases)
+                            tangs     (cons tg tangs)
+                            idxs      (cons i idxs)
+                            askd      (cons i askd))
+                      (command "._POINT" np)
+                      (setq guideEnts (cons (entlast) guideEnts)
+                            tmpEnts   (cons (entlast) tmpEnts))
+                      (setq i (1+ i)))))))))))))
     (setq newPts    (reverse newPts)
           usedBases (reverse usedBases)
           tangs     (reverse tangs))
@@ -87719,32 +89884,31 @@
     (setq guideEnts nil)
 
     ;; --- has the width of the curve just drawn changed? --------------
-    ;; Step 2's question, asked again of the curve this round built.  It
+    ;; Step 3's question, asked again of the curve this round built.  It
     ;; is the next course out and it was re-measured too, and the typed
     ;; offsets only reach the width they happen to add up to: a course
     ;; whose ends were measured a little long or a little short comes
     ;; out that much wide or narrow, and everything taken off it after
     ;; -- this round's dimensions, and the base points of every round
     ;; that follows -- would be measured off a width the wall does not
-    ;; have.  So it is resized here, before any of that: half the
-    ;; difference at each end, scaled about the midpoint of the two, the
-    ;; same correction and the same undo group as step 2.  Unchanged is
-    ;; the default and the Enter answer, which leaves the round exactly
-    ;; as it drew.
+    ;; have.  So it is resized here, before any of that: the same
+    ;; correction, the same split and the same undo group as step 3,
+    ;; with the polyline's first point as START (it sits at the arrowed
+    ;; end).  Unchanged is the default and the Enter answer, which
+    ;; leaves the round exactly as it drew.  No Back: the curve is drawn.
     (setq tx   (- (car  (last newPts)) (car  (car newPts)))
           ty   (- (cadr (last newPts)) (cadr (car newPts)))
           wOld (sqrt (+ (* tx tx) (* ty ty)))
           ;; ends that land on top of each other span no width, so there
           ;; is nothing to ask about and nothing to scale about either
-          wNew (if (> wOld 1e-9)
-                 (cperp:ask-width "Overall width of the new curve" wOld)))
-    (if wNew
+          wres (if (> wOld 1e-9)
+                 (cperp:ask-width "Overall width of the new curve" wOld nil)))
+    (if wres
       (progn
-        (setq mid (list (/ (+ (car  (car newPts)) (car  (last newPts))) 2.0)
-                        (/ (+ (cadr (car newPts)) (cadr (last newPts))) 2.0)
-                        (caddr (car newPts)))
-              fac (/ wNew wOld))
-        ;; A refused resize stops step 2 outright: nothing is drawn yet
+        (setq wNew (car wres)
+              mid  (cperp:scale-ctr (car newPts) (last newPts) (cadr wres))
+              fac  (/ wNew wOld))
+        ;; A refused resize stops step 3 outright: nothing is drawn yet
         ;; there, so re-running costs one click.  Here rounds of typed
         ;; lengths sit behind it and not one dimension is written, so
         ;; the curve is left at the width it drew and the drafter is
@@ -87753,25 +89917,28 @@
         (if (cperp:rescale curCrv mid fac)
           (progn
             (setq newPts (cperp:scale-pts newPts mid fac))
-            (princ (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
-                           (rtos (/ (abs (- wNew wOld)) 2.0))
-                           (if (> wNew wOld) " added at" " taken off")
-                           " each end."))
-            ;; every length was capped as it was typed, but this scales
-            ;; the whole curve about the midpoint of its ends and can
-            ;; carry a point that was sitting ON the boundary out past
-            ;; it.  The correction is the drafter's measurement and is
-            ;; not second-guessed -- but a curve that crosses a boundary
-            ;; it was told to respect does not go without saying.
+            (princ (cperp:width-line wOld wNew (cadr wres)))
+            ;; every length was capped, or run out to the boundary, as
+            ;; it was placed; this scales the whole curve and can carry
+            ;; a point that was sitting ON the boundary out past it, or
+            ;; off it.  The correction is the drafter's measurement and
+            ;; is not second-guessed -- but a curve that crosses a
+            ;; boundary it was told to respect, or leaves one it was
+            ;; told to meet, does not go without saying.
             (if bnd
               (progn
-                (setq over (cperp:past-bnd bnd usedBases newPts))
+                (setq over (if (equal bmode "Meet")
+                             (cperp:off-bnd bnd newPts)
+                             (cperp:past-bnd bnd usedBases newPts)))
                 (if (> over 0)
-                  (princ (strcat "\n" (itoa over) " of "
-                                 (itoa (length newPts)) " points now sit"
-                                 " past the boundary - the width"
-                                 " correction carried the curve beyond"
-                                 " it."))))))
+                  (princ (strcat "\n" (itoa over) " of " (itoa (length newPts))
+                                 (if (equal bmode "Meet")
+                                   (strcat " points no longer sit on the"
+                                           " boundary - the width correction"
+                                           " moved the curve off it.")
+                                   (strcat " points now sit past the"
+                                           " boundary - the width correction"
+                                           " carried the curve beyond it."))))))))
           (princ (strcat "\nThe new curve could not be resized - it is"
                          " most likely on a locked, frozen or switched-off"
                          " layer.  It is left at the " (rtos wOld)
@@ -87808,7 +89975,7 @@
             (progn (princ "\nStepping back one question.")
                    (setq again 'RETRY)))))))
 
-  ;; --- 6. draw every dimension in the chosen style --------------------
+  ;; --- 9. draw every dimension in the chosen style --------------------
   (setq dimStyle (if (equal ans "SIde") "SIDE STANDARD" "STANDARD INCHES"))
   (if (tblsearch "DIMSTYLE" dimStyle)
     (command "._-DIMSTYLE" "_Restore" dimStyle)
@@ -87876,7 +90043,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.8")
+(setq *tutperp-version* "v0.9")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -87986,10 +90153,23 @@
                   "    else re-prompts instead of cancelling the command"
                   "  * zero-length and closed objects are rejected"
                   ""
+                  "Direction click"
+                  "  * right after the selection you click once beside the"
+                  "    line: the end nearest your click becomes START -"
+                  "    lengths are then entered in order START -> FINISH,"
+                  "    and a red arrow marks START for the whole run"
+                  "  * the side of the line you click is the side every round"
+                  "    offsets toward"
+                  "  * a click landing on the line itself is rejected (the"
+                  "    side would be ambiguous); object snap is off for this"
+                  "    click so it cannot be pulled onto the line"
+                  "  * Back at the click re-opens the selection"
+                  ""
                   "Overall width"
-                  "  * right after the selection you are asked whether the"
-                  "    overall width has changed: Grew, Shrank, New, or"
-                  "    Unchanged (the default, and Enter)"
+                  "  * after the click you are asked whether the overall"
+                  "    width has changed: Grew, Shrank, New, or Unchanged"
+                  "    (the default, and Enter); Back there re-opens the"
+                  "    click"
                   "  * EVERY line gets that question, not just the selected"
                   "    one: each round draws the next course out, and the"
                   "    line it drew is asked about the moment it appears -"
@@ -87999,28 +90179,56 @@
                   "  * the width meant is the distance straight ACROSS, end"
                   "    to end - never the length of the OBJECT, which on"
                   "    anything bowed runs further than the width it spans"
-                  "  * half of any difference is added to, or taken off,"
-                  "    EACH end: the OBJECT in the drawing is resized to"
-                  "    match, so the base points and their dimensions still"
-                  "    land on it.  One U puts the width back"
+                  "  * the change is split EVENLY, half at each end, unless"
+                  "    you say otherwise: answer No to the split question and"
+                  "    give the amount at the START end (the arrowed one) -"
+                  "    the rest goes on at FINISH.  Zero and the whole amount"
+                  "    are both answers; more than the whole is refused, and"
+                  "    growing and shrinking are shared out the same way"
+                  "  * the OBJECT in the drawing is resized to match - one"
+                  "    scale about a point on the line through its two ends,"
+                  "    so the shape is carried along - and the base points"
+                  "    and their dimensions still land on it.  One U puts"
+                  "    the width back"
                   "  * a corrected round has its new points moved with the"
                   "    line, so its dimensions read the corrected drawing"
                   "    rather than the lengths typed into it"
                   "  * shrinking away the whole width is rejected, and a"
                   "    resize the drawing will not take - a locked, frozen"
-                  "    or switched-off layer - stops the command at the"
-                  "    selection, where nothing is drawn yet; at a round it"
-                  "    leaves the line at the width it drew and says so"
+                  "    or switched-off layer - stops the command before the"
+                  "    first round, where nothing is drawn yet; at a round"
+                  "    it leaves the line at the width it drew and says so"
                   ""
-                  "Direction click"
-                  "  * the end nearest your click becomes START - lengths are"
-                  "    then entered in order START -> FINISH (a red arrow"
-                  "    marks START for the whole run)"
-                  "  * the side of the line you click is the side every round"
-                  "    offsets toward"
-                  "  * a click landing on the line itself is rejected (the"
-                  "    side would be ambiguous); object snap is off for this"
-                  "    click so it cannot be pulled onto the line"
+                  "The boundary (optional)"
+                  "  * after the width question you may select a curve"
+                  "    already in the drawing - a property line, a house"
+                  "    wall, a deck edge - for the offsets to answer to;"
+                  "    Enter takes None and nothing is capped"
+                  "  * you then say what it is: a LIMIT the offsets stop at,"
+                  "    or the line every offset runs out to MEET.  Back there"
+                  "    re-opens the boundary selection"
+                  "  * the distance to it is measured PER POINT: a ray from"
+                  "    each base point along the offset normal, and the"
+                  "    nearest crossing ahead of it.  A boundary at an angle"
+                  "    to the line is nearer at one end than the other, which"
+                  "    one number could never say"
+                  "  * Limit: the length prompt names the distance, M (Max)"
+                  "    takes it exactly, and a longer length is brought back"
+                  "    to it and said so - the number TYPED is still what"
+                  "    Enter repeats at the next point"
+                  "  * Meet: a point with the boundary ahead of it lands ON"
+                  "    the boundary and no length is asked for it; Back at a"
+                  "    length that is asked steps back to the last length"
+                  "    typed, taking the landed points in between with it"
+                  "  * where the ray never reaches the boundary that point"
+                  "    has no maximum and no landing, so a boundary covering"
+                  "    part of a run answers for the part it covers"
+                  "  * it holds the measured POINTS at the boundary: an arc"
+                  "    segment between two of them can still bow past it,"
+                  "    and the answer is a point there.  The width correction"
+                  "    is not re-capped either - it is your measurement - but"
+                  "    a correction that carries points past a Limit, or off"
+                  "    a Meet, says how many"
                   ""
                   "Counts and lengths"
                   "  * the point count must be a whole number of at least 2;"
@@ -88029,7 +90237,8 @@
                   "  * lengths must be positive - zero and negative values"
                   "    are rejected"
                   "  * Enter repeats the previous length (handy for runs of"
-                  "    equal values); typing B (Back) steps back one point"
+                  "    equal values); typing B (Back) steps back to the last"
+                  "    length typed, or to the count when none was typed yet"
                   ""
                   "Joining the points"
                   "  * Straight, Arcs or Mixed, asked once a round has three"
@@ -88122,7 +90331,10 @@
                   "    FINISH;"
                   "  * the side you clicked (here: above) is the side all"
                   "    offsets go, in every round."
-                  "A click exactly on the line is rejected as ambiguous."))
+                  "A click exactly on the line is rejected as ambiguous."
+                  "The overall-width question comes next, and when a change"
+                  "is not split evenly it is this arrow that says which end"
+                  "START is."))
       (tutp:pause)
 
       ;; stage 3: the division points
@@ -88212,7 +90424,7 @@
                   "STAGE 7 - repeating."
                   "After each polyline PERPPTS asks whether ITS overall"
                   "width has changed - the same Grew/Shrank/New/Unchanged"
-                  "question the selected line got, applied the same way -"
+                  "question the selected line got, split the same way -"
                   "and then: Repeat on the new polyline?  Answering Yes"
                   "spaces a fresh set of points by arc length ALONG that"
                   "polyline and offsets them again - same side, dimensions"
@@ -88282,7 +90494,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.9")
+(setq *tutcperp-version* "v0.10")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -88457,10 +90669,21 @@
                   "    re-prompts"
                   "  * zero-length and closed curves are rejected"
                   ""
+                  "Direction click"
+                  "  * right after the selection you click once beside the"
+                  "    curve: the end nearest your click becomes START, and a"
+                  "    red arrow marks it for the whole run"
+                  "  * the side you click - relative to the direction of"
+                  "    travel - is the side every round offsets toward,"
+                  "    however the curve bends"
+                  "  * a click landing on the curve is rejected as ambiguous"
+                  "  * Back at the click re-opens the selection"
+                  ""
                   "Overall width"
-                  "  * right after the selection you are asked whether the"
-                  "    overall width has changed: Grew, Shrank, New, or"
-                  "    Unchanged (the default, and Enter)"
+                  "  * after the click you are asked whether the overall"
+                  "    width has changed: Grew, Shrank, New, or Unchanged"
+                  "    (the default, and Enter); Back there re-opens the"
+                  "    click"
                   "  * EVERY curve gets that question, not just the selected"
                   "    one: each round draws the next course out, and the"
                   "    curve it drew is asked about the moment it appears -"
@@ -88470,57 +90693,64 @@
                   "  * the width meant is the distance straight ACROSS, end"
                   "    to end - never the length of the CURVE, which on"
                   "    anything bowed runs further than the width it spans"
-                  "  * half of any difference is added to, or taken off,"
-                  "    EACH end: the CURVE in the drawing is resized to"
-                  "    match, so the base points and their dimensions still"
-                  "    land on it.  One U puts the width back"
+                  "  * the change is split EVENLY, half at each end, unless"
+                  "    you say otherwise: answer No to the split question and"
+                  "    give the amount at the START end (the arrowed one) -"
+                  "    the rest goes on at FINISH.  Zero and the whole amount"
+                  "    are both answers; more than the whole is refused, and"
+                  "    growing and shrinking are shared out the same way"
+                  "  * the CURVE in the drawing is resized to match - one"
+                  "    scale about a point on the line through its two ends,"
+                  "    so an arc stays that arc, scaled - and the base points"
+                  "    and their dimensions still land on it.  One U puts"
+                  "    the width back"
                   "  * a corrected round has its new points moved with the"
                   "    curve, so its dimensions read the corrected drawing"
                   "    rather than the lengths typed into it"
                   "  * shrinking away the whole width is rejected, and a"
                   "    resize the drawing will not take - a locked, frozen"
-                  "    or switched-off layer - stops the command at the"
-                  "    selection, where nothing is drawn yet; at a round it"
-                  "    leaves the curve at the width it drew and says so"
+                  "    or switched-off layer - stops the command before the"
+                  "    first round, where nothing is drawn yet; at a round"
+                  "    it leaves the curve at the width it drew and says so"
                   ""
                   "The boundary (optional)"
-                  "  * after the direction click you may select a curve"
+                  "  * after the width question you may select a curve"
                   "    already in the drawing - a property line, a house"
-                  "    wall, a deck edge - that the offsets may not cross;"
+                  "    wall, a deck edge - for the offsets to answer to;"
                   "    Enter takes None and nothing is capped"
-                  "  * the cap is measured PER POINT: a ray from each base"
-                  "    point along its own normal, and the nearest crossing"
-                  "    ahead of it is that point's maximum.  A boundary at"
-                  "    an angle to the run is nearer at one end than the"
-                  "    other, which one number could never say"
-                  "  * the length prompt names the distance to it, M (Max)"
+                  "  * you then say what it is: a LIMIT the offsets stop at,"
+                  "    or the line every offset runs out to MEET.  Back there"
+                  "    re-opens the boundary selection"
+                  "  * the distance to it is measured PER POINT: a ray from"
+                  "    each base point along its own normal, and the nearest"
+                  "    crossing ahead of it.  A boundary at an angle to the"
+                  "    run is nearer at one end than the other, which one"
+                  "    number could never say"
+                  "  * Limit: the length prompt names the distance, M (Max)"
                   "    takes it exactly, and a longer length is brought back"
                   "    to it and said so - the number TYPED is still what"
                   "    Enter repeats at the next point"
+                  "  * Meet: a point with the boundary ahead of it lands ON"
+                  "    the boundary and no length is asked for it; Back at a"
+                  "    length that is asked steps back to the last length"
+                  "    typed, taking the landed points in between with it"
                   "  * where the ray never reaches the boundary that point"
-                  "    has no maximum, so a boundary covering part of a run"
-                  "    caps only the part it covers"
-                  "  * it holds the measured POINTS inside the boundary:"
-                  "    where the boundary bends away between two of them the"
-                  "    arc joining them can still bow past it, and the"
-                  "    answer is a point there.  The width correction is not"
-                  "    re-capped either - it is your measurement - but a"
-                  "    correction that carries points past the boundary says"
+                  "    has no maximum and no landing, so a boundary covering"
+                  "    part of a run answers for the part it covers"
+                  "  * it holds the measured POINTS at the boundary: where"
+                  "    the boundary bends away between two of them the arc"
+                  "    joining them can still bow past it, and the answer is"
+                  "    a point there.  The width correction is not re-capped"
+                  "    either - it is your measurement - but a correction"
+                  "    that carries points past a Limit, or off a Meet, says"
                   "    how many"
-                  ""
-                  "Direction click"
-                  "  * the curve end nearest your click becomes START; a red"
-                  "    arrow marks it for the whole run"
-                  "  * the side you click - relative to the direction of"
-                  "    travel - is the side every round offsets toward,"
-                  "    however the curve bends"
-                  "  * a click landing on the curve is rejected as ambiguous"
                   ""
                   "Counts and lengths"
                   "  * point count: whole number, at least 2; Enter reuses"
                   "    the previous round's count; over 100 asks first"
                   "  * lengths must be positive; Enter repeats the previous"
-                  "    length; B (Back) steps back one point"
+                  "    length; B (Back) steps back to the last length typed,"
+                  "    or to the count when none was typed yet"
                   "  * a point where the curve direction cannot be read"
                   "    (a cusp) is skipped with a message, never offset in"
                   "    an arbitrary direction"
@@ -88625,7 +90855,9 @@
                   "nearest the click becomes START (the red arrow), and the"
                   "side you clicked - relative to the direction of travel -"
                   "is the side every round offsets toward, all the way"
-                  "around the bend."))
+                  "around the bend.  The overall-width question comes next,"
+                  "and when a change is not split evenly it is this arrow"
+                  "that says which end START is."))
       (tutc:pause)
 
       ;; stage 3 + 4 + 5 + 6: division points, offsets, arc polyline,
@@ -88656,7 +90888,7 @@
                   "STAGE 7 - repeating."
                   "After each curve CPERPPTS asks whether ITS overall width"
                   "has changed - the same Grew/Shrank/New/Unchanged question"
-                  "the selected curve got, applied the same way - and then"
+                  "the selected curve got, split the same way - and then"
                   "whether to repeat.  Answering Yes runs the next round"
                   "FROM THE NEWEST CURVE: fresh arc-length points along the"
                   "curve just built, offset perpendicular to ITS tangents -"
@@ -110125,6 +112357,7 @@
     ("LAZDIAG"          "Error report for the last failure")
     ("LAZFORM"          "Pool from a filled-in chart")
     ("LAZLOG"           "What every command has done lately")
+    ("LAZSIDE"          "Side view from a filled-in section")
     ("LAZTXT"           "The same form, drawn in tiles")
     ("LAZFORMCOVER"     "Chart to pool, no bottom")
     ("LAZSPA"           "Spa from a filled-in chart")
@@ -110219,6 +112452,7 @@
      ("Shape"
       "POOL"
       "POOLSIDE"
+      "LAZSIDE"
       "LAZFORM"
       "LAZTXT"
       "OASIS"
@@ -110396,6 +112630,7 @@
       "LAZFORM"
       "LAZTXT"
       "LAZFORMCOVER"
+      "LAZSIDE"
       "LAZSPA"
       "SPA"
       "SPACOVCREATE"
@@ -113245,38 +115480,38 @@
 (setq lazpass:*want* '(
   "CALVER" "LAZDIAG" "LAZLOG" "LAZDIAGVER" "POOL" "POOLCOVER"
   "POOLVER" "POOLDEMO" "POOLDEMOVER" "TUTORIALPOOL" "POOLSIDE" "POOLSIDEVER"
-  "SPA" "SPAVER" "TUTORIALSPA" "OASIS" "OASISVER" "ABCDEF"
-  "ABCDEFVER" "ABFIND" "ABMOVE" "ABPCREATE" "ABFINDVER" "ALTABCDEF"
-  "ALTABCDEFVER" "ABHD" "SIMPABHD" "ABHDCOVER" "ADAB" "TUTORIALABHD"
-  "TUTORIALADAB" "ABHDVER" "ABCURCHECK" "ABCURCHECKSCAN" "ABCURCHECKRESCUE" "ABCURCHECKVER"
-  "ABPCHECK" "ABPCHECKRESCUE" "ABPCHECKVER" "OLAUTO" "OLAUTOVER" "CABHDVER"
-  "CABHD" "POINTRENAMER" "POINTRENAMERVER" "LOBF" "LOBFVER" "ABLOBF"
-  "ABLOBFVER" "AUTOBEAD" "AUTOBEADVER" "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM"
-  "FLOORDIM" "AUTODIMSIDEPOV" "AUTODIMVER" "BPCALLOUT" "BPCALLOUTVER" "DIMSTAMP"
-  "DIMSTAMPVER" "CCPRECHECK" "CCPRECHECKVER" "CDCALLOUT" "CDCALLOUTVER" "CDCREATE"
-  "CDCREATEVER" "CHECK" "DIMARCCHECK" "CHECKVER" "CORNERSTP" "TUTORIALCORNERSTP"
-  "CORNERSTPVER" "HEMISTEP" "TUTORIALHEMISTEP" "HEMISTEPVER" "NORMIESTEP" "TUTORIALNORMIESTEP"
-  "NORMIESTEPVER" "LAZSTEP" "LAZSTEPVER" "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN"
-  "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVER" "COVERCHECKVERSION" "CUSTBLOCK"
-  "CUSTBLOCKVER" "CLEARDIM" "CLEARDIMSCAN" "CLEARDIMVER" "DIMCHECKVER" "DIMCHECKRESCUE"
-  "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE"
-  "DIMCONTENDVER" "DDFIX" "DDSET" "DDCAL" "DDINFO" "DDALT"
-  "DDFIXVER" "DDGPS" "DDELEV" "DDTEST" "DDGPSVER" "FITABHDVER"
-  "FITABHD" "FITABHDCOVER" "LHD" "LHDVER" "LINCHECK" "LINCHECKVER"
-  "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK"
-  "TUTORIALLINFINSCAN" "LINTXTCHK" "LINTXTCHKVER" "PADDLE" "TUTORIALPADDLE" "PADDLEVER"
-  "MOHAMADDLE" "MOHAMADDLEVER" "LINGUTTER" "LINGUTTERSCAN" "LINGUTTERVER" "PERPPTSVER"
-  "PERPPTS" "CPERPPTSVER" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "PERPMARKVER"
-  "PERPMARK" "SMARTFILLET" "SMARTFILLETVER" "HONEFILLET" "HONEFILLETVER" "SPACHECKVER"
-  "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "SPACOVCREATE"
-  "SPACOVCREATEVER" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER" "DRONE"
-  "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SORECONV"
-  "SOCONVVER" "VSCONV" "VSRECONV" "VSCONVVER" "G2MCONV" "G2MRECONV"
-  "G2MCONVVER" "WCALST" "WCALSTVER" "XFTCONV" "XFTRECONV" "XFTCONV-SETUP"
-  "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA"
-  "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER"
-  "LAZPANEL" "LAZPIN" "LAZHIDE" "LAZBUTTON" "LAZICON" "CALHELP"
-  "CALSET" "LAZSET" "LAZNAME" "LAZPANELVER"
+  "LAZSIDE" "LAZSIDEVER" "SPA" "SPAVER" "TUTORIALSPA" "OASIS"
+  "OASISVER" "ABCDEF" "ABCDEFVER" "ABFIND" "ABMOVE" "ABPCREATE"
+  "ABFINDVER" "ALTABCDEF" "ALTABCDEFVER" "ABHD" "SIMPABHD" "ABHDCOVER"
+  "ADAB" "TUTORIALABHD" "TUTORIALADAB" "ABHDVER" "ABCURCHECK" "ABCURCHECKSCAN"
+  "ABCURCHECKRESCUE" "ABCURCHECKVER" "ABPCHECK" "ABPCHECKRESCUE" "ABPCHECKVER" "OLAUTO"
+  "OLAUTOVER" "CABHDVER" "CABHD" "POINTRENAMER" "POINTRENAMERVER" "LOBF"
+  "LOBFVER" "ABLOBF" "ABLOBFVER" "AUTOBEAD" "AUTOBEADVER" "TUTORIALAUTOBEAD"
+  "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV" "AUTODIMVER" "BPCALLOUT"
+  "BPCALLOUTVER" "DIMSTAMP" "DIMSTAMPVER" "CCPRECHECK" "CCPRECHECKVER" "CDCALLOUT"
+  "CDCALLOUTVER" "CDCREATE" "CDCREATEVER" "CHECK" "DIMARCCHECK" "CHECKVER"
+  "CORNERSTP" "TUTORIALCORNERSTP" "CORNERSTPVER" "HEMISTEP" "TUTORIALHEMISTEP" "HEMISTEPVER"
+  "NORMIESTEP" "TUTORIALNORMIESTEP" "NORMIESTEPVER" "LAZSTEP" "LAZSTEPVER" "COVERCHECKRESCUE"
+  "COVERCHECK" "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVER"
+  "COVERCHECKVERSION" "CUSTBLOCK" "CUSTBLOCKVER" "CLEARDIM" "CLEARDIMSCAN" "CLEARDIMVER"
+  "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN"
+  "DIMCONTEND" "DCE" "DIMCONTENDVER" "DDFIX" "DDSET" "DDCAL"
+  "DDINFO" "DDALT" "DDFIXVER" "DDGPS" "DDELEV" "DDTEST"
+  "DDGPSVER" "FITABHDVER" "FITABHD" "FITABHDCOVER" "LHD" "LHDVER"
+  "LINCHECK" "LINCHECKVER" "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN"
+  "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK" "LINTXTCHKVER" "PADDLE"
+  "TUTORIALPADDLE" "PADDLEVER" "MOHAMADDLE" "MOHAMADDLEVER" "LINGUTTER" "LINGUTTERSCAN"
+  "LINGUTTERVER" "PERPPTSVER" "PERPPTS" "CPERPPTSVER" "CPERPPTS" "TUTORIALPERPPTS"
+  "TUTORIALCPERPPTS" "PERPMARKVER" "PERPMARK" "SMARTFILLET" "SMARTFILLETVER" "HONEFILLET"
+  "HONEFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE"
+  "TUTORIALSPACHECK" "SPACOVCREATE" "SPACOVCREATEVER" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER"
+  "STOCKCOVERVER" "DRONE" "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER"
+  "SOCONV" "SORECONV" "SOCONVVER" "VSCONV" "VSRECONV" "VSCONVVER"
+  "G2MCONV" "G2MRECONV" "G2MCONVVER" "WCALST" "WCALSTVER" "XFTCONV"
+  "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION"
+  "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM"
+  "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZHIDE" "LAZBUTTON"
+  "LAZICON" "CALHELP" "CALSET" "LAZSET" "LAZNAME" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)
@@ -113293,7 +115528,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.15 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.16 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 

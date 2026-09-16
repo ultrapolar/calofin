@@ -1,19 +1,36 @@
-# LAZSTEP -- say how many steps, then fill the drawing in (AutoLISP / AutoCAD 2018+)
+# LAZSTEP -- type the step count and the drawing follows it (AutoLISP / AutoCAD 2018+)
 
 ## What it does
 
-`LAZSTEP` is a two-page form for the three pool-step routines. Page one
-asks which routine this is -- `CORNERSTP`, `HEMISTEP` or `NORMIESTEP` --
-**how many steps**, and the handful of questions that routine asks once
-for the whole run. Page two is **a drawing generated from that count**:
-three steps draw three treads, eight draw eight, and every dimension the
-count implies is on the picture with a box against it. Fill in what you
-know, leave the rest blank, press **Insert**: the routine runs and asks
-only for the gaps.
+`LAZSTEP` is a **one-page** form for the three pool-step routines. The
+drawing stands on the left and everything asked about it in the column
+beside it: which routine this is -- `CORNERSTP`, `HEMISTEP` or
+`NORMIESTEP` -- **how many steps**, the handful of questions that
+routine asks once for the whole run, and a box against every dimension
+the count implies. Fill in what you know, leave the rest blank, press
+**Insert**: the routine runs and asks only for the gaps.
+
+**Type the count and the picture follows it.** Three steps draw three
+treads, eight draw eight, and the boxes come with them: put 5 in the
+count and there are five tread boxes, five width boxes and six depth
+boxes to fill in, no more and no fewer. Until a count is given the
+picture is a **nominal** one (`lzt:*steps-nominal*`) and every dimension
+box on it is greyed, because a box that has no step to belong to is not
+a box anybody should be typing into.
 
 Nothing here is a stored picture. `lzt:chart` builds the chart from the
 type and the number, and everything downstream -- the DCL, the band
 cuts, the drawing engine, the answers -- reads it as data.
+
+**It used to be two pages**, the count on the first and the drawing on
+the second, so the picture the count describes was the one thing you
+could not see while typing it, and changing a 5 to a 6 meant Back,
+retype, Next. DCL cannot add a tile to a dialog that is already up, so
+a new count still closes the page and reopens it; what changed is that
+it reopens as *itself*, in the same place, with everything typed still
+in it -- so the count reads as a field that redraws rather than as a
+page boundary. A count that matches the drawing already on screen
+rebuilds nothing at all and simply brings its boxes alive.
 
 **Why the count is the interesting field.** At the command line the step
 count is never a question: the tread loop repeats "Step N - step tread
@@ -24,15 +41,21 @@ own -- `(steps . N)` -- and the loop stops itself after N steps instead
 of waiting for an Enter nobody typed. That is what lets a form of N rows
 drive a run of N steps.
 
-## Page one, per type
+## The run block, per type
 
-Every type: the step count, `dims`, `profile` and `bead`.
+Every type: the step count, `dims`, `profile`, and the **three beading
+questions** -- `bead` (beading required at all), `beadsides` (All /
+Some / None along the step side walls) and `beadnums` (the step numbers
+`Some` asks for, typed as `1 3 5`). Beading was one form-answerable
+question followed by two live prompts *after* the drawing was finished;
+all three come off the sheet now. The side to bead **toward** stays a
+pick in the drawing.
 
 | Type | Asked once |
 | --- | --- |
 | `CORNERSTP` | `direction` (Inside / Outside), `measure` (Middle / True), `treadmode` (Parallel / True / Equidistant), `outerwidth`, `bench` (Yes / No), `benchoffset`, `benchstep` |
 | `HEMISTEP` | `wallwidth`, `crown`, `boundary` (Yes / No) |
-| `NORMIESTEP` | `width` (one width for the whole run), `treat` (Square / Radius / Cut / NotGiven), `treat-sz`, `cutgiven` (Offset / Cut) |
+| `NORMIESTEP` | `treat` (Square / Radius / Cut / NotGiven), `treat-sz`, `cutgiven` (Offset / Cut). Its one `width` is a dimension on the drawing -- the letter `W` -- so the drawing carries its box |
 
 A dropdown's first entry is `(ask)` -- the form's version of an empty
 box, and the only honest default, since every one of these prompts
@@ -48,9 +71,12 @@ store unread is harder to reason about than one that was never sent.
 | `bench`, `benchoffset`, `benchstep` | `direction` is not `Outside` -- a bench is an inside-out feature |
 | `benchoffset`, `benchstep` | `bench` is `Yes` |
 | `measure` | `direction` is not `Outside` |
+| `beadsides`, `beadnums` | `bead` is `No` -- nothing is asked about side walls on a run that is not being beaded |
+| `beadnums` | `beadsides` is `Some` |
 | `treat-sz` | `treat` is `Radius` or `Cut` -- only a sized treatment takes a size |
 | `cutgiven` | `treat` is `Cut` |
 | every depth box | `profile` is not `No` -- a run with no side view asks no depths |
+| **every dimension box** | a step count has been given -- until one is, the picture is nominal and nothing on it is a question this run will reach |
 
 **`measure` and `treadmode` are always offered on a corner run.**
 `CORNERSTP` asks them only when the selection turns up a corner diagonal
@@ -59,10 +85,12 @@ they are offered and the hint says they are ignored on a plain corner.
 An answer the live prompt does not list falls through to the prompt
 anyway.
 
-The count must be a **whole number from 1 to 8**. Anything else is
-refused on page one with a message rather than opening a page for it.
+The count must be a **whole number from 1 to 8**. Anything else leaves
+the drawing where it was, says why on the line under the picture, and
+greys `Insert` -- it never builds a page for a number that might not
+fit on the screen.
 
-## Page two: the drawing, built for the count
+## The drawing, built for the count
 
 The plan view on top, the side profile below it, one per-mille
 coordinate space and one drawing engine.
@@ -86,13 +114,17 @@ until a number is typed against it, and then the number replaces the
 letter on the picture, which is what the letter was standing in for all
 along.
 
-`NORMIESTEP`'s single `width` appears on **both** pages. It is one
-answer shown twice: type it wherever you meet it first.
+`NORMIESTEP`'s single `width` is a dimension on the drawing -- the
+letter `W`, standing off the run it measures -- and its box is in the
+column with the rest. It used to appear on both pages, because the count
+and the drawing were separate and you could meet either first; on one
+page that is two tiles with one key, which is not a dialog DCL will
+open.
 
-Changing the count on page one and coming back regenerates the drawing
-for the new number and keeps what was typed for the steps that still
-exist -- and what was typed for the ones that went away is still in the
-store if you go back up again.
+Changing the count regenerates the drawing for the new number and keeps
+what was typed for the steps that still exist -- and what was typed for
+the ones that went away is still in the store if the number goes back
+up.
 
 ## What travels, and what does not
 
@@ -118,7 +150,7 @@ instead.
 walls, the curve or base line, the side to draw toward, the side
 profile's top-of-tread pick and the bead direction all stay in the
 drawing, where your own snaps are live -- the three routines ask for
-them there as always. `LAZSTEP` says so in the hint on both pages.
+them there as always. `LAZSTEP` says so in the hint under the picture.
 
 ## Install & run
 
@@ -162,6 +194,9 @@ tile's colours -- the grouped build takes `CALOFIN-LIB.lsp`'s instead.
 | `lzt:*prof-h*` | `450` | ...and its whole drop |
 | `lzt:*prof-gap*` | `40` | how far a depth dimension stands off its step |
 | `lzt:*max-steps*` | `8` | the step-count ceiling. DCL will not scroll and a dialog taller than the screen does not open at all; eight fits a laptop, nine does not reliably. **The VB palette offers exactly the counts a sheet was generated for, up to this number** |
+| `lzt:*steps-nominal*` | `3` | what the picture shows before a count is typed. The box opens empty -- the form invents no answers and `steps` is one that travels -- but a page with no drawing on it is a page with nothing to read, so the nominal chart stands in with every box on it greyed |
+| `lzt:*colbudget*` | `34` | how tall the answer column may get, in lines of generated DCL, before it splits in two. The page is as tall as its longest column; tune it against `tools/check_dcl.py` |
+| `lzt:*hint-w*` | `96` | how wide the hint and the two state lines are, in character cells. Wider than the boxes they sit under, because a sentence that does not fit on one line is another row of the page's height |
 | `lzt:*chart-w*` | `58` | the chart column's width, in character cells |
 | `lzt:*chart-h*` | `20` | its total height in rows, spread over the bands |
 | `lzt:*wedge-ed*` | `5` | a tread box's `edit_width` where it is wedged into the drawing |
@@ -170,9 +205,10 @@ tile's colours -- the grouped build takes `CALOFIN-LIB.lsp`'s instead.
 
 ## The state lines
 
-One on each page, and each holds its own button back.
+Two of them, stacked under the picture, and **`Insert` is held back by
+either**: a page with one button cannot have two opinions about it.
 
-**Page one** has boxes with two different readers, which is what makes
+**The run line** has boxes with two different readers, which is what makes
 it worth saying out loud: a measurement goes through `lzt:answer`, and
 the step count and the bench step through `lzt:int`. `3.5` is the case
 that separates them -- a perfectly good measurement, and not a step
@@ -184,25 +220,27 @@ How many steps?  A whole number from 1 to 8, please.
 8 steps is the ceiling - a taller dialog will not open.  Run the rest by hand.
 Bench ends on step number: "3.5" is not a whole number.
 Bench offset off the wall: "wide" is not a measurement.
-3 steps - Next builds the drawing to fill in.
+3 steps - the drawing and its boxes are built for that many.
 ```
 
-`Next >` is greyed for all but the last. The count's two refusals are
+`Insert` is greyed for all but the last. The count's two refusals are
 the ones `lzt:count-ok` has always printed to the command line; they are
 on the page now, live, while the number is being typed -- **and
-`lzt:countwhy` is the one function both read**, so the live warning and
-the refusal at the gate cannot come to different conclusions.
+`lzt:countwhy` is the one function all three readers use** (the live
+warning, the redraw and the refusal at the gate), so they cannot come
+to different conclusions.
 
-**Page two** is the hand-off, named by the letters the drawing shows:
+**The hand-off line** is named by the letters the drawing shows:
 
 ```
+Type a step count and the boxes come alive - one per tread, one per width, one per drop.
 Nothing filled yet - CORNERSTP will ask for all 10 boxes, plus the picks.
 1 of 10 boxes filled - CORNERSTP will ask for T2, T3, W1 and 6 more, plus the picks.
 T2 is not a measurement - type a number, or NA, or clear it.
 All 10 boxes filled - CORNERSTP will ask only for the picks in the drawing.
 ```
 
-Both pages count only what is live: a question `lzt:skip` names is not
+Both lines count only what is live: a question `lzt:skip` names is not
 asked at all, so rubbish in one is neither complained about nor counted.
 The test partitions every live box into sent, still-to-ask and
 unreadable and fails if any lands in two groups or in none, so a line
@@ -254,9 +292,11 @@ on.
 
 - **DCL height is the hard failure mode.** A dialog taller than the
   screen does not open at all, and nothing here can measure a screen. N
-  rows of boxes grow page two linearly, so the count is capped at
-  **eight** and the depth boxes are packed **two to a row**. A larger
-  number is refused with a message on page one. Nine steps or more is a
+  rows of boxes grow the page linearly, so the count is capped at
+  **eight**, the depth boxes are packed **two to a row**, and the answer
+  column **splits in two** once it is taller than `lzt:*colbudget*` --
+  the page is as tall as its longest column. A larger number is refused
+  with a message on the line under the picture. Nine steps or more is a
   run for the command line.
 - **The tread chain staggers past four steps.** A tread box is its
   letter plus nine cells, so eight of them on one line run about 96
@@ -283,15 +323,16 @@ on.
 - **A tread box holds five characters.** `24` and `2'6"` fit; a long
   architectural spelling scrolls inside the box. The side-column boxes
   are wider.
-- The DCL file is **rewritten every time a page is opened**, unlike
-  `LAZFORM`'s, because page two depends on the count -- N rows of boxes
-  cannot be a static dialog. It is written to the temp folder and
-  deleted when the page closes, so there is still nothing to install.
-- DCL has no tab tile. A tab and the Back button are ordinary buttons
-  that close the page and reopen the next, so the dialog blinks as it
-  switches. `done_dialog` reports where it was standing and `new_dialog`
-  takes a position back, so it reopens in the same spot -- the blink is
-  unavoidable, the wandering is not.
+- The DCL file is **rewritten every time the page is opened**, unlike
+  `LAZFORM`'s, because it depends on the count -- N rows of boxes cannot
+  be a static dialog. It is written to the temp folder and deleted when
+  the page closes, so there is still nothing to install.
+- DCL has no tab tile. A tab is an ordinary button that closes the page
+  and reopens the next, and a **count that moves** does the same, so the
+  dialog blinks as it rebuilds. `done_dialog` reports where it was
+  standing and `new_dialog` takes a position back, so it reopens in the
+  same spot -- the blink is unavoidable, the wandering is not. A count
+  that matches the drawing already on screen does not rebuild at all.
 - An edit box reports its value when the caret **leaves** it, so the
   picture updates on Tab or on a click elsewhere, not per keystroke.
 - The plan view is a schematic of where the numbers go, not a survey of
