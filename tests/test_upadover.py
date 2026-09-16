@@ -6,12 +6,22 @@ AutoLISP interpreter and c:UPADOVER driven end to end from a script.
 UPADOVER makes one promise and the promise is geometric, so most of this
 file is geometry: from the point you name round to the point you name,
 the wall comes out UNDER pads -- no overlap anywhere, no gap between one
-pad and the next, and nothing of the run left bare.  Each of those three
-is checked here as a fact about the pads that landed: none overlapping
-another, all of them one block joined edge to edge (a pair meeting at a
-corner is not joined, which is the break the bridging pads exist to
-stop), and no sampled point of the run outside every pad.  On five
-shapes that break covers in different ways:
+pad and the next, and nothing of the run left bare.  Each of those is
+checked here as a fact about the pads that landed: none lying over
+another, all of them one block joined along edges at least
+upad:*mincontact* wide (a pair meeting at a corner is a joint with no
+width, and does not count as joined), no sampled point of the run
+outside every pad, and no pad laid where the run does not go.
+
+The counts are pinned too, on the shapes where they are the point.  The
+first version laid the pads on a grid, and a grid stair-steps whatever
+the wall is doing: it took 13 pads down a 45-degree wall and 13 round a
+half circle where laying them ACROSS the wall takes 7 and 9, and it put
+them up to half a pad off the wall where these sit on it.  That is the
+difference the drafter asked for, so it is written down as numbers
+rather than left to be noticed.
+
+The shapes, each of which breaks covers in a different way:
 
   * a straight wall, where the answer is an obvious flush row;
   * a run round a 90-degree corner, where the row has to turn;
@@ -171,43 +181,68 @@ def overlaps(cs):
             if max(abs(a[0] - b[0]), abs(a[1] - b[1])) < PAD - 1e-6]
 
 
-def shares_edge(a, b):
-    """Two pads meeting along a whole edge: one step of exactly one pad
-    width along one axis and nothing along the other.  A diagonal step
-    touches at a CORNER instead, which is the break the bridging pads
-    exist to stop, so it is not an edge here."""
-    dx, dy = abs(a[0] - b[0]), abs(a[1] - b[1])
-    return ((abs(dx - PAD) < 1e-6 and dy < 1e-6)
-            or (abs(dy - PAD) < 1e-6 and dx < 1e-6))
+#: How much of their shared edge two neighbours must have in common --
+#: upad:*mincontact*.  Nothing here reads the knob: the number is what
+#: the tool promises, so the test says it out loud.
+MINCONTACT = 6.0
+
+
+def contact(a, b):
+    """How much edge two pads actually share, in inches.
+
+    Pads are laid one pad ACROSS from each other on one axis, so they
+    meet on that line; what they share of it is a pad's width less the
+    step along the other axis.  0.0 is two pads touching at a corner --
+    a joint with no width, and a break in everything but topology -- and
+    None is two pads that do not meet at all."""
+    d = sorted((abs(a[0] - b[0]), abs(a[1] - b[1])))
+    if abs(d[1] - PAD) > 1e-6 or d[0] > PAD - 1e-6:
+        return None
+    return PAD - d[0]
 
 
 def loose_seams(cs):
-    """Consecutive pads, in the order they went in, that do not share a
-    full edge.  That order is the order the run walked them, so this is
-    the shape of the cover: a staircase rather than a diagonal string.
-    (A run that doubles back can land two pads in a row that are each
-    edge-to-edge with an EARLIER pad and not with each other -- which is
-    still a sound cover, and why the connectivity check below is the one
-    that speaks for every run.)"""
-    return [(a, b) for a, b in zip(cs, cs[1:]) if not shares_edge(a, b)]
+    """Consecutive pads, in the order they went in, that do not meet
+    along an edge of at least MINCONTACT.
+
+    (A run that doubles back can land two pads in a row that each meet
+    an EARLIER pad and not each other -- which is still a sound cover,
+    and why the connectivity check below is the one that speaks for
+    every run.)"""
+    return [(a, b, contact(a, b)) for a, b in zip(cs, cs[1:])
+            if contact(a, b) is None or contact(a, b) < MINCONTACT - 1e-6]
 
 
 def loose_pads(cs):
-    """Pads no chain of full-edge contacts reaches from the first one.
+    """Pads no chain of shared edges reaches from the first one.
 
     This is "no breaks between pads" as a property of the finished
     cover rather than of the order it went in: every pad is joined to
-    every other through shared edges, so two pads meeting at a corner
+    every other through edges they share, and an edge has to have
+    MINCONTACT of width to count -- so two pads meeting at a corner
     with the wall threading the junction between them cannot pass.
     """
     seen, stack = {0}, [0]
     while stack:
         i = stack.pop()
         for j, b in enumerate(cs):
-            if j not in seen and shares_edge(cs[i], b):
+            if j in seen:
+                continue
+            w = contact(cs[i], b)
+            if w is not None and w >= MINCONTACT - 1e-6:
                 seen.add(j)
                 stack.append(j)
     return [c for j, c in enumerate(cs) if j not in seen]
+
+
+def off_wall(cs, samples):
+    """How far the furthest pad centre sits from the run.
+
+    The point of laying pads across from each other rather than on a
+    grid is that they FOLLOW the wall; this is the number that says so.
+    The end pads are allowed their overshoot, so the run is measured
+    with its own ends included."""
+    return max(min(math.dist(c, p) for p in samples) for c in cs)
 
 
 def bare(cs, samples):
@@ -247,6 +282,15 @@ def covers(label, vm, n0, samples, delta=(0.0, 0.0)):
     check(f"{label}: the whole run is under pads", not bare(cs, samples),
           f"{len(bare(cs, samples))} of {len(samples)} bare, "
           f"first {bare(cs, samples)[:1]}")
+    #: Every pad is laid across from the one the run came out of, to
+    #: cover the wall from there on -- so every pad has a piece of the
+    #: run under it.  A grid could not say this: the pads it put in to
+    #: bridge a corner touched the run at one point or not at all.
+    idle = [c for c in cs
+            if not any(max(abs(p[0] - c[0]), abs(p[1] - c[1])) <= HALF + 1e-9
+                       for p in samples)]
+    check(f"{label}: no pad is laid where the run does not go", not idle,
+          f"{idle[:2]}")
     return cs
 
 
@@ -262,6 +306,8 @@ run(vm, [per, "1", "2"], "straight")
 cs = covers("straight wall", vm, n0, walk_pts(((0, 0), (240, 0))))
 check("each pad shares an edge with the one that went in before it",
       not loose_seams(cs), f"{loose_seams(cs)[:2]}")
+check("and every pad sits ON the wall, not beside it",
+      all(abs(c[1]) < 1e-9 for c in cs), f"{cs}")
 check("the row is the eight pads the run needs",
       cs == [(x, 0.0) for x in (0, 36, 72, 108, 144, 180, 216, 252)], f"{cs}")
 check("the first pad is centred on the start itself", cs[0] == (0.0, 0.0))
@@ -299,12 +345,19 @@ vm = fresh()
 per = pline(vm, [(0, 0), (200, 200), (0, 400)], closed=False)
 n0 = len(vm.entities)
 run(vm, [per, [0.0, 0.0, 0.0], [200.0, 200.0, 0.0]], "45 degrees")
-cs = covers("45 degrees", vm, n0, walk_pts(((0, 0), (200, 200))))
-check("it went in as a staircase, not a diagonal string",
-      len(cs) == 13 and not loose_seams(cs),
-      f"{len(cs)} pads, loose {loose_seams(cs)[:2]}")
-check("it said how many pads bridge a corner crossing",
-      said(vm, "bridge a grid corner"))
+samples = walk_pts(((0, 0), (200, 200)))
+cs = covers("45 degrees", vm, n0, samples)
+#: A grid laid this run in 13 pads, stair-stepping through a grid corner
+#: every pad and needing one more beside each of them to stop the pair
+#: meeting at a point.  Laid across the wall instead it takes 7, and no
+#: two of them meet at a corner -- which is what the count is here to
+#: hold on to.
+check("the diagonal takes seven pads, not a grid's thirteen",
+      len(cs) == 7, f"{len(cs)}")
+check("and no two of them meet at a corner",
+      not loose_seams(cs), f"{loose_seams(cs)[:2]}")
+check("the pads follow the wall rather than a grid",
+      off_wall(cs, samples) <= 12.0, f"{off_wall(cs, samples):.1f}\" off")
 
 
 # ---- an arc -----------------------------------------------------------
@@ -314,10 +367,16 @@ vm = fresh()
 per = pline(vm, [(0, 0, 1.0), (200, 0)], closed=False)   # r=100, below
 n0 = len(vm.entities)
 run(vm, [per, [0.0, 0.0, 0.0], [200.0, 0.0, 0.0]], "arc")
-covers("half circle", vm, n0,
-       walk_pts((((100, 0), 100, math.pi, 2 * math.pi))))
+samples = walk_pts((((100, 0), 100, math.pi, 2 * math.pi)))
+cs = covers("half circle", vm, n0, samples)
 check("the arc's own length is what it reports, not the chord's",
       said(vm, "covering 26'-2\""))
+#: 13 pads on a grid, 9 laid across the wall -- and none of them more
+#: than a third of a pad off the curve.
+check("the curve takes nine pads, not a grid's thirteen",
+      len(cs) == 9, f"{len(cs)}")
+check("and they hug the curve", off_wall(cs, samples) <= 12.0,
+      f"{off_wall(cs, samples):.1f}\" off")
 
 
 print("UPADOVER -- a round spa, which is one CIRCLE and no vertices")
@@ -384,18 +443,28 @@ vm = fresh()
 per = rect(vm)
 n0 = len(vm.entities)
 run(vm, [per, "Whole"], "whole loop")
-cs = covers("a whole loop", vm, n0,
-            walk_pts(((0, 0), (240, 0)), ((240, 0), (240, 120)),
-                     ((240, 120), (0, 120)), ((0, 120), (0, 0))))
+loop = walk_pts(((0, 0), (240, 0)), ((240, 0), (240, 120)),
+                ((240, 120), (0, 120)), ((0, 120), (0, 0)))
+cs = centres(vm, n0)
+check("a whole loop: no two pads lie over each other", not overlaps(cs),
+      f"{overlaps(cs)[:2]}")
 check("the way round is not a question when the answer is both ways",
       not asked(vm, "Click a spot the run passes through"))
 check("it said it came back round to where it started",
       said(vm, "the whole 60'-0\" of it, back round to where it started"))
-check("and the closing line says the whole way round, not end to end",
-      said(vm, "under pads the whole way round")
-      and not said(vm, "both ends carried past"))
-check("the loop closes on the grid without doubling a pad",
-      len(cs) == 20, f"{len(cs)}")
+#: A loop is the one run that cannot come out whole: it closes on its
+#: own first pad, and the stretch left over takes no pad without lying
+#: over that one.  So the tool says how much -- and what it says is
+#: measured here against what is actually bare, because a cover that
+#: under-reports its own gap is worse than one that has a gap.
+bare_len = len(bare(cs, loop)) * 0.25
+check("the stretch it cannot pad is shorter than one pad",
+      bare_len < PAD, f"{bare_len:.1f}\"")
+check("and it says so, where the loop closes back on itself",
+      said(vm, "of the run is left bare - a pad there would lie over one"
+               " already down, where the loop closes back on itself."))
+check("nothing else of the loop is bare",
+      len(bare(cs, loop)) * 0.25 < PAD + 1.0)
 
 
 # ---- which way round --------------------------------------------------

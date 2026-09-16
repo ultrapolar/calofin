@@ -88814,39 +88814,50 @@
 ;;;   never asked.
 ;;;
 ;;; How the pads are laid
-;;;   Every pad sits on ONE grid of pad-sized cells, anchored on the
-;;;   first pad -- which is centred on the start.  That one fact is what
-;;;   the promise rests on: two cells of a grid either share a full edge
-;;;   or stand apart, so pads laid this way can no more overlap than
-;;;   floor tiles can.
+;;;   A pad goes down wherever the run comes out from under the pads
+;;;   already there, and it goes down ONE PAD ACROSS from the pad it
+;;;   came out of, along the axis it came out through.  Two pads offset
+;;;   by exactly their own width on one axis meet on that line and
+;;;   cannot lie over each other whatever the other axis does -- so the
+;;;   other axis is left free, and FOLLOWS THE WALL.
 ;;;
-;;;   The run is then walked end to end, and every cell it passes
-;;;   through gets a pad.  The wall is therefore inside a pad at every
-;;;   point of the run: the cover is not a row of pads centred on the
-;;;   wall with the corners hoped over, it is the cells the wall
-;;;   actually crosses.  Where the run leaves one cell it is already
-;;;   inside the next, because the two share the edge it crossed.
+;;;   That freedom is the whole of it.  The first version laid the pads
+;;;   on a fixed grid, which is simple to prove and expensive to build:
+;;;   the pads stair-step whatever the wall is doing and sit up to half
+;;;   a pad off it.  On the drafter's own comparison drawing the same
+;;;   run took 18 pads that way, 14 laid by hand, and 12 this way --
+;;;   each of them within about three inches of the wall.
 ;;;
-;;;   The one place two cells meet at a point rather than along an edge
-;;;   is a grid CORNER, and a run at 45 degrees crosses one every pad.
-;;;   A cover that hung on that would be two pads touching at a corner
-;;;   with the wall threading the junction between them, which is a
-;;;   break in everything but topology -- so the pad beside it goes in
-;;;   too and the pair share an edge like every other.
+;;;   How far one pad reaches is measured the same way it is laid: the
+;;;   run is followed from where it came out for as long as it stays
+;;;   inside the new pad's strip AND the band it sweeps across that
+;;;   strip still fits inside one pad.  The pad is then centred on that
+;;;   band -- held so it covers the point the run crossed the seam at,
+;;;   which is what keeps the seam closed, and so it shares at least
+;;;   upad:*mincontact* of an edge with its neighbour rather than
+;;;   touching at a corner.  What it actually covers is then walked
+;;;   again rather than assumed, so a pad pulled off the middle of its
+;;;   band by those two holds cannot leave a tail behind it.
 ;;;
 ;;;   The ends are carried past, not stopped at: the first pad is
 ;;;   centred ON the start point, so the cover begins half a pad before
-;;;   it, and the pad the far end falls in runs past that end rather
-;;;   than stopping on it.  A pad past the point is concrete nobody
-;;;   needed; a wall short of one is the thing the run exists to
-;;;   prevent, so that is the direction to err in.
+;;;   it, and the last pad runs past the far end rather than stopping on
+;;;   it.  A pad past the point is concrete nobody needed; a wall short
+;;;   of one is the thing the run exists to prevent, so that is the
+;;;   direction to err in.
+;;;
+;;;   One thing can stop it, and it is reported rather than papered
+;;;   over: a run that comes back within a pad's width of itself -- a
+;;;   slot narrower than a pad, or a whole loop closing on its own first
+;;;   pad -- has stretches where every pad that would cover them lies
+;;;   over one already down.  Those are left bare, measured, and named.
 ;;;
 ;;; What it reports
 ;;;   How many pads, on which layer, how much perimeter they cover and
 ;;;   between which two points; which way round it went and what the
-;;;   other way would have been; and how many pads went in to bridge a
-;;;   corner crossing.  A pick that had to be projected onto the wall is
-;;;   named with the distance it moved.
+;;;   other way would have been; and either that the wall is under pads
+;;;   end to end or exactly how much of it is not.  A pick that had to
+;;;   be projected onto the wall is named with the distance it moved.
 ;;;
 ;;; Robustness
 ;;;   * The whole run is one UNDO group: a single U reverses all of it.
@@ -88866,7 +88877,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *upadover-version* "v1.1")
+(setq *upadover-version* "v1.2")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -88904,6 +88915,16 @@
 ;; clips, at the price of a longer walk.  Below about 8 a run could
 ;; cross a corner of a cell between two samples and miss it.
 (setq upad:*samples* 48)
+
+;; How much of their shared edge two neighbouring pads have to have in
+;; common.  Every pad is laid exactly one pad across from the one the run
+;; came out of, so the two always meet on that line; this is how much of
+;; the line they must actually share.  0 lets them meet at a CORNER,
+;; which is what a run at exactly 45 degrees does if nothing stops it --
+;; a joint with no width, and a break in everything but topology.  6"
+;; costs nothing on any shape tried; raising it holds neighbours closer
+;; together and buys the odd extra pad on a diagonal.
+(setq upad:*mincontact* 6.0)
 
 ;; A click within this of a survey point picks that point rather than
 ;; the place it landed.  12.0 is what PERPMARK, BPCALLOUT and ABFIND
@@ -88943,12 +88964,6 @@
 ;;;  Copied from CALOFIN-LIB.lsp under this file's own prefix, so the
 ;;;  standalone file loads alone -- see STANDARDS.md section 4.
 ;;; ----------------------------------------------------------------------
-
-;; Nearest whole number, negatives included: (fix (+ x 0.5)) truncates
-;; toward zero and would round -1.6 to -1, which puts a pad one cell out
-;; on every run left of or below its start.
-(defun upad:round (x)
-  (if (< x 0.0) (- (fix (+ 0.5 (- x)))) (fix (+ 0.5 x))))
 
 ;; A length as inches with the mark, 36.0 -> 36" -- every message that
 ;; quotes the pad size goes through this, so upad:*padsize* is the only
@@ -89395,41 +89410,27 @@
 ;;; ----------------------------------------------------------------------
 ;;;  The cover
 ;;;
-;;;  Every pad sits on one grid of pad-sized cells anchored on the first
-;;;  of them, and a cell either shares a full edge with its neighbour or
-;;;  stands clear of it -- which is the whole of the no-overlap promise.
-;;;  The run is walked end to end and every cell it passes through gets a
-;;;  pad, which is the whole of the no-gap one.
+;;;  A pad goes down wherever the run comes out from under the pads
+;;;  already there, and it goes down ONE PAD ACROSS from the pad it came
+;;;  out of, along the axis it came out through.  Two pads offset by
+;;;  exactly their own width on one axis meet on that line and cannot
+;;;  lap each other whatever the other axis does -- so the other axis is
+;;;  left free, and follows the WALL.
+;;;
+;;;  That freedom is the whole of it.  Pads laid on a fixed grid instead
+;;;  have to stair-step whatever the wall is doing, and pay for it: on
+;;;  the drafter's own comparison a run took 18 pads on a grid and 14 by
+;;;  hand, and this takes 12 -- each of them sitting on the wall rather
+;;;  than up to half a pad off it.
+;;;
+;;;  The stretch a new pad covers is decided the same way it is laid:
+;;;  the run is followed from where it came out for as long as it stays
+;;;  inside the new pad's strip AND the band it sweeps across that strip
+;;;  still fits inside one pad.  The pad is then centred on that band,
+;;;  held so it still covers the point the run came out at -- which is
+;;;  what keeps the seam between the two pads closed -- and so it shares
+;;;  a real edge with its neighbour rather than touching at a corner.
 ;;; ----------------------------------------------------------------------
-
-;; The cell P falls in, as (i j) counted from the cell centred on ORG.
-(defun upad:cell (p org pitch)
-  (list (upad:round (/ (- (car p) (car org)) pitch))
-        (upad:round (/ (- (cadr p) (cadr org)) pitch))))
-
-(defun upad:cell-ctr (c org pitch)
-  (list (+ (car org)  (* (car c) pitch))
-        (+ (cadr org) (* (cadr c) pitch))))
-
-;; T when cell C already has a pad.  OUT holds (cell kind) entries.
-(defun upad:seen (c out / hit e)
-  (foreach e out (if (equal (car e) c) (setq hit T)))
-  hit)
-
-;; Which of the two cells beside a corner crossing the run really passes
-;; through.  The middle of the step says so wherever the crossing is off
-;; the corner at all; dead on it -- a run at 45 degrees through the
-;; anchor crosses corner after corner exactly -- the axis the run is
-;; moving along faster decides, so the same run always answers the same
-;; way.
-(defun upad:bridge (cur nxt a b org pitch / h v mid)
-  (setq h   (list (car nxt) (cadr cur))     ; across the x edge first
-        v   (list (car cur) (cadr nxt))     ; across the y edge first
-        mid (upad:cell (cal:v* (cal:v+ a b) 0.5) org pitch))
-  (cond ((equal mid h) h)
-        ((equal mid v) v)
-        ((>= (abs (- (car b) (car a))) (abs (- (cadr b) (cadr a)))) h)
-        (t v)))
 
 ;; The run sampled end to end: the point of the perimeter at station S0
 ;; and every STEP along it for LEN, the far end included exactly.  SGN is
@@ -89449,34 +89450,139 @@
       (setq out (cons (upad:point-at en segs st) out))))
   (reverse out))
 
-;; The pads the run needs, in the order it walks them: (centre kind),
-;; kind "run" for a cell the run passes through and "bridge" for one
-;; that goes in beside a corner crossing so the two pads either side of
-;; it share an edge rather than a point.  PTS is the walk above, and its
-;; first point is where the grid is anchored -- the first pad is centred
-;; on the start, so the cover begins half a pad before it.
-(defun upad:cover (pts pitch / org out cur nxt prv br p)
-  (setq org (car pts)
-        cur (list 0 0)
-        out (list (list cur "run"))
-        prv (car pts))
-  (foreach p (cdr pts)
-    (setq nxt (upad:cell p org pitch))
-    (if (not (equal nxt cur))
-      (progn
-        ;; both indices moved: the run crossed a grid corner, where two
-        ;; cells meet at a point and a cover would hang on nothing
-        (if (and (/= (car nxt) (car cur)) (/= (cadr nxt) (cadr cur)))
+;; The pad of OUT covering P, or nil.  A pad reaches HALF either side of
+;; its centre on both axes, so this is a Chebyshev test.
+(defun upad:covered-by (p out half / hit c)
+  (foreach c out
+    (if (and (null hit)
+             (<= (abs (- (car p) (car c))) (+ half 1e-9))
+             (<= (abs (- (cadr p) (cadr c))) (+ half 1e-9)))
+      (setq hit c)))
+  hit)
+
+;; T when a pad centred on C would lap one already down.
+(defun upad:laps-p (c out pitch / hit q)
+  (foreach q out
+    (if (and (null hit)
+             (< (max (abs (- (car c) (car q))) (abs (- (cadr c) (cadr q))))
+                (- pitch 1e-6)))
+      (setq hit T)))
+  hit)
+
+;; How many of PTS no pad covers -- the cover checked against the run it
+;; was laid for, rather than trusted.
+(defun upad:bare (pts out half / n p)
+  (setq n 0)
+  (foreach p pts
+    (if (not (upad:covered-by p out half)) (setq n (1+ n))))
+  n)
+
+;; C slid along its free axis to the nearest spot inside [W0 W1] that
+;; laps nothing.  The spots worth trying are the ones exactly one pad
+;; clear of a pad already down; nil when none of them is in the window,
+;; which is a stretch of wall no pad can take without lapping one.
+(defun upad:clear-of (c out pitch ax w0 w1 / fx best bd q v cand)
+  (setq fx (- 1 ax))
+  (foreach q out
+    (if (< (abs (- (nth ax c) (nth ax q))) (- pitch 1e-6))
+      (foreach v (list (- (nth fx q) pitch) (+ (nth fx q) pitch))
+        (if (and (>= v (- w0 1e-9)) (<= v (+ w1 1e-9)))
           (progn
-            (setq br (upad:bridge cur nxt prv p org pitch))
-            (if (not (upad:seen br out))
-              (setq out (cons (list br "bridge") out)))))
-        (if (not (upad:seen nxt out))
-          (setq out (cons (list nxt "run") out)))
-        (setq cur nxt)))
-    (setq prv p))
-  (mapcar '(lambda (e) (list (upad:cell-ctr (car e) org pitch) (cadr e)))
-          (reverse out)))
+            (setq cand (if (= ax 0)
+                         (list (car c) v)
+                         (list v (cadr c))))
+            (if (and (not (upad:laps-p cand out pitch))
+                     (or (null best) (< (abs (- v (nth fx c))) bd)))
+              (setq best cand
+                    bd   (abs (- v (nth fx c))))))))))
+  best)
+
+;; The pads the run needs, in the order it walks them.  PTS is the run
+;; sampled end to end and its first point is where the first pad is
+;; centred -- on the start, so the cover begins half a pad before it.
+;; MINC is how much of their shared edge two neighbours must have in
+;; common.
+(defun upad:cover (pts pitch minc / half out last prev rest look e ax fx
+                        a b lo hi done moved p w0 w1 cand d cross)
+  (setq half (/ pitch 2.0)
+        out  (list (car pts))
+        last (car pts)
+        rest (cdr pts))
+  (while rest
+    ;; run on while the wall is still under a pad that is already down --
+    ;; a wall that doubles back within a pad's width of itself is covered
+    ;; by the pads of its first pass, and laying a second row over them
+    ;; is exactly what must not happen
+    (setq prev (car out))
+    (while (and rest (setq p (upad:covered-by (car rest) out half)))
+      (setq last p
+            prev (car rest)
+            rest (cdr rest)))
+    (if rest
+      (progn
+        (setq e     (car rest)
+              ;; the side it came out through
+              ax    (if (>= (abs (- (car e) (car last)))
+                            (abs (- (cadr e) (cadr last))))
+                      0 1)
+              fx    (- 1 ax)
+              a     (+ (nth ax last)
+                       (if (> (nth ax e) (nth ax last)) pitch (- pitch)))
+              lo    (nth fx e)
+              hi    lo
+              look  rest
+              done  nil
+              moved nil)
+        ;; how far one pad can follow the run from here
+        (while (and look (not done))
+          (setq p (car look))
+          (if (or (> (abs (- (nth ax p) a)) (+ half 1e-9))
+                  (> (- (max hi (nth fx p)) (min lo (nth fx p))) pitch))
+            (setq done T)
+            (setq lo    (min lo (nth fx p))
+                  hi    (max hi (nth fx p))
+                  look  (cdr look)
+                  moved T)))
+        ;; WHERE it came out, not just the first sample after it did:
+        ;; the run crosses the line the two pads meet on somewhere
+        ;; between the last sample under the old pad and the first one
+        ;; out from under it, and the new pad has to cover that crossing
+        ;; or the seam leaks the fraction of an inch between two samples
+        (setq d     (- (nth ax e) (nth ax prev))
+              cross (if (< (abs d) 1e-9)
+                      (nth fx e)
+                      (+ (nth fx prev)
+                         (* (- (nth fx e) (nth fx prev))
+                            (/ (- (+ (nth ax last)
+                                     (if (> (nth ax e) (nth ax last))
+                                       half (- half)))
+                                  (nth ax prev))
+                               d)))))
+        ;; the free coordinate: the middle of the band the run swept,
+        ;; held so the pad covers both the crossing and the sample after
+        ;; it, and so the two pads share an edge rather than a corner
+        (setq w0   (max (- (max (nth fx e) cross) half)
+                        (- (nth fx last) (- pitch minc)))
+              w1   (min (+ (min (nth fx e) cross) half)
+                        (+ (nth fx last) (- pitch minc)))
+              b    (max w0 (min w1 (/ (+ lo hi) 2.0)))
+              cand (if (= ax 0) (list a b) (list b a)))
+        (if (upad:laps-p cand out pitch)
+          (setq cand (upad:clear-of cand out pitch ax w0 w1)))
+        (if cand
+          ;; REST is left where it is: the loop above walks it forward
+          ;; over whatever the new pad actually covers, which is not
+          ;; always the whole band it was measured against -- holding the
+          ;; pad to the seam and to its neighbour can pull it off that
+          ;; band's middle, and a walk that trusted the measurement
+          ;; instead would step over the tail it no longer covers
+          (setq out  (cons cand out)
+                last cand)
+          ;; nothing in the window is clear: this stretch takes no pad
+          ;; without lapping one already down, so it is left, counted and
+          ;; reported rather than covered twice
+          (setq rest (if moved look (cdr rest)))))))
+  (reverse out))
 
 ;;; ----------------------------------------------------------------------
 ;;;  Layers, blocks and the pads themselves
@@ -89586,7 +89692,7 @@
 (defun c:UPADOVER (/ *error* undo-open doc space sel en ed segs tot closed
                      cands stage done pick e0 e1 loc base0 base1 s0 s1
                      lf lb sgn runlen otherlen asked pts pads delta
-                     nbridge blkname padsize e gap whole)
+                     nbare step blkname padsize e gap whole)
 
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
@@ -89774,19 +89880,21 @@
        (upad:ensure-block doc blkname padsize)
        (cal:ensure-layer upad:*layer* upad:*layercolor*)
        (setq delta   (upad:block-delta space blkname)
-             pts     (upad:walk en segs tot closed s0 sgn runlen
-                                (/ padsize upad:*samples*))
+             step    (/ padsize upad:*samples*)
+             pts     (upad:walk en segs tot closed s0 sgn runlen step)
              ;; the walk re-derives its first point from the STATION,
              ;; and an arc's point-to-station-to-point round trip is
              ;; exact only to floating point: the grid is anchored on the
              ;; spot the pick landed on instead, so the first pad is
              ;; centred where the run says it starts
              pts     (cons base0 (cdr pts))
-             pads    (upad:cover pts padsize)
-             nbridge 0)
+             pads    (upad:cover pts padsize upad:*mincontact*)
+             ;; the cover CHECKED against the run it was laid for, not
+             ;; taken on trust: every sample of the run that no pad
+             ;; covers, in the length that stands for
+             nbare   (* (upad:bare pts pads (/ padsize 2.0)) step))
        (foreach e pads
-         (upad:insert-pad space blkname (car e) delta)
-         (if (= (cadr e) "bridge") (setq nbridge (1+ nbridge))))
+         (upad:insert-pad space blkname e delta))
        (princ (strcat "\nUPADOVER: " (itoa (length pads)) " "
                       (upad:in padsize) " pad(s) on layer \"" upad:*layer*
                       "\", covering "
@@ -89806,18 +89914,26 @@
                           "the shorter way round")
                         ", " (upad:ft runlen) " against " (upad:ft otherlen)
                         " the other way.")))
-       (if (> nbridge 0)
-         (princ (strcat "\nUPADOVER: " (itoa nbridge)
-                        " of them bridge a grid corner the run crosses, so"
-                        " the pads either side of it share an edge rather"
-                        " than a point.")))
-       (princ (strcat "\nUPADOVER: the pads interlock - none overlaps"
-                      " another, and where the run leaves one it is"
-                      " already inside the next, so it is under pads "
-                      (if (and whole closed)
-                        "the whole way round."
-                        (strcat "from end to end, both ends carried past"
-                                " rather than stopped on."))))
+       (if (> nbare (/ step 2.0))
+         ;; the one thing that can stop a cover: a run that comes back
+         ;; within a pad's width of itself.  A pad there would lie over
+         ;; one already down, so it is not laid, and the drafter is told
+         ;; exactly how much wall that leaves rather than finding out on
+         ;; site
+         (princ (strcat "\nUPADOVER: " (upad:ft nbare)
+                        " of the run is left bare - a pad there would lie"
+                        " over one already down"
+                        (if (and whole closed)
+                          ", where the loop closes back on itself."
+                          ".")))
+         (princ (strcat "\nUPADOVER: the pads follow the wall and"
+                        " interlock - none lies over another, and each"
+                        " shares an edge with the one the run came off,"
+                        " so the wall is under pads "
+                        (if (and whole closed)
+                          "the whole way round."
+                          (strcat "from end to end, both ends carried past"
+                                  " rather than stopped on.")))))
        (setq done T))))
 
   (if undo-open (setq undo-open (cal:undoend)))
