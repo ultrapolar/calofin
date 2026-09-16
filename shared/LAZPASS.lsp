@@ -88875,7 +88875,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.4")
+(setq *perpmark-version* "v1.5")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables

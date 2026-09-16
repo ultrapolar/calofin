@@ -95,7 +95,7 @@ the pool is never asked about and cannot be answered wrongly. The same
 sign has driven `ABHD`'s hopper and slope lines for as long as they
 have existed.
 
-> Before v1.4 it was one click — "the centre of the pool" — and one
+> Before v1.5 it was one click — "the centre of the pool" — and one
 > dot product per mark. That is right only for a shape with no notch
 > in it: on a narrow L or a keyhole a centre clicked in one lobe sits
 > on the wrong side of a wall in the other, and every mark there came
