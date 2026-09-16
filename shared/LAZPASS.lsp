@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.17, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.18, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -3033,7 +3033,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091626 REV30")
+(setq pool:*version* "091626 REV31")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -9974,15 +9974,23 @@
                           dac dbd fq quad failed a b c d cen meas notes
                           ml mr lend rend tipl tipr doff th odim pr
                           rcs rce rcarcs
-                          allpts xmax ymax ymin rows xcol xa rbox)
+                          allpts xmax ymax ymin rows xcol xcolr xa rbox)
   (setq oldclay (getvar "CLAYER"))
-  (defun rm:perfect ( / v)
-    (if pool:*insq*
-        (progn (setq perfect t) nil)
-        (progn (setq perfect (pool:askynf 'perfect
-                                          "Are both ends perfect (identical)"
-                                          nil nil))
-               nil)))
+  ;; PERFECT ENDS -- asked on every Roman, in square and out.
+  ;; Squareness is a question about the BODY: whether the
+  ;; rectangle between the two end lines is true.  It says nothing
+  ;; about whether the two ends are the same end twice, and a field
+  ;; pool whose body tapes dead square can still carry a 9" bulge at
+  ;; one end and a 14" at the other.  So the drafter decides.
+  ;;   Yes  -- the sheet as it has always been asked: one S / S1 / V
+  ;;           and one R, taken as both ends.
+  ;;   No   -- each end its own letters, and the pool is drawn,
+  ;;           dimensioned and reported end by end.
+  (defun rm:perfect ()
+    (setq perfect (pool:askynf 'perfect
+                               "Are both ends perfect (identical)"
+                               nil nil))
+    nil)
   ;; one end's tip setback for the live guide, from whatever the sheet
   ;; has so far: the taped S, else what T leaves of B, else the arc
   ;; sagitta of a given radius, else the nominal eighth of B
@@ -10264,6 +10272,12 @@
         xmax (apply 'max (mapcar 'car allpts))
         ymax (apply 'max (mapcar 'cadr allpts))
         ymin (apply 'min (mapcar 'cadr allpts)))
+  ;; ends that are not perfect put a second letter column outboard of
+  ;; the RIGHT end (below), and it is the only thing this sheet ever
+  ;; draws on that side -- so the report table has to start beyond it
+  ;; rather than on top of it
+  (if (and pool:*insq* (not perfect))
+      (setq xmax (+ xmax (* 0.9 doff))))
   (setvar "CLAYER" pool:*lay-dim*)
   (if pool:*insq*
       ;; in-square, per the field sheet: S+T+S share a row along the
@@ -10294,7 +10308,26 @@
         (pool:dimalgs (caddr lend) a
                       (list xcol (* 0.5 (+ (cadr (caddr lend)) (cadr a)))))
         ;; column 2: A, the overall width
-        (pool:dimalg a d (list xa (cadr (cal:mid a d)))))
+        (pool:dimalg a d (list xa (cadr (cal:mid a d))))
+        ;; column 3: the RIGHT end's own S1, V, S1 -- drawn only when
+        ;; the ends are not perfect.  The sheet's single column stands
+        ;; for both ends while they ARE the same end twice; once each
+        ;; end carries its own letters, the right-hand set is numbers
+        ;; nobody could read off the left column.  A perfect pool is
+        ;; unchanged: dimensioning its right end would say the same
+        ;; thing twice.
+        (if (not perfect)
+            (progn
+              (setq xcolr (+ (car tipr) (* 0.9 doff)))
+              (pool:dimalgs c (cadr rend)
+                            (list xcolr (* 0.5 (+ (cadr c)
+                                                  (cadr (cadr rend))))))
+              (pool:dimalgs (cadr rend) (caddr rend)
+                            (list xcolr (cadr (cal:mid (cadr rend)
+                                                        (caddr rend)))))
+              (pool:dimalgs (caddr rend) b
+                            (list xcolr (* 0.5 (+ (cadr (caddr rend))
+                                                  (cadr b))))))))
       (progn
         (pool:dimwalls quad rcs 0 1 (pool:outoff a b cen doff))
         (pool:dimwalls quad rcs 3 2 (pool:outoff d c cen doff))
@@ -112081,7 +112114,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.19")
+(setq *lazform-version* "v2.20")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -113414,10 +113447,21 @@
           "Complex answer the gate and ask their 14 or 18 diagonals at "
           "the command line."))
 
+;; And the Roman earns one for the opposite reason: its right-hand
+;; boxes decide a QUESTION rather than answering four letters, and
+;; nothing about a blank box says so on its own.  Empty means the two
+;; ends match and POOL never asks about the right one; filled means
+;; they do not, and then all four are wanted.
+(setq lzf:*romhint*
+  (strcat "Both ends: leave the four RIGHT-end boxes empty and the "
+          "pool is drawn with two identical ends; fill any one in and "
+          "all four are read."))
+
 (setq lzf:*hints*
   (list (cons "Grecian" lzf:*grechint*)
         (cons "GRSquare" lzf:*grechint*)
-        (cons "OCtagon" lzf:*grechint*)))
+        (cons "OCtagon" lzf:*grechint*)
+        (cons "ROman" lzf:*romhint*)))
 
 (defun lzf:hint (c) (cdr (assoc (car c) lzf:*hints*)))
 
@@ -114131,14 +114175,51 @@
             "c" "d" "c2" "ttc")
           lzf:*sportchain*))
 
-;; PERFECT ENDS.  In square, POOL does not ask whether a Roman's two
-;; ends are identical -- it takes them as identical and asks one end's
-;; letters only, using the left-hand answer for both.  So the sheet's
-;; right-hand halves are dead there, exactly as a Normal hopper's C is:
-;; POOL will never ask, so a number typed into one would be read by
-;; nothing.  Out of square the sheet prints both ends and answers the
-;; question itself -- see lzf:poolform.
-(setq lzf:*perfectdead* '(("ROman" "sr" "s1r" "vr" "r2")))
+;; PERFECT ENDS.  POOL asks whether a Roman's two ends are identical
+;; -- in square and out -- and takes one end's letters for both when
+;; they are.  This sheet PRINTS both ends, so it answers that question
+;; off its own boxes rather than putting it to the drafter twice: the
+;; four RIGHT-end keys below are what it reads.  Nothing typed into
+;; any of them means the ends are the same end twice, which is what
+;; the sheet has shown all along; a number in one means they are not,
+;; and left on Yes that number would be read by nothing.
+;; See lzf:endsblank, lzf:perfect and lzf:poolform.
+(setq lzf:*bothends* '(("ROman" "sr" "s1r" "vr" "r2")))
+
+;; Has anything been typed into the right-hand half?  ONE predicate,
+;; because three things have to agree about it: the answer that
+;; travels (lzf:perfect), what the page still owes (lzf:togo) and what
+;; Insert marks in red.  Read off what is TYPED and not off
+;; cal:formanswer, so a typo in one of those boxes still means the drafter
+;; is using them -- it is lzf:unreadable's to complain about, and a
+;; sheet cannot be told its ends match because it holds a typo.
+(defun lzf:endsblank (c / out k)
+  (setq out t)
+  (foreach k (cdr (assoc (car c) lzf:*bothends*))
+    (if (/= (cal:trim (lzf:get k)) "") (setq out nil)))
+  out)
+
+;; "Yes" / "No" for that question, or nil on a chart that does not
+;; carry it.
+(defun lzf:perfect (c)
+  (if (assoc (car c) lzf:*bothends*)
+      (if (lzf:endsblank c) "Yes" "No")))
+
+;; A RIGHT-HAND HALF NOBODY TOUCHED IS ITSELF AN ANSWER, so those four
+;; boxes are not owed while they are all empty: POOL is being told the
+;; ends match and will ask the left column only.  Fill any ONE of them
+;; in and the other three are owed like every other live box -- POOL
+;; asks all four once the ends are not perfect, and a box left blank
+;; there is a question that drops back to the command line, which is
+;; what Insert exists to prevent.
+;;
+;; Not a greying rule, deliberately.  Dead means POOL will never read
+;; this, so the box is greyed and nothing can be typed into it -- and
+;; here typing into it is exactly how the drafter says the ends
+;; differ.  A question you cannot answer is not a question.
+(defun lzf:endsfree ( / c)
+  (setq c lzf:*chart*)
+  (if (lzf:endsblank c) (cdr (assoc (car c) lzf:*bothends*))))
 
 ;; ONE MEASUREMENT, TWO QUESTIONS.  A Roman's straight side is asked
 ;; twice on one run: rm:letters asks it as the perimeter letter T, and
@@ -114166,9 +114247,6 @@
   ;; asked -- and nothing behind it is offered
   (if lzf:*cover*
       (setq out (append out lzf:*bottomkeys*)))
-  ;; in square, both of a Roman's ends are the left-hand one
-  (if insq
-      (setq out (append out (cdr (assoc (car c) lzf:*perfectdead*)))))
   ;; in square there are no cross dims to measure, no mode to measure
   ;; them from, and no second overall
   (if insq
@@ -114336,15 +114414,16 @@
 ;; lzf:unreadable, which is a different thing to say and says it
 ;; louder -- so the two lists and what lzf:form sends still partition
 ;; the live boxes three ways with nothing in two of them.
-(defun lzf:togo ( / c out k v a)
-  (setq c lzf:*chart*)
+(defun lzf:togo ( / c out k v a free)
+  (setq c lzf:*chart* free (lzf:endsfree))
   (foreach k (lzf:livekeys c)
     (setq v (cal:trim (lzf:get k))
           a (cal:formanswer v))
-    (if (or (= v "")
-            (and (member k lzf:*numonly*)
-                 (not (eq a 'SKIP))
-                 (not (numberp a))))
+    (if (and (not (member k free))
+             (or (= v "")
+                 (and (member k lzf:*numonly*)
+                      (not (eq a 'SKIP))
+                      (not (numberp a)))))
         (setq out (cons k out))))
   (reverse out))
 
@@ -114636,16 +114715,16 @@
              (not (member (car d)
                           (lzf:pooldead lzf:*chart* insq btype))))
         (setq out (cons (cons (read (car d)) a) out))))
-  ;; PERFECT ENDS, out of square.  POOL asks whether a Roman's two ends
-  ;; are identical, and answers the whole right-hand half of the sheet
-  ;; with the left-hand one if they are.  This sheet PRINTS both halves
-  ;; and asks for both, so it answers that question itself -- left on
-  ;; the prompt, the right-hand boxes it has just made the drafter fill
-  ;; in would be read by nothing.  In square POOL does not ask at all:
-  ;; it takes the ends as perfect, which is why lzf:*perfectdead* greys
-  ;; the right-hand boxes there.
-  (if (and (not insq) (assoc (car lzf:*chart*) lzf:*perfectdead*))
-      (setq out (cons (cons 'perfect "No") out)))
+  ;; PERFECT ENDS.  POOL asks whether a Roman's two ends are identical
+  ;; and answers the whole right-hand half of the sheet with the
+  ;; left-hand one when they are.  This sheet prints both halves, so it
+  ;; reads them and answers for itself: a right-hand half left blank is
+  ;; the drafter saying the ends are the same end twice, and one with a
+  ;; number in it would be read by nothing if the prompt were left on
+  ;; Yes.  Squareness has nothing to do with it -- that question is
+  ;; about the body.
+  (if (setq v (lzf:perfect lzf:*chart*))
+      (setq out (cons (cons 'perfect v) out)))
   ;; the gates last, so a chart cannot be talked out of the path its
   ;; own letters live on
   (foreach k (lzf:gates lzf:*chart*)
@@ -118743,7 +118822,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.17 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.18 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 

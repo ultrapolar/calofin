@@ -6,6 +6,73 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.18 -- 2026-09-16
+
+**A Roman's two ends are the drafter's call, in square as well as
+out.**  POOL 091626 REV31, LAZFORM v2.20.
+
+A Roman is a rectangle body with an arc bulging past each end line,
+and POOL has always asked one question about whether those two ends
+match -- but only on an out-of-square pool.  In square it did not ask:
+it took the ends as identical, asked one `S` / `S1` / `V` / `R` set
+and drew it at both ends.
+
+That is the wrong question to hang it on.  Squareness is about the
+BODY -- whether the rectangle between the two end lines tapes true --
+and it says nothing about the ends.  A pool whose body comes back
+dead square can still carry a 9" bulge at one end and a 14" at the
+other, which is an ordinary thing for a field pool to be: one end
+gets a step, or was poured against a wall, or was simply built a
+little differently.  A drafter with that pool in front of them had no
+way to say so.  Their choices were to call a square pool out of
+square -- which turns on the cross-dim tapes, the best-fit and the
+target/actual/delta report they did not want -- or to draw the pool
+wrong and fix the ends by hand afterwards.
+
+`Are both ends perfect (identical)` is now asked on every Roman.
+**Yes** is the sheet exactly as it has always read: one set of
+letters, taken as both ends -- nothing on that path changes but the
+one keyword answering it.
+**No** asks each end its own `S`, `S1`, `V` and `R1`/`R2`, and the
+pool is drawn, dimensioned and reported end by end.
+
+The one thing the in-square sheet could not already carry is the
+second end's letters.  Its `S1 + V + S1` column stands beside the
+LEFT end and speaks for both ends -- which it can do only while they
+are both the same end; once each end has its own numbers, the right
+end's are numbers nobody could read off that column.  So ends
+answered not-perfect get a second column outboard of the right end,
+and the in-square exterior goes from 8 linear dims to 11.  The report
+table already read end by end (`S LEFT` / `S RIGHT`, `V LEFT` / `V
+RIGHT`, `R1` / `R2`) and needed nothing.  A perfect pool is
+untouched: dimensioning its right end would only say the same thing
+twice.
+
+LAZFORM's Roman sheet prints both ends and always has.  It answered
+the question for the drafter out of square (always `No`, because the
+sheet had made them fill both halves in) and greyed the right-hand
+half in square, where POOL would never read it.  Now it reads those
+four boxes instead and answers from them, either squareness: nothing
+typed on the right means the same end twice and the question goes out
+`Yes`; a number in any one of them means it does not, and it goes out
+`No`.  So the sheet no longer forces the answer on the drafter out of
+square either -- leaving the right-hand half blank there now mirrors
+the left end instead of sending POOL back to the command line for
+four letters the sheet was never given.
+
+Which makes those four boxes the one place on any sheet where BLANK
+is an answer, so Insert had to learn it: while all four are empty
+none of them is owed, nothing is struck red and the sheet is
+finished.  Fill any one in and the other three are owed like every
+other live box -- POOL asks all four once the ends are not perfect,
+and a blank one there is a question dropping back to the command
+line, which is what Insert exists to prevent.  They are never
+greyed, which is why this is not the ordinary dead-key rule: greying
+would make it impossible to type into the boxes that are the way to
+say the ends differ.  The page carries a hint line under the form
+saying what empty means, the way the Grecians' says where their
+cross dims are typed.
+
 ## v3.17 -- 2026-09-16
 
 **WCALST cuts its darts at the bends, not at the rungs.**  WCALST v2.0.
