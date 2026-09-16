@@ -445,6 +445,29 @@ TOOLS = {
         # stops working in the grouped build while every check passes.
         'symbols': {'OLA-BACK': 'CAL-BACK'},
     },
+    # SQUAREUP is OLAUTO's neighbour and takes the same shape of helper
+    # out of the library: the ask pair, the sysvar pair and the small
+    # vector set.  What stays local is the tool -- reading a perimeter
+    # into spans, folding collinear pieces into walls, the convex hull
+    # behind the span, and the layers it borrows for the turn.
+    'SQUAREUP': {
+        'src': 'lisp/squareup/SQUAREUP.lsp',
+        'swap': {
+            'sq:askkw': 'cal:askkw',
+            'sq:askyn': 'cal:askyn',
+            'sq:syssave': 'cal:syssave',
+            'sq:sysrestore': 'cal:sysrestore',
+            'sq:2d': 'cal:2d', 'sq:dist': 'cal:dist',
+            'sq:angnorm': 'cal:angnorm', 'sq:ang-diff': 'cal:ang-diff',
+            'sq:tan': 'cal:tan',
+        },
+        'drop_globals': ['sq:*sysold*'],
+        # sq:askkw is the STANDARDS section 4 REFERENCE helper: it takes
+        # the hidden-keyword list third and derives the bracket from the
+        # keywords.  cal:askkw is the older shape and takes the bracket
+        # there, so the call sites are translated rather than renamed.
+        'askkw_hidden': True,
+    },
     # ABLOBF is LHD's OPEN half forked onto ABHD's survey classifier, so
     # it takes the same helpers from the library that LHD does -- the
     # vector set, the angle pair, ceil/nthcdr/sublist, dedupe, pad,

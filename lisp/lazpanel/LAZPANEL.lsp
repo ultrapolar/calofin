@@ -128,7 +128,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.35")
+(setq *lazpanel-version* "v3.36")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -390,6 +390,7 @@
     ("SPACHECK"         "Spa sheet review")
     ("SPACHECKSCAN"     "Spa sheet scan")
     ("SPACOVCREATE"     "Spa cover from the spa")
+    ("SQUAREUP"         "Square up to the perimeter")
     ("STAIRDIM"         "Stair dims")
     ("STOCKCOVER"       "Stock cover placement")
     ("TYDRN"            "Text + point tidy-up")
@@ -508,6 +509,7 @@
     ("SPACHECK" "Audits a spa sheet against what SPA draws")
     ("SPACHECKSCAN" "The spa sheet review as one scan")
     ("SPACOVCREATE" "Offsets a selected spa outline into its cover and hinges it to the taper")
+    ("SQUAREUP" "Turns a highlighted drawing until its perimeter's longest wall (or span) is horizontal")
     ("STAIRDIM" "Stair dimensioning")
     ("STOCKCOVER" "Replaces a highlighted perimeter with a stock cover drawing")
     ("TYDRN" "Text, pool-point and anchor cleanup in one pass")
@@ -619,6 +621,7 @@
     ("SPACHECK" "review audit outlines dimensions hinges taper title date")
     ("SPACHECKSCAN" "scan audit report outlines dimensions hinges title readonly")
     ("SPACOVCREATE" "spa cover lap taper hinge foam sheet offset")
+    ("SQUAREUP" "rotate turn straighten square align orient angle horizontal survey skew tilt level")
     ("STAIRDIM" "stairs steps dimensions plan flight standard typical")
     ("STOCKCOVER" "stock cover replace perimeter drawing folder align placement")
     ("TYDRN" "drone trace cleanup text points spa layer pool tidy")
@@ -842,6 +845,7 @@
       "CLEARDIM"
       "CLEARDIMSCAN"
       "UPADOVER"
+      "SQUAREUP"
       )
     )
      ("Layout"
@@ -882,6 +886,7 @@
       "STOCKCOVER"
       "WCALST"
       "CUSTBLOCK"
+      "SQUAREUP"
       )
     )
      ("Points"
