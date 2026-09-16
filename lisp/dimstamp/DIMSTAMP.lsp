@@ -42,11 +42,23 @@
 ;;; ends or is cancelled -- only the MTEXT it actually stamped is left
 ;;; behind.
 ;;;
-;;; What it WRITES is one of four forms, always:
-;;;   34"                     whole inches
-;;;   3'-4"                   feet and whole inches
-;;;   34 1/2"                 inches and a fraction
-;;;   3'- 4 1/2"              feet, inches and a fraction
+;;; What it WRITES is one of four forms, always -- and a fraction in a
+;;; drawn one is STACKED, through AutoCAD's \S code, with no space in
+;;; front of it: the stack is the separation, and a space there only
+;;; pushes the inch mark off the number.
+;;;
+;;;   drawn (MTEXT)      reads on the sheet as   the plain spelling
+;;;   -----------------  ---------------------   -----------------
+;;;   34"                34"                     34"
+;;;   3'-4"              3'-4"                   3'-4"
+;;;   34\S1/2;"          34 over-a-half "        34 1/2"
+;;;   4'-1\S1/2;"        4'-1 over-a-half "      4'-1 1/2"
+;;;
+;;; The plain spelling on the right is what a prompt offers, what the
+;;; command line echoes and what ds:parse reads back -- nothing stacks
+;;; on a command line, and 4'-11/2" there would read as eleven halves.
+;;; The stacked one reaches an MTEXT and nothing else; ds:drawn is the
+;;; one door between them, so no call site can forget it.
 ;;;
 ;;; What it READS is far looser, because nobody types a dimension
 ;;; carefully twice.  The inch mark is optional and may be two
@@ -55,13 +67,13 @@
 ;;;
 ;;;   4'4.5    4'-4 1/2"    4' 4-1/2    4'4 1/2    52.5    52 1/2
 ;;;
-;;; all read, and the first four all mean 4'- 4 1/2".  Anything not a
+;;; all read, and the first four all mean 4'-4 1/2".  Anything not a
 ;;; whole eighth is rounded to the nearest one.  What is STAMPED is
 ;;; always the canonical spelling above, never the keystrokes: type
-;;; 4'4.5 and the line back reads "read as 4'- 4 1/2"", which is
+;;; 4'4.5 and the line back reads "read as 4'-4 1/2"", which is
 ;;; where a mis-typed value is caught by eye rather than in the
 ;;; drawing.  Feet spelled means feet written, so 52.5 stays 52 1/2"
-;;; rather than becoming 4'- 4 1/2".
+;;; rather than becoming 4'-4 1/2".
 ;;;
 ;;; The ruler offers, around whatever the current value is, every
 ;;; eighth of an inch for a WHOLE INCH EITHER SIDE -- 44" offers 43"
@@ -79,7 +91,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.1")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.2")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -107,6 +119,12 @@
                                     ; break across two lines
 (setq ds:*line-space* 1.0)         ; line space factor, at the "at
                                     ; least" spacing style
+(setq ds:*stack* "/")              ; what separates a STACKED fraction's
+                                    ; numerator from its denominator in
+                                    ; the drawn MTEXT: "/" is the one
+                                    ; over the other with a bar between,
+                                    ; "#" the diagonal form, "^" the
+                                    ; tolerance stack with no bar
 
 ;; -- the ruler.  Scratch geometry, and pinned to the SCREEN: every
 ;;    size below is a fraction of the current view, so the ruler looks
@@ -231,38 +249,69 @@
       (setq eighths (fix (+ 0.5 (* 8.0 (+ (* feet 12.0) inch)))))
       (if (> eighths 0) (list eighths hasfeet)))))
 
-;; Render TOTAL-EIGHTHS (an integer count of 1/8" units) back to text,
+;; Spell TOTAL-EIGHTHS (an integer count of 1/8" units) out as text,
 ;; in the HASFEET family the source text used -- feet notation, or
 ;; plain inches regardless of magnitude.  The fraction is simplified
 ;; and shown only when the remainder is not a whole inch.
-(defun ds:format (total-eighths hasfeet / feet remeighths whole f8 g num den)
+;;
+;; STACKED picks which of the two spellings comes out, and they differ
+;; in exactly one thing: how the fraction is written.
+;;   nil -- PLAIN: " 1/2", spaced off the inches.  Nothing stacks on a
+;;          command line, and 4'-11/2" there would read as eleven
+;;          halves, so the space earns its keep.  This is the spelling
+;;          ds:parse reads back, and the only one ever compared,
+;;          prompted with, or printed.
+;;   T   -- DRAWN: "\S1/2;", AutoCAD's stacking code, and NO space in
+;;          front of it.  The stack IS the separation; a space there
+;;          only pushes the inch mark away from the number.  This is
+;;          the spelling that reaches an MTEXT, and nothing else.
+;; NOTE: the leftover eighths are "remain", not "rem" -- rem IS an
+;; AutoLISP function, and a local of that name shadows it for every
+;; call this one makes.
+(defun ds:spell (total-eighths hasfeet stacked / feet remain whole f8 g
+                     num den fr)
   (if hasfeet
-    (setq feet (/ total-eighths 96)
-          remeighths (- total-eighths (* feet 96)))
-    (setq feet 0 remeighths total-eighths))
-  (setq whole (/ remeighths 8)
-        f8    (- remeighths (* whole 8))
+    (setq feet   (/ total-eighths 96)
+          remain (- total-eighths (* feet 96)))
+    (setq feet 0 remain total-eighths))
+  (setq whole (/ remain 8)
+        f8    (- remain (* whole 8))
         num   0
         den   1)
   (if (/= f8 0)
     (progn
       (setq g (gcd f8 8))
       (setq num (/ f8 g) den (/ 8 g))))
-  (cond
-    ((and hasfeet (/= num 0))
-     (strcat (itoa feet) "'- " (itoa whole) " " (itoa num) "/" (itoa den)
-             "\""))
-    ((and hasfeet (= num 0))
-     (strcat (itoa feet) "'-" (itoa whole) "\""))
-    ((/= num 0)
-     (strcat (itoa whole) " " (itoa num) "/" (itoa den) "\""))
-    (T
-     (strcat (itoa whole) "\""))))
+  (setq fr (cond
+             ((= num 0) "")
+             ((null stacked) (strcat " " (itoa num) "/" (itoa den)))
+             (T (strcat "\\S" (itoa num) ds:*stack* (itoa den) ";"))))
+  (strcat (if hasfeet (strcat (itoa feet) "'-") "")
+          (itoa whole) fr "\""))
 
-;; What S MEANS, in the canonical spelling -- the round trip through
-;; ds:parse and ds:format that turns 4'4.5 into 4'- 4 1/2".  nil when
-;; S is not a measurement.  Every typed answer goes through this, so
-;; nothing but a canonical spelling is ever stamped or remembered.
+;; The PLAIN spelling: what a prompt offers, what the command line
+;; says, and what ds:parse reads back.
+(defun ds:format (total-eighths hasfeet)
+  (ds:spell total-eighths hasfeet nil))
+
+;; The DRAWN spelling: the same value with its fraction stacked, for
+;; an MTEXT and nowhere else.
+(defun ds:stacked (total-eighths hasfeet)
+  (ds:spell total-eighths hasfeet T))
+
+;; STR -- a plain canonical spelling -- as the string that DRAWS it.
+;; Every stamp goes through here, so a stacked fraction is not
+;; something a call site can forget.  Text that does not parse is
+;; drawn as it stands rather than dropped.
+(defun ds:drawn (str / p)
+  (if (setq p (ds:parse str))
+    (ds:stacked (car p) (cadr p))
+    str))
+
+;; What S MEANS, in the plain canonical spelling -- the round trip
+;; through ds:parse and ds:format that turns 4'4.5 into 4'-4 1/2".
+;; nil when S is not a measurement.  Every typed answer goes through
+;; this, so nothing but a canonical spelling is ever remembered.
 (defun ds:read (s / p)
   (if (setq p (ds:parse s)) (ds:format (car p) (cadr p))))
 
@@ -412,8 +461,9 @@
                   (cons 44 ds:*line-space*)))))
 
 ;; Stamp STR at PT -- the drawing content this whole tool exists for.
+;; STR arrives in the plain spelling and is drawn in the stacked one.
 (defun ds:stamp (pt str)
-  (ds:mtext pt ds:*text-hgt* str ds:*layer* nil))
+  (ds:mtext pt ds:*text-hgt* (ds:drawn str) ds:*layer* nil))
 
 ;; Erase every entity in ENTS -- how the scratch ruler is swept away,
 ;; before a redraw and for good when the run ends.
@@ -458,7 +508,9 @@
                                 (cons 10 (list spx y 0.0))
                                 (cons 11 (list (+ spx tl) y 0.0))))
                 ents))
-    (setq lbl (ds:format val hasfeet))
+    ;; the ruler is drawn text too, so its rows stack the way a stamp
+    ;; off that row will -- the label IS the preview
+    (setq lbl (ds:stacked val hasfeet))
     ;; top-left attachment, so half a label's height above the tick
     ;; puts the label astride its own row
     (setq ents (cons (ds:mtext (list (+ spx tl (* gap 0.35))
