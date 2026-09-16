@@ -326,12 +326,13 @@ bouncing back in front of the error you are trying to read.
 
 **The Options button.** Beside Close, on every page including Find, an
 `Options...` button opens `LAZSET` -- the settings as a **dialog**, with
-the theme on a dropdown, a box for each of the eight item colours, the
-two folders, and a way into the hidden list, all in front of you at
-once. It is wired exactly like a grid button -- the same full teardown
-before anything runs -- but the pick it sends is a sentinel
-`c:LAZPANEL` reads itself: settings are not on the roster, so clicking
-Options never lands in Recent the way running a real tool does.
+the theme on a dropdown, a family dropdown and a hex box for each of
+the eight item colours, the two folders, and a way into the hidden
+list, all in front of you at once. It is wired exactly like a grid
+button -- the same full teardown before anything runs -- but the pick
+it sends is a sentinel `c:LAZPANEL` reads itself: settings are not on
+the roster, so clicking Options never lands in Recent the way running a
+real tool does.
 
 **The settings dialog.** `LAZSET` is to `CALSET` what `LAZFORM` is to
 `POOL`: the same answers, as a form rather than an interview. Every box
@@ -340,13 +341,26 @@ comes up filled in from the profile, and **nothing is written until
 profile key itself, and `lzp:set-write` is the only place that reaches
 `setenv`. `Cancel` drops the store on the floor.
 
-A colour box holds an ACI number (1 to 255) or nothing at all, where
-nothing means *auto* -- the shared table in `cal:ink`. While a box
-holds anything else the state line names it and `OK` stays greyed, the
-same bargain `LAZFORM`'s `Insert` strikes and for the same reason: a
-value nothing can read must not be stored and then silently ignored by
-the tool that goes looking for it. `lzp:aci-p` is spelled out rather
-than handed to `atoi`, which answers 0 for `red` and reads `12x` as 12.
+An item colour is **a dropdown of recommended families, plus a hex
+box** -- not a bare ACI number to look up or guess. `lzp:*inkpresets*`
+is a small, curated set (the nine standard AutoCAD colours everyone's
+"Select Color" dialog opens on, plus a five-step grey ramp), each with
+an ACI number and an RGB target. Picking a family writes that preset's
+ACI straight away; typing a hex code (`RRGGBB` or `#RRGGBB`) snaps to
+the nearest preset by RGB distance (`lzp:aci-near`), the same mapping
+`CALSET`'s own Itemcolors prompt now uses at the command line. Storage
+never changes -- it is still a bare `CalofinInk-<ROLE>` ACI number, so
+`cal:ink` and every tool that reads it are untouched; only how a
+drafter ARRIVES at that number changed. The presets are deliberately
+not the full 255-colour palette: the other 240 are not documented
+anywhere in this tree to check a remembered shade against, and a wrong
+one would draw the wrong colour and nothing here would notice. Auto is
+its own entry in the dropdown, first in the list; a hex box left empty
+simply defers to whatever the dropdown says, and while it holds
+something that is not a hex colour the state line names the role and
+`OK` stays greyed, the same bargain `LAZFORM`'s `Insert` strikes and for
+the same reason: a value nothing can read must not be stored and then
+silently ignored by the tool that goes looking for it.
 
 The theme dropdown is emitted **empty** -- DCL has no way to write a
 `popup_list`'s list into the file -- and filled with `start_list` once
@@ -402,6 +416,30 @@ What is refused, and why each one earns its place:
 Removing a name stops it being remembered, but the name it already
 defined answers until the drawing is closed -- AutoLISP has no way to
 take a `defun` back, and the state line says so rather than pretending.
+
+**Carrying it with you.** Names and settings already survive an
+ordinary rebuild -- both live in the registry or the AutoCAD profile,
+outside `releases/` and `LAZPASS.lsp`, which is what lets a
+regenerated build change under them without losing either. What
+neither reaches is somewhere the profile does not: a new machine, a
+rebuilt profile, a drafter borrowing somebody else's seat for a day.
+`LAZBACKUP`, typed, is that -- `[Export/Import/Quit]`, then a file to
+write to or read from.
+
+`Export` writes one plain text file: `[Alias]` and `[Caption]`, one
+`COMMAND=value` line each, then `[Settings]` -- `CalofinTheme`,
+`CalofinErrorDir`, `StockCover_Folder` and one `CalofinInk-<ROLE>` per
+item colour, empty meaning auto exactly as it does everywhere else.
+`Import` reads one back and applies every line it can: a name and a
+caption are checked the same way typing them into `LAZNAME` would
+check them, a colour the same way `LAZSET`'s own hex box would, and a
+command the roster does not carry -- an older or newer build's own
+addition -- is skipped rather than guessed at. Nothing it refuses stops
+the rest: the command reports what it applied and, under it, one line
+per skip naming the value and the reason, so nothing is silently lost.
+An import re-applies your aliases as wrapper `defun`s in THIS session
+too, the same call `LAZNAME`'s own `OK` makes, so a name works from the
+next command typed rather than only after a reload.
 
 **The Pinned row.** Pins are the answer to "I run four of these
 eighty-one all day": ticked tools sit in a row at the top of *every*
@@ -574,6 +612,7 @@ ones to hide) would be a joke at the drafter's expense.
 | --- | --- |
 | `CALHELP` | what a command IS, at the command line. Type any part of a name, its caption, its one-sentence blurb or a search keyword -- the same search the Find page runs, so `survey` finds `ABHD` and `cover` finds `LAZSPA` on a keyword alone -- and it prints the matches with their caption AND blurb; Enter lists every tool that is not hidden. A name in brackets is not loaded in this session. Until this existed the captions were readable in exactly one place: the panel, on whichever page the tool happened to be filed on, which is the complaint Find answers INSIDE the dialog and nothing answered outside it |
 | `CALSET` | the settings calofin keeps in the profile -- `CalofinTheme`, `CalofinErrorDir` (where `LAZDIAG` writes its report) and the stock folder -- what each one does, and one prompt to change it, plus a `Hidden` option that routes straight to `LAZHIDE`. The profile is where a setting SURVIVES: `releases/` and `LAZPASS.lsp` are generated, so a number edited into either is gone at the next regeneration. `CalofinTheme` is also written beside the pins in this file's own registry key, because the VB palette reads it there (`ui/calofin_net/PaletteTheme.vb`) -- the same bargain the pinned row already strikes |
+| `LAZBACKUP` | `[Export/Import/Quit]`, then a file -- your names and settings out to one plain text file, or back from one, for a new machine or a rebuilt profile that a registry key or an AutoCAD profile setting does not reach. See "Carrying it with you" above |
 | `LAZHIDE` | opens the checklist of every tool, ticked to match what is currently hidden -- see "Hiding a tool" above. Accept stores the new list; Cancel re-reads the stored one, exactly as `LAZPIN`'s editor does |
 | `LAZNAME` | your own name for a tool and for its button -- see "Names of your own" above. Reached from `Names...` in `LAZSET`, or typed |
 | `LAZSET` | the same settings as a **dialog** -- theme dropdown, a box per item colour, the two folders, and `Hidden...` into the checklist. This is what the panel's `Options...` button opens; see "The settings dialog" above. Nothing is written until `OK`, and `OK` is greyed while a colour box holds something that is not a colour |
