@@ -158,9 +158,9 @@ answer **matches** the previous one: a radius is not a cut face, so
 24" does not carry across from one to the other.
 
 **`NotGiven` is built square but never drawn as a 90.** Its geometry is
-the plain sharp corner, but the sheet marks it with a circled `?` and a
-`Not Given` note, so nobody downstream reads it as a measured right
-angle. It takes no size, and it does not count as a cut — the
+the plain sharp corner, but the sheet marks it with a circled, **boxed**
+`?` and a `Not Given` note on a leader off that box, so nobody
+downstream reads it as a measured right angle. It takes no size, and it does not count as a cut — the
 cross-dim reference-mode question below is not asked for it, because
 there are no treatment ends to tape to.
 
@@ -296,16 +296,18 @@ either way.
 **Corner dimensions**: an **in-square** pool gets a single "Typ."
 callout at the bottom-right corner (B) — a radius dimension reading
 `R1'-6" Typ.`, a cut-face dimension reading `1'-8" Typ.`, or, for
-square corners, the circled corner mark with a `90° Typ.` leader —
-and, for a `NotGiven` corner, a circled `?` with a `Not Given` note.
+square corners, the circled corner mark reading `90° Typ.` — and, for
+a `NotGiven` corner, a boxed `?` with a `Not Given` note.
 An **out-of-square** pool whose four corner answers came back
 **identical** (Enter reusing the previous corner, typically) collapses
 to that same single "Typ." callout — four copies of the same dim are
 noise, per the reference drawings. Only when the corners genuinely
 **differ** is every corner dimmed individually: radius dims on filleted
 corners, face dims on cuts, and the **circled corner mark** on square
-corners (a small circle on the corner point with a `90°` leader) —
-and a circled `?` plus a `Not Given` note on any `NotGiven` corner.
+corners (a small circle on the corner point and a radius dimension on
+that circle, its measurement replaced by `90°`, dragged out along the
+corner's diagonal) — and a boxed `?` plus a `Not Given` note on any
+`NotGiven` corner.
 
 The **guide updates live**: as soon as the corner answers are in, the
 gray guide redraws its corners with the cuts/fillets at their real
@@ -1233,7 +1235,10 @@ previous style is always restored right afterwards:
   per dimension, keyed on that dimension's own measurement, so a 96"
   side and an 18" cut face on the same pool each get the right style.
   (POOL draws no angular dimensions: a square corner is marked with a
-  circled `90°` leader, not a measured angle.)
+  circled `90°` — a radius dim on the mark circle with its measurement
+  replaced — not a measured angle. That circle is a couple of inches
+  across, so the mark is deliberately kept out of the under-24" switch:
+  it is an angle, not a length.)
 
 If a style is missing from the drawing the dimension is simply drawn
 in the current style (the routine says so once per run for
@@ -1431,9 +1436,9 @@ holds this table and the block together, so neither can drift from the other.
 | `pool:*th-min*` | `3.0` | never smaller than 3" |
 | `pool:*th-div*` | `70.0` | Every flow sizes its dimension offsets and its text off the pool itself, so a 12 ft spa pool and a 60 ft lap pool both come out readable. doff is the dimension stand-off, th the... |
 | `pool:*mark-r*` | `0.18` | circle radius on the corner point |
-| `pool:*mark-lead*` | `1.2` | how far out the leader runs |
-| `pool:*ng-txt*` | `0.25` | "Not Given" text height |
-| `pool:*ng-off*` | `1.45` | how far out that note sits |
+| `pool:*mark-lead*` | `1.2` | how far out the mark's own text sits |
+| `pool:*ng-lead*` | `1.5` | where the "Not Given" leader leaves the box |
+| `pool:*ng-off*` | `2.05` | ... and how far out that note sits |
 | `pool:*rad-off*` | `0.9` | radius dim, dragged out past the arc |
 | `pool:*cut-off*` | `0.5` | cut-face dim, out past the face |
 | `pool:*mlkoff*` | `30.0` | M/L/K dim line, right of the hopper |

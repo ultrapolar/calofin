@@ -199,10 +199,12 @@ the round, or at corner A, re‑asks the gate.
 
 Callouts sit outside the corner on its 45° line: a radius dimension on a
 `Radius` corner (`R12"`), an aligned dimension across a `Cut` face
-(`21"`), a circled corner point with a `90°` leader on a `Square`
-corner, and the same circled point with a `?` leader plus a `Not Given`
-note on a `NotGiven` one — the sheet shows the treatment was never
-recorded rather than silently claiming a 90.
+(`21"`), a circled corner point dimensioned `90°` on a `Square` corner
+— a radius dimension on that little circle, its measurement replaced by
+the mark — and the same circled point with a **boxed** `?` plus a
+`Not Given` note on a leader off the box on a `NotGiven` one: the sheet
+shows the treatment was never recorded rather than silently claiming a
+90.
 
 ## Going back a step
 
@@ -634,9 +636,9 @@ holds this table and the block together, so neither can drift from the other.
 | `spa:*insetfrac*` | `0.3333` | water's edge dims, a third of the way in |
 | `spa:*lapoff*` | `14.0` | how far under the cover the lap note sits |
 | `spa:*mark-r*` | `0.18` | circle radius on the corner point |
-| `spa:*mark-lead*` | `1.2` | how far out its leader runs |
-| `spa:*ng-txt*` | `0.25` | "Not Given" text height |
-| `spa:*ng-off*` | `1.45` | how far out that note sits |
+| `spa:*mark-lead*` | `1.2` | how far out the mark's own text sits |
+| `spa:*ng-lead*` | `1.5` | where the "Not Given" leader leaves the box |
+| `spa:*ng-off*` | `2.05` | ... and how far out that note sits |
 | `spa:*rad-off*` | `0.9` | radius dim, dragged out past the arc |
 | `spa:*cut-off*` | `0.6` | cut-face dim, out past the face |
 | `spa:*oct-off*` | `0.8` | the octagon's one cut callout |

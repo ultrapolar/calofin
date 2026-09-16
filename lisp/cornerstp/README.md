@@ -82,8 +82,26 @@ Per routine:
   [Square/Radius/Cut/NotGiven]` (default `Square`; `NG` and the old
   words `90`, `ROUNDED`, `DIAG`/`DIAGONAL` are accepted typed in full,
   unlisted) -- with a `[Offset/Cut]` choice for how a Cut corner's
-  size is given. A `NotGiven` corner is drawn square and noted on the
-  drawing as never recorded.
+  size is given.
+
+  **The corner is marked, per STANDARDS.md section 2.** A `Square`
+  corner gets the mark that sheet draws: a small circle on the corner
+  point with a radius dimension on that circle reading `90°` instead
+  of measuring anything. A `NotGiven` corner is drawn square but the
+  mark asks `?`, boxed, with a `Not Given` note on a leader off the
+  box -- the drawing says the treatment was never recorded rather than
+  claiming a right angle nobody taped. One answer covers both corners
+  of a run, so one mark carries it and says `Typ.`; a corner-mode
+  recess has a single treated corner and marks that one alone. A step's
+  mark is the SMALLER of the two sizes the sample sheet carries
+  (`*cs-mark-dimstyle*`), because a step's corners are a detail inside
+  somebody else's plan.
+
+  `90°` asserts a right angle, so it is drawn only where the corner
+  really is one: a recess off a wall that leans, or a U with a splayed
+  arm, is left unmarked rather than told a lie (`*cs-sq90-deg*` is how
+  far off 90 still counts). `?` asserts nothing about the angle and is
+  drawn at any.
 
 ## Install & run
 
@@ -115,7 +133,10 @@ override):
 | `*cs-tol-inch*` | `0.125` | What that tolerance is in INCHES when it is derived -- 1/8", the way the shop reads it |
 | `*cs-depth-dimstyle*` | `"STANDARD INCHES"` | Style for step-tread dims (the side profile's depth dims too) |
 | `*cs-width-dimstyle*` | `"SIDE STANDARD"` | Style for step-width dims |
-| `*cs-dim-layer*` | `nil` | Layer for the dimensions; nil = current layer |
+| `*cs-dim-layer*` | `nil` | Layer for the dimensions -- and for the corner mark; nil = current layer |
+| `*cs-mark-dimstyle*` | `"STANDARD INCHES"` | Style for the CORNER MARK: the smaller of the two sizes the sample sheet carries |
+| `*cs-mark-r*` | `0.5` | Radius of the circle the mark is drawn on, in TEXT HEIGHTS; everything else in the mark is a multiple of it (text at 6.7 r, the `Not Given` leader at 8.4 r, its note at 11.4 r) |
+| `*cs-sq90-deg*` | `20.0` | How far off 90, in DEGREES, a corner may sit and still be marked `90°`. POOL's own tolerance, so the two tools read a corner alike |
 | `*cs-dim-offset*` | `2.0` | How far the step-tread dim chain stands off the run, in TEXT HEIGHTS -- so it tracks `DIMSCALE`, not the drawing's size |
 | `*cs-dim-nest*` | `1.5` | How far a step-width dim sits behind the run, in text heights, on top of half that step's own width (the half-width is what nests the wider steps further out) |
 | `*cs-profile-dimgap*` | `nil` | How far the side profile's dims stand off the flight, on top of the clearance the geometry needs; nil = the larger of the two terms below |

@@ -228,7 +228,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091526 REV24")
+(setq spa:*version* "091626 REV25")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -303,12 +303,18 @@
 ;;;
 ;;;  A radius corner takes a radius dim read from outside the arc, a cut
 ;;;  corner an aligned dim across its face, a square one the circled
-;;;  90-degree mark of STANDARDS.md section 2, and a NotGiven corner
-;;;  that same mark with a "?" and a "Not Given" note past its tip.
+;;;  90-degree mark of STANDARDS.md section 2 -- a radius dim on the
+;;;  mark circle carrying "90%%d" in place of its measurement -- and a
+;;;  NotGiven corner that same mark with a BOXED "?" and a "Not Given"
+;;;  note on a leader off the box.
+;;;
+;;;  The three distances are the approved sample sheet's, read back as
+;;;  multiples of the mark circle: the mark's text at 6.7 r, the note's
+;;;  leader leaving the box at 8.4 r, the note itself at 11.4 r.
 (setq spa:*mark-r*    0.18)     ; circle radius on the corner point
-(setq spa:*mark-lead* 1.2)      ; how far out its leader runs
-(setq spa:*ng-txt*    0.25)     ; "Not Given" text height
-(setq spa:*ng-off*    1.45)     ; how far out that note sits
+(setq spa:*mark-lead* 1.2)      ; how far out the mark's own text sits
+(setq spa:*ng-lead*   1.5)      ; where the "Not Given" leader leaves it
+(setq spa:*ng-off*    2.05)     ; ... and how far out that note sits
 (setq spa:*rad-off*   0.9)      ; radius dim, dragged out past the arc
 (setq spa:*cut-off*   0.6)      ; cut-face dim, out past the face
 (setq spa:*oct-off*   0.8)      ; the octagon's one cut callout
@@ -2776,7 +2782,12 @@
   same)
 
 ;; The order sheet's 90-degree corner mark: a small circle on the corner
-;; point with a leader out of it.  Assumes CLAYER is already DIMENSION.
+;; point, DIMENSIONED -- a radius dim on that circle with its
+;; measurement replaced by the mark, so the arrow lands on the circle,
+;; the leader runs out along the corner's outward diagonal and the text
+;; comes out in the sheet's own dimension style.  That is how the
+;; approved sample sheet draws it, and it is what POOL ports.  Assumes
+;; CLAYER is already DIMENSION.
 (defun spa:dim90 (quad i cen doff txt / p outd r)
   (setq p (nth i quad)
         outd (spa:unit (spa:v- p cen))
@@ -2785,25 +2796,32 @@
                  (cons 8 spa:*lay-dim*)
                  (cons 10 (spa:wp p))
                  (cons 40 r)))
-  (command "_.LEADER" (spa:wp (spa:v+ p (spa:v* outd r)))
-           (spa:wp (spa:v+ p (spa:v* outd (* spa:*mark-lead* doff))))
-           "" txt ""))
+  (command "_.DIMRADIUS"
+           (list (entlast) (spa:wp (spa:v+ p (spa:v* outd r))))
+           "_T" txt
+           (spa:wp (spa:v+ p (spa:v* outd (* spa:*mark-lead* doff))))))
 
-;; A NotGiven corner's mark: the circled corner with a ? leader, and a
-;; "Not Given" note past the leader tip -- the sheet must SHOW the
-;; treatment was never recorded, not silently claim a 90.  The note is
-;; pulled back by its own width on a left-pointing corner, so it cannot
-;; read back across its leader into the shape.  (pool:dimng is the
-;; donor; STANDARDS section 2.)
-(defun spa:dimng (quad i cen doff sfx / p outd h tp)
+;; A NotGiven corner's mark: the circled corner asking a question
+;; instead of asserting an angle, and a "Not Given" note on a leader
+;; off it -- the sheet must SHOW the treatment was never recorded, not
+;; silently claim a 90.  The "?" sits in a BOX (a negative DIMGAP is
+;; how AutoCAD draws one), so it reads as a callout rather than as a
+;; stray character; DIMGAP comes straight back, and spa:*dimvars*
+;; carries it home if a run dies in between.  The note is the leader's
+;; own annotation, so AutoCAD hangs it on the side the leader points
+;; and it cannot read back across itself into the shape.
+;; (pool:dimng is the donor; STANDARDS section 2.)
+(defun spa:dimng (quad i cen doff sfx / p outd og)
   (setq p (nth i quad)
-        outd (spa:unit (spa:v- p cen)))
+        outd (spa:unit (spa:v- p cen))
+        og (getvar "DIMGAP"))
+  (setvar "DIMGAP" (- (abs og)))
   (spa:dim90 quad i cen doff (strcat "?" sfx))
-  (setq h (* spa:*ng-txt* doff)
-        tp (spa:v+ p (spa:v* outd (* spa:*ng-off* doff))))
-  (if (< (car outd) 0.0)
-      (setq tp (list (- (car tp) (* 9.0 0.6 h)) (cadr tp))))
-  (spa:text tp h "Not Given" spa:*lay-dim*))
+  (setvar "DIMGAP" og)
+  (command "_.LEADER"
+           (spa:wp (spa:v+ p (spa:v* outd (* spa:*ng-lead* doff))))
+           (spa:wp (spa:v+ p (spa:v* outd (* spa:*ng-off* doff))))
+           "" "Not Given" ""))
 
 ;; Corner callouts, laid out the way the order sheet does them: the note
 ;; sits OUTSIDE the corner, on the 45-degree line out of it.
