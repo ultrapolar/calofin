@@ -47067,9 +47067,10 @@
 ;;;                straight sides (LINE entities and straight
 ;;;                LWPOLYLINE segments) with aligned dimensions, then
 ;;;                its arcs (ARC and CIRCLE entities and bulged
-;;;                LWPOLYLINE segments) with radius dimensions.  A
-;;;                measurement that repeats is called out once and
-;;;                noted "Typ." - see "One dim per size" below.
+;;;                LWPOLYLINE segments) with radius dimensions.  Asks
+;;;                first what to do about a measurement that repeats:
+;;;                call one out and note it "Typ.", or dimension every
+;;;                one where it is - see "One dim per size" below.
 ;;;             Step 3. Asks the user to highlight the stairs.  The
 ;;;                treads (the largest group of parallel lines in the
 ;;;                selection) get their widths dimensioned and the
@@ -47195,13 +47196,13 @@
 ;;;  Settings:
 ;;;    Everything a drafter might want different - the style names, the
 ;;;    layer, how far out the dims sit, what counts as the same place or
-;;;    the same size, the Typ. counts and wording, the side-view test's
-;;;    thresholds, which entity types are selected - is a global in the
-;;;    SETTINGS block straight after the version banner, each with its
-;;;    default and a note on what changing it does.  Nothing below that
-;;;    block repeats a value from it.  (setq ...) one after this file
-;;;    has loaded - in acaddoc.lsp, say - to change it for one machine
-;;;    without editing the file.
+;;;    the same size, the Typ. counts, wording and Enter answer, the
+;;;    side-view test's thresholds, which entity types are selected - is
+;;;    a global in the SETTINGS block straight after the version banner,
+;;;    each with its default and a note on what changing it does.
+;;;    Nothing below that block repeats a value from it.  (setq ...) one
+;;;    after this file has loaded - in acaddoc.lsp, say - to change it
+;;;    for one machine without editing the file.
 ;;;
 ;;;  One dim per size - the "Typ." rule:
 ;;;    A measurement that repeats around the perimeter is called out
@@ -47217,6 +47218,26 @@
 ;;;    as the same measurement (ad:*same-inches*).  The counts and the
 ;;;    wording are ad:*typ-lines*, ad:*typ-curves* and ad:*typ-note* in
 ;;;    the SETTINGS block.
+;;;    Whether the rule runs at all is the drafter's to say: step 2
+;;;    asks before it dimensions anything.
+;;;
+;;;      A size that repeats - dimension every one, or note one
+;;;      "Typ."? [All/Typ] <Typ>:
+;;;
+;;;    All dimensions every side and every arc where it is, counts and
+;;;    note alike left out of it - which is the drawing a shop that
+;;;    calls out each one wants, and the one a drafter about to move
+;;;    dims by hand would rather start from.  Typ. is the rule above,
+;;;    and the Enter answer, so a run that just presses through is the
+;;;    run every version before this one gave.  ad:*typ-default* moves
+;;;    that Enter answer to "All" for a shop that wants the other one
+;;;    every time.
+;;;    The question sits straight after step 1's highlight with nothing
+;;;    else in front of it, so Back there re-opens the highlight; it is
+;;;    put before the undo group opens, so backing out of it leaves
+;;;    nothing behind.  A selection that turns out to be a flight of
+;;;    steps in side view is never asked - the side view dimensions the
+;;;    depth of each step, not a perimeter of repeating sizes.
 ;;;
 ;;;  One dimension per place:
 ;;;    Before placing anything the tool reads every linear, aligned and
@@ -47254,6 +47275,11 @@
 ;;;      instead, and the overall dims follow either answer to that;
 ;;;      Back at the floor dims question re-opens the stairs, Back at
 ;;;      the pad question re-opens the floor dims question.
+;;;    * Step 2's All/Typ. question is the first one AUTODIM puts, and
+;;;      Back there re-opens step 1's highlight - a pickfirst run
+;;;      included, which is how a set picked before the command started
+;;;      gets changed.  STAIRDIM, FLOORDIM and AUTODIMSIDEPOV place no
+;;;      perimeter dims, so none of them asks it.
 ;;;    * Break points closer together than 0.0001 drawing units
 ;;;      (ad:*merge-tol*) are merged so no zero-length dimensions are
 ;;;      created.
@@ -47265,7 +47291,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v2.0")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -47424,6 +47450,18 @@
                                 ; the sides on purpose: a pair or a trio
                                 ; of matching curves reads better
                                 ; dimensioned where each one is
+(setq ad:*typ-default* "Typ")   ; the Enter answer at the question
+                                ; AUTODIM puts before it dimensions the
+                                ; perimeter: "Typ" notes a repeated size
+                                ; once and leaves the rest to that note,
+                                ; "All" dimensions every one where it
+                                ; is.  A shop that wants every dim on
+                                ; the drawing sets this to "All" and
+                                ; presses Enter as before; anything
+                                ; else spelled here reads as "Typ",
+                                ; which is what the tool did when there
+                                ; was no question to ask.  The counts
+                                ; above still decide what "Typ" groups
 
 ;; ---- recognising steps drawn in side view ----------------------------
 ;; AUTODIM takes its side-view route only when the step-1 selection
@@ -47509,6 +47547,27 @@
     (rtos n 2 1)))
 
 ;; ------------------------------------------------------------- asking
+
+;; The perimeter's repeats question, put before anything is dimensioned:
+;; All dimensions every side and every arc where it is, Typ. calls a
+;; repeated size out once and leaves the rest to that note.  Returns T
+;; for All, nil for Typ, or CAL-BACK.
+;; The Enter answer is ad:*typ-default*, normalised here rather than
+;; downstream: a setting spelled any other way - or set to something
+;; that is not a word at all, which is what an acaddoc.lsp line gone
+;; wrong leaves behind - falls back on the Typ. rule, what the tool did
+;; before there was a question, instead of being shown as a default no
+;; keyword accepts or taking the command down at the prompt.
+(defun ad:askrepeats (back / dflt v)
+  (setq dflt (if (and (= (type ad:*typ-default*) 'STR)
+                      (= (strcase ad:*typ-default*) "ALL"))
+               "All"
+               "Typ")
+        v    (cal:askkw (strcat "A size that repeats - dimension every"
+                               " one, or note one \""
+                               (vl-string-trim " " ad:*typ-note*) "\"?")
+                       "All Typ" "All/Typ" dflt back))
+  (if (eq v 'CAL-BACK) v (= v "All")))
 
 ;; restore a dimension style by name if the drawing has it,
 ;; return T when the style was set
@@ -48147,8 +48206,13 @@
 ;; it, and the rest are left to that note - from ad:*typ-lines* equal
 ;; sides up, and from ad:*typ-curves* equal radii up.  Below those
 ;; counts every one is dimensioned where it is.
+;; ALL non-nil is the drafter's answer to ad:askrepeats: every side and
+;; every arc is then dimensioned where it is, whatever the counts say,
+;; and no note is written.  The grouping still runs - it is what puts
+;; the sides in a settled order - but no group is collapsed onto its
+;; first member.
 ;; Returns how many dimensions were placed.
-(defun ad:dimperim (ss / box diag eps off cnt g rec)
+(defun ad:dimperim (ss all / box diag eps off cnt g rec)
   (setq box (cal:bbox-ss ss)
         cnt 0)
   (if box
@@ -48160,7 +48224,7 @@
             off  (max (ad:dimoff) (ad:feet ad:*perim-feet*)))
       ;; the straight sides
       (foreach g (ad:groupsame (ad:perimsegs ss diag eps off) (ad:dupetol))
-        (if (>= (length g) ad:*typ-lines*)
+        (if (and (not all) (>= (length g) ad:*typ-lines*))
           (setq rec (car g)
                 cnt (+ cnt (ad:putaligned (cadr rec) (caddr rec) (cadddr rec)
                                           ad:*style-plan* ad:*typ-note*)))
@@ -48169,7 +48233,7 @@
                                             ad:*style-plan* ""))))))
       ;; the arcs, by radius
       (foreach g (ad:groupsame (ad:perimarcs ss diag eps off) (ad:dupetol))
-        (if (>= (length g) ad:*typ-curves*)
+        (if (and (not all) (>= (length g) ad:*typ-curves*))
           (setq rec (car g)
                 cnt (+ cnt (ad:putradius (car rec) (cadr rec) (caddr rec)
                                          (cadddr rec) (nth 4 rec)
@@ -48663,11 +48727,19 @@
 ;; pads being T when the drafter asked for them: the pads themselves go
 ;; in after the command has put its own state back, so the answer
 ;; travels out of here rather than being acted on mid-run.
-(defun ad:runplan (plan / nper nstair nover nf1 nf2 stage mark3 mark4 v pad)
-  (prompt (strcat "\n=== AUTODIM step 2 of 5: perimeter ==="
-                  "\nDimensioning the straight lines about the"
-                  " perimeter - no input needed..."))
-  (setq nper (ad:dimperim plan))
+;; ALL is step 2's answer, asked by c:AUTODIM before the undo group
+;; opened: T dimensions every repeated size where it is, nil calls one
+;; of each out and leaves the rest to its note.
+(defun ad:runplan (plan all / nper nstair nover nf1 nf2 stage mark3 mark4
+                             v pad)
+  (prompt (strcat "\nDimensioning the straight lines about the"
+                  " perimeter - "
+                  (if all
+                    "every repeated size where it is"
+                    (strcat "one of each repeated size, noted \""
+                            (vl-string-trim " " ad:*typ-note*) "\""))
+                  "..."))
+  (setq nper (ad:dimperim plan all))
   (prompt (strcat "\n" (itoa nper) " perimeter dimension(s) placed."))
   ;; steps 3 and 4 walk back through each other: Back at the floor dims
   ;; question re-opens the stairs, erasing what they drew, and Back at
@@ -48770,7 +48842,7 @@
   (list n nil))
 
 (defun c:AUTODIM (/ *error* oldcmd olddim oldlay oldpick plan risers res n
-                    pad undo-open)
+                    all stage done pad undo-open)
   (defun *error* (msg)
     ;; only close a group that was actually opened - the handler is
     ;; live before _Begin runs (AUTODIM's is during its selection)
@@ -48789,20 +48861,66 @@
     (if lzd:report (lzd:report "AUTODIM" *autodim-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "AUTODIM" *autodim-version*))
-  ;; a pickfirst selection if there is one, otherwise ask for it
+  ;; a pickfirst selection if there is one, otherwise ask for it.  The
+  ;; probe sits OUTSIDE the loop below, as AUTOBEAD's does: a Back out
+  ;; of step 2's question lands on the interactive highlight, never on
+  ;; a re-probe of a pickfirst set the drafter has no way to change
+  ;; from here.
   (setq plan (ssget "_I" (ad:geomfilter)))
   (if lzd:watch (lzd:watch plan) plan)
-  (if (null plan)
-    (progn
-      (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
-                      "\nHighlight everything that makes up the plan (walls"
-                      " etc.), then press Enter.  Only what you highlight is"
-                      " dimensioned and used to find the perimeter."
-                      "\nHighlight a flight of steps drawn in side view"
-                      " instead and it is recognised as one: the depth of"
-                      " every step gets dimensioned rather than a plan."))
-      (setq plan (ssget (ad:geomfilter)))
-      (if lzd:watch (lzd:watch plan) plan)))
+  ;; Step 1 and step 2's question walk back into each other, as a two
+  ;; stage chain - a step counter over a cond, the shape every other
+  ;; chain here has.  The question sits straight after the highlight
+  ;; with nothing else in front of it, so Back there re-opens the
+  ;; highlight (README, "Going back a step"), and it is put BEFORE the
+  ;; undo group opens for the reason HEMISTEP asks its width first: a
+  ;; question behind an open group has a run committed behind it and
+  ;; can no longer re-ask what came before.  Nothing has been drawn at
+  ;; this point either way.
+  ;; The side-view test is stage 2's as well, so it is re-run on the
+  ;; way back: a second highlight is free to be a flight of steps where
+  ;; the first was a plan - and the flight puts no question at all, its
+  ;; dims being the depth of each step rather than a perimeter of
+  ;; repeating sizes.
+  (setq stage (if plan 2 1)
+        done  nil)
+  (while (not done)
+    (cond
+      ((= stage 1)
+       (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
+                       "\nHighlight everything that makes up the plan (walls"
+                       " etc.), then press Enter.  Only what you highlight is"
+                       " dimensioned and used to find the perimeter."
+                       "\nHighlight a flight of steps drawn in side view"
+                       " instead and it is recognised as one: the depth of"
+                       " every step gets dimensioned rather than a plan."))
+       (setq plan (ssget (ad:geomfilter)))
+       (if lzd:watch (lzd:watch plan) plan)
+       ;; nothing highlighted is not a step back, it is the end of the
+       ;; run - the message and the early out are below
+       (if plan (setq stage 2) (setq done T)))
+      (T
+       (if (setq risers (ad:stepprofile-p plan))
+         (setq done T)
+         (progn
+           (prompt (strcat "\n=== AUTODIM step 2 of 5: perimeter ==="
+                           "\nEvery straight side gets an aligned dim and"
+                           " every arc its radius, at least "
+                           (ad:numstr ad:*perim-feet*) "ft outside the plan."
+                           "\nA size that repeats can be called out once -"
+                           " the dim reading \""
+                           (vl-string-trim " " ad:*typ-note*)
+                           "\" and the rest left to that note, from "
+                           (itoa ad:*typ-lines*) " equal sides up and "
+                           (itoa ad:*typ-curves*) " equal radii up - or"
+                           " every one of them can be dimensioned where it"
+                           " is."))
+           (setq all (ad:askrepeats T))
+           (if (eq all 'CAL-BACK)
+             (progn
+               (prompt "\nStepping back to the highlight.")
+               (setq plan nil stage 1))
+             (setq done T)))))))
   (if (null plan)
     (prompt "\nNothing highlighted - AUTODIM cancelled.")
     (progn
@@ -48818,10 +48936,12 @@
           (setq undo-open T)))
       (setq oldlay (ad:enterlayer ad:*layer*))
       ;; both flows answer with (count pads); the side view puts no pad
-      ;; question, so its pads are always nil
-      (setq res (if (setq risers (ad:stepprofile-p plan))
+      ;; question, so its pads are always nil.  Which flow it is was
+      ;; settled above, where step 2's question had to know whether it
+      ;; was going to be asked at all
+      (setq res (if risers
                   (ad:runsteps risers)
-                  (ad:runplan plan))
+                  (ad:runplan plan all))
             n   (car res)
             pad (cadr res))
       (ad:skipreport)
