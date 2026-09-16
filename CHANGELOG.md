@@ -6,6 +6,269 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.19 -- 2026-09-16
+
+**A Roman's two ends are the drafter's call, in square as well as
+out.**  POOL 091626 REV31, LAZFORM v2.20.
+
+A Roman is a rectangle body with an arc bulging past each end line,
+and POOL has always asked one question about whether those two ends
+match -- but only on an out-of-square pool.  In square it did not ask:
+it took the ends as identical, asked one `S` / `S1` / `V` / `R` set
+and drew it at both ends.
+
+That is the wrong question to hang it on.  Squareness is about the
+BODY -- whether the rectangle between the two end lines tapes true --
+and it says nothing about the ends.  A pool whose body comes back
+dead square can still carry a 9" bulge at one end and a 14" at the
+other, which is an ordinary thing for a field pool to be: one end
+gets a step, or was poured against a wall, or was simply built a
+little differently.  A drafter with that pool in front of them had no
+way to say so.  Their choices were to call a square pool out of
+square -- which turns on the cross-dim tapes, the best-fit and the
+target/actual/delta report they did not want -- or to draw the pool
+wrong and fix the ends by hand afterwards.
+
+`Are both ends perfect (identical)` is now asked on every Roman.
+**Yes** is the sheet exactly as it has always read: one set of
+letters, taken as both ends -- nothing on that path changes but the
+one keyword answering it.
+**No** asks each end its own `S`, `S1`, `V` and `R1`/`R2`, and the
+pool is drawn, dimensioned and reported end by end.
+
+The one thing the in-square sheet could not already carry is the
+second end's letters.  Its `S1 + V + S1` column stands beside the
+LEFT end and speaks for both ends -- which it can do only while they
+are both the same end; once each end has its own numbers, the right
+end's are numbers nobody could read off that column.  So ends
+answered not-perfect get a second column outboard of the right end,
+and the in-square exterior goes from 8 linear dims to 11.  The report
+table already read end by end (`S LEFT` / `S RIGHT`, `V LEFT` / `V
+RIGHT`, `R1` / `R2`) and needed nothing.  A perfect pool is
+untouched: dimensioning its right end would only say the same thing
+twice.
+
+LAZFORM's Roman sheet prints both ends and always has.  It answered
+the question for the drafter out of square (always `No`, because the
+sheet had made them fill both halves in) and greyed the right-hand
+half in square, where POOL would never read it.  Now it reads those
+four boxes instead and answers from them, either squareness: nothing
+typed on the right means the same end twice and the question goes out
+`Yes`; a number in any one of them means it does not, and it goes out
+`No`.  So the sheet no longer forces the answer on the drafter out of
+square either -- leaving the right-hand half blank there now mirrors
+the left end instead of sending POOL back to the command line for
+four letters the sheet was never given.
+
+Which makes those four boxes the one place on any sheet where BLANK
+is an answer, so Insert had to learn it: while all four are empty
+none of them is owed, nothing is struck red and the sheet is
+finished.  Fill any one in and the other three are owed like every
+other live box -- POOL asks all four once the ends are not perfect,
+and a blank one there is a question dropping back to the command
+line, which is what Insert exists to prevent.  They are never
+greyed, which is why this is not the ordinary dead-key rule: greying
+would make it impossible to type into the boxes that are the way to
+say the ends differ.  The page carries a hint line under the form
+saying what empty means, the way the Grecians' says where their
+cross dims are typed.
+
+## v3.18 -- 2026-09-16
+
+**The pool perimeter may hand over to the CABLE layer.**  COVERCHECK
+v1.20.
+
+A perimeter does not always stay on one layer.  Where the cable run
+carries a stretch of it, the drafter draws that stretch on `CABLE` --
+and COVERCHECK read `POOL` and nothing else.  So the outline came back
+with a gap in it: no area, nothing for the Cover Details block's
+Overlap and Spacing to be graded against, and no pads suggested, on a
+drawing whose perimeter is closed and always was.  The report said
+AMBIGUOUS and named an open chain, which is true of the pool layer and
+not of the pool.
+
+`*cchk-perim-layers*` (`'("CABLE")`) names the layers that may carry a
+stretch of the SAME closed perimeter.  Their ByLayer geometry is
+chained in alongside the pool layer's, so the outline closes and is
+measured, and the pads and the grading read the whole of it.  The
+report says what it borrowed -- `outline runs 2 segment(s) along layer
+'CABLE' - chained into the perimeter` -- and the summary line carries
+the same count beside the straight/arc split.  Emptying the knob reads
+the pool layer alone, exactly as before.
+
+Only what joins the loop is used, and that takes two rules.  Pool
+segments go into the walk FIRST, so where both layers leave a point
+the walk stays on the pool layer: a borrowed layer can only ever fill
+a gap.  And borrowed geometry hanging by a loose end is CUT before the
+walk -- the branch off to an anchor, the tail of a run carrying on
+past the corner, a run that never touches the pool at all -- because
+what the outline borrows is joined at both ends, which is what makes
+it a stretch rather than a branch.  Without the cut, a branch leaving
+an outline vertex is followed out of it and the loop never closes
+behind it; which of the two the walk met first was decided by the
+order they were drawn in.  A chain with no pool segment in it is that
+layer's own business: neither the outline nor a gap in it, so it is
+counted as neither.  Pool segments are never cut -- one hanging loose
+is the gap the drafter is being told about.
+
+The cut walks INWARD from each loose end rather than sweeping the
+segment list once per segment: cutting one frees the end it held, and
+that end is where the next cut starts, so a cable run several hundred
+segments long costs one walk down it.  A 200-segment run went from 67
+seconds to 4 in the VM, against 2 for the same geometry drawn on
+`POOL` and not borrowed at all -- in line with the chaining the tool
+has always done rather than a new kind of cost.  With nothing borrowed
+the walk is the one it always was, and costs what it always did.
+
+A borrowed layer is read for ByLayer properties like the pool layer
+is, but its skipped items only get a line when the outline came up
+short: otherwise a cable layer full of explicitly-coloured geometry
+would fill the report with red SKIPPED lines about a layer that is not
+the pool's business.
+
+`cchk:pv-chain` hands back its chains as segments now rather than
+vertex lists, which is what lets the caller tell the two layers apart
+after the walk has mixed them.  `tests/test_covercheck.py` drives the
+L-pool exploded with one side on `CABLE`, drawn back-to-front so the
+walk has to turn it round, a two-segment branch drawn BEFORE it so
+entity order is not what decides whether the outline closes, and a
+cable loop of its own parked elsewhere.
+
+## v3.17 -- 2026-09-16
+
+**The palette grew the tab it was missing: the pool SIDE VIEW.**
+
+Every form in this tree had a surface on the palette except one.
+`LAZSIDE` has been a complete routine for a while -- a section per
+bottom type, built out of POOLSIDE's own run chain, with a state line
+and a recall store -- and `tools/gen_ui_charts.py` read `lzf:*charts*`,
+`lzs:*charts*` and `lzt:chart` and stopped there, so `lzv:chart` was
+the one sheet in the tree the palette could not draw.  Nothing was
+broken and every check was green, which is exactly why it went
+unnoticed: the Commands tab has had a LAZSIDE button the whole time,
+and pressing it opens the DCL dialog, so the gap looked like a choice.
+
+The generator asks `lzv:chart` for each of the six types now and the
+catalog carries them beside the other twenty-two sheets, with the three
+tables that travel with a section: the type keyword, `lzv:depthkey`'s
+three depths, and the one question that is not a letter.  `Pool side`
+sits next to `Pool bottom`, which is the same view of the pool -- that
+tab picks a floor by eye off the paper chart, this one measures the
+floor that was picked.
+
+Two rules make this sheet different from the others and both are
+carried as tables rather than opinions.  **The bottom type is the
+answer, not a label**: it travels as `psd:*btypes*` spells it, capitals
+and all, and `tests/test_ui_charts.py` holds the two lists together in
+POOLSIDE's order so a seventh type added to one and not the other
+fails rather than shipping a page whose Draw could only fail.  And
+**the two NA rules on this sheet are opposites** -- NA in a run means
+"not measured" and POOLSIDE reads it back off B, while NA in a depth
+lands in a `REQ` item that is never asked again, so it is withheld and
+named on the state line.  Which keys are depths is `lzv:depthkey`, and
+the form has none of them spelled in it.
+
+`lzv:depthbad` is deliberately left behind.  It is the "D must be
+deeper than C" check, and applying it means reading three boxes --
+which is the one thing this assembly does not do, and the bug the wire
+was built to fix.  POOLSIDE loops at its own prompt, exactly as it does
+for a drafter typing at the command line.
+
+**There is something to install now.**  `tools/package.py`, `make
+package`.
+
+`make check` proved the tree was consistent and `make test` proved it
+drew; neither produced anything anybody could put on a CAD machine.
+This writes an Autodesk ApplicationPlugins bundle, zipped: copy the
+folder, start AutoCAD, the tools are there.
+
+Two lanes, and only one of them needs a compiler.  The AutoLISP half is
+`LAZPASS.lsp` and the glue -- already one self-contained file -- so it
+is finished the moment it is copied, with no build, no NuGet and no
+network.  The palette is a .NET assembly and ships as SOURCES with a
+Windows `build-palette.cmd` that builds the DLL into the slot the
+manifest already points at.
+
+The manifest names the palette either way, and that is the decision
+worth writing down: the entry is `LoadOnCommandInvocation`, so AutoCAD
+does not open the assembly until somebody types CALOFIN and a bundle
+with the slot still empty starts identically and runs every Lisp tool
+in it.  Writing a different manifest depending on whether a DLL
+happened to be lying around would mean the thing you tested is not the
+thing you shipped.  `tests/test_package.py` holds every module the
+manifest names to a file that really travelled, the one exception to
+being unreachable before it is built, and the zip to what was
+assembled.
+
+**WCALST cuts its darts at the bends, not at the rungs.**  WCALST v2.0.
+
+The correction a band needs is made at the bends of the side being
+straightened: every turn there leaves the far edge `turn x width` too
+long or too short.  The emitter summed that per RUNG INTERVAL and
+released it at the rung that ended the interval, so the number of
+darts a run could cut was the number of rungs the drafter had drawn,
+not the cap they were asked for.  A band drawn as two edges and its
+two end lines -- two rungs -- got one dart, on the band's end with
+half its mouth past it; a curve drawn in 3-degree chords with a rung
+every ten of them got four darts against twenty slots and left two
+thirds of its excess in the AFTER CUTS line.  The refining pass could
+not help: a lower threshold cannot make a second dart in an interval
+that only ever yields one.  Both runs finished clean, and a run that
+finishes clean writes no report -- the only trace was `** OVER
+TARGET **` in a summary block on the sheet.
+
+The debt is now accumulated bend by bend and released where it reaches
+the threshold, at the centre of the bends that built it up: at the
+bend itself for one sharp corner, at the middle of the run for a
+stretch of gentle ones.  A bend that calls for more than one dart's
+cap is cut as several equal darts side by side, `wc:*dart-space*` of
+bottom line between them -- the shop's answer to a 15-degree corner on
+a 24-inch band, which is 6.28 of overlap at one place.  No mouth
+crosses either end of the band and no two mouths overlap.  Rungs give
+the width (still the median rung) and the far edge's feet, and nothing
+else.  The oracle band's best fit goes from 8 darts and 3.23% over
+target to 14 darts and 0.03% under it; drawn with only its two end
+rungs it now gets exactly the same fourteen.
+
+The run that showed it is in the suite now (`tests/data/wcalst_two_rung_
+band.txt`): a drafter's band, two long sides drawn as chains of lines
+and joined only by their two end lines, 87 chain nodes with no bend
+over 5 degrees.  Its sheet read TOP LINE 1140.28, DELTA 25.23 (2.23%
+long), AFTER CUTS 21.23 (1.87%) OVER TARGET -- one 4-inch dart, on the
+band's end -- and the VM reproduces every one of those figures from the
+band alone before the change.  After it: 13 darts and 2 inserts along
+the bends, 0.77% left, nothing nearer than 90 inches to either end.
+
+**The stair window is a window.**  It was a selection, and a selection
+takes whole entities: a far side drawn as one polyline came in whole,
+the entire band became the "stair section", was developed rigidly as
+one piece, had every dart dropped as stair work -- and the summary
+read a bottom line 0.00% off, because a rigid copy of the far side is
+exactly as long as the far side.  It is two corners now (`getpoint`,
+`getcorner`, repeated until Enter, Back to the tile height), and a
+far-side segment is in the section when BOTH its ends are inside one
+-- AutoCAD's own Window rule, applied to the segment rather than to
+the entity, so the polyline is clipped to the part the box was drawn
+round.  The report says how many darts fell inside the stair sections
+and were left for the hand work there, so a window that swallowed the
+band is on the command line and not only in the drawing.  The corners
+are typed answers in the LAZDIAG transcript, which is what makes a
+replay possible: `probe_report.py` answers every selection with the
+one the report carried, and the old stair selection would have been
+answered with the band.
+
+**A tile taller than the band is said.**  The apex rule bottoms out at
+`wc:*tile-clear*` above the far edge, so a 30-inch tile on a 24-inch
+band drew every dart one inch high -- correct, invisible, and read as
+missing.  The tile prompt now says the cuts will be shallow and why.
+
+Also: `wc:depth-at` past the far end of the bottom line answered with
+the NEAR end's depth (its initial value); it answers with the far
+end's.  The test VM gained `getcorner`.  `tests/test_wcalst.py` pins
+the new oracle figures and adds the two-rung band, the 3-degree curve,
+the one-polyline far side under a window, the whole band under one,
+and the tall tile.
+
 ## v3.16 -- 2026-09-16
 
 **The step count is a field on the page it redraws.**  LAZSTEP v2.0.

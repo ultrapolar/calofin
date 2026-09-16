@@ -38,7 +38,18 @@ What is asserted, and why each one is worth asserting:
   * the layer is created, and an existing one that is off, frozen or
     locked is put back so the result is visible;
   * every exit hands the session back: sysvars unchanged, no undo mark
-    or group left open, no raw AutoLISP message on a cancel.
+    or group left open, no raw AutoLISP message on a cancel;
+  * the GAP pass: geometry that chains into a perimeter except for a
+    drafting gap is recognised as one, arrowed at every open joint and
+    offered a zero fillet -- and what that fillet did is read back off
+    the drawing rather than assumed.  A zero-radius fillet is the one
+    fillet tests/lispvm.py does for real (it cuts no arc and moves the
+    two lines to where they cross, exactly as AutoCAD does), which is
+    what lets a fillet that TOOK be told from one AutoCAD refused.  A
+    gap whose two ends are on ONE open polyline is the exception and
+    is tested as one: FILLET is never handed both picks there (it
+    would join the two segments and throw away the perimeter between
+    them), and the same join is made by editing the polyline instead.
 
 Run: python3 tests/test_paddle.py
      CALOFIN_LISP_ROOT=shared python3 tests/test_paddle.py
@@ -60,7 +71,7 @@ if os.path.basename(LISP_ROOT) == "shared":
     PADDLE = os.path.join(PARTS, "PADDLE.lsp")
     LIB = os.path.join(PARTS, "CALOFIN-LIB.lsp")
 
-from lispvm import VM, Dot, LispError  # noqa: E402
+from lispvm import VM, Dot, Ent, LispError  # noqa: E402
 
 failures = []
 
@@ -292,15 +303,335 @@ check("and found no perimeter to pad",
 check("nothing was drawn", not pads_of(vm))
 
 
+#: Four lines that would be a 300 x 200 rectangle if the last one
+#: reached the first: it stops 6" short of (0,0).  One open chain, two
+#: loose ends, one gap -- the case a drafter meets every week.
+def _esc(_vm):
+    """An Esc at whatever prompt the script has reached."""
+    raise LispError("Function cancelled", _vm)
+
+
+def gappy(vm, legs=None):
+    for a, b in (legs or [((0, 0), (300, 0)), ((300, 0), (300, 200)),
+                          ((300, 200), (0, 200)), ((0, 200), (0, 6))]):
+        vm.loads('(entmake (list (cons 0 "LINE") (cons 8 "DEMO") '
+                 '(list 10 %.4f %.4f 0.0) (list 11 %.4f %.4f 0.0)))'
+                 % (a[0], a[1], b[0], b[1]))
+    return vm
+
+
+#: The tutorial's outline drawn as loose lines, with its last leg 12"
+#: short of the start: the slot's two inside corners are only reachable
+#: once that gap closes, which is the whole point of asking.
+CORNERED = [((0, 0), (300, 0)), ((300, 0), (300, 168)), ((300, 168), (132, 168)),
+            ((132, 168), (132, 120)), ((132, 120), (84, 120)),
+            ((84, 120), (84, 168)), ((84, 168), (0, 168)), ((0, 168), (0, 12))]
+
+
+def arrows(vm):
+    return [e for e in vm.entities
+            if e not in vm.deleted and vm.layer_of(e) == "PADDLE-GAP"]
+
+
+def verts(vm, e):
+    return [tuple(round(v, 4) for v in g[1:3])
+            for g in vm.entdata.get(e, [])
+            if isinstance(g, list) and g and g[0] == 10]
+
+
+def fillets(vm):
+    return [c for c in vm.commands if c and c[0] == "_.FILLET"]
+
+
+print("PADDLE -- a perimeter that closes except for a gap is one, and says so")
+vm = gappy(fresh(DEMO_LAYER))
+vm.loads('(setvar "FILLETRAD" 13.5) (setvar "TRIMMODE" 0)')
+before = dict(vm.sysvars)
+vm.run("c:PADDLE", [None, None, "Yes"])
+out = "".join(vm.printed)
+check("it read the loose lines as one perimeter with a gap in it",
+      "one closed perimeter with 1 gap(s) in it" in out)
+check("it measured the gap and said where it is",
+      'gap 1 of 1: 6" wide, at 0.00,3.00' in out)
+check("it filleted at radius 0, once",
+      len(fillets(vm)) == 1 and vm.sysvars["FILLETRAD"] != 0.0)
+check("both picks went to FILLET as entity/point pairs",
+      len(fillets(vm)[0]) == 3
+      and all(isinstance(x, list) and isinstance(x[0], Ent)
+              for x in fillets(vm)[0][1:]), f"{fillets(vm)}")
+check("it said the gap closed", "1 gap(s) closed with a zero fillet" in out)
+check("the arrow came away with the gap", not arrows(vm))
+check("and the perimeter it left was read and padded",
+      "auto-detected the largest closed loop" in out
+      and "no concave features need pads" in out)
+check("FILLETRAD and TRIMMODE are back where the drafter had them",
+      vm.sysvars == before,
+      {k: (before[k], vm.sysvars[k])
+       for k in before if before[k] != vm.sysvars[k]})
+check("no undo mark was left open", vm.undo_marks == 0)
+
+
+print("PADDLE -- the arrow points at the gap, from outside the loop")
+vm = gappy(fresh(DEMO_LAYER))
+vm.run("c:PADDLE", [None, None, "No"])
+arw = arrows(vm)
+check("one arrow, one gap", len(arw) == 1, f"{len(arw)}")
+vs = verts(vm, arw[0])
+check("it is a closed polyline of seven points",
+      len(vs) == 7 and dxf(vm, arw[0], 70) == 1, f"{vs}")
+check("its tip is on the gap", vs[0] == (0.0, 3.0), f"{vs[0]}")
+#: the loop's middle is (150,100); an arrow flying in from outside has
+#: every other point of it further from that middle than its tip
+check("every other point of it is further out than the tip",
+      all(math.dist(v, (150.0, 100.0)) > math.dist(vs[0], (150.0, 100.0))
+          for v in vs[1:]), f"{vs}")
+
+
+print("PADDLE -- No leaves the arrow standing and fillets nothing")
+check("it asked before touching anything", not fillets(vm))
+check("the arrow is still there", len(arrows(vm)) == 1)
+check("the lines are where the drafter drew them",
+      [0.0, 6.0] in [dxf(vm, e, 11)[:2] for e in vm.entities
+                     if dxf(vm, e, 0) == "LINE"])
+check("it said the gap was left, and why nothing was padded",
+      "1 gap(s) left as they are" in "".join(vm.printed)
+      and "no closed perimeter loop found" in "".join(vm.printed))
+
+
+print("PADDLE -- Enter at the gap question takes the default, Yes")
+vm = gappy(fresh(DEMO_LAYER))
+vm.run("c:PADDLE", [None, None, None])
+check("Enter closed the gap", len(fillets(vm)) == 1 and not arrows(vm))
+
+
+print("PADDLE -- a wall run past its neighbour is trimmed, not the perimeter")
+#: the last leg is a 30" stub that crosses the first wall 10" along and
+#: sticks 20" out past it.  FILLET keeps the side it was picked on, so
+#: a pick in the middle of that stub would keep the overshoot and trim
+#: the stub off the perimeter instead; the pick goes nine tenths of the
+#: way IN from the loose end for exactly that reason.
+vm = gappy(fresh(DEMO_LAYER),
+           [((0, 0), (300, 0)), ((300, 0), (300, 200)), ((300, 200), (0, 200)),
+            ((0, 200), (0, 10)), ((0, 10), (0, -20))])
+vm.run("c:PADDLE", [None, None, "Yes"])
+stub = [e for e in vm.entities if dxf(vm, e, 0) == "LINE"
+        and dxf(vm, e, 10)[:2] == [0.0, 10.0]]
+check("the overshoot came off at the crossing",
+      len(stub) == 1 and dxf(vm, stub[0], 11)[:2] == [0.0, 0.0],
+      f"{[dxf(vm, e, 11) for e in stub]}")
+check("the wall it was still attached to did not move",
+      [0.0, 10.0] in [dxf(vm, e, 11)[:2] for e in vm.entities
+                      if dxf(vm, e, 0) == "LINE"])
+check("and the perimeter it left is the one that was padded",
+      "auto-detected the largest closed loop" in "".join(vm.printed)
+      and not arrows(vm))
+
+
+print("PADDLE -- two gaps exactly as wide as each other are both found")
+#: a wall left short at BOTH ends leaves two gaps of the same width,
+#: which is the commonest two-gap case there is and the one a vl-sort
+#: of the candidate pairs would lose: vl-sort drops an element that
+#: compares equal to another under the predicate it is handed, and a
+#: ring with a gap missing is not a ring, so neither arrow would go in.
+vm = gappy(fresh(DEMO_LAYER),
+           [((0, 0), (300, 0)), ((0, 20), (300, 20))])
+vm.run("c:PADDLE", [None, None, "No", "No"])
+out = "".join(vm.printed)
+check("both gaps were found", "one closed perimeter with 2 gap(s)" in out)
+check("both are 20 wide, at the two ends of the pair of walls",
+      'gap 1 of 2: 20" wide, at 300.00,10.00' in out
+      and 'gap 2 of 2: 20" wide, at 0.00,10.00' in out, out)
+check("and both were arrowed", len(arrows(vm)) == 2, f"{len(arrows(vm))}")
+
+
+print("PADDLE -- a fillet AutoCAD refuses is reported, not assumed")
+#: a C whose two open ends are parallel and 6 apart: they never cross,
+#: so FILLET cannot join them however far they run on.  The other gap
+#: in the same run is an ordinary one, and closes.
+vm = gappy(fresh(DEMO_LAYER),
+           [((0, 0), (300, 0)), ((300, 0), (300, 200)), ((300, 200), (0, 200)),
+            ((0, 200), (0, 120)), ((6, 100), (6, 0))])
+vm.run("c:PADDLE", [None, None, "Yes", "Yes"])
+out = "".join(vm.printed)
+check("it found both gaps", "one closed perimeter with 2 gap(s)" in out)
+check("it tried both", len(fillets(vm)) == 2, f"{len(fillets(vm))}")
+check("it said which one FILLET would not close",
+      "FILLET would not close 1 gap(s)" in out)
+check("the refused gap keeps its arrow, the closed one does not",
+      len(arrows(vm)) == 1, f"{len(arrows(vm))}")
+check("and it did not claim a perimeter it has not got",
+      "no closed perimeter loop found" in out)
+
+
+print("PADDLE -- an open polyline is joined in place, not handed to FILLET")
+#: the pool outline drawn as ONE polyline that stops 6" short of its
+#: own start -- the commonest near-miss there is.  FILLET must not be
+#: asked for this one: two picks on one polyline joins those two
+#: segments and throws away every segment between them, which here is
+#: the perimeter.  PADDLE makes the same join by editing the polyline:
+#: first vertex to the crossing, last vertex away, closed flag on.
+OPEN_PL = ('(entmake (list (cons 0 "LWPOLYLINE") (cons 100 "AcDbEntity")'
+           ' (cons 8 "DEMO") (cons 100 "AcDbPolyline") (cons 90 9) (cons 70 0)'
+           ' (list 10 0.0 0.0) (list 10 300.0 0.0) (list 10 300.0 168.0)'
+           ' (list 10 132.0 168.0) (list 10 132.0 120.0) (list 10 84.0 120.0)'
+           ' (list 10 84.0 168.0) (list 10 0.0 168.0) (list 10 0.0 6.0)))')
+vm = fresh(DEMO_LAYER)
+vm.loads(OPEN_PL)
+pl = vm.entities[0]
+n0 = len(vm.entities)
+vm.run("c:PADDLE", [None, None, "Yes"])
+out = "".join(vm.printed)
+check("it said it would join the polyline itself",
+      "both ends are on one polyline" in out)
+check("it issued no FILLET", not fillets(vm))
+check("the polyline is closed now", dxf(vm, pl, 70) == 1)
+check("its last vertex went, and the count went with it",
+      dxf(vm, pl, 90) == 8 and len(verts(vm, pl)) == 8,
+      f"{dxf(vm, pl, 90)} {verts(vm, pl)}")
+check("the join is at the crossing of the two end segments",
+      verts(vm, pl)[0] == (0.0, 0.0), f"{verts(vm, pl)[0]}")
+check("the arrow came away, and the slot got its pads",
+      not arrows(vm) and centres(vm, pads_of(vm, n0)) == sorted(CORNERS),
+      f"{centres(vm, pads_of(vm, n0))}")
+
+
+print("PADDLE -- the crossing the polyline is joined at is measured, not guessed")
+#: the same polyline with its last leg running in at an angle: the two
+#: end segments cross at a point that is on neither of them yet, and
+#: that point -- not the loose end, not the first vertex -- is where
+#: the join lands, exactly as a zero fillet would leave it
+vm = fresh(DEMO_LAYER)
+vm.loads('(entmake (list (cons 0 "LWPOLYLINE") (cons 100 "AcDbEntity")'
+         ' (cons 8 "DEMO") (cons 100 "AcDbPolyline") (cons 90 5) (cons 70 0)'
+         ' (list 10 0.0 0.0) (list 10 300.0 0.0) (list 10 300.0 200.0)'
+         ' (list 10 0.0 200.0) (list 10 6.0 20.0)))')
+pl = vm.entities[0]
+vm.run("c:PADDLE", [None, None, "Yes"])
+check("the first vertex moved to where the ends cross",
+      verts(vm, pl)[0] == (6.6667, 0.0), f"{verts(vm, pl)[0]}")
+check("and the polyline came out closed, one vertex shorter",
+      dxf(vm, pl, 70) == 1 and len(verts(vm, pl)) == 4, f"{verts(vm, pl)}")
+
+
+print("PADDLE -- one entity it cannot join in place is named, never filleted")
+#: an arc at one end of the gap.  The edit above is a straight-to-
+#: straight join; anything else on one entity (an arc end, a heavy 2D
+#: POLYLINE, two ends that never cross) is marked and named instead --
+#: what must never happen is FILLET being handed both picks.
+vm = fresh(DEMO_LAYER)
+vm.loads('(entmake (list (cons 0 "LWPOLYLINE") (cons 100 "AcDbEntity")'
+         ' (cons 8 "DEMO") (cons 100 "AcDbPolyline") (cons 90 5) (cons 70 0)'
+         ' (list 10 0.0 0.0) (list 10 300.0 0.0) (list 10 300.0 200.0)'
+         ' (list 10 0.0 200.0) (cons 42 -0.3) (list 10 0.0 6.0)))')
+vm.run("c:PADDLE", [None, None])            # no answer: it must not ask
+out = "".join(vm.printed)
+check("it still recognised the perimeter and marked the gap",
+      "one closed perimeter with 1 gap(s)" in out and len(arrows(vm)) == 1)
+check("it never asked", not any("zero fillet" in p for p, _ in vm.prompts))
+check("it issued no FILLET", not fillets(vm))
+check("it said why, and what to do instead",
+      "both ends are on one entity" in out and "PEDIT > Close" in out)
+
+
+print("PADDLE -- a handed-over selection is still the only geometry read")
+#: the re-read after a fillet is the moment a run could quietly widen
+#: to the whole drawing.  Here the perimeter is handed over pickfirst
+#: (what LINGUTTER does) with a title block border sitting around it:
+#: auto-detect would take the border as the largest closed loop, so the
+#: border must not be read at all -- before the fillet or after it.
+vm = gappy(fresh(DEMO_LAYER), CORNERED)
+vm.loads('(entmake (list (cons 0 "LWPOLYLINE") (cons 100 "AcDbEntity")'
+         ' (cons 8 "DEMO") (cons 100 "AcDbPolyline") (cons 90 4) (cons 70 1)'
+         ' (list 10 -500.0 -500.0) (list 10 900.0 -500.0)'
+         ' (list 10 900.0 900.0) (list 10 -500.0 900.0)))')
+n0 = len(vm.entities)
+vm.loads('(sssetfirst nil (ssget "_X" (list (cons 0 "LINE"))))')
+vm.run("c:PADDLE", ["Yes"])                 # one answer: the gap question
+out = "".join(vm.printed)
+check("it never reached the select prompt",
+      not any("Select perimeter" in p for p, _ in vm.prompts))
+check("it found the gap in what it was handed",
+      "one closed perimeter with 1 gap(s)" in out and "1 gap(s) closed" in out)
+check("the re-read did not widen to the whole drawing",
+      "auto-detected" not in out)
+check("and the pads went on the perimeter, not the border",
+      centres(vm, pads_of(vm, n0)) == sorted(CORNERS),
+      f"{centres(vm, pads_of(vm, n0))}")
+
+
+print("PADDLE -- a gap too wide to be a drafting gap is left alone")
+vm = gappy(fresh(DEMO_LAYER),
+           [((0, 0), (300, 0)), ((300, 0), (300, 200)), ((300, 200), (0, 200)),
+            ((0, 200), (0, 120))])          # 120 short: a missing wall
+vm.run("c:PADDLE", [None, None])
+out = "".join(vm.printed)
+check("it went back to the plain report",
+      "open chain(s) that never close back on themselves" in out)
+check("no arrow, no question", not arrows(vm)
+      and not any("zero fillet" in p for p, _ in vm.prompts))
+
+
+print("PADDLE -- a perimeter beside a smaller closed loop is not the loop")
+#: the gap only gets an arrow when what it would close is BIGGER than
+#: anything already closed -- otherwise the drafter has a perimeter and
+#: this is something loose lying beside it
+vm = gappy(fresh(DEMO_LAYER),
+           [((0, 0), (30, 0)), ((30, 0), (30, 20)), ((30, 20), (0, 20)),
+            ((0, 20), (0, 6)),                          # a 30 x 20 near-loop
+            ((100, 0), (400, 0)), ((400, 0), (400, 300)),
+            ((400, 300), (100, 300)), ((100, 300), (100, 0))])   # closed
+vm.run("c:PADDLE", [None, None])
+check("the closed loop won and the near-loop was only reported",
+      not arrows(vm)
+      and "open chain(s) that never close" in "".join(vm.printed))
+
+
+print("PADDLE -- the arrows are PADDLE's own: cleared and re-marked each run")
+vm = gappy(fresh(DEMO_LAYER))
+vm.run("c:PADDLE", [None, None, "No"])
+first = arrows(vm)
+vm.printed = []
+vm.run("c:PADDLE", [None, None, "No"])
+check("last run's arrow was taken away", all(e in vm.deleted for e in first))
+check("and this run drew its own", len(arrows(vm)) == 1
+      and arrows(vm) != first)
+check("the arrow was never read back as perimeter geometry",
+      "one closed perimeter with 1 gap(s)" in "".join(vm.printed))
+
+
+print("PADDLE -- the pads go in on the perimeter the fillet closed")
+vm = gappy(fresh(DEMO_LAYER), CORNERED)
+n0 = len(vm.entities)
+vm.run("c:PADDLE", [None, None, "Yes"])
+check("the two inside corners were padded once the gap closed",
+      centres(vm, pads_of(vm, n0)) == sorted(CORNERS),
+      f"{centres(vm, pads_of(vm, n0))}")
+check("and no arrow was left over", not arrows(vm))
+
+
+print("PADDLE -- Esc at the gap question leaves the arrows and the session")
+vm = gappy(fresh(DEMO_LAYER))
+vm.loads('(setvar "FILLETRAD" 13.5) (setvar "TRIMMODE" 0)')
+vm.handle_errors = True
+before = dict(vm.sysvars)
+vm.run("c:PADDLE", [None, None, _esc])
+check("the handler saw the cancel",
+      any("cancel" in m.lower() for m in vm.handled_errors))
+check("a plain cancel prints no error line",
+      "PADDLE error" not in "".join(vm.printed))
+check("the arrow stays -- it is what the drafter works from next",
+      len(arrows(vm)) == 1)
+check("every sysvar is back where it started", vm.sysvars == before,
+      {k: (before[k], vm.sysvars[k])
+       for k in before if before[k] != vm.sysvars[k]})
+check("no undo mark was left open", vm.undo_marks == 0)
+
+
 print("PADDLE -- Esc at the select prompt is silent and leaves nothing open")
 vm = with_perimeter()
 vm.handle_errors = True
 before = dict(vm.sysvars)
 n0 = len(vm.entities)
-
-
-def _esc(_vm):
-    raise LispError("Function cancelled", _vm)
 
 
 try:

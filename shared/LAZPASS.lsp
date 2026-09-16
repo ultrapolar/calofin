@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; LAZPASS.lsp  --  calofin v3.16, the whole shared build in one file
+;;; LAZPASS.lsp  --  calofin v3.19, the whole shared build in one file
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/build_shared_bundle.py
@@ -3033,7 +3033,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091626 REV28")
+(setq pool:*version* "091626 REV31")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -3854,6 +3854,17 @@
       (progn
         (setq v (* pool:*half-ratio* (/ tot n)))
         (if (> v 1.0e-6) v))))
+
+;; A crew that could not tape one corner-cut letter usually could not
+;; tape its matched partner either (S / S1 close a taped S2 face at 45
+;; either way -- see the overall-sheet note above pool:grecflow's ask
+;; block).  Said right where the partner is asked, not only in the
+;; block's opening note.  A pure side effect: always nil, so the
+;; question it decorates keeps its own kind and default untouched.
+(defun pool:sugnahint (ans key subject / )
+  (if (not (pool:sq ans key))
+      (princ (strcat "\n(" subject " was NA -- NA is a likely answer here too.)")))
+  nil)
 
 ;;; -------------------- form answers -----------------------------------
 ;;;
@@ -5320,7 +5331,8 @@
                                 (list 'a 'REQ "A - overall width" (cdr (assoc "A" pvo)))))
                       (list (list 'tt 'NAX "T - top side length" (cdr (assoc "T" pvo)))
                             (list 'ss 'NAX "S - corner cut along the side" (cdr (assoc "S" pvo)))
-                            (list 's1 'NAX "S1 - corner cut down the end" (cdr (assoc "S1" pvo)))
+                            (list 's1 'NAX "S1 - corner cut down the end" (cdr (assoc "S1" pvo))
+                                  nil nil nil '(pool:sugnahint ans 'ss "S"))
                             (list 'vv 'NAX "V - end width" (cdr (assoc "V" pvo)))
                             (list 's2 'NAX "S2 - corner cut face (check, sets NA S/S1)" (cdr (assoc "S2" pvo)))))
                     t))
@@ -5625,15 +5637,15 @@
   (foreach p pts (setq cen (cal:v+ cen p)))
   (setq cen (cal:v* cen (/ 1.0 8.0)))
 
-  ;; -------- perimeter (POOL) + internal end chords (dashed,
-  ;; POOL-NOTES).  Perimeter walls run between the corner TREATMENT
-  ;; ends and the treatment itself closes each corner (a square corner
-  ;; degenerates to the plain corner-to-corner wall); the two internal
-  ;; chords are not walls, so they stay on the true corners.
+  ;; -------- perimeter (POOL).  Perimeter walls run between the corner
+  ;; TREATMENT ends and the treatment itself closes each corner (a
+  ;; square corner degenerates to the plain corner-to-corner wall); the
+  ;; two internal end chords are not walls -- they are construction,
+  ;; not the pool -- so they are left off the drawing entirely and
+  ;; shown only in the mini-model beside the report (dashed, below).
   (foreach e pool:*grecedges*
     (setq p (nth (car e) pts) qq (nth (cadr e) pts))
-    (if (member (caddr e) '(ad bc))
-        (pool:lined p qq)
+    (if (not (member (caddr e) '(ad bc)))
         (pool:line (cadr (nth (car e) gce))          ; eNext(i)
                    (car (nth (cadr e) gce)) pool:*lay-pool*))) ; ePrev(j)
   (setq gcarcs (pool:ringarcs gce gcs pool:*lay-pool*))
@@ -5766,11 +5778,14 @@
   (pool:askgiven failed)
   (setq rbox (pool:report rows notes (+ xmax (* pool:*rep-gap* doff)) ymax th pool:*lay-notes*))
   ;; perimeter mini-model with the corner letters, right of the report
+  ;; -- the two internal end chords (A-D, B-C) show here, dashed, as
+  ;; the reference lines they are; they are not part of the pool drawn
+  ;; full-size above
   (setq mprims nil k 0)
   (foreach e pool:*grecedges*
-    (if (not (member (caddr e) '(ad bc)))
-        (setq mprims (cons (list 'l (nth (car e) pts) (nth (cadr e) pts))
-                           mprims))))
+    (setq mprims (cons (list (if (member (caddr e) '(ad bc)) 'ld 'l)
+                             (nth (car e) pts) (nth (cadr e) pts))
+                       mprims)))
   (setq mlbls nil)
   (foreach p pts
     (setq mlbls (append mlbls (list (cons p (nth (length mlbls) pool:*grecnames*))))))
@@ -6665,9 +6680,10 @@
 ;; at a small fixed size with the corner LETTERS on it.  The letters
 ;; used to sit in the corners of the full-size drawing; they live here
 ;; now, so the drawing itself stays clean.
-;;   prims  ('l p1 p2) line | ('a p1 pmid p2) arc as three points
-;;          (uniform scaling keeps an arc an arc) | ('rb cen b a) a
-;;          round/elliptical body
+;;   prims  ('l p1 p2) line | ('ld p1 p2) dashed reference line (the
+;;          body-end chords that are construction, not perimeter) |
+;;          ('a p1 pmid p2) arc as three points (uniform scaling keeps
+;;          an arc an arc) | ('rb cen b a) a round/elliptical body
 ;;   poly   the corner ring, for keeping letters outside the outline
 ;;          (nil -> plain outward-from-centre offsets)
 ;;   lbls   ((pt . "A") ...)
@@ -6700,6 +6716,8 @@
           (cond
             ((eq (car p) 'l)
              (pool:line (pool:mms (cadr p)) (pool:mms (caddr p)) pool:*lay-notes*))
+            ((eq (car p) 'ld)
+             (pool:lined (pool:mms (cadr p)) (pool:mms (caddr p))))
             ((eq (car p) 'a)
              (pool:arc3p (pool:mms (cadr p)) (pool:mms (caddr p))
                          (pool:mms (cadddr p)) pool:*lay-notes*))
@@ -7438,6 +7456,21 @@
                                  (distance ra rc))))
                 n (1+ n)))))
   (if (> n 0) (/ sum n) nil))
+
+;; How far a candidate reference-mode reading actually sits from what
+;; the tape read: XMEAS's own reference points, measured on the quad Q
+;; that was fit to them.  Used to score a NotGiven guess between the
+;; Corner and Middle interpretations of the same two raw numbers --
+;; smaller is the better-fitting guess.  0.0 (not nil) when nothing was
+;; taped for this diagonal, so it drops out of a summed score untouched.
+(defun pool:crossresid (q corners xmeas diagkey / sum ra rc)
+  (setq sum 0.0)
+  (foreach m xmeas
+    (if (and (eq (car m) diagkey) (nth 7 m))
+        (setq ra (pool:cornerpoint q corners (nth 3 m) (nth 4 m))
+              rc (pool:cornerpoint q corners (nth 5 m) (nth 6 m))
+              sum (+ sum (abs (- (nth 7 m) (distance ra rc)))))))
+  sum)
 
 ;;; -------------------- pool bottom / hopper (rectangle) ---------------
 ;;;
@@ -9115,7 +9148,7 @@
                              tp bo le ri dac dbd totl lrad rrad tpna bona
                              corners cmode anycut cc prevty prevsz lbl
                              gq gcorners xmeas xg tm hl val m rpa rpb pass
-                             ans xitems cc2
+                             ans xitems cc2 autores xrefnote
                              fitres quad failed a b c d cen meas notes tri
                              doff th endoff pr odim k
                              midl midr ml mr tipl tipr
@@ -9444,11 +9477,18 @@
     (if (and (not pool:*insq*) anycut)
         (progn
           ;; a bare "Cut corners" would now read as the Cut keyword, and
-          ;; this gate covers Radius corners too -- but NOT NotGiven,
-          ;; which has no treatment ends to tape between
+          ;; this gate covers Radius corners too -- but NOT a NotGiven
+          ;; CORNER TREATMENT, which has no treatment ends to tape
+          ;; between.  The NotGiven answered HERE is a different thing:
+          ;; the sheet's two cross dims exist but never says which
+          ;; reference they were taped to -- see qf:autocross below.
+          (princ (strcat "\nNotGiven: Corner and Middle are both tried against"
+                         " the numbers given; whichever fits is used and"
+                         " named in the report."))
           (setq v (pool:askkwf 'cmode
                                "Radius/Cut corners -- cross dims measured from"
-                               "Corner Middle Ends" "Corner/Middle/Ends" nil t))
+                               "Corner Middle Ends NotGiven"
+                               "Corner/Middle/Ends/NotGiven" nil t))
           (if (eq v 'CAL-BACK) v (progn (setq cmode v) nil)))
         nil))
 
@@ -9496,6 +9536,40 @@
                 (setq xmeas (reverse xmeas))
                 nil)))))
 
+  ;; -------- NotGiven reference mode: the sheet's two cross dims were
+  ;; asked and taped like Corner (pool:crosstemplate's default template,
+  ;; the one NotGiven also uses to ask with -- see there), but nothing
+  ;; says whether the tape actually ran to the true corners or to the
+  ;; cut/radius midpoints.  Fit both ways -- Ends is never guessed here,
+  ;; it takes four ties, not two, so a NotGiven sheet cannot mean that
+  ;; -- and keep whichever interpretation's OWN reference points, on ITS
+  ;; OWN fitted quad, land closest to the numbers actually taped; ties
+  ;; go to Corner, the more common tape point.  Called with QUAD/FAILED
+  ;; already holding the Corner fit (the outer body computes that first
+  ;; regardless of cmode).  Returns (cmode quad failed xmeas) so every-
+  ;; thing after this reads the winner as if it had been asked outright.
+  (defun qf:autocross ( / xmeasm quadc quadm failedc failedm fitres2
+                          dacm dbdm residc residm pass)
+    (setq quadc quad failedc failed)
+    (setq xmeasm (mapcar '(lambda (tm m) (append tm (list (nth 7 m))))
+                         (pool:crosstemplate "Middle") xmeas))
+    (setq quadm quadc pass 0)
+    (while (< pass 2)
+      (setq dacm (pool:effcross quadm corners xmeasm 'ac)
+            dbdm (pool:effcross quadm corners xmeasm 'bd)
+            fitres2 (pool:fitquad bo tp le ri dacm dbdm pool:*side-tol* pool:*cross-tol*)
+            quadm (car fitres2)
+            failedm (cadr fitres2)
+            pass (1+ pass)))
+    (setq residc (+ (pool:crossresid quadc corners xmeas 'ac)
+                    (pool:crossresid quadc corners xmeas 'bd))
+          residm (+ (pool:crossresid quadm corners xmeasm 'ac)
+                    (pool:crossresid quadm corners xmeasm 'bd)))
+    (if (or (and failedc (not failedm))
+            (and (eq failedc failedm) (< residm residc)))
+        (list "Middle" quadm failedm xmeasm)
+        (list "Corner" quadc failedc xmeas)))
+
   ;; ---- the input phase, with Back working right across it
   (pool:stages (list 'qf:sides 'qf:oval 'qf:corners 'qf:cmode 'qf:cross))
 
@@ -9513,20 +9587,31 @@
         fitres (pool:fitquad bo tp le ri dac dbd pool:*side-tol* pool:*cross-tol*)
         quad (car fitres)
         failed (cadr fitres))
-  (if (/= cmode "Corner")
-      (progn
-        (setq pass 0)
-        (while (< pass 2)
-          (setq dac (pool:effcross quad corners xmeas 'ac)
-                dbd (pool:effcross quad corners xmeas 'bd)
-                fitres (pool:fitquad bo tp le ri dac dbd pool:*side-tol* pool:*cross-tol*)
-                quad (car fitres)
-                failed (cadr fitres)
-                pass (1+ pass)))))
+  (cond
+    ((and (= cmode "NotGiven") (or dac dbd))
+     (setq autores (qf:autocross)
+           cmode (car autores)
+           quad (cadr autores)
+           failed (caddr autores)
+           xmeas (cadddr autores)
+           xrefnote (strcat "CROSS DIMS REFERENCE NOT GIVEN - ASSUMED "
+                            (strcase cmode))))
+    ;; nothing was taped either way -- nothing to guess between, so no
+    ;; note either
+    ((= cmode "NotGiven") (setq cmode "Corner"))
+    ((/= cmode "Corner")
+     (setq pass 0)
+     (while (< pass 2)
+       (setq dac (pool:effcross quad corners xmeas 'ac)
+             dbd (pool:effcross quad corners xmeas 'bd)
+             fitres (pool:fitquad bo tp le ri dac dbd pool:*side-tol* pool:*cross-tol*)
+             quad (car fitres)
+             failed (cadr fitres)
+             pass (1+ pass)))))
   (setq a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
         cen (cal:v* (cal:v+ (cal:v+ a b) (cal:v+ c d)) 0.25)
         meas (pool:quadmeas quad)
-        notes nil)
+        notes (if xrefnote (list xrefnote) nil))
 
   ;; dashed linetype + scale for the reference lines
   (setq pool:*dashlt* (pool:ltload "DASHED"))
@@ -9889,15 +9974,23 @@
                           dac dbd fq quad failed a b c d cen meas notes
                           ml mr lend rend tipl tipr doff th odim pr
                           rcs rce rcarcs
-                          allpts xmax ymax ymin rows xcol xa rbox)
+                          allpts xmax ymax ymin rows xcol xcolr xa rbox)
   (setq oldclay (getvar "CLAYER"))
-  (defun rm:perfect ( / v)
-    (if pool:*insq*
-        (progn (setq perfect t) nil)
-        (progn (setq perfect (pool:askynf 'perfect
-                                          "Are both ends perfect (identical)"
-                                          nil nil))
-               nil)))
+  ;; PERFECT ENDS -- asked on every Roman, in square and out.
+  ;; Squareness is a question about the BODY: whether the
+  ;; rectangle between the two end lines is true.  It says nothing
+  ;; about whether the two ends are the same end twice, and a field
+  ;; pool whose body tapes dead square can still carry a 9" bulge at
+  ;; one end and a 14" at the other.  So the drafter decides.
+  ;;   Yes  -- the sheet as it has always been asked: one S / S1 / V
+  ;;           and one R, taken as both ends.
+  ;;   No   -- each end its own letters, and the pool is drawn,
+  ;;           dimensioned and reported end by end.
+  (defun rm:perfect ()
+    (setq perfect (pool:askynf 'perfect
+                               "Are both ends perfect (identical)"
+                               nil nil))
+    nil)
   ;; one end's tip setback for the live guide, from whatever the sheet
   ;; has so far: the taped S, else what T leaves of B, else the arc
   ;; sagitta of a given radius, else the nominal eighth of B
@@ -10154,13 +10247,12 @@
         th (max pool:*th-min* (/ (max tv araw) pool:*th-div*))
         pool:*dashlt* (pool:ltload "DASHED"))
   ;; sides run between the corner-treatment ends (the true corners
-  ;; when the corners are square); the dashed body chords stay on the
-  ;; true corners -- they are construction, not walls
+  ;; when the corners are square); the body end chords A-D / B-C are
+  ;; construction, not walls, so they are left off the pool entirely
+  ;; and shown only in the mini-model beside the report (dashed, below)
   (setq rce (pool:ringends quad rcs))
   (pool:line (cadr (nth 0 rce)) (car (nth 1 rce)) pool:*lay-pool*)
   (pool:line (cadr (nth 2 rce)) (car (nth 3 rce)) pool:*lay-pool*)
-  (pool:lined b c)
-  (pool:lined d a)
   (setq rcarcs (pool:ringarcs rce rcs pool:*lay-pool*))
   (setq ml (pool:unit (cal:perp (cal:v- d a))))
   (if (< (cal:dot (cal:v- (cal:mid a d) cen) ml) 0.0)
@@ -10180,6 +10272,12 @@
         xmax (apply 'max (mapcar 'car allpts))
         ymax (apply 'max (mapcar 'cadr allpts))
         ymin (apply 'min (mapcar 'cadr allpts)))
+  ;; ends that are not perfect put a second letter column outboard of
+  ;; the RIGHT end (below), and it is the only thing this sheet ever
+  ;; draws on that side -- so the report table has to start beyond it
+  ;; rather than on top of it
+  (if (and pool:*insq* (not perfect))
+      (setq xmax (+ xmax (* 0.9 doff))))
   (setvar "CLAYER" pool:*lay-dim*)
   (if pool:*insq*
       ;; in-square, per the field sheet: S+T+S share a row along the
@@ -10210,7 +10308,26 @@
         (pool:dimalgs (caddr lend) a
                       (list xcol (* 0.5 (+ (cadr (caddr lend)) (cadr a)))))
         ;; column 2: A, the overall width
-        (pool:dimalg a d (list xa (cadr (cal:mid a d)))))
+        (pool:dimalg a d (list xa (cadr (cal:mid a d))))
+        ;; column 3: the RIGHT end's own S1, V, S1 -- drawn only when
+        ;; the ends are not perfect.  The sheet's single column stands
+        ;; for both ends while they ARE the same end twice; once each
+        ;; end carries its own letters, the right-hand set is numbers
+        ;; nobody could read off the left column.  A perfect pool is
+        ;; unchanged: dimensioning its right end would say the same
+        ;; thing twice.
+        (if (not perfect)
+            (progn
+              (setq xcolr (+ (car tipr) (* 0.9 doff)))
+              (pool:dimalgs c (cadr rend)
+                            (list xcolr (* 0.5 (+ (cadr c)
+                                                  (cadr (cadr rend))))))
+              (pool:dimalgs (cadr rend) (caddr rend)
+                            (list xcolr (cadr (cal:mid (cadr rend)
+                                                        (caddr rend)))))
+              (pool:dimalgs (caddr rend) b
+                            (list xcolr (* 0.5 (+ (cadr (caddr rend))
+                                                  (cadr b))))))))
       (progn
         (pool:dimwalls quad rcs 0 1 (pool:outoff a b cen doff))
         (pool:dimwalls quad rcs 3 2 (pool:outoff d c cen doff))
@@ -10284,13 +10401,16 @@
   (pool:askgiven failed)
   (setq rbox (pool:report rows notes (+ xmax (* pool:*rep-gap* doff)) ymax th pool:*lay-notes*))
   ;; perimeter mini-model with the corner letters, right of the report:
-  ;; the two sides, the S1 stubs and the end arcs
+  ;; the two sides, the S1 stubs, the end arcs and the two body end
+  ;; chords A-D / B-C, dashed, as the reference lines they are -- they
+  ;; are not part of the pool drawn full-size above
   (pool:minimap
     (list (list 'l a b) (list 'l d c)
           (list 'l d (cadr lend)) (list 'l a (caddr lend))
           (list 'a (cadr lend) tipl (caddr lend))
           (list 'l c (cadr rend)) (list 'l b (caddr rend))
-          (list 'a (cadr rend) tipr (caddr rend)))
+          (list 'a (cadr rend) tipr (caddr rend))
+          (list 'ld d a) (list 'ld b c))
     quad
     (list (cons a "A") (cons b "B") (cons c "C") (cons d "D"))
     (+ (car rbox) (* pool:*map-gap* th)) (cadr rbox) (* pool:*map-size* th) th)
@@ -46947,9 +47067,10 @@
 ;;;                straight sides (LINE entities and straight
 ;;;                LWPOLYLINE segments) with aligned dimensions, then
 ;;;                its arcs (ARC and CIRCLE entities and bulged
-;;;                LWPOLYLINE segments) with radius dimensions.  A
-;;;                measurement that repeats is called out once and
-;;;                noted "Typ." - see "One dim per size" below.
+;;;                LWPOLYLINE segments) with radius dimensions.  Asks
+;;;                first what to do about a measurement that repeats:
+;;;                call one out and note it "Typ.", or dimension every
+;;;                one where it is - see "One dim per size" below.
 ;;;             Step 3. Asks the user to highlight the stairs.  The
 ;;;                treads (the largest group of parallel lines in the
 ;;;                selection) get their widths dimensioned and the
@@ -47075,13 +47196,13 @@
 ;;;  Settings:
 ;;;    Everything a drafter might want different - the style names, the
 ;;;    layer, how far out the dims sit, what counts as the same place or
-;;;    the same size, the Typ. counts and wording, the side-view test's
-;;;    thresholds, which entity types are selected - is a global in the
-;;;    SETTINGS block straight after the version banner, each with its
-;;;    default and a note on what changing it does.  Nothing below that
-;;;    block repeats a value from it.  (setq ...) one after this file
-;;;    has loaded - in acaddoc.lsp, say - to change it for one machine
-;;;    without editing the file.
+;;;    the same size, the Typ. counts, wording and Enter answer, the
+;;;    side-view test's thresholds, which entity types are selected - is
+;;;    a global in the SETTINGS block straight after the version banner,
+;;;    each with its default and a note on what changing it does.
+;;;    Nothing below that block repeats a value from it.  (setq ...) one
+;;;    after this file has loaded - in acaddoc.lsp, say - to change it
+;;;    for one machine without editing the file.
 ;;;
 ;;;  One dim per size - the "Typ." rule:
 ;;;    A measurement that repeats around the perimeter is called out
@@ -47097,6 +47218,26 @@
 ;;;    as the same measurement (ad:*same-inches*).  The counts and the
 ;;;    wording are ad:*typ-lines*, ad:*typ-curves* and ad:*typ-note* in
 ;;;    the SETTINGS block.
+;;;    Whether the rule runs at all is the drafter's to say: step 2
+;;;    asks before it dimensions anything.
+;;;
+;;;      A size that repeats - dimension every one, or note one
+;;;      "Typ."? [All/Typ] <Typ>:
+;;;
+;;;    All dimensions every side and every arc where it is, counts and
+;;;    note alike left out of it - which is the drawing a shop that
+;;;    calls out each one wants, and the one a drafter about to move
+;;;    dims by hand would rather start from.  Typ. is the rule above,
+;;;    and the Enter answer, so a run that just presses through is the
+;;;    run every version before this one gave.  ad:*typ-default* moves
+;;;    that Enter answer to "All" for a shop that wants the other one
+;;;    every time.
+;;;    The question sits straight after step 1's highlight with nothing
+;;;    else in front of it, so Back there re-opens the highlight; it is
+;;;    put before the undo group opens, so backing out of it leaves
+;;;    nothing behind.  A selection that turns out to be a flight of
+;;;    steps in side view is never asked - the side view dimensions the
+;;;    depth of each step, not a perimeter of repeating sizes.
 ;;;
 ;;;  One dimension per place:
 ;;;    Before placing anything the tool reads every linear, aligned and
@@ -47134,6 +47275,11 @@
 ;;;      instead, and the overall dims follow either answer to that;
 ;;;      Back at the floor dims question re-opens the stairs, Back at
 ;;;      the pad question re-opens the floor dims question.
+;;;    * Step 2's All/Typ. question is the first one AUTODIM puts, and
+;;;      Back there re-opens step 1's highlight - a pickfirst run
+;;;      included, which is how a set picked before the command started
+;;;      gets changed.  STAIRDIM, FLOORDIM and AUTODIMSIDEPOV place no
+;;;      perimeter dims, so none of them asks it.
 ;;;    * Break points closer together than 0.0001 drawing units
 ;;;      (ad:*merge-tol*) are merged so no zero-length dimensions are
 ;;;      created.
@@ -47145,7 +47291,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v2.0")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -47304,6 +47450,18 @@
                                 ; the sides on purpose: a pair or a trio
                                 ; of matching curves reads better
                                 ; dimensioned where each one is
+(setq ad:*typ-default* "Typ")   ; the Enter answer at the question
+                                ; AUTODIM puts before it dimensions the
+                                ; perimeter: "Typ" notes a repeated size
+                                ; once and leaves the rest to that note,
+                                ; "All" dimensions every one where it
+                                ; is.  A shop that wants every dim on
+                                ; the drawing sets this to "All" and
+                                ; presses Enter as before; anything
+                                ; else spelled here reads as "Typ",
+                                ; which is what the tool did when there
+                                ; was no question to ask.  The counts
+                                ; above still decide what "Typ" groups
 
 ;; ---- recognising steps drawn in side view ----------------------------
 ;; AUTODIM takes its side-view route only when the step-1 selection
@@ -47389,6 +47547,27 @@
     (rtos n 2 1)))
 
 ;; ------------------------------------------------------------- asking
+
+;; The perimeter's repeats question, put before anything is dimensioned:
+;; All dimensions every side and every arc where it is, Typ. calls a
+;; repeated size out once and leaves the rest to that note.  Returns T
+;; for All, nil for Typ, or CAL-BACK.
+;; The Enter answer is ad:*typ-default*, normalised here rather than
+;; downstream: a setting spelled any other way - or set to something
+;; that is not a word at all, which is what an acaddoc.lsp line gone
+;; wrong leaves behind - falls back on the Typ. rule, what the tool did
+;; before there was a question, instead of being shown as a default no
+;; keyword accepts or taking the command down at the prompt.
+(defun ad:askrepeats (back / dflt v)
+  (setq dflt (if (and (= (type ad:*typ-default*) 'STR)
+                      (= (strcase ad:*typ-default*) "ALL"))
+               "All"
+               "Typ")
+        v    (cal:askkw (strcat "A size that repeats - dimension every"
+                               " one, or note one \""
+                               (vl-string-trim " " ad:*typ-note*) "\"?")
+                       "All Typ" "All/Typ" dflt back))
+  (if (eq v 'CAL-BACK) v (= v "All")))
 
 ;; restore a dimension style by name if the drawing has it,
 ;; return T when the style was set
@@ -48027,8 +48206,13 @@
 ;; it, and the rest are left to that note - from ad:*typ-lines* equal
 ;; sides up, and from ad:*typ-curves* equal radii up.  Below those
 ;; counts every one is dimensioned where it is.
+;; ALL non-nil is the drafter's answer to ad:askrepeats: every side and
+;; every arc is then dimensioned where it is, whatever the counts say,
+;; and no note is written.  The grouping still runs - it is what puts
+;; the sides in a settled order - but no group is collapsed onto its
+;; first member.
 ;; Returns how many dimensions were placed.
-(defun ad:dimperim (ss / box diag eps off cnt g rec)
+(defun ad:dimperim (ss all / box diag eps off cnt g rec)
   (setq box (cal:bbox-ss ss)
         cnt 0)
   (if box
@@ -48040,7 +48224,7 @@
             off  (max (ad:dimoff) (ad:feet ad:*perim-feet*)))
       ;; the straight sides
       (foreach g (ad:groupsame (ad:perimsegs ss diag eps off) (ad:dupetol))
-        (if (>= (length g) ad:*typ-lines*)
+        (if (and (not all) (>= (length g) ad:*typ-lines*))
           (setq rec (car g)
                 cnt (+ cnt (ad:putaligned (cadr rec) (caddr rec) (cadddr rec)
                                           ad:*style-plan* ad:*typ-note*)))
@@ -48049,7 +48233,7 @@
                                             ad:*style-plan* ""))))))
       ;; the arcs, by radius
       (foreach g (ad:groupsame (ad:perimarcs ss diag eps off) (ad:dupetol))
-        (if (>= (length g) ad:*typ-curves*)
+        (if (and (not all) (>= (length g) ad:*typ-curves*))
           (setq rec (car g)
                 cnt (+ cnt (ad:putradius (car rec) (cadr rec) (caddr rec)
                                          (cadddr rec) (nth 4 rec)
@@ -48543,11 +48727,19 @@
 ;; pads being T when the drafter asked for them: the pads themselves go
 ;; in after the command has put its own state back, so the answer
 ;; travels out of here rather than being acted on mid-run.
-(defun ad:runplan (plan / nper nstair nover nf1 nf2 stage mark3 mark4 v pad)
-  (prompt (strcat "\n=== AUTODIM step 2 of 5: perimeter ==="
-                  "\nDimensioning the straight lines about the"
-                  " perimeter - no input needed..."))
-  (setq nper (ad:dimperim plan))
+;; ALL is step 2's answer, asked by c:AUTODIM before the undo group
+;; opened: T dimensions every repeated size where it is, nil calls one
+;; of each out and leaves the rest to its note.
+(defun ad:runplan (plan all / nper nstair nover nf1 nf2 stage mark3 mark4
+                             v pad)
+  (prompt (strcat "\nDimensioning the straight lines about the"
+                  " perimeter - "
+                  (if all
+                    "every repeated size where it is"
+                    (strcat "one of each repeated size, noted \""
+                            (vl-string-trim " " ad:*typ-note*) "\""))
+                  "..."))
+  (setq nper (ad:dimperim plan all))
   (prompt (strcat "\n" (itoa nper) " perimeter dimension(s) placed."))
   ;; steps 3 and 4 walk back through each other: Back at the floor dims
   ;; question re-opens the stairs, erasing what they drew, and Back at
@@ -48650,7 +48842,7 @@
   (list n nil))
 
 (defun c:AUTODIM (/ *error* oldcmd olddim oldlay oldpick plan risers res n
-                    pad undo-open)
+                    all stage done pad undo-open)
   (defun *error* (msg)
     ;; only close a group that was actually opened - the handler is
     ;; live before _Begin runs (AUTODIM's is during its selection)
@@ -48669,20 +48861,66 @@
     (if lzd:report (lzd:report "AUTODIM" *autodim-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "AUTODIM" *autodim-version*))
-  ;; a pickfirst selection if there is one, otherwise ask for it
+  ;; a pickfirst selection if there is one, otherwise ask for it.  The
+  ;; probe sits OUTSIDE the loop below, as AUTOBEAD's does: a Back out
+  ;; of step 2's question lands on the interactive highlight, never on
+  ;; a re-probe of a pickfirst set the drafter has no way to change
+  ;; from here.
   (setq plan (ssget "_I" (ad:geomfilter)))
   (if lzd:watch (lzd:watch plan) plan)
-  (if (null plan)
-    (progn
-      (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
-                      "\nHighlight everything that makes up the plan (walls"
-                      " etc.), then press Enter.  Only what you highlight is"
-                      " dimensioned and used to find the perimeter."
-                      "\nHighlight a flight of steps drawn in side view"
-                      " instead and it is recognised as one: the depth of"
-                      " every step gets dimensioned rather than a plan."))
-      (setq plan (ssget (ad:geomfilter)))
-      (if lzd:watch (lzd:watch plan) plan)))
+  ;; Step 1 and step 2's question walk back into each other, as a two
+  ;; stage chain - a step counter over a cond, the shape every other
+  ;; chain here has.  The question sits straight after the highlight
+  ;; with nothing else in front of it, so Back there re-opens the
+  ;; highlight (README, "Going back a step"), and it is put BEFORE the
+  ;; undo group opens for the reason HEMISTEP asks its width first: a
+  ;; question behind an open group has a run committed behind it and
+  ;; can no longer re-ask what came before.  Nothing has been drawn at
+  ;; this point either way.
+  ;; The side-view test is stage 2's as well, so it is re-run on the
+  ;; way back: a second highlight is free to be a flight of steps where
+  ;; the first was a plan - and the flight puts no question at all, its
+  ;; dims being the depth of each step rather than a perimeter of
+  ;; repeating sizes.
+  (setq stage (if plan 2 1)
+        done  nil)
+  (while (not done)
+    (cond
+      ((= stage 1)
+       (prompt (strcat "\n=== AUTODIM step 1: highlight the plan ==="
+                       "\nHighlight everything that makes up the plan (walls"
+                       " etc.), then press Enter.  Only what you highlight is"
+                       " dimensioned and used to find the perimeter."
+                       "\nHighlight a flight of steps drawn in side view"
+                       " instead and it is recognised as one: the depth of"
+                       " every step gets dimensioned rather than a plan."))
+       (setq plan (ssget (ad:geomfilter)))
+       (if lzd:watch (lzd:watch plan) plan)
+       ;; nothing highlighted is not a step back, it is the end of the
+       ;; run - the message and the early out are below
+       (if plan (setq stage 2) (setq done T)))
+      (T
+       (if (setq risers (ad:stepprofile-p plan))
+         (setq done T)
+         (progn
+           (prompt (strcat "\n=== AUTODIM step 2 of 5: perimeter ==="
+                           "\nEvery straight side gets an aligned dim and"
+                           " every arc its radius, at least "
+                           (ad:numstr ad:*perim-feet*) "ft outside the plan."
+                           "\nA size that repeats can be called out once -"
+                           " the dim reading \""
+                           (vl-string-trim " " ad:*typ-note*)
+                           "\" and the rest left to that note, from "
+                           (itoa ad:*typ-lines*) " equal sides up and "
+                           (itoa ad:*typ-curves*) " equal radii up - or"
+                           " every one of them can be dimensioned where it"
+                           " is."))
+           (setq all (ad:askrepeats T))
+           (if (eq all 'CAL-BACK)
+             (progn
+               (prompt "\nStepping back to the highlight.")
+               (setq plan nil stage 1))
+             (setq done T)))))))
   (if (null plan)
     (prompt "\nNothing highlighted - AUTODIM cancelled.")
     (progn
@@ -48698,10 +48936,12 @@
           (setq undo-open T)))
       (setq oldlay (ad:enterlayer ad:*layer*))
       ;; both flows answer with (count pads); the side view puts no pad
-      ;; question, so its pads are always nil
-      (setq res (if (setq risers (ad:stepprofile-p plan))
+      ;; question, so its pads are always nil.  Which flow it is was
+      ;; settled above, where step 2's question had to know whether it
+      ;; was going to be asked at all
+      (setq res (if risers
                   (ad:runsteps risers)
-                  (ad:runplan plan))
+                  (ad:runplan plan all))
             n   (car res)
             pad (cadr res))
       (ad:skipreport)
@@ -49265,8 +49505,15 @@
 ;;; the near eighth-inch steps are the smallest text and the shortest
 ;;; ticks, quarters and halves step up from there, and the whole-inch
 ;;; jumps (1", 2", 3" either way) are the tallest and boldest, exactly
-;;; where the deepest mark on a tape measure would be.  A small CIRCLE
-;;; rides the row that is the CURRENT value.
+;;; where the deepest mark on a tape measure would be.
+;;;
+;;; The CURRENT row is not one of the options -- it is where you
+;;; already are -- so it is drawn as a stamp rather than as a ruler:
+;;; tick, label and a RING round the spine all go on the stamp's own
+;;; layer at the stamp's own colour, while every row you can pick
+;;; stays the ruler's.  That is what makes the row you are on read
+;;; differently from the rows you can click, and read as the thing it
+;;; would stamp.
 ;;;
 ;;; The ruler is pinned to the SCREEN, not to the drawing: it is drawn
 ;;; down a strip near the left of whatever the current view is showing
@@ -49339,7 +49586,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.2")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.3")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -49396,6 +49643,17 @@
 (setq ds:*ruler-txt-frac* 0.5)     ; the biggest row label's height,
                                     ; as a fraction of the row spacing
 (setq ds:*ruler-tick-frac* 0.6)    ; the longest tick, same measure
+(setq ds:*ring-frac* 0.26)         ; the ring round the CURRENT row, as
+                                    ; a fraction of the row spacing.
+                                    ; Bigger than a tick is long on
+                                    ; purpose: the row you are on should
+                                    ; be the first thing the eye finds
+(setq ds:*current-color* nil)      ; ACI colour of that current row --
+                                    ; nil is ByLayer, and since the row
+                                    ; is drawn on the STAMP's layer that
+                                    ; means it reads in exactly the
+                                    ; colour the stamp will.  A number
+                                    ; here overrides that
 (setq ds:*ruler-reach* 6.0)        ; how far right of the spine, in row
                                     ; spacings, a click still counts as
                                     ; picking a row rather than as an
@@ -49691,16 +49949,44 @@
 (defun ds:erase-ents (ents / e)
   (foreach e ents (if (and e (entget e)) (entdel e))))
 
+;; A ruler stroke from (X1 Y1) to (X2 Y2) on LAY, in COL -- or ByLayer
+;; when COL is nil, which is how the current row takes the stamp
+;; layer's own colour.
+(defun ds:ruler-line (x1 y1 x2 y2 lay col)
+  (entmakex (append (list '(0 . "LINE") '(100 . "AcDbEntity")
+                          (cons 8 lay))
+                    (if col (list (cons 62 col)))
+                    (list '(100 . "AcDbLine")
+                          (cons 10 (list x1 y1 0.0))
+                          (cons 11 (list x2 y2 0.0))))))
+
+;; The ring that marks the current row, same layer and colour rule.
+(defun ds:ruler-ring (x y r lay col)
+  (entmakex (append (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                          (cons 8 lay))
+                    (if col (list (cons 62 col)))
+                    (list '(100 . "AcDbCircle")
+                          (cons 10 (list x y 0.0))
+                          (cons 40 r)))))
+
 ;; Draw the ruler down its strip of the CURRENT VIEW for the current
 ;; value (TOTAL-EIGHTHS, HASFEET), one row per suggestion plus a
-;; circled CURRENT row among them, the whole thing centred vertically
+;; ringed CURRENT row among them, the whole thing centred vertically
 ;; in the view.  Returns (ENTS BOX ROWS): the entities drawn (for
 ;; ds:erase-ents), BOX as (XMIN XMAX YTOL) for a click's hit test, and
 ;; ROWS as a list of (VALUE ROW-Y) pairs.
+;;
+;; Every row but one is an OPTION, and they are drawn alike: the
+;; ruler's own layer, the ruler's own colour.  The CURRENT row is not
+;; an option -- it is where you already are -- so tick, label and ring
+;; alike go on the STAMP's layer at the stamp's colour, which is what
+;; makes the row you are on read differently from the rows you can
+;; pick, and makes it read as what it would stamp.
 (defun ds:draw-ruler (total-eighths hasfeet / rows n i row val tier y
                           hgt tl spx ents lbl result view vx vy vw vh
-                          gap base)
+                          gap base rlay rcol)
   (cal:ensure-layer ds:*ruler-layer* ds:*ruler-color*)
+  (cal:ensure-layer ds:*layer* ds:*layer-color*)   ; the current row's
   (ds:ensure-style ds:*style*)
   (setq rows (cons (list total-eighths 'current)
                    (ds:suggestions total-eighths hasfeet)))
@@ -49721,14 +50007,12 @@
     (setq y (+ base (* i gap)))
     (setq hgt (ds:ruler-hgt tier gap))
     (setq tl  (ds:ruler-tick tier gap))
-    (setq ents (cons
-                (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
-                                (cons 8 ds:*ruler-layer*)
-                                (cons 62 ds:*ruler-color*)
-                                '(100 . "AcDbLine")
-                                (cons 10 (list spx y 0.0))
-                                (cons 11 (list (+ spx tl) y 0.0))))
-                ents))
+    ;; where you ARE is drawn as the stamp; what you can PICK is drawn
+    ;; as the ruler
+    (if (eq tier 'current)
+      (setq rlay ds:*layer*       rcol ds:*current-color*)
+      (setq rlay ds:*ruler-layer* rcol ds:*ruler-color*))
+    (setq ents (cons (ds:ruler-line spx y (+ spx tl) y rlay rcol) ents))
     ;; the ruler is drawn text too, so its rows stack the way a stamp
     ;; off that row will -- the label IS the preview
     (setq lbl (ds:stacked val hasfeet))
@@ -49736,28 +50020,17 @@
     ;; puts the label astride its own row
     (setq ents (cons (ds:mtext (list (+ spx tl (* gap 0.35))
                                      (+ y (/ hgt 2.0)))
-                               hgt lbl ds:*ruler-layer* ds:*ruler-color*)
+                               hgt lbl rlay rcol)
                      ents))
     (if (eq tier 'current)
-      (setq ents (cons
-                  (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                                  (cons 8 ds:*ruler-layer*)
-                                  (cons 62 ds:*ruler-color*)
-                                  '(100 . "AcDbCircle")
-                                  (cons 10 (list spx y 0.0))
-                                  (cons 40 (* gap 0.18))))
-                  ents)))
+      (setq ents (cons (ds:ruler-ring spx y (* gap ds:*ring-frac*)
+                                      rlay rcol)
+                       ents)))
     (setq result (cons (list val y) result))
     (setq i (1+ i)))
-  (setq ents (cons
-              (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
-                              (cons 8 ds:*ruler-layer*)
-                              (cons 62 ds:*ruler-color*)
-                              '(100 . "AcDbLine")
-                              (cons 10 (list spx base 0.0))
-                              (cons 11 (list spx (+ base (* (- n 1) gap))
-                                             0.0))))
-              ents))
+  (setq ents (cons (ds:ruler-line spx base spx (+ base (* (- n 1) gap))
+                                  ds:*ruler-layer* ds:*ruler-color*)
+                   ents))
   (list ents
         (list (- spx (/ gap 2.0)) (+ spx (* gap ds:*ruler-reach*))
               (/ gap 2.0))
@@ -60147,6 +60420,18 @@
 ;;;       closed loop wins; leftover open chains or other closed loops
 ;;;       are reported as AMBIGUOUS. Its area (sq ft) and its straight
 ;;;       / arc segment split are given in the report on the side.
+;;;       A perimeter does not always stay on one layer: the stretch
+;;;       the cable run carries is drawn on "CABLE" (tune
+;;;       *cchk-perim-layers*), and that layer's ByLayer geometry is
+;;;       chained in alongside the pool's so the outline still closes
+;;;       and is still measured. Only what joins the loop is used --
+;;;       a branch off to an anchor, or the cable's own loop parked
+;;;       elsewhere, is cut before the walk and counted as neither a
+;;;       gap nor a stray loop -- and where both layers leave a point
+;;;       the pool layer wins, so a borrowed layer can only ever fill
+;;;       a gap. The report names how many segments came off which
+;;;       layer, and the pads and the Cover Details grading read the
+;;;       whole perimeter, borrowed stretches included.
 ;;;     - COVER DETAILS. A block named (or containing) "Cover
 ;;;       Details" holds an OVERLAP value ("Overlap: 12''" -- only
 ;;;       12"/15"/18" exist) and a SPACING tag ("Spacing: 5x5" --
@@ -60253,7 +60538,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.18")
+(setq *cchk-version* "v1.20")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -60277,6 +60562,19 @@
 ;; template already uses.
 (setq *cchk-pool-layer*   "POOL")
 (setq *cchk-cover-layer*  "COVER")
+
+;; Layers OTHER than the pool layer that may carry a stretch of the
+;; SAME closed perimeter -- the cable run drawn on "CABLE" being the
+;; everyday one.  Their ByLayer geometry is chained in alongside the
+;; pool layer's, so an outline that hands over mid-run still closes
+;; and is still measured.  Only what actually joins the loop is used:
+;; whatever else sits on these layers is that layer's own business,
+;; and is never counted as a gap or a stray loop.  At a junction the
+;; pool layer wins, so a borrowed layer can only ever fill a gap, and
+;; a loop with no pool-layer segment in it is not the pool outline.
+;; Adding a layer here lets more geometry into the outline; '() reads
+;; the pool layer on its own, as before.
+(setq *cchk-perim-layers* '("CABLE"))
 
 ;; When no cover is drawn the sheet has to say which size IS shown.
 ;; Both notes together is an error -- a sheet shows one or the other.
@@ -62402,13 +62700,151 @@
      (if cv (cchk:pv-vts->segs (car cv) (cdr cv))))))
 
 ;; Chains touching segments (ends within *cchk-chain-fuzz*) end-to-end.
-;; Returns (loops . open-count); each loop is a vertex list (x y bulge).
-(defun cchk:pv-chain (segs / loops nopen chain head tail done found rest s)
-  (setq nopen 0)
+;; A segment is (start end bulge [layer]); cchk:pv-chain hands back the
+;; chains it made, closed and open, still as segments -- the layer tag
+;; is what lets cchk:pool-loop tell the pool's own geometry from a
+;; stretch borrowed off *cchk-perim-layers* once the walk has mixed the
+;; two.
+(defun cchk:pv-revseg (s)
+  ;; SEG walked the other way: same geometry, so the bulge changes
+  ;; sign.  The layer tag (4th slot, see cchk:pv-tag-segs) rides along
+  ;; untouched -- turning a segment round does not move it.
+  (list (cadr s) (car s) (- (caddr s)) (cadddr s)))
+
+(defun cchk:pv-tag-segs (segs lay)
+  ;; stamp a run of segments with the layer they were read off: nil
+  ;; for the pool layer itself, the layer's NAME for one borrowed off
+  ;; *cchk-perim-layers*.  The tag sits in a 4th slot every other
+  ;; segment reader ignores, so an untagged segment still means the
+  ;; pool layer.
+  (mapcar '(lambda (s) (list (car s) (cadr s) (caddr s) lay)) segs))
+
+(defun cchk:pv-chain-vts (chain)
+  ;; a chain of segments as the (x y bulge) vertex list the area and
+  ;; the feature hunt read: one vertex per segment, its start point
+  ;; carrying the bulge of the segment leaving it
+  (mapcar '(lambda (s) (list (car (car s)) (cadr (car s)) (caddr s)))
+          chain))
+
+(defun cchk:pv-has-pool-p (chain)
+  ;; T when any segment of CHAIN came off the pool layer itself.  A
+  ;; chain without one is a borrowed layer's own geometry running its
+  ;; own errand, not a piece of the pool outline.
+  (vl-some '(lambda (s) (null (cadddr s))) chain))
+
+(defun cchk:pv-borrowed (chain / out hit s)
+  ;; the borrowed layers CHAIN took segments off, as ((layer . count)
+  ;; ...) in the order they were met; nil when the whole chain is the
+  ;; pool layer's own
+  (foreach s chain
+    (if (cadddr s)
+      (if (setq hit (assoc (cadddr s) out))
+        (setq out (subst (cons (car hit) (1+ (cdr hit))) hit out))
+        (setq out (append out (list (cons (cadddr s) 1)))))))
+  out)
+
+(defun cchk:pv-take (segs pt / found rest s)
+  ;; the first segment in SEGS with an end on PT, turned so that it
+  ;; LEAVES pt, and the rest of SEGS without it, in order
+  (setq found nil rest nil)
+  (foreach s segs
+    (if found
+        (setq rest (cons s rest))
+        (cond
+          ((<= (distance pt (car s)) *cchk-chain-fuzz*) (setq found s))
+          ((<= (distance pt (cadr s)) *cchk-chain-fuzz*) ; reversed
+           (setq found (cchk:pv-revseg s)))
+          (T (setq rest (cons s rest))))))
+  (list found (reverse rest)))
+
+(defun cchk:pv-drop-slivers (segs)
+  ;; segments shorter than the chaining fuzz join nothing and would
+  ;; make every end look occupied - they go before any walk
+  (vl-remove-if
+    '(lambda (s) (<= (distance (car s) (cadr s)) *cchk-chain-fuzz*))
+    segs))
+
+(defun cchk:pv-tal-find (pt tal / hit c)
+  ;; the tally entry for PT, ends within the chaining fuzz being the
+  ;; same spot; the entry itself, so subst can replace it
+  (foreach c tal
+    (if (and (null hit) (<= (distance pt (car c)) *cchk-chain-fuzz*))
+      (setq hit c)))
+  hit)
+
+(defun cchk:pv-tally (segs / tal hit s e)
+  ;; ((point . ends-on-it) ...) over every segment end.  A point with
+  ;; one end on it is a LOOSE END: nothing carries on from there.
+  (foreach s segs
+    (foreach e (list (car s) (cadr s))
+      (if (setq hit (cchk:pv-tal-find e tal))
+        (setq tal (subst (cons (car hit) (1+ (cdr hit))) hit tal))
+        (setq tal (cons (cons e 1) tal)))))
+  tal)
+
+(defun cchk:pv-take-borrowed (segs pt / found rest s)
+  ;; the first BORROWED segment with an end on PT, and the rest of
+  ;; SEGS without it, in order; nil when nothing borrowed lands there
+  (foreach s segs
+    (if (and (null found)
+             (cadddr s)
+             (or (<= (distance pt (car s)) *cchk-chain-fuzz*)
+                 (<= (distance pt (cadr s)) *cchk-chain-fuzz*)))
+      (setq found s)
+      (setq rest (cons s rest))))
+  (if found (cons found (reverse rest))))
+
+(defun cchk:pv-prune-spurs (segs / tal q pt cut seg hit e)
+  ;; Borrowed geometry hanging by a loose end is a SPUR -- the cable
+  ;; branching off to an anchor, the tail of a run that carries on
+  ;; past the corner, a whole run that never touches the pool at all
+  ;; -- and it is not a stretch of the perimeter: what the outline
+  ;; borrows is joined at BOTH ends, which is what makes it a stretch
+  ;; rather than a branch.  Cutting spurs before the walk is what
+  ;; stops one leaving an outline vertex from being followed out of
+  ;; it, which would leave the loop open behind it.
+  ;;
+  ;; Pool-layer segments (untagged) are never cut: one hanging loose
+  ;; is the GAP the drafter is being told about.
+  ;;
+  ;; The cut walks INWARD from each loose end rather than sweeping the
+  ;; whole list again per segment: cutting one frees the end it held,
+  ;; and that end goes on the queue, so a run several hundred segments
+  ;; long costs one walk down it instead of one sweep per segment.
+  (setq tal (cchk:pv-tally segs))
+  (foreach hit tal (if (< (cdr hit) 2) (setq q (cons (car hit) q))))
+  (while q
+    (setq pt (car q)
+          q  (cdr q))
+    (if (setq cut (cchk:pv-take-borrowed segs pt))
+      (progn
+        (setq seg  (car cut)
+              segs (cdr cut))
+        ;; both its ends lose an end with it, and one left holding a
+        ;; single segment is the next loose end along the spur
+        (foreach e (list (car seg) (cadr seg))
+          (if (setq hit (cchk:pv-tal-find e tal))
+            (progn
+              (setq tal (subst (cons (car hit) (1- (cdr hit))) hit tal))
+              (if (= 2 (cdr hit)) (setq q (cons e q)))))))))
+  segs)
+
+(defun cchk:pv-chain (segs / loops opens chain head tail done found rest)
+  ;; Returns (closed-chains open-chains), both lists of SEGMENT chains
+  ;; -- cchk:pv-chain-vts turns one into the vertex list the area and
+  ;; feature hunts read, and the segments keep whatever layer tag they
+  ;; were given, so the caller can still tell which layer each stretch
+  ;; came off after the walk has mixed them.
+  ;;
+  ;; The walk grows at BOTH ends, as PADDLE's does.  Growing forward
+  ;; only splits an outline with ONE gap in it into TWO open chains
+  ;; whenever the walk starts in the middle of it -- the half ahead of
+  ;; the starting segment runs into the gap, the half behind it into
+  ;; the segment already taken -- and that count is read out to the
+  ;; drafter as "N open chain(s) (check for gaps)".  One hole has to
+  ;; count as one.
   ;; drop degenerate slivers
-  (setq segs (vl-remove-if
-               '(lambda (s) (<= (distance (car s) (cadr s)) *cchk-chain-fuzz*))
-               segs))
+  (setq segs (cchk:pv-drop-slivers segs))
   (while segs
     (setq chain (list (car segs))
           head  (car (car segs))
@@ -62419,27 +62855,28 @@
       (cond
         ;; loop closed back onto its start?
         ((and (> (length chain) 1) (<= (distance tail head) *cchk-chain-fuzz*))
-         (setq loops (cons (mapcar '(lambda (s) (list (car (car s)) (cadr (car s)) (caddr s)))
-                                   chain)
-                           loops)
+         (setq loops (cons chain loops)
                done  T))
-        (T ;; look for a segment continuing from the tail
-         (setq found nil rest nil)
-         (foreach s segs
-           (if found
-               (setq rest (cons s rest))
-               (cond
-                 ((<= (distance tail (car s)) *cchk-chain-fuzz*)
-                  (setq found s))
-                 ((<= (distance tail (cadr s)) *cchk-chain-fuzz*) ; reversed
-                  (setq found (list (cadr s) (car s) (- (caddr s)))))
-                 (T (setq rest (cons s rest))))))
-         (if found
-             (setq chain (append chain (list found))
-                   tail  (cadr found)
-                   segs  (reverse rest))
-             (setq nopen (1+ nopen) done T)))))) ; dead end: open chain
-  (cons (reverse loops) nopen))
+        (T ;; a segment leaving the tail, else one arriving at the head
+         (setq rest  (cchk:pv-take segs tail)
+               found (car rest)
+               rest  (cadr rest))
+         (cond
+           (found (setq chain (append chain (list found))
+                        tail  (cadr found)
+                        segs  rest))
+           (T
+            (setq rest  (cchk:pv-take segs head)
+                  found (car rest)
+                  rest  (cadr rest))
+            (if found
+                (setq found (cchk:pv-revseg found) ; turned to arrive at head
+                      chain (cons found chain)
+                      head  (car found)
+                      segs  rest)
+                (setq opens (cons chain opens)  ; dead end both ways
+                      done  T))))))))
+  (list (reverse loops) (reverse opens)))
 
 ;; Concave features of one closed loop: returns pads, each
 ;; (center rotation kind) with kind = "corner" / "arc". PADSIZE sets
@@ -62552,9 +62989,11 @@
        (or (null (assoc 370 ed))
            (= -1 (cdr (assoc 370 ed))))))
 
-(defun cchk:pool-ents (ss saved / i e ed out nskip)
-  ;; pool-outline candidates: LINE/ARC/LWPOLYLINE/POLYLINE on the pool
-  ;; layer with every property ByLayer, from the selection. SAVED (the
+(defun cchk:pool-ents (ss saved lay / i e ed out nskip)
+  ;; outline candidates on ONE layer: LINE/ARC/LWPOLYLINE/POLYLINE/
+  ;; CIRCLE on LAY with every property ByLayer, from the selection.
+  ;; LAY is the pool layer, or one of *cchk-perim-layers* when the
+  ;; perimeter hands over to another layer partway round. SAVED (the
   ;; review's colour stash) supplies the true colour of anything
   ;; currently greyed out. Returns (ents . skipped); skipped sit on
   ;; the layer but carry explicit properties.
@@ -62565,29 +63004,52 @@
           ed (entget e))
     (if (and ed
              (member (cdr (assoc 0 ed)) '("LINE" "ARC" "LWPOLYLINE" "POLYLINE" "CIRCLE"))
-             (= (strcase (cdr (assoc 8 ed))) (strcase *cchk-pool-layer*)))
+             (= (strcase (cdr (assoc 8 ed))) (strcase lay)))
       (if (cchk:bylayer-p e (cond ((assoc e saved) (cdr (assoc e saved)))
                                   ((cchk:ent-color e))))
         (setq out (cons e out))
         (setq nskip (1+ nskip)))))
   (cons (reverse out) nskip))
 
-(defun cchk:pool-loop (pents / segs e res loops best bestarea a l)
+(defun cchk:pool-loop (pents borrow / segs e bl res loops opens best
+                             bestarea a l)
   ;; the pool outline: the largest closed loop chained from the
-  ;; candidates' bulge-aware segments. Returns
-  ;;   (best-loop open-chain-count other-closed-loop-count)
-  ;; best-loop is nil when nothing closes back on itself; the other
-  ;; two counts flag an ambiguous outline (a gap, or extra geometry
-  ;; on the pool layer) even when a loop was still found.
+  ;; candidates' bulge-aware segments.  BORROW is ((layer . ents) ...)
+  ;; read off *cchk-perim-layers* -- a stretch of the same perimeter
+  ;; drawn elsewhere, chained in so an outline that hands over midway
+  ;; still closes.  Returns
+  ;;   (best-loop open-chain-count other-closed-loop-count borrowed)
+  ;; best-loop is nil when nothing closes back on itself; the two
+  ;; counts flag an ambiguous outline (a gap, or extra geometry on the
+  ;; pool layer) even when a loop was still found; BORROWED is
+  ;; ((layer . segment-count) ...) for the loop that won.
+  ;;
+  ;; Pool segments go in FIRST, so where both layers leave a point the
+  ;; walk stays on the pool layer and a borrowed one can only ever
+  ;; fill a gap.  Only chains carrying a pool segment are the pool's:
+  ;; the rest is the borrowed layer's own geometry -- a cable run off
+  ;; to an anchor, a loop of its own -- and it is neither the outline
+  ;; nor a gap in it, so it is not measured and not counted.
   (foreach e pents
-    (setq segs (append segs (cchk:pv-ent-segs e))))
+    (setq segs (append segs (cchk:pv-tag-segs (cchk:pv-ent-segs e) nil))))
+  (foreach bl borrow
+    (foreach e (cdr bl)
+      (setq segs (append segs (cchk:pv-tag-segs (cchk:pv-ent-segs e) (car bl))))))
+  ;; with nothing borrowed there is nothing to cut, and the walk is
+  ;; the one it always was
+  (if borrow
+    (setq segs (cchk:pv-prune-spurs (cchk:pv-drop-slivers segs))))
   (setq res      (cchk:pv-chain segs)
-        loops    (car res)
+        loops    (vl-remove-if-not 'cchk:pv-has-pool-p (car res))
+        opens    (vl-remove-if-not 'cchk:pv-has-pool-p (cadr res))
         bestarea 0.0)
   (foreach l loops
-    (setq a (abs (cchk:pv-area l)))
+    (setq a (abs (cchk:pv-area (cchk:pv-chain-vts l))))
     (if (> a bestarea) (setq bestarea a best l)))
-  (list best (cdr res) (max 0 (1- (length loops)))))
+  (list (if best (cchk:pv-chain-vts best))
+        (length opens)
+        (max 0 (1- (length loops)))
+        (if best (cchk:pv-borrowed best))))
 
 (defun cchk:parse-nxn (s / lst i n num a res)
   ;; the first "NxN" written in the text ("5x5", "3 X 3") as a list
@@ -62617,6 +63079,23 @@
                     (setq res (list a num)))))))
           (setq i (1+ i))))))
   res)
+
+(defun cchk:borrow-str (bwd / out b)
+  ;; the borrowed stretches as one phrase for the summary line --
+  ;; "3 segment(s) off layer 'CABLE'", one clause per layer
+  (setq out "")
+  (foreach b bwd
+    (setq out (strcat out
+                      (if (= out "") "" ", ")
+                      (itoa (cdr b)) " segment(s) off layer '" (car b) "'")))
+  out)
+
+(defun cchk:lay-list-str (lays / out l)
+  ;; a list of layer names as "'A', 'B'"
+  (setq out "")
+  (foreach l lays
+    (setq out (strcat out (if (= out "") "" ", ") "'" l "'")))
+  out)
 
 (defun cchk:nxn-str (sp)
   (strcat (itoa (car sp)) "x" (itoa (cadr sp))))
@@ -62726,6 +63205,7 @@
     (cchk:tag (entlast) "MARKER")))
 
 (defun cchk:cover-audit (ss blks live saved / pres pents lres vts narc nlin v
+                          lay xres borrow xskip sk b bwd
                           sqft det ovraw ovval ovok ovna spraw spval spna
                           arcy wantov wantsp why dashpoly cstat covered note
                           spanote replblk replp replsum padskip pk lines s f
@@ -62751,11 +63231,19 @@
       (strcat "Pool/Spa size: BOTH '" *cchk-pool-note* "' and '" *cchk-spa-note*
               "' are in the selection - ONLY ONE SIZE CAN BE SHOWN")))))
 
-  ;; --- pool outline & area (ByLayer geometry on the pool layer) ----
-  (setq pres  (cchk:pool-ents ss saved)
-        pents (car pres)
-        lres  (if pents (cchk:pool-loop pents))
+  ;; --- pool outline & area (ByLayer geometry on the pool layer, plus
+  ;; --- any stretch of the same perimeter on *cchk-perim-layers*) ---
+  (setq pres  (cchk:pool-ents ss saved *cchk-pool-layer*)
+        pents (car pres))
+  (foreach lay *cchk-perim-layers*
+    (setq xres (cchk:pool-ents ss saved lay))
+    (if (car xres)
+      (setq borrow (append borrow (list (cons lay (car xres))))))
+    (if (> (cdr xres) 0)
+      (setq xskip (append xskip (list (cons lay (cdr xres)))))))
+  (setq lres  (if pents (cchk:pool-loop pents borrow))
         vts   (car lres)
+        bwd   (cadddr lres)
         narc  0
         nlin  0)
   (if (> (cdr pres) 0)
@@ -62764,6 +63252,22 @@
                   (list (strcat "Pool: " (itoa (cdr pres)) " item(s) on layer '"
                                 *cchk-pool-layer*
                                 "' SKIPPED - properties are not ByLayer")))))
+  ;; a borrowed layer's own non-ByLayer items are that layer's own
+  ;; business and are not worth a line - UNLESS the outline came up
+  ;; short, in which case one of them is the likeliest reason why
+  (if (or (null vts) (and lres (or (> (cadr lres) 0) (> (caddr lres) 0))))
+    (foreach sk xskip
+      (setq lines
+            (append lines
+                    (list (strcat "Pool: " (itoa (cdr sk)) " item(s) on layer '"
+                                  (car sk)
+                                  "' SKIPPED - properties are not ByLayer"))))))
+  (foreach b bwd
+    (setq lines
+          (append lines
+                  (list (strcat "Pool: outline runs " (itoa (cdr b))
+                                " segment(s) along layer '" (car b)
+                                "' - chained into the perimeter")))))
   (if (and lres (or (> (cadr lres) 0) (> (caddr lres) 0)))
     (setq lines (append lines (list
       (strcat "Pool: outline on layer '" *cchk-pool-layer* "' is AMBIGUOUS -"
@@ -62786,6 +63290,7 @@
                             (itoa nlin) " straight / " (itoa narc)
                             " arc segment(s), mostly "
                             (if arcy "arcs" "straights")
+                            (if bwd (strcat ", " (cchk:borrow-str bwd)) "")
                             (if (and lres (or (> (cadr lres) 0) (> (caddr lres) 0)))
                               " (AMBIGUOUS - see detail)"
                               "")))
@@ -62809,8 +63314,13 @@
                wantsp '(3 3)
                why    (strcat "over " (rtos *cchk-area-large* 2 0) " sq ft")))))
     (setq poolsum (strcat "NOTHING closed and ByLayer found on layer '"
-                          *cchk-pool-layer*
-                          "' - area not measured (check for gaps)")))
+                          *cchk-pool-layer* "'"
+                          (if borrow
+                            (strcat " (layer "
+                                    (cchk:lay-list-str (mapcar 'car borrow))
+                                    " read in too)")
+                            "")
+                          " - area not measured (check for gaps)")))
 
   ;; --- Cover Details: Overlap & Spacing vs what the pool needs -----
   (setq det (car (vl-remove-if-not
@@ -63734,6 +64244,14 @@
   (princ "\n  exploded into lines/arcs) is chained into the pool's outline; its")
   (princ "\n  area (sq ft) and straight/arc segment mix are reported. An")
   (princ "\n  outline with gaps or extra closed loops is flagged AMBIGUOUS.")
+  (if *cchk-perim-layers*
+    (progn
+      (princ (strcat "\n  A stretch of the SAME perimeter drawn on layer "
+                     (cchk:lay-list-str *cchk-perim-layers*)))
+      (princ "\n  (tune *cchk-perim-layers*) is chained in with it, so an outline")
+      (princ "\n  that hands over midway still closes; a branch off such a run,")
+      (princ "\n  and anything else on those layers, is left out of the outline")
+      (princ "\n  and is never counted as a gap in it.")))
   (princ (strcat "\n\nCOVER DETAILS - the '" *cchk-details-block*
                  "' block's OVERLAP"))
   (princ "\n  (12\"/15\"/18\") and SPACING (NxN) values are checked against what")
@@ -84498,6 +85016,12 @@
 ;;;   * a closed LWPOLYLINE or 2D POLYLINE, or
 ;;;   * loose LINEs / ARCs (or a mix of all of the above) -- PADDLE
 ;;;     chains touching segments end-to-end into closed loops.
+;;;   * geometry that is a closed perimeter EXCEPT for a gap: PADDLE
+;;;     recognises the near-miss (the chains and the gaps between them
+;;;     go round once and come back), draws an arrow at every open
+;;;     joint and offers to close it with a zero-radius FILLET.  Yes
+;;;     closes it and the run carries straight on from the perimeter
+;;;     that leaves; No leaves the arrow standing to work from.
 ;;;
 ;;; Usage:
 ;;;   Command: PADDLE
@@ -84545,7 +85069,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.13")
+(setq *paddle-version* "v1.14")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -84600,6 +85124,30 @@
 ;; doubled polyline vertex, a zero-length line), which is also what
 ;; keeps a corner drawn with a duplicate vertex from being missed.
 (setq *paddle-fuzz* 0.05)
+
+;; --- the gap in a perimeter that nearly closes ---
+;; Furthest apart two loose ends may be and still read as a DRAFTING
+;; GAP rather than a missing piece of perimeter.  Geometry that chains
+;; into a loop except here is one arrow and one question away from
+;; being paddable -- PADDLE offers the zero fillet that closes it.
+;; Geometry short of a whole wall is not, and gets the plain report it
+;; always got.  One pad wide: a hole a pad would fall through is not a
+;; gap.  Ends closer together than *paddle-fuzz* are already chained
+;; and are not a gap either.
+(setq *paddle-gapmax* 36.0)
+;; Layer the gap arrow is drawn on, and the colour index it is created
+;; with.  A plain ACI number rather than 'auto on purpose: red reads
+;; against any background a drafter can set, which is the one thing a
+;; mark saying "it is open HERE" has to do.  The arrows are PADDLE's
+;; own marks and nobody else's -- every run clears this layer and
+;; re-marks whatever is still open, so an arrow does not outlive the
+;; gap it pointed at -- so put nothing else on it.
+(setq *paddle-gap-layer* "PADDLE-GAP")
+(setq *paddle-gap-color* 1)
+;; Length of that arrow, tail to tip, in drawing units.  Its head is a
+;; third of that long and three times as wide as its shaft, which is
+;; what makes it read as an arrow at the zoom the pads are seen at.
+(setq *paddle-arrow* 36.0)
 
 ;; --- TUTORIALPADDLE ---
 ;; Layer the tutorial draws its labelled sample perimeter on, and the
@@ -84779,10 +85327,40 @@
      (if cv (paddle--vts->segs (car cv) (cdr cv))))))
 
 ;; ------------------- chain segments into loops ---------------------
+;; SEG walked the other way: the same geometry, so the bulge changes
+;; sign with the direction, and still owned by the same entity.
+(defun paddle--revseg (s)
+  (list (cadr s) (car s) (- (caddr s)) (cadddr s)))
+
+;; The first segment in SEGS with an end on PT (within *paddle-fuzz*),
+;; turned so that it LEAVES pt, and the rest of SEGS without it, in
+;; order: (segment rest).  (nil rest) when nothing touches pt.
+(defun paddle--take (segs pt / found rest s)
+  (setq found nil rest nil)
+  (foreach s segs
+    (if found
+        (setq rest (cons s rest))
+        (cond
+          ((<= (distance pt (car s)) *paddle-fuzz*) (setq found s))
+          ((<= (distance pt (cadr s)) *paddle-fuzz*) ; reversed
+           (setq found (paddle--revseg s)))
+          (T (setq rest (cons s rest))))))
+  (list found (reverse rest)))
+
 ;; Chains touching segments (ends within *paddle-fuzz*) end-to-end.
-;; Returns (loops . open-count); each loop is a vertex list (x y bulge).
-(defun paddle--chain (segs / loops nopen chain head tail done found rest s)
-  (setq nopen 0)
+;; Returns (loops opens): each loop is a vertex list (x y bulge), and
+;; each open chain the SEGMENTS it ran out of geometry with, in walk
+;; order -- which is what the gap pass below needs, because a segment
+;; still knows which entity it came off and a vertex does not.
+;;
+;; The walk grows at BOTH ends.  Growing forward only splits a
+;; perimeter with ONE gap in it into TWO open chains whenever the walk
+;; starts in the middle of it: the half ahead of the starting segment
+;; runs into the gap, and the half behind it then runs into the
+;; segment already taken.  Two chains meeting at a point that is not a
+;; gap is not what the drawing says -- there is one loop with one hole
+;; in it, and the arrow belongs at the hole.
+(defun paddle--chain (segs / loops opens chain head tail done found rest)
   ;; drop degenerate slivers
   (setq segs (vl-remove-if
                '(lambda (s) (<= (distance (car s) (cadr s)) *paddle-fuzz*))
@@ -84801,23 +85379,26 @@
                                    chain)
                            loops)
                done  T))
-        (T ;; look for a segment continuing from the tail
-         (setq found nil rest nil)
-         (foreach s segs
-           (if found
-               (setq rest (cons s rest))
-               (cond
-                 ((<= (distance tail (car s)) *paddle-fuzz*)
-                  (setq found s))
-                 ((<= (distance tail (cadr s)) *paddle-fuzz*) ; reversed
-                  (setq found (list (cadr s) (car s) (- (caddr s)))))
-                 (T (setq rest (cons s rest))))))
-         (if found
-             (setq chain (append chain (list found))
-                   tail  (cadr found)
-                   segs  (reverse rest))
-             (setq nopen (1+ nopen) done T)))))) ; dead end: open chain
-  (cons (reverse loops) nopen))
+        (T ;; a segment leaving the tail, else one arriving at the head
+         (setq rest  (paddle--take segs tail)
+               found (car rest)
+               rest  (cadr rest))
+         (cond
+           (found (setq chain (append chain (list found))
+                        tail  (cadr found)
+                        segs  rest))
+           (T
+            (setq rest  (paddle--take segs head)
+                  found (car rest)
+                  rest  (cadr rest))
+            (if found
+                (setq found (paddle--revseg found) ; turned to arrive at head
+                      chain (cons found chain)
+                      head  (car found)
+                      segs  rest)
+                (setq opens (cons chain opens) ; dead end both ways
+                      done  T))))))))
+  (list (reverse loops) (reverse opens)))
 
 ;; ------------------------ feature detection ------------------------
 ;; Returns a list of pads: (center rotation kind), kind = "corner"/"arc".
@@ -85029,12 +85610,387 @@
 (defun paddle--solid-loops (loops)
   (vl-remove-if '(lambda (l) (< (abs (paddle--area l)) 1e-6)) loops))
 
+;; ============= a perimeter that nearly closes =======================
+;; A drawing says "closed perimeter" long before it is one: two walls
+;; that overshoot each other by an inch, a polyline that stops a hair
+;; short of its own start, a fillet somebody erased and never redrew.
+;; PADDLE chains everything that touches, so what is left over is a set
+;; of OPEN chains -- and when those chains and the gaps between them go
+;; round once and arrive back where they started, the drawing WAS one
+;; closed perimeter with holes punched in it.  This section finds that
+;; ring and marks every hole with an arrow; c:PADDLE offers the zero
+;; fillet that closes one.
+
+;; The point at U along segment S -- 0 at the start, 1 at the end, the
+;; arc followed round when there is one.
+(defun paddle--segpt (s u / a b blg seg cen)
+  (setq a   (car s)
+        b   (cadr s)
+        blg (caddr s))
+  (if (= blg 0.0)
+      (cal:v+ a (cal:v* (cal:v- b a) u))
+      (progn
+        (setq seg (paddle--arcdata a b blg)
+              cen (caddr seg))
+        (paddle--arcpt cen (cadr seg) (+ (angle cen a) (* (car seg) u))))))
+
+;; A 2D point as the 3D one (command ...) and trans want.
+(defun paddle--3d (p) (list (car p) (cadr p) 0.0))
+
+;; Where the FILLET pick goes on an end segment, as a fraction of it
+;; measured FROM the loose end: nine tenths of the way in, right up by
+;; the end that is still attached to the rest of the perimeter.
+;;
+;; FILLET keeps the side of the pick and moves the other end, so the
+;; pick has to land past the point where the two ends cross or it keeps
+;; the wrong half.  Two ends that fall short of each other cross
+;; outside both segments, and any pick at all is past it.  Two that
+;; overshoot cross INSIDE them, as far in as the overshoot is long --
+;; so the middle of the segment, the obvious pick, is on the wrong side
+;; of the crossing as soon as a wall is run more than half its own
+;; length past its neighbour, and FILLET would then trim the perimeter
+;; and keep the overshoot.  Nine tenths is wrong only for an end
+;; segment that is overshoot nearly end to end, and is still clear of
+;; the neighbouring segment when the end belongs to a polyline.  It is
+;; a fact about the way FILLET reads a pick rather than a knob, so it
+;; is written where it is used and not in the settings block.
+
+;; The two loose ends of open chain number I, each as
+;; (point entity pick-point chain end segment): end 0 is the head the
+;; walk started from, end 1 the tail it ran out at, and SEGMENT is the
+;; one the end sits on, turned so that it always runs FROM the loose
+;; end into the chain -- which makes the pick one rule for both, and
+;; gives the gap the two lines it has to cross.
+(defun paddle--ends (chain i / sf sl)
+  (setq sf (car chain)                          ; the head's segment runs
+        sl (paddle--revseg (last chain)))       ; in; the tail's is turned
+                                                ; round so that it does too
+  (list (list (car sf) (cadddr sf) (paddle--segpt sf 0.9) i 0 sf)
+        (list (car sl) (cadddr sl) (paddle--segpt sl 0.9) i 1 sl)))
+
+;; One number per loose end, and its index in paddle--endlist's answer,
+;; so a pair, a partner and a visited mark are all comparable as
+;; numbers rather than as the lists they name.
+(defun paddle--endkey (e) (+ (* 2 (nth 3 e)) (nth 4 e)))
+
+;; Every loose end in OPENS, in chain order -- so (nth key ends) finds
+;; one again from its key.
+(defun paddle--endlist (opens / out i c)
+  (setq i 0)
+  (foreach c opens
+    (setq out (append out (paddle--ends c i))
+          i   (1+ i)))
+  out)
+
+;; Pair the loose ends off, closest first: a gap is two ends that want
+;; to be one point.  Ends further apart than *paddle-gapmax* are left
+;; unpaired -- that is a missing wall, not a gap -- ends closer
+;; together than *paddle-fuzz* are already chained and are not a gap
+;; either, and an end already spoken for cannot be paired twice.  What
+;; comes back is a set of disjoint pairs, each (end-a end-b distance).
+(defun paddle--pairs (ends / cand taken out best a b d p)
+  (foreach a ends
+    (foreach b ends
+      (if (and (< (paddle--endkey a) (paddle--endkey b)) ; each pair once
+               (> (setq d (distance (car a) (car b))) *paddle-fuzz*)
+               (<= d *paddle-gapmax*))
+          (setq cand (cons (list d a b) cand)))))
+  ;; then take them closest first.  The pick is a scan rather than a
+  ;; vl-sort because vl-sort DROPS an element that compares equal to
+  ;; another under the predicate it is given -- and two gaps exactly as
+  ;; wide as each other is not an oddity here, it is what the two ends
+  ;; of a wall left short at both of them look like.  Sorting them
+  ;; would quietly lose one, and a ring with a gap missing is not a
+  ;; ring, so the arrow would never be drawn.
+  (repeat (length cand)
+    (setq best nil)
+    (foreach p cand
+      (if (and (not (member (paddle--endkey (cadr p)) taken))
+               (not (member (paddle--endkey (caddr p)) taken))
+               (or (null best) (< (car p) (car best))))
+          (setq best p)))
+    (if best
+        (setq a     (cadr best)
+              b     (caddr best)
+              taken (cons (paddle--endkey a) (cons (paddle--endkey b) taken))
+              out   (cons (list a b (car best)) out))))
+  (reverse out))
+
+;; The end paired with E, or nil.
+(defun paddle--partner (e pairs / k out p)
+  (setq k (paddle--endkey e))
+  (foreach p pairs
+    (cond
+      ((= k (paddle--endkey (car p)))  (setq out (cadr p)))
+      ((= k (paddle--endkey (cadr p))) (setq out (car p)))))
+  out)
+
+;; One gap: the two ends that want to be one point, and how far apart
+;; they are -- the number the drafter is told before being asked about
+;; it, because an eighth of an inch and a foot are not the same
+;; question even though they read the same on screen.
+(defun paddle--gap (a b)
+  (list a b (distance (car a) (car b))))
+
+;; Walk the ring that leaves chain START by its tail: across the gap
+;; waiting there, in at whichever end of whichever chain is on the far
+;; side, out at that chain's other end, on across the next gap, and so
+;; on until the walk arrives back at the head it set out from.  A walk
+;; that does is a RING -- chain, gap, chain, gap, the whole way round.
+;; Returns (chains gaps): the chains as (index . the-end-it-came-in-by)
+;; in walk order, and the gaps as the (end end) pairs it crossed.  nil
+;; when the walk meets a loose end nothing wants, or a chain it has
+;; already walked -- a knot, not a ring.
+(defun paddle--ring (start ends pairs / here goal chains gaps nxt ci ok done)
+  (setq goal   (* 2 start)                   ; the head of START again
+        here   (nth (1+ (* 2 start)) ends)   ; leaving START by its tail
+        chains (list (cons start 0))
+        ok     nil
+        done   nil)
+  (while (not done)
+    (setq nxt (paddle--partner here pairs))
+    (cond
+      ((null nxt) (setq done T))                 ; a loose end: no ring
+      ((= (paddle--endkey nxt) goal)             ; home: the ring closes
+       (setq gaps (cons (paddle--gap here nxt) gaps)
+             ok   T
+             done T))
+      ((assoc (nth 3 nxt) chains) (setq done T)) ; a chain walked twice
+      (T (setq gaps   (cons (paddle--gap here nxt) gaps)
+               ci     (nth 3 nxt)
+               chains (cons (cons ci (nth 4 nxt)) chains)
+               here   (nth (+ (* 2 ci) (- 1 (nth 4 nxt))) ends)))))
+  (if ok (list (reverse chains) (reverse gaps))))
+
+;; The vertex list that ring would be once its gaps are closed: every
+;; chain in the order the walk met it, turned round when the walk came
+;; in by its tail, and each gap left as the straight closing segment it
+;; is about to become.  Enough to measure the area it encloses and find
+;; the middle of it, which is all the ring is read for.
+(defun paddle--ring-vts (opens chains / out c segs s end)
+  (foreach c chains
+    (setq segs (nth (car c) opens))
+    (if (= (cdr c) 1)
+        (setq segs (reverse (mapcar '(lambda (s) (paddle--revseg s)) segs))))
+    (foreach s segs
+      (setq out (cons (list (car (car s)) (cadr (car s)) (caddr s)) out)))
+    ;; and the loose end the chain stops at.  A vertex carries the
+    ;; bulge of the segment LEAVING it, and what leaves this one is the
+    ;; gap -- straight, so 0.  Leaving the point out instead would
+    ;; measure the loop with one segment per chain shortcut away, which
+    ;; is most of it when the chain is a wall or two.
+    (setq end (cadr (last segs))
+          out (cons (list (car end) (cadr end) 0.0) out)))
+  (reverse out))
+
+;; The biggest of a set of closed loops by the area it encloses -- what
+;; a ring of open chains has to beat before PADDLE reads it as the
+;; perimeter rather than as something loose beside one.
+(defun paddle--maxarea (loops / best a l)
+  (setq best 0.0)
+  (foreach l loops
+    (if (> (setq a (abs (paddle--area l))) best) (setq best a)))
+  best)
+
+;; The ring the open chains make, or the biggest of them when they make
+;; more than one -- the same rule auto-detect uses to pick between
+;; closed loops.  A ring enclosing no area (chains doubling back on
+;; each other) is not one.  Returns (vts chains gaps area).
+(defun paddle--best-ring (opens / ends pairs i seen r vts a best bestarea)
+  (setq ends     (paddle--endlist opens)
+        pairs    (paddle--pairs ends)
+        i        0
+        bestarea 0.0)
+  (repeat (length opens)
+    (if (not (member i seen))
+        (if (setq r (paddle--ring i ends pairs))
+            (progn
+              (setq seen (append seen (mapcar '(lambda (c) (car c)) (car r)))
+                    vts  (paddle--ring-vts opens (car r))
+                    a    (abs (paddle--area vts)))
+              (if (> a bestarea)
+                  (setq bestarea a
+                        best     (list vts (car r) (cadr r) a))))))
+    (setq i (1+ i)))
+  (if (> bestarea 1e-6) best))
+
+;; Where two straight segments would cross if both ran on for ever --
+;; the point a zero fillet joins them at -- or nil when they never do.
+(defun paddle--xsect (s1 s2 / a u c v den)
+  (setq a   (car s1)
+        u   (cal:v- (cadr s1) a)
+        c   (car s2)
+        v   (cal:v- (cadr s2) c)
+        den (cal:cross u v))
+  (if (> (abs den) 1e-9)
+      (cal:v+ a (cal:v* u (/ (cal:cross (cal:v- c a) v)
+                                       den)))))
+
+;; Is this gap the two ends of ONE open LWPOLYLINE, straight at both of
+;; them?  That is the polyline somebody drew round the pool and never
+;; closed, and it is the one gap FILLET must not be asked to close: two
+;; picks on one polyline joins those two segments and throws away every
+;; segment between them, which here is the whole perimeter.  It is
+;; closed by editing the polyline instead (paddle--lwclose), so this
+;; asks everything that edit needs to be safe -- one entity, its own
+;; two ends, open, straight where it is being joined.
+(defun paddle--lwgap-p (g / a b ent cv vts p q)
+  (setq a   (car g)
+        b   (cadr g)
+        ent (cadr a))
+  (and (eq ent (cadr b))
+       (= "LWPOLYLINE" (cdr (assoc 0 (entget ent))))
+       (= 0.0 (caddr (nth 5 a)))               ; straight at both ends
+       (= 0.0 (caddr (nth 5 b)))
+       (setq cv (paddle--lwverts ent))
+       (not (car cv))                          ; and not closed already
+       (> (length (cdr cv)) 2)
+       (setq vts (cdr cv)
+             p   (cal:2d (car vts))
+             q   (cal:2d (last vts)))
+       ;; the polyline's OWN two ends, and nothing else's
+       (or (and (<= (distance p (car a)) *paddle-fuzz*)
+                (<= (distance q (car b)) *paddle-fuzz*))
+           (and (<= (distance p (car b)) *paddle-fuzz*)
+                (<= (distance q (car a)) *paddle-fuzz*)))))
+
+;; Close that polyline onto itself at X: its first vertex moves to the
+;; crossing, its last one goes (it is the same point now, reached the
+;; long way round) and the closed flag goes on.  That is exactly what a
+;; zero fillet between its two end segments leaves behind -- both of
+;; them run on or trimmed back to where they cross -- done as an edit
+;; because FILLET cannot be asked for it.  Every group that is not a
+;; vertex is carried over untouched, and so is each vertex's own width
+;; and bulge.  Returns T.
+(defun paddle--lwclose (ent x / ed g chunks cur head tail)
+  (setq ed (entget ent))
+  (foreach g ed
+    (cond
+      ((= (car g) 10)                          ; a vertex, and its own
+       (if cur (setq chunks (cons (reverse cur) chunks)))   ; groups
+       (setq cur (list g)))                                 ; follow it
+      ((and cur (member (car g) '(40 41 42))) (setq cur (cons g cur)))
+      (cur (setq tail (cons g tail)))          ; after the last vertex
+      (T   (setq head (cons g head)))))        ; before the first
+  (if cur (setq chunks (cons (reverse cur) chunks)))
+  (setq chunks (reverse chunks)
+        head   (reverse head)
+        tail   (reverse tail))
+  (if (> (length chunks) 2)
+      (progn
+        (setq chunks (cons (subst (list 10 (car x) (cadr x))
+                                  (car (car chunks)) (car chunks))
+                           (cdr chunks))
+              chunks (reverse (cdr (reverse chunks))) ; the last one goes
+              head   (subst (cons 70 (logior 1 (cdr (assoc 70 ed))))
+                            (assoc 70 ed) head)
+              head   (subst (cons 90 (length chunks)) (assoc 90 ed) head))
+        (entmod (append head (apply 'append chunks) tail))
+        (entupd ent)
+        T)))
+
+;; Where a gap is: halfway between the two ends that want to be one
+;; point, which is where the arrow points and where the fillet lands.
+(defun paddle--gap-mid (g)
+  (cal:v* (cal:v+ (car (car g)) (car (cadr g))) 0.5))
+
+;; The middle of a vertex list, near enough for "which side is the
+;; inside of the loop": the arrow flies in from the other one.
+(defun paddle--centroid (vts / n)
+  (setq n (float (length vts)))
+  (list (/ (apply '+ (mapcar '(lambda (v) (car v)) vts)) n)
+        (/ (apply '+ (mapcar '(lambda (v) (cadr v)) vts)) n)))
+
+;; The arrow that says IT IS OPEN HERE: one closed polyline, tip on the
+;; gap and tail out on the side away from the inside of the loop, so it
+;; points at the joint from clear space instead of across the drawing.
+;; One entity, so taking it away again when the gap closes is one
+;; entdel.  Returns it.
+(defun paddle--arrow (tip dir lay / l h w sh nrm head back pts)
+  (setq l    *paddle-arrow*
+        h    (/ l 3.0)      ; head length
+        w    (/ l 8.0)      ; half the head's width
+        sh   (/ l 24.0)     ; half the shaft's width
+        nrm  (list (- (cadr dir)) (car dir))
+        head (cal:v- tip (cal:v* dir h))
+        back (cal:v- tip (cal:v* dir l))
+        pts  (list tip
+                   (cal:v+ head (cal:v* nrm w))
+                   (cal:v+ head (cal:v* nrm sh))
+                   (cal:v+ back (cal:v* nrm sh))
+                   (cal:v- back (cal:v* nrm sh))
+                   (cal:v- head (cal:v* nrm sh))
+                   (cal:v- head (cal:v* nrm w))))
+  (entmake (append (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") (cons 8 lay)
+                         '(100 . "AcDbPolyline") (cons 90 (length pts)) '(70 . 1))
+                   (mapcar '(lambda (p) (list 10 (car p) (cadr p))) pts)))
+  (entlast))
+
+;; PADDLE's own marks and nobody else's: every run clears the gap layer
+;; and re-marks whatever is still open, so an arrow does not outlive
+;; the gap it pointed at when the drafter closes one by hand.  Returns
+;; how many it took away.
+(defun paddle--clear-arrows ( / ss i n)
+  (setq n 0)
+  (if (setq ss (ssget "_X" (list (cons 8 *paddle-gap-layer*)
+                                 (cons 410 (getvar "CTAB")))))
+      (progn
+        (setq i 0)
+        (repeat (sslength ss)
+          (entdel (ssname ss i))
+          (setq i (1+ i)
+                n (1+ n)))))
+  n)
+
+;; Close one gap the way a drafter would: FILLET at radius 0, picked on
+;; each end segment up by the end of it that stays (paddle--ends).  Whether it took is read
+;; back off the drawing afterwards rather than promised here -- FILLET
+;; refuses a pair it cannot join (two ends that are parallel however
+;; far they run on, two segments of one entity it will not close), and
+;; a tool that says "if you say so" and then LOOKS is a tool that
+;; cannot be wrong about it.
+(defun paddle--dofillet (g / a b guard)
+  (setq a (car g)
+        b (cadr g))
+  (setvar "FILLETRAD" 0.0)
+  (setvar "TRIMMODE" 1)
+  (command "_.FILLET"
+           (list (cadr a) (trans (paddle--3d (caddr a)) 0 1))
+           (list (cadr b) (trans (paddle--3d (caddr b)) 0 1)))
+  ;; a FILLET that refused a pick is still asking: cancel it here, where
+  ;; the refusal costs one message, rather than letting the next command
+  ;; answer it
+  (setq guard 0)
+  (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+    (command)
+    (setq guard (1+ guard))))
+
+;; Is there still a loose end where this gap was?  A zero fillet that
+;; took leaves none -- the two ends are one point now, and one point
+;; chains -- and one AutoCAD refused leaves both of them exactly where
+;; the arrow is pointing.  Read over *paddle-gapmax* of the gap's
+;; middle rather than at the ends themselves, because a fillet MOVES
+;; the ends it joins and the points the gap was measured between are
+;; not where they are afterwards.
+(defun paddle--still-open-p (mid opens / open i c e)
+  (setq open nil
+        i    0)
+  (foreach c opens
+    (foreach e (paddle--ends c i)
+      (if (<= (distance (car e) mid) *paddle-gapmax*) (setq open T)))
+    (setq i (1+ i)))
+  open)
+
 ;; --------------------------- selection -----------------------------
 ;; Turns a selection set (or the whole current tab when SS is nil) into
-;; a list of closed perimeter loops (vertex lists). Auto-detect keeps
-;; only the largest loop.
-(defun paddle--perimeters (ss / auto i segs res loops nopen nflat best
-                              bestarea a)
+;; (loops opens): the closed perimeter loops, as vertex lists, and the
+;; open chains that would not close, as segments.  Auto-detect keeps
+;; only the largest loop.  Every segment carries the entity it came off
+;; so the gap pass can hand two of them to FILLET, and entities on the
+;; gap layer are skipped -- those are PADDLE's own arrows, and a run
+;; that read its own marks back as geometry would pad them.
+(defun paddle--perimeters (ss / auto i en ed segs res loops opens nflat best
+                              bestarea a l)
   (setq auto (not ss))
   (if auto
       (setq ss (ssget "_X" (list '(0 . "LWPOLYLINE,POLYLINE,LINE,ARC")
@@ -85043,17 +85999,20 @@
       (progn
         (setq i 0)
         (repeat (sslength ss)
-          (setq segs (append segs (paddle--ent-segs (ssname ss i)))
-                i    (1+ i)))
+          (setq en (ssname ss i)
+                i  (1+ i))
+          ;; entget is nil for an entity a fillet consumed, and this
+          ;; same set is read again after the gap pass has filleted
+          (if (and (setq ed (entget en))
+                   (/= (strcase (cdr (assoc 8 ed)))
+                       (strcase *paddle-gap-layer*)))
+              (setq segs (append segs
+                                 (mapcar '(lambda (s) (append s (list en)))
+                                         (paddle--ent-segs en))))))
         (setq res   (paddle--chain segs)
               loops (paddle--solid-loops (car res))
               nflat (- (length (car res)) (length loops))
-              nopen (cdr res))
-        (if (> nopen 0)
-            (princ (strcat "\nPADDLE: ignored " (itoa nopen)
-                           " open chain(s) that never close back on themselves"
-                           " (check for gaps; chaining tolerance is "
-                           (rtos *paddle-fuzz* 2 2) ").")))
+              opens (cadr res))
         (if (> nflat 0)
             (princ (strcat "\nPADDLE: ignored " (itoa nflat)
                            " closed loop(s) that enclose no area"
@@ -85064,16 +86023,27 @@
               (foreach l loops
                 (setq a (abs (paddle--area l)))
                 (if (> a bestarea) (setq bestarea a best l)))
+              (setq loops nil)
               (if best
                   (progn
                     (princ "\nPADDLE: auto-detected the largest closed loop as the perimeter.")
-                    (list best))))
-            loops))))
+                    (setq loops (list best))))))
+        (list loops opens))))
 
 ;; ---------------------------- command ------------------------------
-(defun c:PADDLE (/ *error* doc space mark-open padsize blkname ss perims vts
-                   allpads delta ndodge ncorner narc)
+(defun c:PADDLE (/ *error* doc space mark-open padsize blkname ss res perims
+                   opens vts allpads delta ndodge ncorner narc ofrad otrim
+                   oecho ring gaps ngap nring nopen marks mk g mid ctr ans
+                   xsc tried nyes nclosed nrefused nleft pad)
   (defun *error* (msg)
+    ;; the sysvars the gap pass borrows go back FIRST.  A setvar cannot
+    ;; throw and everything below it can, and an error raised inside
+    ;; *error* abandons every line after it -- the drafter would meet a
+    ;; FILLETRAD of 0 in the NEXT command they ran, which does not look
+    ;; like this one's doing.
+    (if ofrad (setvar "FILLETRAD" ofrad))
+    (if otrim (setvar "TRIMMODE" otrim))
+    (if oecho (setvar "CMDECHO" oecho))
     ;; close only the mark THIS run opened: an Esc at the perimeter
     ;; prompt comes before StartUndoMark, and closing a mark nothing
     ;; opened throws -- from inside the handler, where nothing catches
@@ -85111,13 +86081,142 @@
         (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
         (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
         (if lzd:watch (lzd:watch ss) ss)))
-  (setq perims (paddle--perimeters ss))
+
+  ;; One undo step covers the lot: the marks this run clears, the arrows
+  ;; it draws at whatever is open, the gaps the drafter has it close,
+  ;; and the pads that follow.  It opens here rather than at the pads
+  ;; because the first thing below already writes to the drawing.
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
+  (paddle--clear-arrows)
+
+  (setq res    (paddle--perimeters ss)
+        perims (car res)
+        opens  (cadr res)
+        nring  0)
+
+  ;; --- a perimeter that closes except for a gap ----------------------
+  ;; The chains and the gaps between them go round once and come back:
+  ;; that is one perimeter with holes in it, not a pile of loose lines.
+  ;; It has to enclose more than any loop that DID close, or it is
+  ;; something loose lying beside a perimeter PADDLE already has.
+  (if (and opens
+           (setq ring (paddle--best-ring opens))
+           (> (nth 3 ring) (paddle--maxarea perims)))
+      (setq gaps  (nth 2 ring)
+            ngap  (length gaps)
+            nring (length (nth 1 ring)))
+      (setq ring nil ngap 0))
+
+  (setq nopen (- (length opens) nring))
+  (if (> nopen 0)
+      (princ (strcat "\nPADDLE: ignored " (itoa nopen)
+                     " open chain(s) that never close back on themselves"
+                     " (check for gaps; chaining tolerance is "
+                     (rtos *paddle-fuzz* 2 2) ").")))
+
+  (if ring
+      (progn
+        (paddle--ensure-layer *paddle-gap-layer* *paddle-gap-color*)
+        (princ (strcat "\nPADDLE: this reads as one closed perimeter with "
+                       (itoa ngap) " gap(s) in it, not as loose geometry."
+                       " Arrow(s) drawn on layer \"" *paddle-gap-layer*
+                       "\" at the open joint(s)."))
+        ;; every arrow goes in BEFORE the first question: a drafter who
+        ;; answers No, or presses Esc at one, is left looking at the
+        ;; whole picture rather than at the one gap that got as far as
+        ;; being asked about
+        (setq ctr (paddle--centroid (car ring))) ; the inside of the loop
+        (foreach g gaps
+          (setq mid   (paddle--gap-mid g)
+                marks (cons (list (paddle--arrow
+                                    mid
+                                    (cond ((cal:unit (cal:v- ctr mid)))
+                                          ('(0.0 1.0))) ; a gap dead on the
+                                                        ; middle: any way in
+                                    *paddle-gap-layer*)
+                                  mid g)
+                            marks)))
+        (setq marks (reverse marks)
+              oecho (getvar "CMDECHO")
+              ofrad (getvar "FILLETRAD")
+              otrim (getvar "TRIMMODE")
+              nyes  0
+              ngap  0)
+        (foreach mk marks
+          (setq ngap (1+ ngap)
+                g    (caddr mk)
+                mid  (cadr mk))
+          (princ (strcat "\n  gap " (itoa ngap) " of " (itoa (length marks))
+                         ": " (paddle--in (caddr g)) " wide, at "
+                         (rtos (car mid) 2 2) "," (rtos (cadr mid) 2 2)))
+          ;; Both loose ends on ONE entity is the polyline somebody
+          ;; drew round the pool and never closed.  FILLET must not be
+          ;; asked for that one -- two picks on one polyline joins
+          ;; those two segments and throws away every segment between
+          ;; them, which here is the perimeter -- so the same join is
+          ;; made by editing the polyline: first vertex to the
+          ;; crossing, last vertex away, closed flag on, which is what
+          ;; the fillet would have left.  Anything else on one entity
+          ;; (a heavy POLYLINE, an arc at either end, two ends that
+          ;; never cross) is marked and named instead.
+          (setq xsc (if (paddle--lwgap-p g)
+                        (paddle--xsect (nth 5 (car g)) (nth 5 (cadr g)))))
+          (if (and (eq (cadr (car g)) (cadr (cadr g))) (not xsc))
+              (progn
+                (princ "\n  both ends are on one entity, and PADDLE cannot join it in")
+                (princ "\n  place. A zero fillet there is two picks on one polyline,")
+                (princ "\n  which cuts away everything between them, so it is not")
+                (princ "\n  offered. Close it (PEDIT > Close, or pull the two ends")
+                (princ "\n  together) and run PADDLE again."))
+              (progn
+                (if xsc
+                    (princ "\n  both ends are on one polyline: PADDLE joins them at the crossing itself."))
+                (initget "Yes No")
+                (setq ans (getkword "\nClose the gap the arrow points at with a zero fillet? [Yes/No] <Yes>: "))
+                (if lzd:ask (lzd:ask "\nClose the gap the arrow points at with a zero fillet? [Yes/No] <Yes>: " ans) ans)
+                (if (null ans) (setq ans "Yes"))
+                (if (= ans "Yes")
+                    (progn
+                      (setvar "CMDECHO" 0)
+                      (if xsc
+                          (paddle--lwclose (cadr (car g)) xsc)
+                          (paddle--dofillet g))
+                      (setvar "CMDECHO" oecho)
+                      (setq nyes  (1+ nyes)
+                            tried (cons (car mk) tried)))))))  ; asked for, and tried
+        (setvar "FILLETRAD" ofrad)
+        (setvar "TRIMMODE" otrim)
+        (setq nclosed 0 nrefused 0 nleft 0)
+        ;; read the drawing again: a gap that closed is not there to be
+        ;; found any more, and what it closed is a perimeter to pad
+        (if (> nyes 0)
+            (setq res    (paddle--perimeters ss)
+                  perims (car res)
+                  opens  (cadr res)))
+        (foreach mk marks
+          (if (paddle--still-open-p (cadr mk) opens)
+              (if (member (car mk) tried)
+                  (setq nrefused (1+ nrefused))
+                  (setq nleft (1+ nleft)))
+              (progn (entdel (car mk)) ; the arrow has nothing left to
+                     (setq nclosed (1+ nclosed))))) ; point at
+        (if (> nclosed 0)
+            (princ (strcat "\nPADDLE: " (itoa nclosed)
+                           " gap(s) closed with a zero fillet - carrying on"
+                           " with what that leaves.")))
+        (if (> nrefused 0)
+            (princ (strcat "\nPADDLE: FILLET would not close " (itoa nrefused)
+                           " gap(s) - the two ends do not meet even run on."
+                           " Their arrow(s) stay.")))
+        (if (> nleft 0)
+            (princ (strcat "\nPADDLE: " (itoa nleft)
+                           " gap(s) left as they are - the arrow(s) mark them."
+                           " PADDLE pads the perimeter once it closes.")))))
 
   (if (not perims)
       (princ "\nPADDLE: no closed perimeter loop found.")
       (progn
-        (vla-StartUndoMark doc)
-        (setq mark-open T)
         (paddle--ensure-block doc blkname padsize)
         (paddle--ensure-layer *paddle-layer* *paddle-layer-color*)
         (setq delta (paddle--block-delta space blkname))
@@ -85131,8 +86230,6 @@
         (foreach pad allpads
           (paddle--insert-pad space blkname (car pad) (cadr pad) delta)
           (if (= (caddr pad) "corner") (setq ncorner (1+ ncorner)) (setq narc (1+ narc))))
-        (vla-EndUndoMark doc)
-        (setq mark-open nil)
         (if allpads
             (progn
               (princ (strcat "\nPADDLE: inserted " (itoa (length allpads))
@@ -85145,6 +86242,8 @@
                                  " overlapping pad(s) merged into their"
                                  " neighbours where features crowd together."))))
             (princ "\nPADDLE: perimeter checked - no concave features need pads."))))
+  (vla-EndUndoMark doc)
+  (setq mark-open nil)
   (if lzd:end (lzd:end "PADDLE"))
   (princ))
 
@@ -85211,7 +86310,14 @@
   (princ "\n    largest closed loop by itself. A closed polyline is ideal, but")
   (princ "\n    loose lines and arcs work too - touching ends (within ")
   (princ (strcat (rtos *paddle-fuzz* 2 2) "\") are"))
-  (princ "\n    chained together automatically.")
+  (princ "\n    chained together automatically.  Ends that ALMOST meet are a")
+  (princ (strcat "\n    GAP: up to " (paddle--in *paddle-gapmax*)
+                 " apart, and with the rest of the geometry going"))
+  (princ "\n    round once and coming back, PADDLE reads it as a perimeter with")
+  (princ "\n    a hole in it - draws an arrow at the open joint, offers to close")
+  (princ "\n    it with a zero fillet, and pads what that leaves.  Say No and the")
+  (princ (strcat "\n    arrow stays on layer \"" *paddle-gap-layer*
+                 "\" for you to work from."))
   (princ (strcat "\n 2. INSIDE CORNERS. A connection point that bends more than "
                  (rtos (/ (* *paddle-cornertol* 180.0) pi) 2 0) " degrees"))
   (princ "\n    away from straight gets one pad centered on the corner. Gentler")
@@ -85357,6 +86463,14 @@
 ;;;   * a closed LWPOLYLINE or 2D POLYLINE, or
 ;;;   * loose LINEs / ARCs (or a mix of all of the above) -- MOHAMADDLE
 ;;;     chains touching segments end-to-end into closed loops.
+;;;   * geometry that is a closed perimeter EXCEPT for a gap: the
+;;;     near-miss is recognised (the chains and the gaps between them
+;;;     go round once and come back), an arrow is drawn at every open
+;;;     joint and closing it with a zero-radius FILLET is offered.
+;;;     Yes closes it and the run carries straight on from the
+;;;     perimeter that leaves; No leaves the arrow standing to work
+;;;     from.  PADDLE's pass, ported with the rest of the engine, and
+;;;     the arrows share PADDLE's own layer.
 ;;;
 ;;; Usage:
 ;;;   Command: MOHAMADDLE
@@ -85406,7 +86520,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *mohamaddle-version* "v1.0")
+(setq *mohamaddle-version* "v1.1")
 
 ;; --- the pad itself ---
 ;; Pad sizes MOHAMADDLE offers, in the order shown at the prompt.  Each
@@ -85463,6 +86577,32 @@
 ;; doubled polyline vertex, a zero-length line), which is also what
 ;; keeps a corner drawn with a duplicate vertex from being missed.
 (setq *mohamaddle-fuzz* 0.05)
+
+;; --- the gap in a perimeter that nearly closes ---
+;; Furthest apart two loose ends may be and still read as a DRAFTING
+;; GAP rather than a missing piece of perimeter.  Geometry that chains
+;; into a loop except here is one arrow and one question away from
+;; being paddable -- MOHAMADDLE offers the zero fillet that closes it.
+;; Geometry short of a whole wall is not, and gets the plain report it
+;; always got.  One pad wide: a hole a pad would fall through is not a
+;; gap.  Ends closer together than *mohamaddle-fuzz* are already chained
+;; and are not a gap either.
+(setq *mohamaddle-gapmax* 36.0)
+;; Layer the gap arrow is drawn on, and the colour index it is created
+;; with.  A plain ACI number rather than 'auto on purpose: red reads
+;; against any background a drafter can set, which is the one thing a
+;; mark saying "it is open HERE" has to do.  The layer is PADDLE's and
+;; is shared with it deliberately: the two tools mark the same thing in
+;; the same drawing, the way they already share "PADS", so whichever of
+;; them runs next clears the marks and re-marks whatever is still open.
+;; An arrow never outlives the gap it pointed at.  Put nothing else on
+;; this layer.
+(setq *mohamaddle-gap-layer* "PADDLE-GAP")
+(setq *mohamaddle-gap-color* 1)
+;; Length of that arrow, tail to tip, in drawing units.  Its head is a
+;; third of that long and three times as wide as its shaft, which is
+;; what makes it read as an arrow at the zoom the pads are seen at.
+(setq *mohamaddle-arrow* 36.0)
 
 ;; -------------------------- text helper ------------------------------
 ;; A length as inches with the mark, 36.0 -> 36" -- every message that
@@ -85649,10 +86789,40 @@
      (if cv (mohamaddle--vts->segs (car cv) (cdr cv))))))
 
 ;; ------------------- chain segments into loops ---------------------
+;; SEG walked the other way: the same geometry, so the bulge changes
+;; sign with the direction, and still owned by the same entity.
+(defun mohamaddle--revseg (s)
+  (list (cadr s) (car s) (- (caddr s)) (cadddr s)))
+
+;; The first segment in SEGS with an end on PT (within *mohamaddle-fuzz*),
+;; turned so that it LEAVES pt, and the rest of SEGS without it, in
+;; order: (segment rest).  (nil rest) when nothing touches pt.
+(defun mohamaddle--take (segs pt / found rest s)
+  (setq found nil rest nil)
+  (foreach s segs
+    (if found
+        (setq rest (cons s rest))
+        (cond
+          ((<= (distance pt (car s)) *mohamaddle-fuzz*) (setq found s))
+          ((<= (distance pt (cadr s)) *mohamaddle-fuzz*) ; reversed
+           (setq found (mohamaddle--revseg s)))
+          (T (setq rest (cons s rest))))))
+  (list found (reverse rest)))
+
 ;; Chains touching segments (ends within *mohamaddle-fuzz*) end-to-end.
-;; Returns (loops . open-count); each loop is a vertex list (x y bulge).
-(defun mohamaddle--chain (segs / loops nopen chain head tail done found rest s)
-  (setq nopen 0)
+;; Returns (loops opens): each loop is a vertex list (x y bulge), and
+;; each open chain the SEGMENTS it ran out of geometry with, in walk
+;; order -- which is what the gap pass below needs, because a segment
+;; still knows which entity it came off and a vertex does not.
+;;
+;; The walk grows at BOTH ends.  Growing forward only splits a
+;; perimeter with ONE gap in it into TWO open chains whenever the walk
+;; starts in the middle of it: the half ahead of the starting segment
+;; runs into the gap, and the half behind it then runs into the
+;; segment already taken.  Two chains meeting at a point that is not a
+;; gap is not what the drawing says -- there is one loop with one hole
+;; in it, and the arrow belongs at the hole.
+(defun mohamaddle--chain (segs / loops opens chain head tail done found rest)
   ;; drop degenerate slivers
   (setq segs (vl-remove-if
                '(lambda (s) (<= (distance (car s) (cadr s)) *mohamaddle-fuzz*))
@@ -85671,23 +86841,26 @@
                                    chain)
                            loops)
                done  T))
-        (T ;; look for a segment continuing from the tail
-         (setq found nil rest nil)
-         (foreach s segs
-           (if found
-               (setq rest (cons s rest))
-               (cond
-                 ((<= (distance tail (car s)) *mohamaddle-fuzz*)
-                  (setq found s))
-                 ((<= (distance tail (cadr s)) *mohamaddle-fuzz*) ; reversed
-                  (setq found (list (cadr s) (car s) (- (caddr s)))))
-                 (T (setq rest (cons s rest))))))
-         (if found
-             (setq chain (append chain (list found))
-                   tail  (cadr found)
-                   segs  (reverse rest))
-             (setq nopen (1+ nopen) done T)))))) ; dead end: open chain
-  (cons (reverse loops) nopen))
+        (T ;; a segment leaving the tail, else one arriving at the head
+         (setq rest  (mohamaddle--take segs tail)
+               found (car rest)
+               rest  (cadr rest))
+         (cond
+           (found (setq chain (append chain (list found))
+                        tail  (cadr found)
+                        segs  rest))
+           (T
+            (setq rest  (mohamaddle--take segs head)
+                  found (car rest)
+                  rest  (cadr rest))
+            (if found
+                (setq found (mohamaddle--revseg found) ; turned to arrive at head
+                      chain (cons found chain)
+                      head  (car found)
+                      segs  rest)
+                (setq opens (cons chain opens) ; dead end both ways
+                      done  T))))))))
+  (list (reverse loops) (reverse opens)))
 
 ;; ------------------------ feature detection ------------------------
 ;; Returns a list of pads: (center rotation kind), kind = "corner"/"arc".
@@ -85899,12 +87072,387 @@
 (defun mohamaddle--solid-loops (loops)
   (vl-remove-if '(lambda (l) (< (abs (mohamaddle--area l)) 1e-6)) loops))
 
+;; ============= a perimeter that nearly closes =======================
+;; A drawing says "closed perimeter" long before it is one: two walls
+;; that overshoot each other by an inch, a polyline that stops a hair
+;; short of its own start, a fillet somebody erased and never redrew.
+;; MOHAMADDLE chains everything that touches, so what is left over is a set
+;; of OPEN chains -- and when those chains and the gaps between them go
+;; round once and arrive back where they started, the drawing WAS one
+;; closed perimeter with holes punched in it.  This section finds that
+;; ring and marks every hole with an arrow; c:MOHAMADDLE offers the zero
+;; fillet that closes one.
+
+;; The point at U along segment S -- 0 at the start, 1 at the end, the
+;; arc followed round when there is one.
+(defun mohamaddle--segpt (s u / a b blg seg cen)
+  (setq a   (car s)
+        b   (cadr s)
+        blg (caddr s))
+  (if (= blg 0.0)
+      (cal:v+ a (cal:v* (cal:v- b a) u))
+      (progn
+        (setq seg (mohamaddle--arcdata a b blg)
+              cen (caddr seg))
+        (mohamaddle--arcpt cen (cadr seg) (+ (angle cen a) (* (car seg) u))))))
+
+;; A 2D point as the 3D one (command ...) and trans want.
+(defun mohamaddle--3d (p) (list (car p) (cadr p) 0.0))
+
+;; Where the FILLET pick goes on an end segment, as a fraction of it
+;; measured FROM the loose end: nine tenths of the way in, right up by
+;; the end that is still attached to the rest of the perimeter.
+;;
+;; FILLET keeps the side of the pick and moves the other end, so the
+;; pick has to land past the point where the two ends cross or it keeps
+;; the wrong half.  Two ends that fall short of each other cross
+;; outside both segments, and any pick at all is past it.  Two that
+;; overshoot cross INSIDE them, as far in as the overshoot is long --
+;; so the middle of the segment, the obvious pick, is on the wrong side
+;; of the crossing as soon as a wall is run more than half its own
+;; length past its neighbour, and FILLET would then trim the perimeter
+;; and keep the overshoot.  Nine tenths is wrong only for an end
+;; segment that is overshoot nearly end to end, and is still clear of
+;; the neighbouring segment when the end belongs to a polyline.  It is
+;; a fact about the way FILLET reads a pick rather than a knob, so it
+;; is written where it is used and not in the settings block.
+
+;; The two loose ends of open chain number I, each as
+;; (point entity pick-point chain end segment): end 0 is the head the
+;; walk started from, end 1 the tail it ran out at, and SEGMENT is the
+;; one the end sits on, turned so that it always runs FROM the loose
+;; end into the chain -- which makes the pick one rule for both, and
+;; gives the gap the two lines it has to cross.
+(defun mohamaddle--ends (chain i / sf sl)
+  (setq sf (car chain)                          ; the head's segment runs
+        sl (mohamaddle--revseg (last chain)))       ; in; the tail's is turned
+                                                ; round so that it does too
+  (list (list (car sf) (cadddr sf) (mohamaddle--segpt sf 0.9) i 0 sf)
+        (list (car sl) (cadddr sl) (mohamaddle--segpt sl 0.9) i 1 sl)))
+
+;; One number per loose end, and its index in mohamaddle--endlist's answer,
+;; so a pair, a partner and a visited mark are all comparable as
+;; numbers rather than as the lists they name.
+(defun mohamaddle--endkey (e) (+ (* 2 (nth 3 e)) (nth 4 e)))
+
+;; Every loose end in OPENS, in chain order -- so (nth key ends) finds
+;; one again from its key.
+(defun mohamaddle--endlist (opens / out i c)
+  (setq i 0)
+  (foreach c opens
+    (setq out (append out (mohamaddle--ends c i))
+          i   (1+ i)))
+  out)
+
+;; Pair the loose ends off, closest first: a gap is two ends that want
+;; to be one point.  Ends further apart than *mohamaddle-gapmax* are left
+;; unpaired -- that is a missing wall, not a gap -- ends closer
+;; together than *mohamaddle-fuzz* are already chained and are not a gap
+;; either, and an end already spoken for cannot be paired twice.  What
+;; comes back is a set of disjoint pairs, each (end-a end-b distance).
+(defun mohamaddle--pairs (ends / cand taken out best a b d p)
+  (foreach a ends
+    (foreach b ends
+      (if (and (< (mohamaddle--endkey a) (mohamaddle--endkey b)) ; each pair once
+               (> (setq d (distance (car a) (car b))) *mohamaddle-fuzz*)
+               (<= d *mohamaddle-gapmax*))
+          (setq cand (cons (list d a b) cand)))))
+  ;; then take them closest first.  The pick is a scan rather than a
+  ;; vl-sort because vl-sort DROPS an element that compares equal to
+  ;; another under the predicate it is given -- and two gaps exactly as
+  ;; wide as each other is not an oddity here, it is what the two ends
+  ;; of a wall left short at both of them look like.  Sorting them
+  ;; would quietly lose one, and a ring with a gap missing is not a
+  ;; ring, so the arrow would never be drawn.
+  (repeat (length cand)
+    (setq best nil)
+    (foreach p cand
+      (if (and (not (member (mohamaddle--endkey (cadr p)) taken))
+               (not (member (mohamaddle--endkey (caddr p)) taken))
+               (or (null best) (< (car p) (car best))))
+          (setq best p)))
+    (if best
+        (setq a     (cadr best)
+              b     (caddr best)
+              taken (cons (mohamaddle--endkey a) (cons (mohamaddle--endkey b) taken))
+              out   (cons (list a b (car best)) out))))
+  (reverse out))
+
+;; The end paired with E, or nil.
+(defun mohamaddle--partner (e pairs / k out p)
+  (setq k (mohamaddle--endkey e))
+  (foreach p pairs
+    (cond
+      ((= k (mohamaddle--endkey (car p)))  (setq out (cadr p)))
+      ((= k (mohamaddle--endkey (cadr p))) (setq out (car p)))))
+  out)
+
+;; One gap: the two ends that want to be one point, and how far apart
+;; they are -- the number the drafter is told before being asked about
+;; it, because an eighth of an inch and a foot are not the same
+;; question even though they read the same on screen.
+(defun mohamaddle--gap (a b)
+  (list a b (distance (car a) (car b))))
+
+;; Walk the ring that leaves chain START by its tail: across the gap
+;; waiting there, in at whichever end of whichever chain is on the far
+;; side, out at that chain's other end, on across the next gap, and so
+;; on until the walk arrives back at the head it set out from.  A walk
+;; that does is a RING -- chain, gap, chain, gap, the whole way round.
+;; Returns (chains gaps): the chains as (index . the-end-it-came-in-by)
+;; in walk order, and the gaps as the (end end) pairs it crossed.  nil
+;; when the walk meets a loose end nothing wants, or a chain it has
+;; already walked -- a knot, not a ring.
+(defun mohamaddle--ring (start ends pairs / here goal chains gaps nxt ci ok done)
+  (setq goal   (* 2 start)                   ; the head of START again
+        here   (nth (1+ (* 2 start)) ends)   ; leaving START by its tail
+        chains (list (cons start 0))
+        ok     nil
+        done   nil)
+  (while (not done)
+    (setq nxt (mohamaddle--partner here pairs))
+    (cond
+      ((null nxt) (setq done T))                 ; a loose end: no ring
+      ((= (mohamaddle--endkey nxt) goal)             ; home: the ring closes
+       (setq gaps (cons (mohamaddle--gap here nxt) gaps)
+             ok   T
+             done T))
+      ((assoc (nth 3 nxt) chains) (setq done T)) ; a chain walked twice
+      (T (setq gaps   (cons (mohamaddle--gap here nxt) gaps)
+               ci     (nth 3 nxt)
+               chains (cons (cons ci (nth 4 nxt)) chains)
+               here   (nth (+ (* 2 ci) (- 1 (nth 4 nxt))) ends)))))
+  (if ok (list (reverse chains) (reverse gaps))))
+
+;; The vertex list that ring would be once its gaps are closed: every
+;; chain in the order the walk met it, turned round when the walk came
+;; in by its tail, and each gap left as the straight closing segment it
+;; is about to become.  Enough to measure the area it encloses and find
+;; the middle of it, which is all the ring is read for.
+(defun mohamaddle--ring-vts (opens chains / out c segs s end)
+  (foreach c chains
+    (setq segs (nth (car c) opens))
+    (if (= (cdr c) 1)
+        (setq segs (reverse (mapcar '(lambda (s) (mohamaddle--revseg s)) segs))))
+    (foreach s segs
+      (setq out (cons (list (car (car s)) (cadr (car s)) (caddr s)) out)))
+    ;; and the loose end the chain stops at.  A vertex carries the
+    ;; bulge of the segment LEAVING it, and what leaves this one is the
+    ;; gap -- straight, so 0.  Leaving the point out instead would
+    ;; measure the loop with one segment per chain shortcut away, which
+    ;; is most of it when the chain is a wall or two.
+    (setq end (cadr (last segs))
+          out (cons (list (car end) (cadr end) 0.0) out)))
+  (reverse out))
+
+;; The biggest of a set of closed loops by the area it encloses -- what
+;; a ring of open chains has to beat before MOHAMADDLE reads it as the
+;; perimeter rather than as something loose beside one.
+(defun mohamaddle--maxarea (loops / best a l)
+  (setq best 0.0)
+  (foreach l loops
+    (if (> (setq a (abs (mohamaddle--area l))) best) (setq best a)))
+  best)
+
+;; The ring the open chains make, or the biggest of them when they make
+;; more than one -- the same rule auto-detect uses to pick between
+;; closed loops.  A ring enclosing no area (chains doubling back on
+;; each other) is not one.  Returns (vts chains gaps area).
+(defun mohamaddle--best-ring (opens / ends pairs i seen r vts a best bestarea)
+  (setq ends     (mohamaddle--endlist opens)
+        pairs    (mohamaddle--pairs ends)
+        i        0
+        bestarea 0.0)
+  (repeat (length opens)
+    (if (not (member i seen))
+        (if (setq r (mohamaddle--ring i ends pairs))
+            (progn
+              (setq seen (append seen (mapcar '(lambda (c) (car c)) (car r)))
+                    vts  (mohamaddle--ring-vts opens (car r))
+                    a    (abs (mohamaddle--area vts)))
+              (if (> a bestarea)
+                  (setq bestarea a
+                        best     (list vts (car r) (cadr r) a))))))
+    (setq i (1+ i)))
+  (if (> bestarea 1e-6) best))
+
+;; Where two straight segments would cross if both ran on for ever --
+;; the point a zero fillet joins them at -- or nil when they never do.
+(defun mohamaddle--xsect (s1 s2 / a u c v den)
+  (setq a   (car s1)
+        u   (cal:v- (cadr s1) a)
+        c   (car s2)
+        v   (cal:v- (cadr s2) c)
+        den (cal:cross u v))
+  (if (> (abs den) 1e-9)
+      (cal:v+ a (cal:v* u (/ (cal:cross (cal:v- c a) v)
+                                       den)))))
+
+;; Is this gap the two ends of ONE open LWPOLYLINE, straight at both of
+;; them?  That is the polyline somebody drew round the pool and never
+;; closed, and it is the one gap FILLET must not be asked to close: two
+;; picks on one polyline joins those two segments and throws away every
+;; segment between them, which here is the whole perimeter.  It is
+;; closed by editing the polyline instead (mohamaddle--lwclose), so this
+;; asks everything that edit needs to be safe -- one entity, its own
+;; two ends, open, straight where it is being joined.
+(defun mohamaddle--lwgap-p (g / a b ent cv vts p q)
+  (setq a   (car g)
+        b   (cadr g)
+        ent (cadr a))
+  (and (eq ent (cadr b))
+       (= "LWPOLYLINE" (cdr (assoc 0 (entget ent))))
+       (= 0.0 (caddr (nth 5 a)))               ; straight at both ends
+       (= 0.0 (caddr (nth 5 b)))
+       (setq cv (mohamaddle--lwverts ent))
+       (not (car cv))                          ; and not closed already
+       (> (length (cdr cv)) 2)
+       (setq vts (cdr cv)
+             p   (cal:2d (car vts))
+             q   (cal:2d (last vts)))
+       ;; the polyline's OWN two ends, and nothing else's
+       (or (and (<= (distance p (car a)) *mohamaddle-fuzz*)
+                (<= (distance q (car b)) *mohamaddle-fuzz*))
+           (and (<= (distance p (car b)) *mohamaddle-fuzz*)
+                (<= (distance q (car a)) *mohamaddle-fuzz*)))))
+
+;; Close that polyline onto itself at X: its first vertex moves to the
+;; crossing, its last one goes (it is the same point now, reached the
+;; long way round) and the closed flag goes on.  That is exactly what a
+;; zero fillet between its two end segments leaves behind -- both of
+;; them run on or trimmed back to where they cross -- done as an edit
+;; because FILLET cannot be asked for it.  Every group that is not a
+;; vertex is carried over untouched, and so is each vertex's own width
+;; and bulge.  Returns T.
+(defun mohamaddle--lwclose (ent x / ed g chunks cur head tail)
+  (setq ed (entget ent))
+  (foreach g ed
+    (cond
+      ((= (car g) 10)                          ; a vertex, and its own
+       (if cur (setq chunks (cons (reverse cur) chunks)))   ; groups
+       (setq cur (list g)))                                 ; follow it
+      ((and cur (member (car g) '(40 41 42))) (setq cur (cons g cur)))
+      (cur (setq tail (cons g tail)))          ; after the last vertex
+      (T   (setq head (cons g head)))))        ; before the first
+  (if cur (setq chunks (cons (reverse cur) chunks)))
+  (setq chunks (reverse chunks)
+        head   (reverse head)
+        tail   (reverse tail))
+  (if (> (length chunks) 2)
+      (progn
+        (setq chunks (cons (subst (list 10 (car x) (cadr x))
+                                  (car (car chunks)) (car chunks))
+                           (cdr chunks))
+              chunks (reverse (cdr (reverse chunks))) ; the last one goes
+              head   (subst (cons 70 (logior 1 (cdr (assoc 70 ed))))
+                            (assoc 70 ed) head)
+              head   (subst (cons 90 (length chunks)) (assoc 90 ed) head))
+        (entmod (append head (apply 'append chunks) tail))
+        (entupd ent)
+        T)))
+
+;; Where a gap is: halfway between the two ends that want to be one
+;; point, which is where the arrow points and where the fillet lands.
+(defun mohamaddle--gap-mid (g)
+  (cal:v* (cal:v+ (car (car g)) (car (cadr g))) 0.5))
+
+;; The middle of a vertex list, near enough for "which side is the
+;; inside of the loop": the arrow flies in from the other one.
+(defun mohamaddle--centroid (vts / n)
+  (setq n (float (length vts)))
+  (list (/ (apply '+ (mapcar '(lambda (v) (car v)) vts)) n)
+        (/ (apply '+ (mapcar '(lambda (v) (cadr v)) vts)) n)))
+
+;; The arrow that says IT IS OPEN HERE: one closed polyline, tip on the
+;; gap and tail out on the side away from the inside of the loop, so it
+;; points at the joint from clear space instead of across the drawing.
+;; One entity, so taking it away again when the gap closes is one
+;; entdel.  Returns it.
+(defun mohamaddle--arrow (tip dir lay / l h w sh nrm head back pts)
+  (setq l    *mohamaddle-arrow*
+        h    (/ l 3.0)      ; head length
+        w    (/ l 8.0)      ; half the head's width
+        sh   (/ l 24.0)     ; half the shaft's width
+        nrm  (list (- (cadr dir)) (car dir))
+        head (cal:v- tip (cal:v* dir h))
+        back (cal:v- tip (cal:v* dir l))
+        pts  (list tip
+                   (cal:v+ head (cal:v* nrm w))
+                   (cal:v+ head (cal:v* nrm sh))
+                   (cal:v+ back (cal:v* nrm sh))
+                   (cal:v- back (cal:v* nrm sh))
+                   (cal:v- head (cal:v* nrm sh))
+                   (cal:v- head (cal:v* nrm w))))
+  (entmake (append (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") (cons 8 lay)
+                         '(100 . "AcDbPolyline") (cons 90 (length pts)) '(70 . 1))
+                   (mapcar '(lambda (p) (list 10 (car p) (cadr p))) pts)))
+  (entlast))
+
+;; the pad tools' own marks and nobody else's: every run clears the gap layer
+;; and re-marks whatever is still open, so an arrow does not outlive
+;; the gap it pointed at when the drafter closes one by hand.  Returns
+;; how many it took away.
+(defun mohamaddle--clear-arrows ( / ss i n)
+  (setq n 0)
+  (if (setq ss (ssget "_X" (list (cons 8 *mohamaddle-gap-layer*)
+                                 (cons 410 (getvar "CTAB")))))
+      (progn
+        (setq i 0)
+        (repeat (sslength ss)
+          (entdel (ssname ss i))
+          (setq i (1+ i)
+                n (1+ n)))))
+  n)
+
+;; Close one gap the way a drafter would: FILLET at radius 0, picked on
+;; each end segment up by the end of it that stays (mohamaddle--ends).  Whether it took is read
+;; back off the drawing afterwards rather than promised here -- FILLET
+;; refuses a pair it cannot join (two ends that are parallel however
+;; far they run on, two segments of one entity it will not close), and
+;; a tool that says "if you say so" and then LOOKS is a tool that
+;; cannot be wrong about it.
+(defun mohamaddle--dofillet (g / a b guard)
+  (setq a (car g)
+        b (cadr g))
+  (setvar "FILLETRAD" 0.0)
+  (setvar "TRIMMODE" 1)
+  (command "_.FILLET"
+           (list (cadr a) (trans (mohamaddle--3d (caddr a)) 0 1))
+           (list (cadr b) (trans (mohamaddle--3d (caddr b)) 0 1)))
+  ;; a FILLET that refused a pick is still asking: cancel it here, where
+  ;; the refusal costs one message, rather than letting the next command
+  ;; answer it
+  (setq guard 0)
+  (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+    (command)
+    (setq guard (1+ guard))))
+
+;; Is there still a loose end where this gap was?  A zero fillet that
+;; took leaves none -- the two ends are one point now, and one point
+;; chains -- and one AutoCAD refused leaves both of them exactly where
+;; the arrow is pointing.  Read over *mohamaddle-gapmax* of the gap's
+;; middle rather than at the ends themselves, because a fillet MOVES
+;; the ends it joins and the points the gap was measured between are
+;; not where they are afterwards.
+(defun mohamaddle--still-open-p (mid opens / open i c e)
+  (setq open nil
+        i    0)
+  (foreach c opens
+    (foreach e (mohamaddle--ends c i)
+      (if (<= (distance (car e) mid) *mohamaddle-gapmax*) (setq open T)))
+    (setq i (1+ i)))
+  open)
+
 ;; --------------------------- selection -----------------------------
 ;; Turns a selection set (or the whole current tab when SS is nil) into
-;; a list of closed perimeter loops (vertex lists). Auto-detect keeps
-;; only the largest loop.
-(defun mohamaddle--perimeters (ss / auto i segs res loops nopen nflat best
-                                  bestarea a)
+;; (loops opens): the closed perimeter loops, as vertex lists, and the
+;; open chains that would not close, as segments.  Auto-detect keeps
+;; only the largest loop.  Every segment carries the entity it came off
+;; so the gap pass can hand two of them to FILLET, and entities on the
+;; gap layer are skipped -- those are the pad tools' own arrows, and a run
+;; that read its own marks back as geometry would pad them.
+(defun mohamaddle--perimeters (ss / auto i en ed segs res loops opens nflat best
+                              bestarea a l)
   (setq auto (not ss))
   (if auto
       (setq ss (ssget "_X" (list '(0 . "LWPOLYLINE,POLYLINE,LINE,ARC")
@@ -85913,17 +87461,20 @@
       (progn
         (setq i 0)
         (repeat (sslength ss)
-          (setq segs (append segs (mohamaddle--ent-segs (ssname ss i)))
-                i    (1+ i)))
+          (setq en (ssname ss i)
+                i  (1+ i))
+          ;; entget is nil for an entity a fillet consumed, and this
+          ;; same set is read again after the gap pass has filleted
+          (if (and (setq ed (entget en))
+                   (/= (strcase (cdr (assoc 8 ed)))
+                       (strcase *mohamaddle-gap-layer*)))
+              (setq segs (append segs
+                                 (mapcar '(lambda (s) (append s (list en)))
+                                         (mohamaddle--ent-segs en))))))
         (setq res   (mohamaddle--chain segs)
               loops (mohamaddle--solid-loops (car res))
               nflat (- (length (car res)) (length loops))
-              nopen (cdr res))
-        (if (> nopen 0)
-            (princ (strcat "\nMOHAMADDLE: ignored " (itoa nopen)
-                           " open chain(s) that never close back on themselves"
-                           " (check for gaps; chaining tolerance is "
-                           (rtos *mohamaddle-fuzz* 2 2) ").")))
+              opens (cadr res))
         (if (> nflat 0)
             (princ (strcat "\nMOHAMADDLE: ignored " (itoa nflat)
                            " closed loop(s) that enclose no area"
@@ -85934,16 +87485,28 @@
               (foreach l loops
                 (setq a (abs (mohamaddle--area l)))
                 (if (> a bestarea) (setq bestarea a best l)))
+              (setq loops nil)
               (if best
                   (progn
                     (princ "\nMOHAMADDLE: auto-detected the largest closed loop as the perimeter.")
-                    (list best))))
-            loops))))
+                    (setq loops (list best))))))
+        (list loops opens))))
 
 ;; ---------------------------- command ------------------------------
 (defun c:MOHAMADDLE (/ *error* doc space mark-open sizekw picked padsize
-                       blkname ss perims vts allpads delta ndodge ncorner narc)
+                       blkname ss res perims opens vts allpads delta ndodge
+                       ncorner narc ofrad otrim oecho ring gaps ngap nring
+                       nopen marks mk g mid ctr ans xsc tried nyes nclosed
+                       nrefused nleft pad)
   (defun *error* (msg)
+    ;; the sysvars the gap pass borrows go back FIRST.  A setvar cannot
+    ;; throw and everything below it can, and an error raised inside
+    ;; *error* abandons every line after it -- the drafter would meet a
+    ;; FILLETRAD of 0 in the NEXT command they ran, which does not look
+    ;; like this one's doing.
+    (if ofrad (setvar "FILLETRAD" ofrad))
+    (if otrim (setvar "TRIMMODE" otrim))
+    (if oecho (setvar "CMDECHO" oecho))
     ;; close only the mark THIS run opened: an Esc at the size or
     ;; perimeter prompt comes before StartUndoMark, and closing a mark
     ;; nothing opened throws -- from inside the handler, where nothing
@@ -85986,13 +87549,141 @@
         (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
         (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
         (if lzd:watch (lzd:watch ss) ss)))
-  (setq perims (mohamaddle--perimeters ss))
+  ;; One undo step covers the lot: the marks this run clears, the arrows
+  ;; it draws at whatever is open, the gaps the drafter has it close,
+  ;; and the pads that follow.  It opens here rather than at the pads
+  ;; because the first thing below already writes to the drawing.
+  (vla-StartUndoMark doc)
+  (setq mark-open T)
+  (mohamaddle--clear-arrows)
+
+  (setq res    (mohamaddle--perimeters ss)
+        perims (car res)
+        opens  (cadr res)
+        nring  0)
+
+  ;; --- a perimeter that closes except for a gap ----------------------
+  ;; The chains and the gaps between them go round once and come back:
+  ;; that is one perimeter with holes in it, not a pile of loose lines.
+  ;; It has to enclose more than any loop that DID close, or it is
+  ;; something loose lying beside a perimeter MOHAMADDLE already has.
+  (if (and opens
+           (setq ring (mohamaddle--best-ring opens))
+           (> (nth 3 ring) (mohamaddle--maxarea perims)))
+      (setq gaps  (nth 2 ring)
+            ngap  (length gaps)
+            nring (length (nth 1 ring)))
+      (setq ring nil ngap 0))
+
+  (setq nopen (- (length opens) nring))
+  (if (> nopen 0)
+      (princ (strcat "\nMOHAMADDLE: ignored " (itoa nopen)
+                     " open chain(s) that never close back on themselves"
+                     " (check for gaps; chaining tolerance is "
+                     (rtos *mohamaddle-fuzz* 2 2) ").")))
+
+  (if ring
+      (progn
+        (mohamaddle--ensure-layer *mohamaddle-gap-layer* *mohamaddle-gap-color*)
+        (princ (strcat "\nMOHAMADDLE: this reads as one closed perimeter with "
+                       (itoa ngap) " gap(s) in it, not as loose geometry."
+                       " Arrow(s) drawn on layer \"" *mohamaddle-gap-layer*
+                       "\" at the open joint(s)."))
+        ;; every arrow goes in BEFORE the first question: a drafter who
+        ;; answers No, or presses Esc at one, is left looking at the
+        ;; whole picture rather than at the one gap that got as far as
+        ;; being asked about
+        (setq ctr (mohamaddle--centroid (car ring))) ; the inside of the loop
+        (foreach g gaps
+          (setq mid   (mohamaddle--gap-mid g)
+                marks (cons (list (mohamaddle--arrow
+                                    mid
+                                    (cond ((cal:unit (cal:v- ctr mid)))
+                                          ('(0.0 1.0))) ; a gap dead on the
+                                                        ; middle: any way in
+                                    *mohamaddle-gap-layer*)
+                                  mid g)
+                            marks)))
+        (setq marks (reverse marks)
+              oecho (getvar "CMDECHO")
+              ofrad (getvar "FILLETRAD")
+              otrim (getvar "TRIMMODE")
+              nyes  0
+              ngap  0)
+        (foreach mk marks
+          (setq ngap (1+ ngap)
+                g    (caddr mk)
+                mid  (cadr mk))
+          (princ (strcat "\n  gap " (itoa ngap) " of " (itoa (length marks))
+                         ": " (mohamaddle--in (caddr g)) " wide, at "
+                         (rtos (car mid) 2 2) "," (rtos (cadr mid) 2 2)))
+          ;; Both loose ends on ONE entity is the polyline somebody
+          ;; drew round the pool and never closed.  FILLET must not be
+          ;; asked for that one -- two picks on one polyline joins
+          ;; those two segments and throws away every segment between
+          ;; them, which here is the perimeter -- so the same join is
+          ;; made by editing the polyline: first vertex to the
+          ;; crossing, last vertex away, closed flag on, which is what
+          ;; the fillet would have left.  Anything else on one entity
+          ;; (a heavy POLYLINE, an arc at either end, two ends that
+          ;; never cross) is marked and named instead.
+          (setq xsc (if (mohamaddle--lwgap-p g)
+                        (mohamaddle--xsect (nth 5 (car g)) (nth 5 (cadr g)))))
+          (if (and (eq (cadr (car g)) (cadr (cadr g))) (not xsc))
+              (progn
+                (princ "\n  both ends are on one entity, and MOHAMADDLE cannot join it in")
+                (princ "\n  place. A zero fillet there is two picks on one polyline,")
+                (princ "\n  which cuts away everything between them, so it is not")
+                (princ "\n  offered. Close it (PEDIT > Close, or pull the two ends")
+                (princ "\n  together) and run MOHAMADDLE again."))
+              (progn
+                (if xsc
+                    (princ "\n  both ends are on one polyline: MOHAMADDLE joins them at the crossing itself."))
+                (initget "Yes No")
+                (setq ans (getkword "\nClose the gap the arrow points at with a zero fillet? [Yes/No] <Yes>: "))
+                (if lzd:ask (lzd:ask "\nClose the gap the arrow points at with a zero fillet? [Yes/No] <Yes>: " ans) ans)
+                (if (null ans) (setq ans "Yes"))
+                (if (= ans "Yes")
+                    (progn
+                      (setvar "CMDECHO" 0)
+                      (if xsc
+                          (mohamaddle--lwclose (cadr (car g)) xsc)
+                          (mohamaddle--dofillet g))
+                      (setvar "CMDECHO" oecho)
+                      (setq nyes  (1+ nyes)
+                            tried (cons (car mk) tried)))))))  ; asked for, and tried
+        (setvar "FILLETRAD" ofrad)
+        (setvar "TRIMMODE" otrim)
+        (setq nclosed 0 nrefused 0 nleft 0)
+        ;; read the drawing again: a gap that closed is not there to be
+        ;; found any more, and what it closed is a perimeter to pad
+        (if (> nyes 0)
+            (setq res    (mohamaddle--perimeters ss)
+                  perims (car res)
+                  opens  (cadr res)))
+        (foreach mk marks
+          (if (mohamaddle--still-open-p (cadr mk) opens)
+              (if (member (car mk) tried)
+                  (setq nrefused (1+ nrefused))
+                  (setq nleft (1+ nleft)))
+              (progn (entdel (car mk)) ; the arrow has nothing left to
+                     (setq nclosed (1+ nclosed))))) ; point at
+        (if (> nclosed 0)
+            (princ (strcat "\nMOHAMADDLE: " (itoa nclosed)
+                           " gap(s) closed with a zero fillet - carrying on"
+                           " with what that leaves.")))
+        (if (> nrefused 0)
+            (princ (strcat "\nMOHAMADDLE: FILLET would not close " (itoa nrefused)
+                           " gap(s) - the two ends do not meet even run on."
+                           " Their arrow(s) stay.")))
+        (if (> nleft 0)
+            (princ (strcat "\nMOHAMADDLE: " (itoa nleft)
+                           " gap(s) left as they are - the arrow(s) mark them."
+                           " MOHAMADDLE pads the perimeter once it closes.")))))
 
   (if (not perims)
       (princ "\nMOHAMADDLE: no closed perimeter loop found.")
       (progn
-        (vla-StartUndoMark doc)
-        (setq mark-open T)
         (mohamaddle--ensure-block doc blkname padsize)
         (mohamaddle--ensure-layer *mohamaddle-layer* *mohamaddle-layer-color*)
         (setq delta (mohamaddle--block-delta space blkname))
@@ -86006,8 +87697,6 @@
         (foreach pad allpads
           (mohamaddle--insert-pad space blkname (car pad) (cadr pad) delta)
           (if (= (caddr pad) "corner") (setq ncorner (1+ ncorner)) (setq narc (1+ narc))))
-        (vla-EndUndoMark doc)
-        (setq mark-open nil)
         (if allpads
             (progn
               (princ (strcat "\nMOHAMADDLE: inserted " (itoa (length allpads))
@@ -86020,6 +87709,8 @@
                                  " overlapping pad(s) merged into their"
                                  " neighbours where features crowd together."))))
             (princ "\nMOHAMADDLE: perimeter checked - no concave features need pads."))))
+  (vla-EndUndoMark doc)
+  (setq mark-open nil)
   (if lzd:end (lzd:end "MOHAMADDLE"))
   (princ))
 
@@ -93634,9 +95325,13 @@
 ;;;       are solid.  (At most sf:*maxshown* previews; when more fit,
 ;;;       the routine says how many it left out rather than silently
 ;;;       stopping.)
-;;;    3. Click the arc you want.  The previews go, the corner is
-;;;       filleted for real at that radius, and the arc gets its radius
-;;;       dimension -- the number the shop needs, not just the shape.
+;;;    3. Click the one you want -- the ARC, or the R6 lettered beside
+;;;       it.  Both are that size: an arc is a hairline and the label
+;;;       is much the bigger target of the two, so a click that lands
+;;;       on the letters is an answer rather than a fan thrown away.
+;;;       The previews go, the corner is filleted for real at that
+;;;       radius, and the arc gets its radius dimension -- the number
+;;;       the shop needs, not just the shape.
 ;;;    4. It then offers the SAME radius for the rest of the corners:
 ;;;       two lines per corner until Done.  As soon as one repeat is
 ;;;       cut, the single dimension becomes "R12 Typ.", which is how the
@@ -93649,6 +95344,18 @@
 ;;;  shade.  The labels climb a rung further off the leg with each
 ;;;  preview, because consecutive tangent points sit one step apart
 ;;;  along a leg and that is not room for two labels side by side.
+;;;
+;;;  Two lines that stop short of where they MEET are the case the fan
+;;;  cannot speak for itself.  FILLET extends them to the corner, so
+;;;  every arc is drawn round a point that is on neither line -- and
+;;;  when the lines are yards from it, what lands on screen is a fan of
+;;;  green arcs floating in space with nothing to say which two lines
+;;;  they belong to.  So each leg that falls short gets a DASHED run
+;;;  from its own end out to that corner: the line FILLET is going to
+;;;  make, drawn before it exists.  It is a preview like the arcs --
+;;;  same layer, erased with them, never left behind -- and a leg that
+;;;  misses by less than sf:*gapmin* gets none, because a run shorter
+;;;  than one dash is a tick on the end of a line and reads as work.
 ;;;
 ;;;  HONEFILLET is the spinoff for the sizes BETWEEN these: same corner,
 ;;;  same picks, but it asks for two neighbouring previews and redraws
@@ -93675,6 +95382,9 @@
 ;;;    sf:*trans*      how transparent a preview is, per cent
 ;;;    sf:*ltype*      the extras' linetype, created if missing
 ;;;    sf:*ltscale*    per-arc linetype scale, nil = the drawing's
+;;;    sf:*guide*      T to run a dashed line out to a corner the
+;;;                    picked lines stop short of
+;;;    sf:*gapmin*     how far short one has to stop before it does
 ;;;    sf:*label*      T to letter each preview R6, R12 ...
 ;;;    sf:*txthgt*     height of those labels
 ;;;    sf:*rung*       how far each label climbs past the one before,
@@ -93701,6 +95411,14 @@
 ;;;    * The preview arcs are real entities on their own layer, erased
 ;;;      on the way out -- on a clean finish, on Esc, and on an error.
 ;;;      The empty layer is left behind; deleting it is a PURGE away.
+;;;      The dashed guides out to a far-off corner are previews too and
+;;;      go the same way; the run says so out loud when it draws them,
+;;;      because two new lines in a drawing are work until somebody is
+;;;      told otherwise.
+;;;    * A preview's LABEL is the same answer as its arc.  Both are on
+;;;      the list a click is looked up in, so R6 and the arc it letters
+;;;      pick the same corner; a guide line is on neither list and a
+;;;      click on one is a miss.
 ;;;    * The shades are true colours (DXF 420) and the transparency is
 ;;;      DXF 440, both per entity.  A viewport with transparency display
 ;;;      switched off (TRANSPARENCYDISPLAY 0) draws them solid, which
@@ -93723,7 +95441,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.5")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.6")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -93773,6 +95491,23 @@
                              ; quarter-scale pattern puts real gaps in
                              ; even the smallest preview.  nil = leave
                              ; the arcs at the drawing's own LTSCALE
+;; Two lines that stop short of where they MEET put the whole fan out
+;; in space: FILLET extends them to a corner that is on neither line, so
+;; the arcs are drawn round a point yards from anything the drafter can
+;; see.  A dashed run from each leg's own end out to that corner is what
+;; ties the fan back to the two lines it belongs to.
+(setq sf:*guide*      t)     ; nil = never draw one, and a far-off
+                             ; corner is a fan of green arcs floating
+                             ; in space again
+(setq sf:*gapmin*     4.5)   ; how far short of the corner a line has to
+                             ; stop before it gets one.  The stock
+                             ; DASHED pattern is 18 units and
+                             ; sf:*ltscale* takes a quarter of it, so a
+                             ; run shorter than 4.5 comes out as one
+                             ; unbroken tick on the end of the line --
+                             ; which reads as drawn work, the one thing
+                             ; a guide must never do.  nil = a guide for
+                             ; any gap at all
 (setq sf:*label*      t)
 (setq sf:*txthgt*     4.0)   ; small enough that two labels a 6" step
                              ; apart clear each other side to side
@@ -93899,13 +95634,16 @@
 ;;; -------------------- the corner ----------------------------------
 
 ;; One leg of the corner: which way the line runs from the crossing
-;; point X on the side that was CLICKED -- the side FILLET keeps -- and
-;; how far it reaches that way.  Returns (unit-direction reach), or nil
-;; when the line has no length.  The pick decides the direction and the
-;; far endpoint decides the reach, so a line whose crossing point lies
-;; off its own end (the case FILLET handles by extending it) is
-;; measured the same way as one the corner sits inside.
-(defun sf:leg (en x pk / ends a b d s u av)
+;; point X on the side that was CLICKED -- the side FILLET keeps -- how
+;; far it reaches that way, and how far short of X it STARTS.  Returns
+;; (unit-direction reach gap), or nil when the line has no length.  The
+;; pick decides the direction and the far endpoint decides the reach,
+;; so a line whose crossing point lies off its own end (the case FILLET
+;; handles by extending it) is measured the same way as one the corner
+;; sits inside.  The GAP is what that case costs the drawing: the run
+;; from X back to the nearer end, which is line FILLET will make and
+;; nobody can see yet, and 0 for a line the corner already sits on.
+(defun sf:leg (en x pk / ends a b d s u av nv)
   (setq ends (sf:ends en)
         a    (car  ends)
         b    (cadr ends)
@@ -93921,17 +95659,23 @@
                   (cal:dot d (cal:v- a x))
                   (cal:dot d (cal:v- b x)))))
       (setq u  (if (< s 0.0) (cal:v* d -1.0) d)
-            av (max (cal:dot u (cal:v- a x)) (cal:dot u (cal:v- b x))))
-      (if (> av 1e-9) (list u av)))))
+            av (max (cal:dot u (cal:v- a x)) (cal:dot u (cal:v- b x)))
+            nv (min (cal:dot u (cal:v- a x)) (cal:dot u (cal:v- b x))))
+      ;; a nearer end BEHIND X is a corner the line already covers, and
+      ;; there is no gap to draw over: the negative reach is not a
+      ;; distance, so it comes back as the 0 it means
+      (if (> av 1e-9) (list u av (max 0.0 nv))))))
 
 ;; Everything about the corner two picked lines make, worked out once:
-;;   (X u1 reach1 u2 reach2 half-angle)
+;;   (X u1 reach1 u2 reach2 half-angle gap1 gap2)
 ;; X is where the two lines cross (extended if they have to be, as
 ;; FILLET extends them), each u runs from X along the side that was
 ;; clicked, and half-angle is half the turn between them -- the one
-;; number the whole fillet is built from.  nil when there is no corner:
-;; parallel lines, the same line twice, or two legs so nearly straight
-;; through that no arc could join them.
+;; number the whole fillet is built from.  The two gaps say how far
+;; short of X each line stops, which is the ground the dashed guides
+;; are drawn over and 0 for a line X sits on.  nil when there is no
+;; corner: parallel lines, the same line twice, or two legs so nearly
+;; straight through that no arc could join them.
 (defun sf:corner (e1 pk1 e2 pk2 / a b x l1 l2 th)
   (setq a (sf:ends e1)
         b (sf:ends e2)
@@ -93946,7 +95690,42 @@
           (setq th (abs (cal:signed-dang (angle '(0.0 0.0) (car l1))
                                         (angle '(0.0 0.0) (car l2)))))
           (if (and (> th sf:*minang*) (< th (- pi sf:*minang*)))
-            (list x (car l1) (cadr l1) (car l2) (cadr l2) (/ th 2.0))))))))
+            (list x (car l1) (cadr l1) (car l2) (cadr l2) (/ th 2.0)
+                  (caddr l1) (caddr l2))))))))
+
+;; How far leg N (1 or 2) stops SHORT of the corner, when that is far
+;; enough to be worth a guide.  nil for a line the corner sits on, and
+;; nil for one that misses it by less than sf:*gapmin*, where the run
+;; out to it would be a tick on the end of a line rather than a line
+;; going somewhere.  sf:*guide* nil turns the whole thing off, and
+;; then every caller of this is a no-op rather than each of them
+;; testing the flag for itself.
+(defun sf:gapof (geo n / g)
+  (setq g (nth (if (= n 1) 6 7) geo))
+  (if (and sf:*guide* g (> g (if sf:*gapmin* sf:*gapmin* 0.0))) g))
+
+;; What those dashed runs ARE, in words, said once a run.  A straight
+;; dashed line lands on screen beside dashed ARCS that mean something
+;; else entirely, and a drafter who finds two new lines in the drawing
+;; has to be told they are a guide rather than work somebody's tool
+;; left behind.  nil when both lines reach their corner and none was
+;; drawn -- there is nothing to explain then, and the note would be
+;; one more line to scroll past.
+(defun sf:gapnote (geo / g1 g2)
+  (setq g1 (sf:gapof geo 1)
+        g2 (sf:gapof geo 2))
+  (cond
+    ((and g1 g2)
+     (strcat "\nNeither line reaches that corner -- they stop "
+             (sf:num g1) "\" and " (sf:num g2) "\" short of it."
+             "  The dashed STRAIGHT run out to it is a guide, not"
+             " drawn work; FILLET extends the legs when the corner is"
+             " cut."))
+    ((or g1 g2)
+     (strcat "\nOne line stops " (sf:num (if g1 g1 g2)) "\" short of"
+             " that corner.  The dashed STRAIGHT run out to it is a"
+             " guide, not drawn work; FILLET extends that leg when the"
+             " corner is cut."))))
 
 ;; how far back from the corner a fillet of radius R starts
 (defun sf:tanlen (half r) (/ r (cal:tan half)))
@@ -94007,8 +95786,11 @@
 
 ;;; -------------------- previews ------------------------------------
 
-;; Remember what was drawn: everything goes on the erase list, and an
-;; arc also goes on the list a click is looked up in.
+;; Remember what was drawn: everything goes on the erase list, and
+;; anything that STANDS FOR a radius -- the arc and the label beside it
+;; both -- also goes on the list a click is looked up in.  A guide line
+;; is marked with no radius: it is drawn with the fan and erased with
+;; it, but it is not one of the answers.
 (defun sf:mark (en r)
   (if en
     (progn
@@ -94016,8 +95798,9 @@
       (if r (setq sf:*picks* (cons (cons en r) sf:*picks*)))))
   en)
 
-;; the radius a preview arc stands for, nil for anything else in the
-;; drawing
+;; the radius a preview stands for -- its arc or its label, since
+;; either one is that size -- and nil for anything else in the drawing,
+;; a guide line of this tool's own included
 (defun sf:radof (en / p)
   (setq p (assoc en sf:*picks*))
   (if p (cdr p)))
@@ -94067,6 +95850,23 @@
                     (cons 50 a1) (cons 51 a2))))
   (if (entmake dxf) (entlast)))
 
+;; One guide line, dashed, and a preview in every other way: the same
+;; layer, the same fallback colour, the same transparency, erased with
+;; the rest.  No true colour of its own -- the light-to-dark grading is
+;; how the fan says WHICH radius, and a guide stands for none of them,
+;; so it reads as the layer's plain green.
+(defun sf:draw-line (p1 p2 / dxf)
+  (setq dxf (append
+              (list '(0 . "LINE") '(100 . "AcDbEntity")
+                    (cons 8 sf:*layer*) (cons 62 sf:*color*)
+                    (cons 6 (sf:ensure-ltype)))
+              (if sf:*ltscale* (list (cons 48 sf:*ltscale*)))
+              (sf:colgroups nil)             ; entity section, as above
+              (list '(100 . "AcDbLine")
+                    (list 10 (car p1) (cadr p1) 0.0)
+                    (list 11 (car p2) (cadr p2) 0.0))))
+  (if (entmake dxf) (entlast)))
+
 ;; the radius, lettered beside a preview in that preview's own shade.
 ;; Middle-centre justified, so the text sits on the point it is given
 ;; whatever it says.
@@ -94098,14 +95898,34 @@
                                (float (/ i 2)))))))) ; integer divide:
                                                      ; the rung number
 
-;; Draw the whole fan of previews, light shade to dark.  Labels
-;; alternate between the two legs: consecutive tangent points sit one
-;; step apart along one leg, which is not room enough for two labels
-;; side by side.
+;; The dashed run from each leg's own end out to the corner, for a leg
+;; whose line stops short of it.  Two lines that meet on paper get none
+;; of this and want none; two that are yards apart get the one thing
+;; that says which corner the fan belongs to, because the point FILLET
+;; will extend them to is on neither of them.  Marked with no radius --
+;; a guide stands for no size, so a click on one is a miss like any
+;; other click on empty paper.
+(defun sf:guides (geo / u g i)
+  (setq i 1)
+  (foreach u (list (cadr geo) (cadddr geo))
+    (if (setq g (sf:gapof geo i))
+      (sf:mark (sf:draw-line (cal:v+ (car geo) (cal:v* u g)) (car geo))
+               nil))
+    (setq i (1+ i))))
+
+;; Draw the whole fan of previews, light shade to dark, over the dashed
+;; guides out to a corner the lines stop short of.  Labels alternate
+;; between the two legs: consecutive tangent points sit one step apart
+;; along one leg, which is not room enough for two labels side by
+;; side.
 (defun sf:preview (geo rads / i n r a c t1 t2 anchor col)
   (setq i 0
         n (length rads))
   (cal:ensure-layer sf:*layer* sf:*color*)
+  ;; the guides go down FIRST, so every arc sits on top of them: where a
+  ;; tangent point lands inside a gap the arc lies along the guide, and
+  ;; the arc is what a click there has to find
+  (sf:guides geo)
   (foreach r rads
     (setq a   (sf:arcpts geo r)
           c   (car   a)
@@ -94116,9 +95936,14 @@
     (if sf:*label*
       (progn
         (setq anchor (if (= 0 (rem i 2)) t1 t2))
+        ;; the label is marked with the SAME radius as its arc, so
+        ;; clicking the R6 is clicking the R6 corner.  It is much the
+        ;; bigger target of the two -- an arc is a hairline, and on a
+        ;; tight fan the near-miss that used to throw the whole thing
+        ;; away is now an answer
         (sf:mark (sf:draw-label (sf:labelpt anchor c i)
                                 (sf:rlabel r) col)
-                 nil)))
+                 r)))
     (setq i (1+ i))))
 
 ;;; -------------------- asking --------------------------------------
@@ -94156,20 +95981,26 @@
 ;; that would throw a whole fan of them away is exactly the click this
 ;; prompt invites.  Cancel is in the bracket, so there is a mouse-only
 ;; way out that does not depend on hitting anything.
-(defun sf:pickpreview ( / sel ans r)
+(defun sf:pickpreview ( / msg sel ans r)
+  ;; the question in a local: it is asked in the prompt and written down
+  ;; again in the transcript, and two copies of one string is how the
+  ;; two come to say different things
+  (setq msg "\nClick the rounded corner you want, or its label [Cancel]: ")
   (while (not ans)
     (initget "Cancel")
-    (setq sel (entsel "\nClick the rounded corner you want [Cancel]: "))
-    (if lzd:ask (lzd:ask "\nClick the rounded corner you want [Cancel]: " sel) sel)
+    (setq sel (entsel msg))
+    (if lzd:ask (lzd:ask msg sel) sel)
     (if lzd:watch (lzd:watch sel) sel)
     (cond
       ((= (type sel) 'STR) (setq ans 'SF-NONE))
       ((null sel)
        (princ (strcat "\n  (nothing there -- click one of the green"
-                      " corners, or type Cancel)")))
+                      " corners or the R-number beside it, or type"
+                      " Cancel)")))
       ((setq r (sf:radof (car sel))) (setq ans r))
       (t (princ (strcat "\n  (that is not one of the previews -- click a"
-                        " green corner)")))))
+                        " green corner, or the R-number lettered beside"
+                        " it)")))))
   (if (eq ans 'SF-NONE) nil ans))
 
 ;;; -------------------- cutting and dimensioning --------------------
@@ -94322,7 +96153,7 @@
 ;;; -------------------- the command ---------------------------------
 
 (defun c:SMARTFILLET ( / *error* olderr odim undo-open
-                         one two geo rmax rads extra shown-extras
+                         one two geo rmax rads extra shown-extras note
                          r arc dim1 made)
 
   ;; -- restore drawing state on error / Esc.  The previews go first:
@@ -94420,6 +96251,13 @@
        (princ (strcat "\nDashed: " (sf:rlist shown-extras)
                       " -- the in-between sizes, less common than a "
                       (sf:num sf:*step*) "\" step.")))
+     ;; ...and a STRAIGHT dashed line, when there is one, is not one of
+     ;; those at all.  It goes out to a corner the picked lines stop
+     ;; short of, which is where the whole fan is drawn and where
+     ;; neither line can be seen -- said here, next to the sentence
+     ;; about the dashed arcs, because that is the one it would
+     ;; otherwise be read as
+     (if (setq note (sf:gapnote geo)) (princ note))
      ;; a cap that says nothing reads as "that is all this corner
      ;; takes", which is a different fact
      (if (> extra 0)
@@ -94429,6 +96267,12 @@
                       (if (= 1 extra) "is" "are") " not shown"
                       " -- raise sf:*maxshown* to see "
                       (if (= 1 extra) "it" "them") ".")))
+     ;; the label answers for its arc, and on a fan this tight it is
+     ;; the bigger target of the two -- worth saying, because nothing
+     ;; on screen suggests a piece of text is clickable
+     (if sf:*label*
+       (princ (strcat "\nClick an arc or the R-number beside it --"
+                      " either one is that radius.")))
 
      ;; -- 3. the one that gets cut
      (setq r (sf:pickpreview))
@@ -94500,7 +96344,8 @@
 (if (not *calofin-quiet*)
   (princ (strcat "\nSMARTFILLET " *smartfillet-version*
                  " loaded -- type SMARTFILLET, pick two lines, and click"
-                 " the rounded corner you want.")))
+                 " the rounded corner you want, or the R-number beside"
+                 " it.")))
 (princ)
 
 
@@ -94557,6 +96402,26 @@
 ;;;       cut, the single dimension becomes "R13.5 Typ.", which is how
 ;;;       the radius would be lettered by hand.
 ;;;
+;;;  Every pick in that run takes the ARC or the R-number lettered
+;;;  beside it -- both are that size.  It matters most on the honed
+;;;  fan, where the arcs sit half an inch apart and an arc is a
+;;;  hairline: the label is much the bigger target of the two, so a
+;;;  click that lands on the letters is an answer rather than a fan
+;;;  thrown away and bracketed again.
+;;;
+;;;  Two lines that stop short of where they MEET are the case neither
+;;;  fan can speak for itself.  FILLET extends them to the corner, so
+;;;  every arc is drawn round a point that is on neither line -- and
+;;;  when the lines are yards from it, what lands on screen is a fan of
+;;;  green arcs floating in space with nothing to say which two lines
+;;;  they belong to.  So each leg that falls short gets a DASHED run
+;;;  from its own end out to that corner: the line FILLET is going to
+;;;  make, drawn before it exists.  It is a preview like the arcs --
+;;;  same layer, redrawn with the honed fan, erased with either, never
+;;;  left behind -- and a leg that misses by less than hn:*gapmin*
+;;;  gets none, because a run shorter than one dash is a tick on the
+;;;  end of a line and reads as work.
+;;;
 ;;;  Telling one preview from the next is the whole job of both fans,
 ;;;  and it matters more here than it does in SMARTFILLET -- half an
 ;;;  inch of radius is a hair's difference on screen.  So three things
@@ -94591,6 +96456,9 @@
 ;;;    hn:*trans*      how transparent a preview is, per cent
 ;;;    hn:*ltype*      the dashed previews' linetype, created if missing
 ;;;    hn:*ltscale*    per-arc linetype scale, nil = the drawing's
+;;;    hn:*guide*      T to run a dashed line out to a corner the
+;;;                    picked lines stop short of
+;;;    hn:*gapmin*     how far short one has to stop before it does
 ;;;    hn:*label*      T to letter each preview R6, R13.5 ...
 ;;;    hn:*txthgt*     height of those labels
 ;;;    hn:*rung*       how far each label climbs past the one before,
@@ -94620,6 +96488,15 @@
 ;;;    * The preview arcs are real entities on their own layer, erased
 ;;;      on the way out -- on a clean finish, on Esc, and on an error.
 ;;;      The empty layer is left behind; deleting it is a PURGE away.
+;;;      The dashed guides out to a far-off corner are previews too and
+;;;      go the same way; the run says so out loud when it draws them,
+;;;      because two new lines in a drawing are work until somebody is
+;;;      told otherwise.
+;;;    * A preview's LABEL is the same answer as its arc, at the
+;;;      bracket and at the cut alike.  Both are on the list a click is
+;;;      looked up in, so R13.5 and the arc it letters pick the same
+;;;      corner; a guide line is on neither list and a click on one is
+;;;      a miss.
 ;;;    * The shades are true colours (DXF 420) and the transparency is
 ;;;      DXF 440, both per entity.  A viewport with transparency display
 ;;;      switched off (TRANSPARENCYDISPLAY 0) draws them solid, which
@@ -94642,7 +96519,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *honefillet-version* "v1.3")  ; announced on load; release_lisp.py
+(setq *honefillet-version* "v1.4")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -94705,6 +96582,23 @@
                              ; quarter-scale pattern puts real gaps in
                              ; even the smallest preview.  nil = leave
                              ; the arcs at the drawing's own LTSCALE
+;; Two lines that stop short of where they MEET put the whole fan out
+;; in space: FILLET extends them to a corner that is on neither line, so
+;; the arcs are drawn round a point yards from anything the drafter can
+;; see.  A dashed run from each leg's own end out to that corner is what
+;; ties the fan back to the two lines it belongs to.
+(setq hn:*guide*      t)     ; nil = never draw one, and a far-off
+                             ; corner is a fan of green arcs floating
+                             ; in space again
+(setq hn:*gapmin*     4.5)   ; how far short of the corner a line has to
+                             ; stop before it gets one.  The stock
+                             ; DASHED pattern is 18 units and
+                             ; hn:*ltscale* takes a quarter of it, so a
+                             ; run shorter than 4.5 comes out as one
+                             ; unbroken tick on the end of the line --
+                             ; which reads as drawn work, the one thing
+                             ; a guide must never do.  nil = a guide for
+                             ; any gap at all
 (setq hn:*label*      t)
 (setq hn:*txthgt*     3.0)   ; smaller than SMARTFILLET's: R13.5 is two
                              ; characters longer than R12 and the honed
@@ -94843,13 +96737,16 @@
 ;;; -------------------- the corner ----------------------------------
 
 ;; One leg of the corner: which way the line runs from the crossing
-;; point X on the side that was CLICKED -- the side FILLET keeps -- and
-;; how far it reaches that way.  Returns (unit-direction reach), or nil
-;; when the line has no length.  The pick decides the direction and the
-;; far endpoint decides the reach, so a line whose crossing point lies
-;; off its own end (the case FILLET handles by extending it) is
-;; measured the same way as one the corner sits inside.
-(defun hn:leg (en x pk / ends a b d s u av)
+;; point X on the side that was CLICKED -- the side FILLET keeps -- how
+;; far it reaches that way, and how far short of X it STARTS.  Returns
+;; (unit-direction reach gap), or nil when the line has no length.  The
+;; pick decides the direction and the far endpoint decides the reach,
+;; so a line whose crossing point lies off its own end (the case FILLET
+;; handles by extending it) is measured the same way as one the corner
+;; sits inside.  The GAP is what that case costs the drawing: the run
+;; from X back to the nearer end, which is line FILLET will make and
+;; nobody can see yet, and 0 for a line the corner already sits on.
+(defun hn:leg (en x pk / ends a b d s u av nv)
   (setq ends (hn:ends en)
         a    (car  ends)
         b    (cadr ends)
@@ -94865,17 +96762,23 @@
                   (cal:dot d (cal:v- a x))
                   (cal:dot d (cal:v- b x)))))
       (setq u  (if (< s 0.0) (cal:v* d -1.0) d)
-            av (max (cal:dot u (cal:v- a x)) (cal:dot u (cal:v- b x))))
-      (if (> av 1e-9) (list u av)))))
+            av (max (cal:dot u (cal:v- a x)) (cal:dot u (cal:v- b x)))
+            nv (min (cal:dot u (cal:v- a x)) (cal:dot u (cal:v- b x))))
+      ;; a nearer end BEHIND X is a corner the line already covers, and
+      ;; there is no gap to draw over: the negative reach is not a
+      ;; distance, so it comes back as the 0 it means
+      (if (> av 1e-9) (list u av (max 0.0 nv))))))
 
 ;; Everything about the corner two picked lines make, worked out once:
-;;   (X u1 reach1 u2 reach2 half-angle)
+;;   (X u1 reach1 u2 reach2 half-angle gap1 gap2)
 ;; X is where the two lines cross (extended if they have to be, as
 ;; FILLET extends them), each u runs from X along the side that was
 ;; clicked, and half-angle is half the turn between them -- the one
-;; number the whole fillet is built from.  nil when there is no corner:
-;; parallel lines, the same line twice, or two legs so nearly straight
-;; through that no arc could join them.
+;; number the whole fillet is built from.  The two gaps say how far
+;; short of X each line stops, which is the ground the dashed guides
+;; are drawn over and 0 for a line X sits on.  nil when there is no
+;; corner: parallel lines, the same line twice, or two legs so nearly
+;; straight through that no arc could join them.
 (defun hn:corner (e1 pk1 e2 pk2 / a b x l1 l2 th)
   (setq a (hn:ends e1)
         b (hn:ends e2)
@@ -94890,7 +96793,42 @@
           (setq th (abs (cal:signed-dang (angle '(0.0 0.0) (car l1))
                                         (angle '(0.0 0.0) (car l2)))))
           (if (and (> th hn:*minang*) (< th (- pi hn:*minang*)))
-            (list x (car l1) (cadr l1) (car l2) (cadr l2) (/ th 2.0))))))))
+            (list x (car l1) (cadr l1) (car l2) (cadr l2) (/ th 2.0)
+                  (caddr l1) (caddr l2))))))))
+
+;; How far leg N (1 or 2) stops SHORT of the corner, when that is far
+;; enough to be worth a guide.  nil for a line the corner sits on, and
+;; nil for one that misses it by less than hn:*gapmin*, where the run
+;; out to it would be a tick on the end of a line rather than a line
+;; going somewhere.  hn:*guide* nil turns the whole thing off, and
+;; then every caller of this is a no-op rather than each of them
+;; testing the flag for itself.
+(defun hn:gapof (geo n / g)
+  (setq g (nth (if (= n 1) 6 7) geo))
+  (if (and hn:*guide* g (> g (if hn:*gapmin* hn:*gapmin* 0.0))) g))
+
+;; What those dashed runs ARE, in words, said once a run.  A straight
+;; dashed line lands on screen beside dashed ARCS that mean something
+;; else entirely, and a drafter who finds two new lines in the drawing
+;; has to be told they are a guide rather than work somebody's tool
+;; left behind.  nil when both lines reach their corner and none was
+;; drawn -- there is nothing to explain then, and the note would be
+;; one more line to scroll past.
+(defun hn:gapnote (geo / g1 g2)
+  (setq g1 (hn:gapof geo 1)
+        g2 (hn:gapof geo 2))
+  (cond
+    ((and g1 g2)
+     (strcat "\nNeither line reaches that corner -- they stop "
+             (hn:num g1) "\" and " (hn:num g2) "\" short of it."
+             "  The dashed STRAIGHT run out to it is a guide, not"
+             " drawn work; FILLET extends the legs when the corner is"
+             " cut."))
+    ((or g1 g2)
+     (strcat "\nOne line stops " (hn:num (if g1 g1 g2)) "\" short of"
+             " that corner.  The dashed STRAIGHT run out to it is a"
+             " guide, not drawn work; FILLET extends that leg when the"
+             " corner is cut."))))
 
 ;; how far back from the corner a fillet of radius R starts
 (defun hn:tanlen (half r) (/ r (cal:tan half)))
@@ -94974,8 +96912,11 @@
 
 ;;; -------------------- previews ------------------------------------
 
-;; Remember what was drawn: everything goes on the erase list, and an
-;; arc also goes on the list a click is looked up in.
+;; Remember what was drawn: everything goes on the erase list, and
+;; anything that STANDS FOR a radius -- the arc and the label beside it
+;; both -- also goes on the list a click is looked up in.  A guide line
+;; is marked with no radius: it is drawn with the fan and erased with
+;; it, but it is not one of the answers.
 (defun hn:mark (en r)
   (if en
     (progn
@@ -94983,8 +96924,9 @@
       (if r (setq hn:*picks* (cons (cons en r) hn:*picks*)))))
   en)
 
-;; the radius a preview arc stands for, nil for anything else in the
-;; drawing
+;; the radius a preview stands for -- its arc or its label, since
+;; either one is that size -- and nil for anything else in the drawing,
+;; a guide line of this tool's own included
 (defun hn:radof (en / p)
   (setq p (assoc en hn:*picks*))
   (if p (cdr p)))
@@ -95034,6 +96976,23 @@
                     (cons 50 a1) (cons 51 a2))))
   (if (entmake dxf) (entlast)))
 
+;; One guide line, dashed, and a preview in every other way: the same
+;; layer, the same fallback colour, the same transparency, erased with
+;; the rest.  No true colour of its own -- the light-to-dark grading is
+;; how the fan says WHICH radius, and a guide stands for none of them,
+;; so it reads as the layer's plain green.
+(defun hn:draw-line (p1 p2 / dxf)
+  (setq dxf (append
+              (list '(0 . "LINE") '(100 . "AcDbEntity")
+                    (cons 8 hn:*layer*) (cons 62 hn:*color*)
+                    (cons 6 (hn:ensure-ltype)))
+              (if hn:*ltscale* (list (cons 48 hn:*ltscale*)))
+              (hn:colgroups nil)             ; entity section, as above
+              (list '(100 . "AcDbLine")
+                    (list 10 (car p1) (cadr p1) 0.0)
+                    (list 11 (car p2) (cadr p2) 0.0))))
+  (if (entmake dxf) (entlast)))
+
 ;; the radius, lettered beside a preview in that preview's own shade.
 ;; Middle-centre justified, so the text sits on the point it is given
 ;; whatever it says.
@@ -95065,15 +97024,39 @@
                                (float (/ i 2)))))))) ; integer divide:
                                                      ; the rung number
 
-;; Draw the whole fan of previews, light shade to dark.  FINE says
-;; which fan this is, and so which sizes come out dashed.  Labels
-;; alternate between the two legs: consecutive tangent points sit one
-;; step apart along one leg -- half an inch once the fan is honed --
-;; which is not room enough for two labels side by side.
+;; The dashed run from each leg's own end out to the corner, for a leg
+;; whose line stops short of it.  Two lines that meet on paper get none
+;; of this and want none; two that are yards apart get the one thing
+;; that says which corner the fan belongs to, because the point FILLET
+;; will extend them to is on neither of them.  Marked with no radius --
+;; a guide stands for no size, so a click on one is a miss like any
+;; other click on empty paper.
+(defun hn:guides (geo / u g i)
+  (setq i 1)
+  (foreach u (list (cadr geo) (cadddr geo))
+    (if (setq g (hn:gapof geo i))
+      (hn:mark (hn:draw-line (cal:v+ (car geo) (cal:v* u g)) (car geo))
+               nil))
+    (setq i (1+ i))))
+
+;; Draw the whole fan of previews, light shade to dark, over the dashed
+;; guides out to a corner the lines stop short of.  FINE says which fan
+;; this is, and so which sizes come out dashed.  Labels alternate
+;; between the two legs: consecutive tangent points sit one step apart
+;; along one leg -- half an inch once the fan is honed -- which is not
+;; room enough for two labels side by side.
+;;
+;; Called once per fan, and the guides go down again with the second
+;; one: the honed fan is drawn after hn:clear has taken the coarse one
+;; out, so anything not redrawn here is gone for the rest of the run.
 (defun hn:preview (geo rads fine / i n r a c t1 t2 anchor col)
   (setq i 0
         n (length rads))
   (cal:ensure-layer hn:*layer* hn:*color*)
+  ;; the guides go down FIRST, so every arc sits on top of them: where a
+  ;; tangent point lands inside a gap the arc lies along the guide, and
+  ;; the arc is what a click there has to find
+  (hn:guides geo)
   (foreach r rads
     (setq a   (hn:arcpts geo r)
           c   (car   a)
@@ -95084,9 +97067,14 @@
     (if hn:*label*
       (progn
         (setq anchor (if (= 0 (rem i 2)) t1 t2))
+        ;; the label is marked with the SAME radius as its arc, so
+        ;; clicking the R6 is clicking the R6 corner.  It is much the
+        ;; bigger target of the two -- an arc is a hairline, and on a
+        ;; tight fan the near-miss that used to throw the whole thing
+        ;; away is now an answer
         (hn:mark (hn:draw-label (hn:labelpt anchor c i)
                                 (hn:rlabel r) col)
-                 nil)))
+                 r)))
     (setq i (1+ i))))
 
 ;;; -------------------- asking --------------------------------------
@@ -95136,10 +97124,12 @@
       ((= (type sel) 'STR) (setq ans 'HN-NONE))
       ((null sel)
        (princ (strcat "\n  (nothing there -- click one of the green"
-                      " corners, or type Cancel)")))
+                      " corners or the R-number beside it, or type"
+                      " Cancel)")))
       ((setq r (hn:radof (car sel))) (setq ans r))
       (t (princ (strcat "\n  (that is not one of the previews -- click a"
-                        " green corner)")))))
+                        " green corner, or the R-number lettered beside"
+                        " it)")))))
   (if (eq ans 'HN-NONE) nil ans))
 
 ;; The two previews the honed fan is drawn between, as (lo hi).  Both
@@ -95322,7 +97312,7 @@
 ;;; -------------------- the command ---------------------------------
 
 (defun c:HONEFILLET ( / *error* olderr odim undo-open
-                         one two geo rmax rads extra shown-extras
+                         one two geo rmax rads extra shown-extras note
                          span fines r arc dim1 made)
 
   ;; -- restore drawing state on error / Esc.  The previews go first:
@@ -95430,6 +97420,15 @@
        (princ (strcat "\nDashed: " (hn:rlist shown-extras)
                       " -- the in-between sizes, less common than a "
                       (hn:num hn:*step*) "\" step.")))
+     ;; ...and a STRAIGHT dashed line, when there is one, is not one of
+     ;; those at all.  It goes out to a corner the picked lines stop
+     ;; short of, which is where both fans are drawn and where neither
+     ;; line can be seen -- said here, next to the sentence about the
+     ;; dashed arcs, because that is the one it would otherwise be read
+     ;; as.  Once, though the guides are redrawn with the honed fan:
+     ;; the gap is a fact about the two lines, and it does not change
+     ;; when the sizes on offer do
+     (if (setq note (hn:gapnote geo)) (princ note))
      ;; a cap that says nothing reads as "that is all this corner
      ;; takes", which is a different fact
      (if (> extra 0)
@@ -95439,6 +97438,13 @@
                       (if (= 1 extra) "is" "are") " not shown"
                       " -- raise hn:*maxshown* to see "
                       (if (= 1 extra) "it" "them") ".")))
+     ;; the label answers for its arc at every pick in the run, and on
+     ;; the honed fan it is much the bigger target of the two -- worth
+     ;; saying, because nothing on screen suggests a piece of text is
+     ;; clickable
+     (if hn:*label*
+       (princ (strcat "\nClick an arc or the R-number beside it --"
+                      " either one is that radius.")))
 
      ;; -- 3. the two the answer sits between, and that range redrawn at
      ;;       half inches.  Only now is there a fan to cut from: the
@@ -95457,7 +97463,9 @@
                         " -- the whole inches solid, the rest dashed."))))
 
      ;; -- 4. the one that gets cut
-     (setq r (if span (hn:pickpreview "Click the rounded corner you want")))
+     (setq r (if span
+               (hn:pickpreview
+                 "Click the rounded corner you want, or its label")))
      (hn:clear)
      (cond
        ((null r)
@@ -95527,7 +97535,8 @@
   (princ (strcat "\nHONEFILLET " *honefillet-version*
                  " loaded -- type HONEFILLET, pick two lines, bracket two"
                  " of the corners offered, and click one of the half-inch"
-                 " sizes between them.")))
+                 " sizes between them -- the arc, or the R-number beside"
+                 " it.")))
 (princ)
 
 
@@ -103022,9 +105031,12 @@
 ;;;   * band-height dimensions at both ends (layer DIMENSION)
 ;;;
 ;;; Darts + inserts are capped (the run asks, wc:*maxfeat* is the
-;;; default): the required correction is accumulated along the band and
-;;; only released when it reaches a minimum useful width, so the cut
-;;; count stays conservative.
+;;; default): the correction each BEND of the straightened side calls
+;;; for is accumulated along the band and released where it reaches a
+;;; minimum useful width -- at the bend, not at the nearest rung, so a
+;;; band drawn with two end rungs gets the same darts as the ladder it
+;;; was measured from -- and a bend too wide for one dart is cut as
+;;; several side by side.
 ;;;
 ;;; Every number the routine works to is a named tunable in the block
 ;;; below the version banner -- layers, cut sizes, the tracing angles,
@@ -103035,7 +105047,7 @@
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
 
-(setq *wcalst-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v2.0")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 ;;; -------------------- tunables ----------------------------------------
@@ -103085,7 +105097,8 @@
 ;; ---- how many cuts, and how wide -------------------------------------
 
 (setq wc:*maxfeat* 20)              ; the darts+inserts cap the prompt offers, and what an out-of-range answer falls back to
-(setq wc:*dart-cap* 4.0)            ; widest mouth ONE dart may open: lower it and a big correction splits across more rungs, raise it for fewer, wider Vs
+(setq wc:*dart-cap* 4.0)            ; widest mouth ONE dart may open: lower it and a big bend splits across more darts side by side, raise it for fewer, wider Vs
+(setq wc:*dart-space* 2.0)          ; bottom line left between two darts cut side by side for one bend, and between any two mouths: less packs them tighter, more spreads a wide correction along the band
 (setq wc:*wmin-f* 0.04)             ; smallest correction worth a cut, as a share of the band width - the floor that stops the refining pass cutting hair-width darts
 (setq wc:*target* 0.01)             ; the after-cuts residual the refining variant aims under, as a share of the bottom line, and what OVER TARGET is measured against
 (setq wc:*refine* 0.6)              ; how far each refining pass drops the threshold: nearer 1 refines in smaller steps and uses more of the passes below
@@ -103391,41 +105404,67 @@
   )
 )
 
-(defun wc:emit (idebt rungs pts s wmin maxfeat carry / feats acc k fsum
-                cw f fdev)
-  ;; walk the per-interval correction debt, releasing a dart (mouth
-  ;; capped at wc:*dart-cap*) or an insert whenever the accumulator
-  ;; reaches WMIN.
-  ;; CARRY non-nil: the un-released remainder carries to the next rung
-  ;; (large corrections split into several capped darts - best fit);
-  ;; CARRY nil: the accumulator resets after each release (fewest cuts)
-  ;; -> (feats fsum): feats = ((x width type local-depth) ...) in band
-  ;;    order, fsum = inserts added - dart widths removed
-  (setq feats nil acc 0.0 k 0 fsum 0.0)
-  (while (< k (length idebt))
-    (setq acc (+ acc (nth k idebt)))
-    (if (and (>= (abs acc) wmin) (< (length feats) maxfeat))
+(defun wc:emit (turns s w wmin maxfeat carry toplen / feats acc mx md k
+                n d tot c m cw x i rel fsum right)
+  ;; walk the BENDS of the straightened side.  Each turn there leaves
+  ;; the far edge (turn x width) too long (a turn towards it) or too
+  ;; short (a turn away); that debt accumulates bend by bend and is
+  ;; released as a dart or an insert the moment it reaches WMIN -- at
+  ;; the debt's own centre, which for one sharp bend is the bend and for
+  ;; a run of gentle ones is the middle of the run.  Rungs play no part
+  ;; here: they set the width and nothing else.  Released at the rung
+  ;; that ENDED the interval instead, a band drawn with its two end
+  ;; rungs got one dart, on the band's end, and a curve drawn in 3-deg
+  ;; chords with a rung every ten of them got four darts for 20 slots,
+  ;; two thirds of its excess left in the summary line.
+  ;; CARRY non-nil (best fit): a correction wider than wc:*dart-cap* is
+  ;; cut as several equal darts side by side, wc:*dart-space* of bottom
+  ;; line between them, and what the feature cap leaves uncut carries
+  ;; to the next release.  CARRY nil (fewest cuts): one capped dart per
+  ;; release, then the accumulator resets.
+  ;; No mouth crosses either end of the band and no two mouths overlap.
+  ;; -> (feats fsum): feats = ((x width type) ...) in band order,
+  ;;    type 1 = dart, -1 = insert; fsum = inserts added - dart widths
+  (setq feats nil acc 0.0 mx 0.0 md 0.0 fsum 0.0 right -1.0e18
+        k 1 n (length turns))
+  (while (and (< k (1- n)) (< (length feats) maxfeat))
+    (setq d   (* (nth k turns) w)
+          acc (+ acc d)
+          mx  (+ mx (* (abs d) (nth k s)))
+          md  (+ md (abs d)))
+    (if (>= (abs acc) wmin)
       (progn
-        (setq cw (abs acc))
-        (if (< acc 0) (setq cw (min cw wc:*dart-cap*)))  ; dart mouth cap
-        (setq f (nth (1+ k) rungs)
-              fdev (wc:dev-point (caddr f) pts s)
-        )
-        ;; turn towards the far side = dart
-        (setq feats (cons (list (nth (car f) s) cw
-                                (if (< acc 0) 1 -1)
-                                (- (cadr fdev)))
-                          feats)
-              fsum (+ fsum (if (< acc 0) (- cw) cw))
-              acc (if carry
-                    (if (< acc 0) (+ acc cw) (- acc cw))
-                    0.0
-                  )
-        )
-      )
-    )
-    (setq k (1+ k))
-  )
+        (setq tot (abs acc)
+              c   (if (> md 1.0e-9) (/ mx md) (nth k s)))
+        (if (< acc 0)
+          ;; a turn towards the far side leaves it long: dart(s)
+          (progn
+            (setq m   (if carry (fix (+ 0.999999 (/ tot wc:*dart-cap*))) 1)
+                  m   (max 1 (min m (- maxfeat (length feats))))
+                  cw  (min wc:*dart-cap* (/ tot m))
+                  rel (* m cw)
+                  i   0)
+            (while (< i m)
+              (setq x (+ c (* (- i (/ (1- m) 2.0)) (+ cw wc:*dart-space*)))
+                    x (max x (+ right wc:*dart-space* (/ cw 2.0))) ; clear of the last mouth
+                    x (max x (/ cw 2.0))                            ; inside the band's start
+                    x (min x (- toplen (/ cw 2.0)))                 ; and its end
+                    right (+ x (/ cw 2.0))
+                    feats (cons (list x cw 1) feats)
+                    i (1+ i)))
+            (setq fsum (- fsum rel)))
+          ;; a turn away from it opens a gap: one slit, the sliver as
+          ;; wide as the gap
+          (progn
+            (setq cw  tot
+                  rel tot
+                  x   (max (/ cw 2.0) (min c (- toplen (/ cw 2.0)))))
+            (setq feats (cons (list x cw -1) feats)
+                  fsum  (+ fsum rel))))
+        (setq acc (if carry (if (< acc 0) (+ acc rel) (- acc rel)) 0.0)
+              mx  0.0
+              md  0.0)))
+    (setq k (1+ k)))
   (list (reverse feats) fsum)
 )
 
@@ -103461,6 +105500,8 @@
   ;; over DPS (a list of dev-points sorted ascending by car); used to
   ;; land dart feet exactly on the bottom line
   (setq res (cadr (car dps)) found nil)
+  (if (> xv (car (last dps)))           ; past the far end: that end's
+    (setq res (cadr (last dps)) found T)) ; depth, not the near end's
   (while (and (cdr dps) (not found))
     (setq a (car dps) b (cadr dps))
     (if (and (<= (car a) xv) (<= xv (car b)))
@@ -103483,6 +105524,30 @@
     (if (and (>= xv (car r)) (<= xv (cadr r))) (setq hit T))
   )
   hit
+)
+
+(defun wc:inwin (sgm wins / hit lo hi wn)
+  ;; T when BOTH ends of segment SGM lie inside one of the windows in
+  ;; WINS, each a (corner corner) pair in any order -- AutoCAD's own
+  ;; Window rule, applied to one segment rather than to a whole entity.
+  ;; A far side drawn as one polyline is what this is for: a selection
+  ;; took the whole entity, and with it the whole far side became the
+  ;; "stair section" -- developed rigidly, every dart dropped, and the
+  ;; summary reading a bottom line 0.00% off.
+  (setq hit nil)
+  (foreach wn wins
+    (setq lo (list (min (car (car wn)) (car (cadr wn)))
+                   (min (cadr (car wn)) (cadr (cadr wn))))
+          hi (list (max (car (car wn)) (car (cadr wn)))
+                   (max (cadr (car wn)) (cadr (cadr wn)))))
+    (if (and (wc:ptin (car sgm) lo hi) (wc:ptin (cadr sgm) lo hi))
+      (setq hit T)))
+  hit
+)
+
+(defun wc:ptin (p lo hi)
+  (and (>= (car p) (car lo)) (<= (car p) (car hi))
+       (>= (cadr p) (cadr lo)) (<= (cadr p) (cadr hi)))
 )
 
 (defun wc:notch (dps dfeats / runs run dp dd lx rx curr)
@@ -103554,14 +105619,14 @@
 
 (defun c:WCALST (/ *error* oldlay ss segs nodes pick en pk seed sg d2min
                  d2c i r ids pts chainkeys s n p0 p1 dch j far ang rungs
-                 widths w mid side cross ni f k turns d0 d1 idebt i0 i1
-                 tsum total wmin maxfeat acc feats fdev farlay fseed
+                 widths w mid side cross ni f k turns d0 d1
+                 total wmin maxfeat feats farlay fseed fsum
                  fsegs cands rfar rr farpts farids fk seen ordered devpts
                  minx miny maxx maxy sgp x0 y0 wpt a b ld hz cw x
                  dl dr yb enda endb lay2 inundo conns nmk sgm dp1 dp2
                  bandlays tileh toplen botb bota tx th pass stop
                  resid featsb residb paircnt bndpts vy vfeats vresid
-                 vlab ssstairs stsegs stkeys synth comp compkeys grow
+                 vlab stwins stp1 stp2 stdrop stsegs stkeys synth comp compkeys grow
                  rsgns rsgn rkeep rmaj sumk ln
                  strest nodes2 endpts dpa stentry stpath usedj stpt stgo
                  stcand se pA pB stang stca stsn sttot stlen stprev stdx
@@ -103581,16 +105646,17 @@
 
   ;; ---- 1.-7. the questions, staged so every prompt after the first
   ;; offers Back (Undo works too): the side pick returns to the band
-  ;; selection, the numeric prompts to the side pick - the trace is
-  ;; recomputed from whatever is re-answered.  A trace that fails now
-  ;; re-opens the pick it came from instead of ending the command.
+  ;; selection, the numeric prompts to the side pick, the stair windows
+  ;; to the tile height - the trace is recomputed from whatever is
+  ;; re-answered.  A trace that fails now re-opens the pick it came
+  ;; from instead of ending the command.
   ;; Lines highlighted before WCALST was typed (pickfirst) are the band -
   ;; the first pass through stage 1 takes them; a too-small band or Back
   ;; re-asks interactively.
   (setq wc-pick (ssget "_I" '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
   (if lzd:watch (lzd:watch wc-pick) wc-pick)
-  (setq stage 1)
-  (while (< stage 6)
+  (setq stage 1 stwins nil)
+  (while (< stage 7)
     (cond
 
       ;; ---- 1. selection ----------------------------------------------
@@ -103776,21 +105842,13 @@
                )
                (setq turns (reverse (cons 0.0 turns)))
 
-               (setq idebt nil k 0)
-               (while (< k (1- (length rungs)))
-                 (setq i0 (car (nth k rungs))
-                       i1 (car (nth (1+ k) rungs))
-                       tsum 0.0
-                       j (1+ i0)
-                 )
-                 (while (<= j i1)
-                   (setq tsum (+ tsum (nth j turns)) j (1+ j))
-                 )
-                 (setq idebt (cons (* tsum w) idebt) k (1+ k))
-               )
-               (setq idebt (reverse idebt)
-                     total (apply '+ (mapcar 'abs idebt))
-               )
+               ;; the whole correction the band calls for -- every
+               ;; bend's turn times the width, sign dropped -- which the
+               ;; feature cap is shared out over; and the developed
+               ;; length, which is where a mouth may not go past
+               (setq total 0.0)
+               (foreach d0 turns (setq total (+ total (abs (* d0 w)))))
+               (setq toplen (car (reverse s)))
                (setq stage 4)
              )
            )
@@ -103812,7 +105870,7 @@
        ))
       ;; a tile of this height sits along the straightened edge: cuts
       ;; may only come up to (width - tile height - 1") from the far edge
-      (T
+      ((= stage 5)
        (initget "Back Undo")
        (setq tileh (getreal (strcat "\nTile height along the straightened"
                                     " edge [Back] <none>: ")))
@@ -103821,18 +105879,49 @@
          (setq stage 4)
          (progn
            (if (and tileh (< tileh 0.0)) (setq tileh nil))
+           ;; a tile that leaves less than the clearance under it on a
+           ;; band this wide bottoms the apex rule out: every cut stops
+           ;; wc:*tile-clear* above the far edge, and a drafter not told
+           ;; so reads the inch-high darts that come out as missing
+           (if (and tileh (> (+ tileh wc:*tile-clear* wc:*tile-clear*) w))
+             (princ (strcat "\nWCALST: a tile " (wc:num tileh)
+                            " high on a band " (wc:num w)
+                            " wide leaves no room under it - every cut"
+                            " stops " (wc:num wc:*tile-clear*)
+                            " above the far edge, so the darts will be"
+                            " shallow.")))
            (setq stage 6)
+         )
+       ))
+      ;; stair sections: the far edge wraps around steps there, and each
+      ;; windowed section is developed rigidly as one piece so every
+      ;; tread length and riser rise is kept exactly (treads come out
+      ;; level, equal steps up and down stay equal).  The window is two
+      ;; corners, and a far-side SEGMENT is in it when both its ends are
+      ;; -- a selection would take whole entities, and a far side drawn
+      ;; as one polyline came in whole: the entire band became the stair
+      ;; section, developed rigidly with every dart dropped and a
+      ;; summary that read 0.00%.  Enter with none windowed means none;
+      ;; after one, Enter means done.
+      (T
+       (initget "Back Undo")
+       (setq stp1 (getpoint (strcat "\nWindow a STAIR section - first corner"
+                                    " [Back] (Enter = "
+                                    (if stwins "done" "none") "): ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") stp1) stp1)
+       (cond
+         ((= (type stp1) 'STR) (setq stwins nil stage 5))
+         ((not stp1) (setq stage 7))
+         (T
+          (setq stp2 (getcorner stp1 "\nOpposite corner: "))
+          (if lzd:ask (lzd:ask "\nOpposite corner: " stp2) stp2)
+          (if stp2
+            (setq stwins (cons (list stp1 stp2) stwins))
+            (princ "  (no second corner - that window is dropped)"))
          )
        ))
     )
   )
-  ;; stair sections: the bottom line wraps around steps there; each
-  ;; windowed section is developed rigidly as one piece so every tread
-  ;; length and riser rise is kept exactly (treads come out level,
-  ;; equal steps up and down stay equal)
-  (princ "\nWindow the STAIR section(s) if any (Enter = none): ")
-  (setq ssstairs (ssget))
-  (if lzd:watch (lzd:watch ssstairs) ssstairs)
 
   ;; ---- 8. develop the far edge ----------------------------------------
   ;; far side points = every rung far foot + the far chain traced from a
@@ -103949,13 +106038,14 @@
   ;; keeps its exact rise (validated against a hand-drawn example:
   ;; every segment length is preserved to the hundredth)
   (setq synth nil stkeys nil stairrng nil)
-  (if ssstairs
+  (if stwins
     (progn
-      ;; candidate segments: in the window, on the far side's layer,
-      ;; outline (drawn once), touching neither end of the chain
+      ;; candidate segments: both ends inside a window, on the far
+      ;; side's layer, outline (drawn once), touching neither end of
+      ;; the chain
       (setq stsegs nil)
       (foreach sgm segs
-        (if (and (ssmemb (cadddr sgm) ssstairs)
+        (if (and (wc:inwin sgm stwins)
                  (equal (caddr sgm) farlay)
                  (= 1 (wc:mult sgm paircnt))
                  (not (wc:member-key (car sgm) chainkeys))
@@ -104105,18 +106195,18 @@
   ;;   B) target <1%: the threshold is refined until the after-cuts
   ;;      residual (bottom-after - darts + inserts vs bottom-before)
   ;;      aims under 1% of the original bottom length
-  ;; dart mouths are capped at 4" on the bottom line in both (larger
-  ;; corrections split across consecutive rungs)
+  ;; dart mouths are capped at wc:*dart-cap* on the bottom line in both
+  ;; (B cuts a wider correction as several darts side by side)
   (setq wmin (max (* wc:*wmin-f* w) (/ total maxfeat)))
 
-  (setq rr (wc:emit idebt rungs pts s wmin maxfeat nil)
+  (setq rr (wc:emit turns s w wmin maxfeat nil toplen)
         featsb (car rr)                            ; minimum variant
         residb (+ (- bota botb) (cadr rr))
   )
 
   (setq pass 0 stop nil)
   (while (not stop)
-    (setq rr (wc:emit idebt rungs pts s wmin maxfeat T)
+    (setq rr (wc:emit turns s w wmin maxfeat T toplen)
           feats (car rr)
           resid (+ (- bota botb) (cadr rr))
           pass (1+ pass)
@@ -104135,12 +106225,15 @@
   ;; darts landing inside a windowed stair section are dropped (the
   ;; stairs are developed rigidly and get their darts added by hand);
   ;; inserts are left in place
+  (setq stdrop 0)
   (if stairrng
     (progn
-      (setq feats  (vl-remove-if
+      (setq k      (length feats)
+            feats  (vl-remove-if
                      '(lambda (f) (and (= 1 (caddr f))
                                        (wc:instair (car f) stairrng)))
                      feats)
+            stdrop (- k (length feats))
             featsb (vl-remove-if
                      '(lambda (f) (and (= 1 (caddr f))
                                        (wc:instair (car f) stairrng)))
@@ -104183,8 +106276,7 @@
 
   ;; two stacked drawings: the <1% target version, and below it the
   ;; minimum darts+inserts version
-  (setq toplen (car (reverse s))
-        nmk 0
+  (setq nmk 0
         vy y0
   )
   (foreach vr (list (list feats resid "TARGET <1%")
@@ -104378,6 +106470,9 @@
                    (if (> (abs (cadr vr)) (* wc:*target* botb))
                      " OVER TARGET" "")))
   )
+  (if (> stdrop 0)
+    (princ (strcat "\n  " (itoa stdrop) " dart(s) fall inside the stair"
+                   " section(s) and are left for the hand work there.")))
   (princ (strcat "\n  top line " (wc:num toplen)
                  ", bottom before " (wc:num botb)
                  ", bottom after " (wc:num bota)
@@ -110407,7 +112502,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.19")
+(setq *lazform-version* "v2.20")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -111740,10 +113835,21 @@
           "Complex answer the gate and ask their 14 or 18 diagonals at "
           "the command line."))
 
+;; And the Roman earns one for the opposite reason: its right-hand
+;; boxes decide a QUESTION rather than answering four letters, and
+;; nothing about a blank box says so on its own.  Empty means the two
+;; ends match and POOL never asks about the right one; filled means
+;; they do not, and then all four are wanted.
+(setq lzf:*romhint*
+  (strcat "Both ends: leave the four RIGHT-end boxes empty and the "
+          "pool is drawn with two identical ends; fill any one in and "
+          "all four are read."))
+
 (setq lzf:*hints*
   (list (cons "Grecian" lzf:*grechint*)
         (cons "GRSquare" lzf:*grechint*)
-        (cons "OCtagon" lzf:*grechint*)))
+        (cons "OCtagon" lzf:*grechint*)
+        (cons "ROman" lzf:*romhint*)))
 
 (defun lzf:hint (c) (cdr (assoc (car c) lzf:*hints*)))
 
@@ -112457,14 +114563,51 @@
             "c" "d" "c2" "ttc")
           lzf:*sportchain*))
 
-;; PERFECT ENDS.  In square, POOL does not ask whether a Roman's two
-;; ends are identical -- it takes them as identical and asks one end's
-;; letters only, using the left-hand answer for both.  So the sheet's
-;; right-hand halves are dead there, exactly as a Normal hopper's C is:
-;; POOL will never ask, so a number typed into one would be read by
-;; nothing.  Out of square the sheet prints both ends and answers the
-;; question itself -- see lzf:poolform.
-(setq lzf:*perfectdead* '(("ROman" "sr" "s1r" "vr" "r2")))
+;; PERFECT ENDS.  POOL asks whether a Roman's two ends are identical
+;; -- in square and out -- and takes one end's letters for both when
+;; they are.  This sheet PRINTS both ends, so it answers that question
+;; off its own boxes rather than putting it to the drafter twice: the
+;; four RIGHT-end keys below are what it reads.  Nothing typed into
+;; any of them means the ends are the same end twice, which is what
+;; the sheet has shown all along; a number in one means they are not,
+;; and left on Yes that number would be read by nothing.
+;; See lzf:endsblank, lzf:perfect and lzf:poolform.
+(setq lzf:*bothends* '(("ROman" "sr" "s1r" "vr" "r2")))
+
+;; Has anything been typed into the right-hand half?  ONE predicate,
+;; because three things have to agree about it: the answer that
+;; travels (lzf:perfect), what the page still owes (lzf:togo) and what
+;; Insert marks in red.  Read off what is TYPED and not off
+;; cal:formanswer, so a typo in one of those boxes still means the drafter
+;; is using them -- it is lzf:unreadable's to complain about, and a
+;; sheet cannot be told its ends match because it holds a typo.
+(defun lzf:endsblank (c / out k)
+  (setq out t)
+  (foreach k (cdr (assoc (car c) lzf:*bothends*))
+    (if (/= (cal:trim (lzf:get k)) "") (setq out nil)))
+  out)
+
+;; "Yes" / "No" for that question, or nil on a chart that does not
+;; carry it.
+(defun lzf:perfect (c)
+  (if (assoc (car c) lzf:*bothends*)
+      (if (lzf:endsblank c) "Yes" "No")))
+
+;; A RIGHT-HAND HALF NOBODY TOUCHED IS ITSELF AN ANSWER, so those four
+;; boxes are not owed while they are all empty: POOL is being told the
+;; ends match and will ask the left column only.  Fill any ONE of them
+;; in and the other three are owed like every other live box -- POOL
+;; asks all four once the ends are not perfect, and a box left blank
+;; there is a question that drops back to the command line, which is
+;; what Insert exists to prevent.
+;;
+;; Not a greying rule, deliberately.  Dead means POOL will never read
+;; this, so the box is greyed and nothing can be typed into it -- and
+;; here typing into it is exactly how the drafter says the ends
+;; differ.  A question you cannot answer is not a question.
+(defun lzf:endsfree ( / c)
+  (setq c lzf:*chart*)
+  (if (lzf:endsblank c) (cdr (assoc (car c) lzf:*bothends*))))
 
 ;; ONE MEASUREMENT, TWO QUESTIONS.  A Roman's straight side is asked
 ;; twice on one run: rm:letters asks it as the perimeter letter T, and
@@ -112492,9 +114635,6 @@
   ;; asked -- and nothing behind it is offered
   (if lzf:*cover*
       (setq out (append out lzf:*bottomkeys*)))
-  ;; in square, both of a Roman's ends are the left-hand one
-  (if insq
-      (setq out (append out (cdr (assoc (car c) lzf:*perfectdead*)))))
   ;; in square there are no cross dims to measure, no mode to measure
   ;; them from, and no second overall
   (if insq
@@ -112662,15 +114802,16 @@
 ;; lzf:unreadable, which is a different thing to say and says it
 ;; louder -- so the two lists and what lzf:form sends still partition
 ;; the live boxes three ways with nothing in two of them.
-(defun lzf:togo ( / c out k v a)
-  (setq c lzf:*chart*)
+(defun lzf:togo ( / c out k v a free)
+  (setq c lzf:*chart* free (lzf:endsfree))
   (foreach k (lzf:livekeys c)
     (setq v (cal:trim (lzf:get k))
           a (cal:formanswer v))
-    (if (or (= v "")
-            (and (member k lzf:*numonly*)
-                 (not (eq a 'SKIP))
-                 (not (numberp a))))
+    (if (and (not (member k free))
+             (or (= v "")
+                 (and (member k lzf:*numonly*)
+                      (not (eq a 'SKIP))
+                      (not (numberp a)))))
         (setq out (cons k out))))
   (reverse out))
 
@@ -112962,16 +115103,16 @@
              (not (member (car d)
                           (lzf:pooldead lzf:*chart* insq btype))))
         (setq out (cons (cons (read (car d)) a) out))))
-  ;; PERFECT ENDS, out of square.  POOL asks whether a Roman's two ends
-  ;; are identical, and answers the whole right-hand half of the sheet
-  ;; with the left-hand one if they are.  This sheet PRINTS both halves
-  ;; and asks for both, so it answers that question itself -- left on
-  ;; the prompt, the right-hand boxes it has just made the drafter fill
-  ;; in would be read by nothing.  In square POOL does not ask at all:
-  ;; it takes the ends as perfect, which is why lzf:*perfectdead* greys
-  ;; the right-hand boxes there.
-  (if (and (not insq) (assoc (car lzf:*chart*) lzf:*perfectdead*))
-      (setq out (cons (cons 'perfect "No") out)))
+  ;; PERFECT ENDS.  POOL asks whether a Roman's two ends are identical
+  ;; and answers the whole right-hand half of the sheet with the
+  ;; left-hand one when they are.  This sheet prints both halves, so it
+  ;; reads them and answers for itself: a right-hand half left blank is
+  ;; the drafter saying the ends are the same end twice, and one with a
+  ;; number in it would be read by nothing if the prompt were left on
+  ;; Yes.  Squareness has nothing to do with it -- that question is
+  ;; about the body.
+  (if (setq v (lzf:perfect lzf:*chart*))
+      (setq out (cons (cons 'perfect v) out)))
   ;; the gates last, so a chart cannot be talked out of the path its
   ;; own letters live on
   (foreach k (lzf:gates lzf:*chart*)
@@ -117069,7 +119210,7 @@
     (princ "\nLAZPASS: missing:")
     (foreach n (reverse lazpass:*missing*)
       (princ (strcat " " n))))
-  (princ (strcat "\nLAZPASS: calofin v3.16 loaded - "
+  (princ (strcat "\nLAZPASS: calofin v3.19 loaded - "
                  (itoa (length lazpass:*want*))
                  " commands in one session.")))
 

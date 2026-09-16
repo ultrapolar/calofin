@@ -47,6 +47,15 @@ Public Class CalofinPalette
             _ps.AddVisual("Steps", New StepFormView())
             _ps.AddVisual("Spa", New SpaChartView())
             _ps.AddVisual("Pool bottom", New PoolFormView())
+            ' The SECTION, drawn: LAZSIDE's sheet, one page per bottom
+            ' type.  It sits next to Pool bottom because the two are the
+            ' same view of the pool -- that tab picks a floor by eye off
+            ' the paper chart, this one measures the floor that was
+            ' picked.  Nothing is passed in: unlike the plan sheets
+            ' there is one entry point and the catalog carries it, which
+            ' is why this takes no arguments where ChartFormView takes
+            ' four.
+            _ps.AddVisual("Pool side", New SideFormView())
         End If
         _ps.Visible = True
     End Sub

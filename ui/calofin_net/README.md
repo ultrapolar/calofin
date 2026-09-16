@@ -243,11 +243,60 @@ stop the flight short of the count that built the very drawing in front
 of you — the sheet would show four steps and the routine would draw
 three. Every other answer travels exactly as typed.
 
+## The Pool side tab
+
+`LAZSIDE`'s sheet: the longitudinal section on one side as a whole
+picture, every dimension it carries with a box in the column beside it,
+and POOLSIDE draws it.
+
+**One page per bottom type, and the page is the answer.** Six floors are
+six different chains of letters — a Normal's `H G F E` against a Sport's
+`E2 F2 G F1 E1` — so the picker is not a filter over one sheet, it *is*
+the sheet. It is also the answer POOLSIDE's first prompt gets, which is
+`lzv:form`'s own rule and the reason it is worth spelling out: "a sheet
+can never be filled in for one floor and drawn as another". The six
+words travel exactly as `psd:*btypes*` spells them, capitals and all,
+because they are answers and not labels — `tests/test_ui_charts.py`
+holds the two lists together, in POOLSIDE's order.
+
+Nothing typed is lost when the type changes. `B`, `C` and `D` are on
+every floor and mean the same thing on all of them, so they come
+straight across; a run letter the new floor does not have waits, and
+comes back if the type does.
+
+**The two NA rules on this sheet are opposites**, which is why neither
+can be a blanket rule about the word:
+
+- in a **run**, `NA` means the tape was not run there and POOLSIDE reads
+  it back off `B` — two of them split the remainder evenly, which is
+  what lets a sheet with a hole in it still draw;
+- in a **depth**, there is nothing to read it back from. `C`, `D` and
+  `C2` are `REQ` items in `psd:items`, and *a REQ item fed a nil is not
+  asked again* — so an `NA` there is withheld, named on the state line
+  and held behind `Draw`, exactly as `lzv:form` demotes it to an empty
+  box. Which keys those are is `lzv:depthkey`, a table, and it arrives
+  through the catalog: the form has no depth key spelled in it.
+
+The **mirror** question — "put the deep end on the RIGHT" — is the one
+thing on the sheet that is not a letter, so it is a dropdown. Left on
+`(ask)` it sends nothing and POOLSIDE applies its own keyboard default,
+which is the only honest reading of an unanswered question.
+
+State line, Recall last and the wire are the Pool chart's, through the
+same `FormWire` kit. The recall slot is the bottom type, under LAZSIDE's
+own registry key, so a sheet filled in on the DCL panel comes back here
+and the other way round.
+
+`tests/test_side_form.py` holds every one of those seams to the file it
+has to agree with, and `tests/test_ui_charts.py` holds the section
+itself to `lzv:chart`.
+
 ## The chart geometry is generated too
 
-`Generated/ChartCatalog.g.vb` is the vector charts `LAZFORM`, `LAZSPA`
-and `LAZSTEP` draw, written from `lzf:*charts*`, `lzs:*charts*` and
-`lzt:chart` by `tools/gen_ui_charts.py`. It carries, per sheet: the
+`Generated/ChartCatalog.g.vb` is the vector charts `LAZFORM`, `LAZSPA`,
+`LAZSTEP` and `LAZSIDE` draw, written from `lzf:*charts*`,
+`lzs:*charts*`, `lzt:chart` and `lzv:chart` by
+`tools/gen_ui_charts.py`. It carries, per sheet: the
 outline as flat polylines, every dimension with the two ends of the line
 it measures, the column-only keys, the corner letters, and the answers
 the sheet implies.
@@ -262,6 +311,14 @@ photograph of a chart, every box needed a hand-nudged fraction in
 estimates". Drawn from the vectors, a box needs no position at all: it
 belongs at the **midpoint of its dimension line**, in the chart's own
 0..1000 co-ordinates.
+
+`lzv:depthbad` is left behind for a second reason on top of that one.
+It is the side view's "D must be deeper than C, and C2 between them",
+and applying it means **reading three boxes** — which is the one thing
+this assembly does not do, and the bug the wire was built to fix. The
+panel can say it because it has the numbers; POOLSIDE loops at its own
+prompt until the pair is right, exactly as it does for a drafter typing
+at the command line.
 
 What the catalog deliberately does **not** carry is `lzf:dead` and
 `lzs:dead`: *which* of a page's boxes this run will actually ask about,

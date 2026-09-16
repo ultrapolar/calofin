@@ -383,26 +383,135 @@ print('== the branch: a plan goes the plan route, a flight does not ==')
 #: The plan route needs ActiveX for its bounding boxes, which the VM has
 #: no stub for, so each step is replaced by a note of having been run.
 TRACE = """
-  (setq ran '())
-  (defun ad:dimperim (ss) (setq ran (cons "perimeter" ran)) 0)
+  (setq ran '() sawall "never called")
+  (defun ad:dimperim (ss all)
+    (setq ran (cons "perimeter" ran) sawall all) 0)
   (defun ad:dimstairs (ss0)  (setq ran (cons "stairs" ran)) 0)
   (defun ad:getfloor (tag obstacles back) (setq ran (cons "floor" ran)) 0)
   (defun ad:overall (plan) (setq ran (cons "overall" ran)) 0)
   (defun ad:runsteps (risers) (setq ran (cons "step depths" ran)) (princ))"""
 
 
-def route(segs, answers=('Yes',)):
+def route(segs, answers=('Yes',), repeats=None, asks=True):
+    """A whole run, reported as the steps it took.  A plan is asked step
+    2's repeats question before anything is dimensioned, so `repeats`
+    (None = Enter = Typ) leads its script; a flight of steps is never
+    asked one, and passes asks=False."""
     vm = fresh()
     ents = draw(vm, segs)
     vm.loads(TRACE)
-    vm.run('c:AUTODIM', [None, ents] + list(answers))
+    vm.run('c:AUTODIM',
+           [None, ents] + ([repeats] if asks else []) + list(answers))
     return [str(x) for x in reversed(vm.globals['ran'])]
 
 
 assert route(PLAN) == ['perimeter', 'stairs', 'floor', 'floor', 'overall']
 print('   a rectangular plan: all five plan steps, no step depths')
-assert route(FLIGHT, answers=()) == ['step depths']
+assert route(FLIGHT, answers=(), asks=False) == ['step depths']
 print('   a flight of steps: the step depths alone, no plan steps')
+
+
+print('== step 2 asks what to do about a size that repeats ==')
+#: The question is put between step 1's highlight and the first dim
+#: placed, which is the only place an answer can still decide the
+#: drawing.  The TRACE stub above records what reached ad:dimperim:
+#: 't' for All, None for the Typ. rule, and the string it starts as
+#: when the step never ran at all.
+
+
+ENTS = object()                    # "the same highlight again", for Back
+
+
+def repeats(script, segs=PLAN, setting=''):
+    """A whole run over `segs`, reporting the vm so the answer that
+    reached ad:dimperim can be read off it.  `script` is what is typed
+    from step 2's question on; the floor dims and pads are turned down
+    at the end of every one of them."""
+    vm = fresh()
+    ents = draw(vm, segs)
+    vm.loads(TRACE)
+    if setting:
+        vm.loads(setting)
+    vm.run('c:AUTODIM',
+           [None, ents] + [ents if a is ENTS else a for a in script]
+           + ['No', 'No'])
+    assert not vm.script, 'answers left over: %r' % vm.script
+    return vm
+
+vm = repeats(['Typ'])
+assert vm.globals['sawall'] is None
+#: and the prompt itself, which is what a click on the bracket sends
+assert [p[0] for p in vm.prompts if 'size that repeats' in p[0]] == [
+    '\nA size that repeats - dimension every one, or note one "Typ."?'
+    ' [All/Typ/Back] <Typ>: '], vm.prompts
+print('   Typ: the rule runs, as it always has')
+
+assert repeats(['All']).globals['sawall'] == 't'
+print('   All: the rule is turned off for the run')
+
+assert repeats([None]).globals['sawall'] is None
+print('   Enter: takes the <Typ> default')
+
+#: ad:*typ-default* moves that Enter answer, for a shop that calls out
+#: every side on every drawing
+assert repeats([None], setting='(setq ad:*typ-default* "All")'
+               ).globals['sawall'] == 't'
+print('   ad:*typ-default* "All": Enter takes All instead')
+
+#: ...and a setting spelled as neither falls back on the Typ. rule
+#: rather than showing a default no keyword would accept
+assert repeats([None], setting='(setq ad:*typ-default* "typical")'
+               ).globals['sawall'] is None
+print('   ad:*typ-default* spelled otherwise: the Typ. rule, as before')
+
+#: an acaddoc.lsp line gone wrong leaves something that is not a word
+#: at all there - the prompt still opens, on the Typ. rule
+assert repeats([None], setting='(setq ad:*typ-default* nil)'
+               ).globals['sawall'] is None
+assert repeats([None], setting='(setq ad:*typ-default* 3)'
+               ).globals['sawall'] is None
+print('   ad:*typ-default* set to nil or a number: the same, and no error')
+
+#: The question sits straight after the highlight with nothing else in
+#: front of it and nothing drawn yet, so Back re-opens the highlight -
+#: and the answer given the second time is the one that counts
+vm = repeats(['Back', ENTS, 'All'])
+assert vm.globals['sawall'] == 't', vm.globals['sawall']
+asked = [p[0] for p in vm.prompts if p[0].startswith('ssget')]
+assert asked == ['ssget _I', 'ssget', 'ssget'], asked
+assert any('Stepping back to the highlight' in x for x in vm.printed)
+print('   Back: the highlight re-opens, and the second answer is kept')
+
+#: the perimeter was dimensioned once, on the answer that stuck, and
+#: the run opened ONE undo group - which is the question's other half:
+#: it is put in front of the group, so backing out of it never has to
+#: close one and open another, and never leaves a stray mark behind
+assert [str(x) for x in vm.globals['ran']].count('perimeter') == 1, \
+    vm.globals['ran']
+assert undo_cmds(vm) == ['_Begin', '_End'], undo_cmds(vm)
+print('   asked in front of the undo group: one group, one perimeter pass')
+
+#: a flight of steps is never asked: its dims are the depth of each
+#: step, not a perimeter of repeating sizes.  The script would have
+#: been exhausted at the question if it had been put
+vm = fresh()
+ents = draw(vm, FLIGHT)
+vm.loads(TRACE)
+vm.run('c:AUTODIM', [None, ents])
+assert vm.globals['sawall'] == 'never called', vm.globals['sawall']
+assert not [p for p in vm.prompts if p[0].startswith('\nA size')], vm.prompts
+print('   a side view of steps: the question is never put')
+
+#: a pickfirst plan is asked it like any other - the set was picked
+#: before the command started, so the question is its first prompt
+vm = fresh()
+ents = draw(vm, PLAN)
+vm.loads(TRACE)
+vm.run('c:AUTODIM', [ents, 'All', 'No', 'No'])
+assert vm.globals['sawall'] == 't', vm.globals['sawall']
+assert vm.prompts[0][0] == 'ssget _I', vm.prompts[0]
+assert not any(p[0] == 'ssget' for p in vm.prompts), vm.prompts
+print('   a pickfirst plan: asked without the highlight being re-opened')
 
 
 print('== step 4 asks first, and takes No, Enter and Back for an answer ==')
@@ -410,7 +519,7 @@ print('== step 4 asks first, and takes No, Enter and Back for an answer ==')
 #: by a note of having been run, and Back available at the floor lines.
 FLOW = """
   (setq ran '() backon "")
-  (defun ad:dimperim (ss) (setq ran (cons "perimeter" ran)) 0)
+  (defun ad:dimperim (ss all) (setq ran (cons "perimeter" ran)) 0)
   (defun ad:dimstairs (ss0) (setq ran (cons "stairs" ran)) 0)
   (defun ad:overall (plan) (setq ran (cons "overall" ran)) 0)
   (defun ad:eraseafter (mark) (setq ran (cons "rolled back" ran)) (princ))
@@ -428,7 +537,7 @@ def plan_flow(answers, backon=''):
     vm.loads(FLOW)
     vm.loads('(setq backon "%s")' % backon)
     vm.script = list(answers)
-    vm.loads('(ad:runplan nil)')
+    vm.loads('(ad:runplan nil nil)')
     assert not vm.script, 'answers left over: %r' % vm.script
     return [str(x) for x in reversed(vm.globals['ran'])]
 
@@ -476,7 +585,7 @@ def plan_pads(answers, backon=''):
     vm.loads(FLOW)
     vm.loads('(setq backon "%s")' % backon)
     vm.script = list(answers)
-    out = vm.loads('(ad:runplan nil)')
+    out = vm.loads('(ad:runplan nil nil)')
     assert not vm.script, 'answers left over: %r' % vm.script
     return out[1]
 
@@ -515,9 +624,11 @@ PADSTUB = """
     (princ))"""
 
 
-def autodim_pads(answers, segs=PLAN, pickfirst=1, paddle=True, undoctl=None):
+def autodim_pads(answers, segs=PLAN, pickfirst=1, paddle=True, undoctl=None,
+                 repeats=None, asks=True):
     """A whole AUTODIM run with every dimensioning step stubbed out, so
-    what is left is the handover."""
+    what is left is the handover.  Step 2's repeats question leads a
+    plan's script, as in route() above."""
     vm = fresh()
     ents = draw(vm, segs)
     vm.loads(TRACE)
@@ -526,7 +637,8 @@ def autodim_pads(answers, segs=PLAN, pickfirst=1, paddle=True, undoctl=None):
     vm.sysvars['PICKFIRST'] = pickfirst
     if undoctl is not None:
         vm.sysvars['UNDOCTL'] = undoctl
-    vm.run('c:AUTODIM', [None, ents] + list(answers))
+    vm.run('c:AUTODIM',
+           [None, ents] + ([repeats] if asks else []) + list(answers))
     return vm, ents
 
 
@@ -550,7 +662,7 @@ vm, _ = autodim_pads(['Yes'])
 assert vm.globals['padruns'] == 0
 print('   Yes to floor dims: PADDLE is not run either')
 
-vm, _ = autodim_pads([], segs=FLIGHT)
+vm, _ = autodim_pads([], segs=FLIGHT, asks=False)
 assert vm.globals['padruns'] == 0
 print('   a side view of steps: no pad question, no pads')
 
@@ -592,7 +704,7 @@ vm.loads(PADSTUB)
 vm.loads('(defun ad:overall (plan) (ad:no-such-helper plan))')
 vm.handle_errors = True
 vm.sysvars['PICKFIRST'] = 0
-vm.run('c:AUTODIM', [None, ents, 'No', 'Yes'])
+vm.run('c:AUTODIM', [None, ents, None, 'No', 'Yes'])
 assert len(vm.handled_errors) == 1, vm.handled_errors
 assert vm.sysvars['PICKFIRST'] == 0, vm.sysvars['PICKFIRST']
 assert vm.globals['padruns'] == 0, vm.globals['padruns']
@@ -681,9 +793,10 @@ PERIM = """
   (defun ad:arcang (centre mid diag eps ss) (angle centre mid))"""
 
 
-def perim(segs=(), arcs=()):
+def perim(segs=(), arcs=(), all=False):
     """Dimension a perimeter of the given straight sides and arcs, and
-    report what came out as (note, measurement) per dim, in order."""
+    report what came out as (note, measurement) per dim, in order.
+    ALL is step 2's answer: True dimensions every repeat where it is."""
     vm = fresh()
     vm.sysvars['DIMTXT'] = 0.125
     vm.sysvars['DIMSCALE'] = 48
@@ -699,7 +812,7 @@ def perim(segs=(), arcs=()):
     vm.script = [ents]
     vm.loads('(setq SS (ssget))')
     vm.loads(PERIM)
-    n = vm.loads('(ad:dimperim SS)')
+    n = vm.loads('(ad:dimperim SS %s)' % ('T' if all else 'nil'))
     out = []
     for c in vm.commands:
         if not c or c[0] not in ('_.DIMALIGNED', '_.DIMRADIUS'):
@@ -755,6 +868,31 @@ n, got = perim(arcs=[((0, 0), 18.0), ((80, 0), 18.0), ((160, 0), 18.0),
 assert n == 3, (n, got)
 assert [g[0] for g in got] == ['<> Typ.', '', ''], got
 print('   four of one radius and two of another: noted once, then both')
+
+
+print('== All turns the rule off: every repeat dimensioned where it is ==')
+#: Step 2 asks before it places anything, and the answer reaches
+#: ad:dimperim as ALL.  T there means the counts and the note are left
+#: out of it entirely - the drawing a shop that calls out every side
+#: wants, and the one a drafter about to move dims by hand starts from.
+
+# the pair that was one noted dim above is two plain ones now
+n, got = perim(segs=[((0, 0), (60, 0)), ((0, 40), (60, 40))], all=True)
+assert n == 2, (n, got)
+assert got == [('', 60.0), ('', 60.0)], got
+print('   two equal sides: both dimensioned, neither noted')
+
+# and so is the group of four radii
+n, got = perim(arcs=[((0, 0), 18.0), ((80, 0), 18.0),
+                     ((160, 0), 18.0), ((0, 80), 18.0)], all=True)
+assert n == 4, (n, got)
+assert [g[0] for g in got] == ['', '', '', ''], got
+print('   four equal radii: all four, none of them noted')
+
+# sizes that were never grouped come out exactly as they did
+n, got = perim(segs=[((0, 0), (60, 0)), ((0, 40), (36, 40))], all=True)
+assert n == 2 and got == [('', 60.0), ('', 36.0)], (n, got)
+print('   two sides of different lengths: the same two dims as before')
 
 
 print('== a radius dim counts as dimensioning that arc ==')
@@ -972,13 +1110,13 @@ assert n == 1, (n, got)
 print('   ad:*typ-lines*: two equal sides is the default trigger')
 
 
-def perim_with(setting, segs=(), arcs=()):
+def perim_with(setting, segs=(), arcs=(), all=False):
     """perim(), with one setting changed before the run."""
     global PERIM
     saved = PERIM
     try:
         PERIM = saved + '\n' + setting
-        return perim(segs=segs, arcs=arcs)
+        return perim(segs=segs, arcs=arcs, all=all)
     finally:
         PERIM = saved
 
@@ -992,6 +1130,13 @@ n, got = perim_with('(setq ad:*typ-curves* 2)',
                     arcs=[((0, 0), 18.0), ((80, 0), 18.0)])
 assert n == 1 and got[0][0] == '<> Typ.', (n, got)
 print('   ad:*typ-curves* 2: two equal radii are noted once')
+
+# ...and All is the answer the counts cannot reach: the same setting,
+# the same two arcs, both dimensioned where they are
+n, got = perim_with('(setq ad:*typ-curves* 2)',
+                    arcs=[((0, 0), 18.0), ((80, 0), 18.0)], all=True)
+assert n == 2 and [g[0] for g in got] == ['', ''], (n, got)
+print('   ad:*typ-curves* 2 answered All: both, and neither noted')
 
 n, got = perim_with('(setq ad:*perim-feet* 4.0)', segs=[((0, 0), (60, 0))])
 assert n == 1, (n, got)

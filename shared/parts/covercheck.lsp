@@ -123,6 +123,18 @@
 ;;;       closed loop wins; leftover open chains or other closed loops
 ;;;       are reported as AMBIGUOUS. Its area (sq ft) and its straight
 ;;;       / arc segment split are given in the report on the side.
+;;;       A perimeter does not always stay on one layer: the stretch
+;;;       the cable run carries is drawn on "CABLE" (tune
+;;;       *cchk-perim-layers*), and that layer's ByLayer geometry is
+;;;       chained in alongside the pool's so the outline still closes
+;;;       and is still measured. Only what joins the loop is used --
+;;;       a branch off to an anchor, or the cable's own loop parked
+;;;       elsewhere, is cut before the walk and counted as neither a
+;;;       gap nor a stray loop -- and where both layers leave a point
+;;;       the pool layer wins, so a borrowed layer can only ever fill
+;;;       a gap. The report names how many segments came off which
+;;;       layer, and the pads and the Cover Details grading read the
+;;;       whole perimeter, borrowed stretches included.
 ;;;     - COVER DETAILS. A block named (or containing) "Cover
 ;;;       Details" holds an OVERLAP value ("Overlap: 12''" -- only
 ;;;       12"/15"/18" exist) and a SPACING tag ("Spacing: 5x5" --
@@ -229,7 +241,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.18")
+(setq *cchk-version* "v1.20")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -253,6 +265,19 @@
 ;; template already uses.
 (setq *cchk-pool-layer*   "POOL")
 (setq *cchk-cover-layer*  "COVER")
+
+;; Layers OTHER than the pool layer that may carry a stretch of the
+;; SAME closed perimeter -- the cable run drawn on "CABLE" being the
+;; everyday one.  Their ByLayer geometry is chained in alongside the
+;; pool layer's, so an outline that hands over mid-run still closes
+;; and is still measured.  Only what actually joins the loop is used:
+;; whatever else sits on these layers is that layer's own business,
+;; and is never counted as a gap or a stray loop.  At a junction the
+;; pool layer wins, so a borrowed layer can only ever fill a gap, and
+;; a loop with no pool-layer segment in it is not the pool outline.
+;; Adding a layer here lets more geometry into the outline; '() reads
+;; the pool layer on its own, as before.
+(setq *cchk-perim-layers* '("CABLE"))
 
 ;; When no cover is drawn the sheet has to say which size IS shown.
 ;; Both notes together is an error -- a sheet shows one or the other.
@@ -2378,13 +2403,151 @@
      (if cv (cchk:pv-vts->segs (car cv) (cdr cv))))))
 
 ;; Chains touching segments (ends within *cchk-chain-fuzz*) end-to-end.
-;; Returns (loops . open-count); each loop is a vertex list (x y bulge).
-(defun cchk:pv-chain (segs / loops nopen chain head tail done found rest s)
-  (setq nopen 0)
+;; A segment is (start end bulge [layer]); cchk:pv-chain hands back the
+;; chains it made, closed and open, still as segments -- the layer tag
+;; is what lets cchk:pool-loop tell the pool's own geometry from a
+;; stretch borrowed off *cchk-perim-layers* once the walk has mixed the
+;; two.
+(defun cchk:pv-revseg (s)
+  ;; SEG walked the other way: same geometry, so the bulge changes
+  ;; sign.  The layer tag (4th slot, see cchk:pv-tag-segs) rides along
+  ;; untouched -- turning a segment round does not move it.
+  (list (cadr s) (car s) (- (caddr s)) (cadddr s)))
+
+(defun cchk:pv-tag-segs (segs lay)
+  ;; stamp a run of segments with the layer they were read off: nil
+  ;; for the pool layer itself, the layer's NAME for one borrowed off
+  ;; *cchk-perim-layers*.  The tag sits in a 4th slot every other
+  ;; segment reader ignores, so an untagged segment still means the
+  ;; pool layer.
+  (mapcar '(lambda (s) (list (car s) (cadr s) (caddr s) lay)) segs))
+
+(defun cchk:pv-chain-vts (chain)
+  ;; a chain of segments as the (x y bulge) vertex list the area and
+  ;; the feature hunt read: one vertex per segment, its start point
+  ;; carrying the bulge of the segment leaving it
+  (mapcar '(lambda (s) (list (car (car s)) (cadr (car s)) (caddr s)))
+          chain))
+
+(defun cchk:pv-has-pool-p (chain)
+  ;; T when any segment of CHAIN came off the pool layer itself.  A
+  ;; chain without one is a borrowed layer's own geometry running its
+  ;; own errand, not a piece of the pool outline.
+  (vl-some '(lambda (s) (null (cadddr s))) chain))
+
+(defun cchk:pv-borrowed (chain / out hit s)
+  ;; the borrowed layers CHAIN took segments off, as ((layer . count)
+  ;; ...) in the order they were met; nil when the whole chain is the
+  ;; pool layer's own
+  (foreach s chain
+    (if (cadddr s)
+      (if (setq hit (assoc (cadddr s) out))
+        (setq out (subst (cons (car hit) (1+ (cdr hit))) hit out))
+        (setq out (append out (list (cons (cadddr s) 1)))))))
+  out)
+
+(defun cchk:pv-take (segs pt / found rest s)
+  ;; the first segment in SEGS with an end on PT, turned so that it
+  ;; LEAVES pt, and the rest of SEGS without it, in order
+  (setq found nil rest nil)
+  (foreach s segs
+    (if found
+        (setq rest (cons s rest))
+        (cond
+          ((<= (distance pt (car s)) *cchk-chain-fuzz*) (setq found s))
+          ((<= (distance pt (cadr s)) *cchk-chain-fuzz*) ; reversed
+           (setq found (cchk:pv-revseg s)))
+          (T (setq rest (cons s rest))))))
+  (list found (reverse rest)))
+
+(defun cchk:pv-drop-slivers (segs)
+  ;; segments shorter than the chaining fuzz join nothing and would
+  ;; make every end look occupied - they go before any walk
+  (vl-remove-if
+    '(lambda (s) (<= (distance (car s) (cadr s)) *cchk-chain-fuzz*))
+    segs))
+
+(defun cchk:pv-tal-find (pt tal / hit c)
+  ;; the tally entry for PT, ends within the chaining fuzz being the
+  ;; same spot; the entry itself, so subst can replace it
+  (foreach c tal
+    (if (and (null hit) (<= (distance pt (car c)) *cchk-chain-fuzz*))
+      (setq hit c)))
+  hit)
+
+(defun cchk:pv-tally (segs / tal hit s e)
+  ;; ((point . ends-on-it) ...) over every segment end.  A point with
+  ;; one end on it is a LOOSE END: nothing carries on from there.
+  (foreach s segs
+    (foreach e (list (car s) (cadr s))
+      (if (setq hit (cchk:pv-tal-find e tal))
+        (setq tal (subst (cons (car hit) (1+ (cdr hit))) hit tal))
+        (setq tal (cons (cons e 1) tal)))))
+  tal)
+
+(defun cchk:pv-take-borrowed (segs pt / found rest s)
+  ;; the first BORROWED segment with an end on PT, and the rest of
+  ;; SEGS without it, in order; nil when nothing borrowed lands there
+  (foreach s segs
+    (if (and (null found)
+             (cadddr s)
+             (or (<= (distance pt (car s)) *cchk-chain-fuzz*)
+                 (<= (distance pt (cadr s)) *cchk-chain-fuzz*)))
+      (setq found s)
+      (setq rest (cons s rest))))
+  (if found (cons found (reverse rest))))
+
+(defun cchk:pv-prune-spurs (segs / tal q pt cut seg hit e)
+  ;; Borrowed geometry hanging by a loose end is a SPUR -- the cable
+  ;; branching off to an anchor, the tail of a run that carries on
+  ;; past the corner, a whole run that never touches the pool at all
+  ;; -- and it is not a stretch of the perimeter: what the outline
+  ;; borrows is joined at BOTH ends, which is what makes it a stretch
+  ;; rather than a branch.  Cutting spurs before the walk is what
+  ;; stops one leaving an outline vertex from being followed out of
+  ;; it, which would leave the loop open behind it.
+  ;;
+  ;; Pool-layer segments (untagged) are never cut: one hanging loose
+  ;; is the GAP the drafter is being told about.
+  ;;
+  ;; The cut walks INWARD from each loose end rather than sweeping the
+  ;; whole list again per segment: cutting one frees the end it held,
+  ;; and that end goes on the queue, so a run several hundred segments
+  ;; long costs one walk down it instead of one sweep per segment.
+  (setq tal (cchk:pv-tally segs))
+  (foreach hit tal (if (< (cdr hit) 2) (setq q (cons (car hit) q))))
+  (while q
+    (setq pt (car q)
+          q  (cdr q))
+    (if (setq cut (cchk:pv-take-borrowed segs pt))
+      (progn
+        (setq seg  (car cut)
+              segs (cdr cut))
+        ;; both its ends lose an end with it, and one left holding a
+        ;; single segment is the next loose end along the spur
+        (foreach e (list (car seg) (cadr seg))
+          (if (setq hit (cchk:pv-tal-find e tal))
+            (progn
+              (setq tal (subst (cons (car hit) (1- (cdr hit))) hit tal))
+              (if (= 2 (cdr hit)) (setq q (cons e q)))))))))
+  segs)
+
+(defun cchk:pv-chain (segs / loops opens chain head tail done found rest)
+  ;; Returns (closed-chains open-chains), both lists of SEGMENT chains
+  ;; -- cchk:pv-chain-vts turns one into the vertex list the area and
+  ;; feature hunts read, and the segments keep whatever layer tag they
+  ;; were given, so the caller can still tell which layer each stretch
+  ;; came off after the walk has mixed them.
+  ;;
+  ;; The walk grows at BOTH ends, as PADDLE's does.  Growing forward
+  ;; only splits an outline with ONE gap in it into TWO open chains
+  ;; whenever the walk starts in the middle of it -- the half ahead of
+  ;; the starting segment runs into the gap, the half behind it into
+  ;; the segment already taken -- and that count is read out to the
+  ;; drafter as "N open chain(s) (check for gaps)".  One hole has to
+  ;; count as one.
   ;; drop degenerate slivers
-  (setq segs (vl-remove-if
-               '(lambda (s) (<= (distance (car s) (cadr s)) *cchk-chain-fuzz*))
-               segs))
+  (setq segs (cchk:pv-drop-slivers segs))
   (while segs
     (setq chain (list (car segs))
           head  (car (car segs))
@@ -2395,27 +2558,28 @@
       (cond
         ;; loop closed back onto its start?
         ((and (> (length chain) 1) (<= (distance tail head) *cchk-chain-fuzz*))
-         (setq loops (cons (mapcar '(lambda (s) (list (car (car s)) (cadr (car s)) (caddr s)))
-                                   chain)
-                           loops)
+         (setq loops (cons chain loops)
                done  T))
-        (T ;; look for a segment continuing from the tail
-         (setq found nil rest nil)
-         (foreach s segs
-           (if found
-               (setq rest (cons s rest))
-               (cond
-                 ((<= (distance tail (car s)) *cchk-chain-fuzz*)
-                  (setq found s))
-                 ((<= (distance tail (cadr s)) *cchk-chain-fuzz*) ; reversed
-                  (setq found (list (cadr s) (car s) (- (caddr s)))))
-                 (T (setq rest (cons s rest))))))
-         (if found
-             (setq chain (append chain (list found))
-                   tail  (cadr found)
-                   segs  (reverse rest))
-             (setq nopen (1+ nopen) done T)))))) ; dead end: open chain
-  (cons (reverse loops) nopen))
+        (T ;; a segment leaving the tail, else one arriving at the head
+         (setq rest  (cchk:pv-take segs tail)
+               found (car rest)
+               rest  (cadr rest))
+         (cond
+           (found (setq chain (append chain (list found))
+                        tail  (cadr found)
+                        segs  rest))
+           (T
+            (setq rest  (cchk:pv-take segs head)
+                  found (car rest)
+                  rest  (cadr rest))
+            (if found
+                (setq found (cchk:pv-revseg found) ; turned to arrive at head
+                      chain (cons found chain)
+                      head  (car found)
+                      segs  rest)
+                (setq opens (cons chain opens)  ; dead end both ways
+                      done  T))))))))
+  (list (reverse loops) (reverse opens)))
 
 ;; Concave features of one closed loop: returns pads, each
 ;; (center rotation kind) with kind = "corner" / "arc". PADSIZE sets
@@ -2528,9 +2692,11 @@
        (or (null (assoc 370 ed))
            (= -1 (cdr (assoc 370 ed))))))
 
-(defun cchk:pool-ents (ss saved / i e ed out nskip)
-  ;; pool-outline candidates: LINE/ARC/LWPOLYLINE/POLYLINE on the pool
-  ;; layer with every property ByLayer, from the selection. SAVED (the
+(defun cchk:pool-ents (ss saved lay / i e ed out nskip)
+  ;; outline candidates on ONE layer: LINE/ARC/LWPOLYLINE/POLYLINE/
+  ;; CIRCLE on LAY with every property ByLayer, from the selection.
+  ;; LAY is the pool layer, or one of *cchk-perim-layers* when the
+  ;; perimeter hands over to another layer partway round. SAVED (the
   ;; review's colour stash) supplies the true colour of anything
   ;; currently greyed out. Returns (ents . skipped); skipped sit on
   ;; the layer but carry explicit properties.
@@ -2541,29 +2707,52 @@
           ed (entget e))
     (if (and ed
              (member (cdr (assoc 0 ed)) '("LINE" "ARC" "LWPOLYLINE" "POLYLINE" "CIRCLE"))
-             (= (strcase (cdr (assoc 8 ed))) (strcase *cchk-pool-layer*)))
+             (= (strcase (cdr (assoc 8 ed))) (strcase lay)))
       (if (cchk:bylayer-p e (cond ((assoc e saved) (cdr (assoc e saved)))
                                   ((cchk:ent-color e))))
         (setq out (cons e out))
         (setq nskip (1+ nskip)))))
   (cons (reverse out) nskip))
 
-(defun cchk:pool-loop (pents / segs e res loops best bestarea a l)
+(defun cchk:pool-loop (pents borrow / segs e bl res loops opens best
+                             bestarea a l)
   ;; the pool outline: the largest closed loop chained from the
-  ;; candidates' bulge-aware segments. Returns
-  ;;   (best-loop open-chain-count other-closed-loop-count)
-  ;; best-loop is nil when nothing closes back on itself; the other
-  ;; two counts flag an ambiguous outline (a gap, or extra geometry
-  ;; on the pool layer) even when a loop was still found.
+  ;; candidates' bulge-aware segments.  BORROW is ((layer . ents) ...)
+  ;; read off *cchk-perim-layers* -- a stretch of the same perimeter
+  ;; drawn elsewhere, chained in so an outline that hands over midway
+  ;; still closes.  Returns
+  ;;   (best-loop open-chain-count other-closed-loop-count borrowed)
+  ;; best-loop is nil when nothing closes back on itself; the two
+  ;; counts flag an ambiguous outline (a gap, or extra geometry on the
+  ;; pool layer) even when a loop was still found; BORROWED is
+  ;; ((layer . segment-count) ...) for the loop that won.
+  ;;
+  ;; Pool segments go in FIRST, so where both layers leave a point the
+  ;; walk stays on the pool layer and a borrowed one can only ever
+  ;; fill a gap.  Only chains carrying a pool segment are the pool's:
+  ;; the rest is the borrowed layer's own geometry -- a cable run off
+  ;; to an anchor, a loop of its own -- and it is neither the outline
+  ;; nor a gap in it, so it is not measured and not counted.
   (foreach e pents
-    (setq segs (append segs (cchk:pv-ent-segs e))))
+    (setq segs (append segs (cchk:pv-tag-segs (cchk:pv-ent-segs e) nil))))
+  (foreach bl borrow
+    (foreach e (cdr bl)
+      (setq segs (append segs (cchk:pv-tag-segs (cchk:pv-ent-segs e) (car bl))))))
+  ;; with nothing borrowed there is nothing to cut, and the walk is
+  ;; the one it always was
+  (if borrow
+    (setq segs (cchk:pv-prune-spurs (cchk:pv-drop-slivers segs))))
   (setq res      (cchk:pv-chain segs)
-        loops    (car res)
+        loops    (vl-remove-if-not 'cchk:pv-has-pool-p (car res))
+        opens    (vl-remove-if-not 'cchk:pv-has-pool-p (cadr res))
         bestarea 0.0)
   (foreach l loops
-    (setq a (abs (cchk:pv-area l)))
+    (setq a (abs (cchk:pv-area (cchk:pv-chain-vts l))))
     (if (> a bestarea) (setq bestarea a best l)))
-  (list best (cdr res) (max 0 (1- (length loops)))))
+  (list (if best (cchk:pv-chain-vts best))
+        (length opens)
+        (max 0 (1- (length loops)))
+        (if best (cchk:pv-borrowed best))))
 
 (defun cchk:parse-nxn (s / lst i n num a res)
   ;; the first "NxN" written in the text ("5x5", "3 X 3") as a list
@@ -2593,6 +2782,23 @@
                     (setq res (list a num)))))))
           (setq i (1+ i))))))
   res)
+
+(defun cchk:borrow-str (bwd / out b)
+  ;; the borrowed stretches as one phrase for the summary line --
+  ;; "3 segment(s) off layer 'CABLE'", one clause per layer
+  (setq out "")
+  (foreach b bwd
+    (setq out (strcat out
+                      (if (= out "") "" ", ")
+                      (itoa (cdr b)) " segment(s) off layer '" (car b) "'")))
+  out)
+
+(defun cchk:lay-list-str (lays / out l)
+  ;; a list of layer names as "'A', 'B'"
+  (setq out "")
+  (foreach l lays
+    (setq out (strcat out (if (= out "") "" ", ") "'" l "'")))
+  out)
 
 (defun cchk:nxn-str (sp)
   (strcat (itoa (car sp)) "x" (itoa (cadr sp))))
@@ -2702,6 +2908,7 @@
     (cchk:tag (entlast) "MARKER")))
 
 (defun cchk:cover-audit (ss blks live saved / pres pents lres vts narc nlin v
+                          lay xres borrow xskip sk b bwd
                           sqft det ovraw ovval ovok ovna spraw spval spna
                           arcy wantov wantsp why dashpoly cstat covered note
                           spanote replblk replp replsum padskip pk lines s f
@@ -2727,11 +2934,19 @@
       (strcat "Pool/Spa size: BOTH '" *cchk-pool-note* "' and '" *cchk-spa-note*
               "' are in the selection - ONLY ONE SIZE CAN BE SHOWN")))))
 
-  ;; --- pool outline & area (ByLayer geometry on the pool layer) ----
-  (setq pres  (cchk:pool-ents ss saved)
-        pents (car pres)
-        lres  (if pents (cchk:pool-loop pents))
+  ;; --- pool outline & area (ByLayer geometry on the pool layer, plus
+  ;; --- any stretch of the same perimeter on *cchk-perim-layers*) ---
+  (setq pres  (cchk:pool-ents ss saved *cchk-pool-layer*)
+        pents (car pres))
+  (foreach lay *cchk-perim-layers*
+    (setq xres (cchk:pool-ents ss saved lay))
+    (if (car xres)
+      (setq borrow (append borrow (list (cons lay (car xres))))))
+    (if (> (cdr xres) 0)
+      (setq xskip (append xskip (list (cons lay (cdr xres)))))))
+  (setq lres  (if pents (cchk:pool-loop pents borrow))
         vts   (car lres)
+        bwd   (cadddr lres)
         narc  0
         nlin  0)
   (if (> (cdr pres) 0)
@@ -2740,6 +2955,22 @@
                   (list (strcat "Pool: " (itoa (cdr pres)) " item(s) on layer '"
                                 *cchk-pool-layer*
                                 "' SKIPPED - properties are not ByLayer")))))
+  ;; a borrowed layer's own non-ByLayer items are that layer's own
+  ;; business and are not worth a line - UNLESS the outline came up
+  ;; short, in which case one of them is the likeliest reason why
+  (if (or (null vts) (and lres (or (> (cadr lres) 0) (> (caddr lres) 0))))
+    (foreach sk xskip
+      (setq lines
+            (append lines
+                    (list (strcat "Pool: " (itoa (cdr sk)) " item(s) on layer '"
+                                  (car sk)
+                                  "' SKIPPED - properties are not ByLayer"))))))
+  (foreach b bwd
+    (setq lines
+          (append lines
+                  (list (strcat "Pool: outline runs " (itoa (cdr b))
+                                " segment(s) along layer '" (car b)
+                                "' - chained into the perimeter")))))
   (if (and lres (or (> (cadr lres) 0) (> (caddr lres) 0)))
     (setq lines (append lines (list
       (strcat "Pool: outline on layer '" *cchk-pool-layer* "' is AMBIGUOUS -"
@@ -2762,6 +2993,7 @@
                             (itoa nlin) " straight / " (itoa narc)
                             " arc segment(s), mostly "
                             (if arcy "arcs" "straights")
+                            (if bwd (strcat ", " (cchk:borrow-str bwd)) "")
                             (if (and lres (or (> (cadr lres) 0) (> (caddr lres) 0)))
                               " (AMBIGUOUS - see detail)"
                               "")))
@@ -2785,8 +3017,13 @@
                wantsp '(3 3)
                why    (strcat "over " (rtos *cchk-area-large* 2 0) " sq ft")))))
     (setq poolsum (strcat "NOTHING closed and ByLayer found on layer '"
-                          *cchk-pool-layer*
-                          "' - area not measured (check for gaps)")))
+                          *cchk-pool-layer* "'"
+                          (if borrow
+                            (strcat " (layer "
+                                    (cchk:lay-list-str (mapcar 'car borrow))
+                                    " read in too)")
+                            "")
+                          " - area not measured (check for gaps)")))
 
   ;; --- Cover Details: Overlap & Spacing vs what the pool needs -----
   (setq det (car (vl-remove-if-not
@@ -3710,6 +3947,14 @@
   (princ "\n  exploded into lines/arcs) is chained into the pool's outline; its")
   (princ "\n  area (sq ft) and straight/arc segment mix are reported. An")
   (princ "\n  outline with gaps or extra closed loops is flagged AMBIGUOUS.")
+  (if *cchk-perim-layers*
+    (progn
+      (princ (strcat "\n  A stretch of the SAME perimeter drawn on layer "
+                     (cchk:lay-list-str *cchk-perim-layers*)))
+      (princ "\n  (tune *cchk-perim-layers*) is chained in with it, so an outline")
+      (princ "\n  that hands over midway still closes; a branch off such a run,")
+      (princ "\n  and anything else on those layers, is left out of the outline")
+      (princ "\n  and is never counted as a gap in it.")))
   (princ (strcat "\n\nCOVER DETAILS - the '" *cchk-details-block*
                  "' block's OVERLAP"))
   (princ "\n  (12\"/15\"/18\") and SPACING (NxN) values are checked against what")

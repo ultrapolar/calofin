@@ -48,6 +48,14 @@ alongside.
      report says to run `CDIM`.
    - Pool outline found on `POOL` (ByLayer properties; exploded shapes
      chained back together), its area and straight/arc split reported.
+     A perimeter that hands over partway round -- the stretch the cable
+     run carries, drawn on `CABLE` (`*cchk-perim-layers*`) -- is chained
+     in with it, so the outline still closes and is still measured, and
+     the report says how many segments came off which layer. Only what
+     joins the loop is used: a branch off to an anchor, or the cable's
+     own loop elsewhere, is cut before the walk and counted as neither
+     a gap nor a stray loop. Where both layers leave a point the pool
+     layer wins, so a borrowed layer can only ever fill a gap.
    - Cover Details block's Overlap (only 12"/15"/18" exist) and
      Spacing (NxN) checked against what the outline demands: more arcs
      than straights -> 18" and 3x3; mostly straight under 1,200 sq ft
@@ -112,6 +120,7 @@ The tables below are the block, read off it:
 | --- | --- | --- |
 | `*cchk-pool-layer*` | `"POOL"` | The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these are layer names the shop's template already uses |
 | `*cchk-cover-layer*` | `"COVER"` | The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these are layer names the shop's template already uses |
+| `*cchk-perim-layers*` | `'("CABLE")` | Layers other than the pool layer that may carry a stretch of the **same** closed perimeter -- the cable run being the everyday one. Their ByLayer geometry is chained in alongside the pool layer's, so an outline that hands over midway still closes and is still measured; only what actually joins the loop is used, and the rest of the layer is never counted as a gap or a stray loop. Adding a layer lets more geometry into the outline; `'()` reads the pool layer on its own |
 | `*cchk-pool-note*` | `"Pool Size Shown"` | When no cover is drawn the sheet has to say which size IS shown. Both notes together is an error -- a sheet shows one or the other |
 | `*cchk-spa-note*` | `"Spa Size Shown"` | When no cover is drawn the sheet has to say which size IS shown. Both notes together is an error -- a sheet shows one or the other |
 | `*cchk-details-block*` | `"Cover Details"` | The block carrying Overlap and Spacing, the block a replacement drawing has to carry, and the linetype names that read as dashed |
@@ -249,7 +258,13 @@ is still used exactly as given, same as `*cchk-grey-color*`.
 * The pad hunt is a **port** of PADDLE's rules carried inside this
   file (a standalone file cannot call `PADDLE.lsp`); when PADDLE's
   rules change the port must move with them -- the test below is what
-  makes that drift loud.
+  makes that drift loud. The chaining moved with PADDLE's too: the
+  walk grows at **both** ends of a chain, so an outline with one gap
+  in it reads as ONE open chain however the walk happened to start,
+  and `N open chain(s) (check for gaps)` counts holes rather than
+  where the walk began. COVERCHECK stops at reporting them -- the
+  arrow-and-fillet offer PADDLE makes is a placer's job, not a
+  checker's.
 * Object-associative dimensions are warned about before their points
   move, and their report line says so in red.
 

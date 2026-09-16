@@ -1654,6 +1654,57 @@ def _dimrot_angle(a):
     return None
 
 
+def _line_ends(vm, e):
+    """The two ends of a LINE, or (None, None) for anything else."""
+    if not isinstance(e, Ent) or e in vm.deleted:
+        return None, None
+    data = vm.entdata.get(e, [])
+    if next((g.b for g in data if isinstance(g, Dot) and g.a == 0), None) \
+            != 'LINE':
+        return None, None
+    ends = {}
+    for g in data:
+        if isinstance(g, list) and g and g[0] in (10, 11):
+            ends[g[0]] = [float(v) for v in g[1:3]]
+    return ends.get(10), ends.get(11)
+
+
+def _move_line_end(vm, e, code, p):
+    vm.entdata[e] = [[code, float(p[0]), float(p[1]), 0.0]
+                     if isinstance(g, list) and g and g[0] == code else g
+                     for g in vm.entdata[e]]
+
+
+def _fillet_zero(vm, one, two):
+    """A zero-radius FILLET between two LINEs: each is trimmed back or
+    run on to the point where the two cross, and each keeps the side it
+    was picked on -- which is what makes the pick point part of the
+    answer and not decoration.  Two lines that never cross (parallel,
+    or one of the picks is not a line at all) are left alone, exactly
+    as AutoCAD refuses them."""
+    (e1, k1), (e2, k2) = one, two
+    if e1 is e2:
+        return
+    a1, b1 = _line_ends(vm, e1)
+    a2, b2 = _line_ends(vm, e2)
+    if not (a1 and b1 and a2 and b2):
+        return
+    d1 = [b1[0] - a1[0], b1[1] - a1[1]]
+    d2 = [b2[0] - a2[0], b2[1] - a2[1]]
+    den = d1[0] * d2[1] - d1[1] * d2[0]
+    if abs(den) < 1e-12:                      # parallel: nothing to meet at
+        return
+    t = ((a2[0] - a1[0]) * d2[1] - (a2[1] - a1[1]) * d2[0]) / den
+    x = [a1[0] + d1[0] * t, a1[1] + d1[1] * t]
+    for e, a, b, d, k in ((e1, a1, b1, d1, k1), (e2, a2, b2, d2, k2)):
+        n = d[0] * d[0] + d[1] * d[1]
+        spick = ((k[0] - a[0]) * d[0] + (k[1] - a[1]) * d[1]) / n
+        sx = ((x[0] - a[0]) * d[0] + (x[1] - a[1]) * d[1]) / n
+        # the end on the far side of the crossing from the pick is the
+        # end that moves; the picked side is the side FILLET keeps
+        _move_line_end(vm, e, 11 if spick < sx else 10, x)
+
+
 # command + input
 @bi('command')
 def _command(vm, a):
@@ -1771,27 +1822,38 @@ def _command(vm, a):
             data = [Dot(g.a, g.b | 128) if isinstance(g, Dot) and g.a == 70
                     else g for g in data]
             vm.entdata[a[1]] = data + [[11] + [float(v) for v in loc[0]]]
-    # FILLET leaves the arc it cut behind as the last entity, which is
-    # how a routine gets hold of what it just made.  The VM does NOT do
-    # fillet geometry: the two lines are left exactly as they were and
-    # the arc's centre is a stand-in, halfway between the two picks.
-    # What IS real is the radius on it -- the FILLETRAD that reached
-    # AutoCAD -- because a routine that sets FILLETRAD and then trusts
-    # (entlast) has to be held to both halves of that.
+    # FILLET at a radius leaves the arc it cut behind as the last
+    # entity, which is how a routine gets hold of what it just made.
+    # The VM does NOT do that fillet's geometry: the two lines are left
+    # exactly as they were and the arc's centre is a stand-in, halfway
+    # between the two picks.  What IS real is the radius on it -- the
+    # FILLETRAD that reached AutoCAD -- because a routine that sets
+    # FILLETRAD and then trusts (entlast) has to be held to both halves
+    # of that.
+    #
+    # FILLET at radius ZERO is the one fillet the VM does for real.  It
+    # cuts no arc at all in AutoCAD -- it runs the two objects on, or
+    # trims them back, to the point where they cross -- and PADDLE
+    # leans on exactly that to close a drafting gap in a perimeter.  A
+    # VM that left the lines where they were could not tell a fillet
+    # that took from one AutoCAD refused, and PADDLE reports the
+    # difference, so the lines move here too.
     if a and a[0] == '_.FILLET':
-        picks = [x[1] for x in a[1:]
+        picks = [(x[0], pt(x[1])) for x in a[1:]
                  if isinstance(x, list) and len(x) == 2
                  and isinstance(x[0], Ent) and isinstance(x[1], list)]
-        if len(picks) >= 2:
-            p1, q1 = pt(picks[0]), pt(picks[1])
+        rad = float(num(vm.sysvars.get('FILLETRAD', 0)))
+        if len(picks) >= 2 and rad == 0.0:
+            _fillet_zero(vm, picks[0], picks[1])
+        elif len(picks) >= 2:
+            p1, q1 = picks[0][1], picks[1][1]
             c = [0.5 * (p1[i] + q1[i]) for i in range(2)]
             e = Ent()
             vm.entities.append(e)
             vm.entdata[e] = [Dot(0, 'ARC'),
                              Dot(8, vm.sysvars.get('CLAYER', '0')),
                              [10] + c + [0.0],
-                             Dot(40, float(num(vm.sysvars.get('FILLETRAD',
-                                                              0))))]
+                             Dot(40, rad)]
     # DIMRADIUS: (command "_.DIMRADIUS" (list arc point-on-it) [_T s] loc)
     # A radial dim is group 70 bit 4 with the centre in 10 and the point
     # it was picked at in 15 -- that pair is how the tools recognize one
@@ -1940,6 +2002,24 @@ def _getpoint(vm, a):
             if vm.initget_bits & 128:
                 return v
             raise LispError(f"getpoint: keyword {v!r} not among "
+                            f"{vm.initget_kws!r} at {prompt!r}", vm)
+        return kw
+    return list(v)
+
+
+@bi('getcorner')
+def _getcorner(vm, a):
+    # (getcorner basept [prompt]) -- the second corner of a window,
+    # rubber-banded from BASEPT in AutoCAD; scripted here exactly as a
+    # getpoint is: a point, nil for Enter, a string for a keyword
+    prompt = a[-1] if a and isinstance(a[-1], str) else ""
+    v = vm.pop_script(prompt, 'getcorner')
+    if v is None:
+        return NIL
+    if isinstance(v, str):
+        kw = _match_kw(vm, v)
+        if kw is None:
+            raise LispError(f"getcorner: keyword {v!r} not among "
                             f"{vm.initget_kws!r} at {prompt!r}", vm)
         return kw
     return list(v)

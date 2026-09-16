@@ -244,7 +244,8 @@ Anything a sheet carries that has no place on the plan view gets a box
 and no letter: the depths `C` and `D` (read off a section), the radii
 `R1 R2 R3`, the check dimensions `S2`, `X` and the oval's `T`, the
 out-of-square second overalls, the Sport chain, and Roman's right-hand
-`S`/`S1`/`V` for when the two ends are not identical. Those boxes pack
+`S`/`S1`/`V`/`R2` for when the two ends are not identical (live on
+every Roman page, in square and out). Those boxes pack
 **two to a row** wherever the pair of labels still fits across -- a
 sheet with a dozen of them stacked one per row makes a dialog taller
 than the screen, and a DCL dialog taller than the screen does not open
@@ -543,10 +544,19 @@ to be asked on runs that had already answered them:
   instead, and `c:POOL` clears both on either exit. **A sheet with no
   floor work on it is `LAZFORMCOVER`**, which is also what greys
   everything behind that gate so the page does not wait to be filled in.
-- **The Roman's "are both ends perfect"**. In square POOL takes the ends
-  as identical and asks one end's letters, so the sheet's right-hand
-  `S`/`S1`/`V`/`R2` boxes are greyed there. Out of square the sheet
-  prints both ends, so it answers the question itself.
+- **The Roman's "are both ends perfect"**. POOL asks it on every Roman
+  now, in square and out — squareness is about the body, not the ends.
+  The sheet prints both ends either way, so it answers the question off
+  its own right-hand `S`/`S1`/`V`/`R2` boxes: **nothing typed into any
+  of them** sends `Yes` and POOL asks the left column only; **a number
+  in any one** sends `No` and all four are read. Those four are
+  therefore not *owed* while they are all empty — a blank box that is
+  itself an answer is not something Insert may hold the page for — and
+  the moment one is filled the other three are owed like any other live
+  box, because POOL will ask for them. They are never greyed: typing
+  into them is how the drafter says the ends differ, and a question you
+  cannot answer is not a question. The page carries a hint line saying
+  so.
 - **The hopper's straight-side check.** POOL asked it under the same key
   as the perimeter `T`, and the store is consume-once, so on a Roman --
   which asks both on one run -- the second question could only ever go

@@ -16,9 +16,12 @@
 ;;;   * band-height dimensions at both ends (layer DIMENSION)
 ;;;
 ;;; Darts + inserts are capped (the run asks, wc:*maxfeat* is the
-;;; default): the required correction is accumulated along the band and
-;;; only released when it reaches a minimum useful width, so the cut
-;;; count stays conservative.
+;;; default): the correction each BEND of the straightened side calls
+;;; for is accumulated along the band and released where it reaches a
+;;; minimum useful width -- at the bend, not at the nearest rung, so a
+;;; band drawn with two end rungs gets the same darts as the ladder it
+;;; was measured from -- and a bend too wide for one dart is cut as
+;;; several side by side.
 ;;;
 ;;; Every number the routine works to is a named tunable in the block
 ;;; below the version banner -- layers, cut sizes, the tracing angles,
@@ -29,7 +32,7 @@
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
 
-(setq *wcalst-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v2.0")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 ;;; -------------------- tunables ----------------------------------------
@@ -79,7 +82,8 @@
 ;; ---- how many cuts, and how wide -------------------------------------
 
 (setq wc:*maxfeat* 20)              ; the darts+inserts cap the prompt offers, and what an out-of-range answer falls back to
-(setq wc:*dart-cap* 4.0)            ; widest mouth ONE dart may open: lower it and a big correction splits across more rungs, raise it for fewer, wider Vs
+(setq wc:*dart-cap* 4.0)            ; widest mouth ONE dart may open: lower it and a big bend splits across more darts side by side, raise it for fewer, wider Vs
+(setq wc:*dart-space* 2.0)          ; bottom line left between two darts cut side by side for one bend, and between any two mouths: less packs them tighter, more spreads a wide correction along the band
 (setq wc:*wmin-f* 0.04)             ; smallest correction worth a cut, as a share of the band width - the floor that stops the refining pass cutting hair-width darts
 (setq wc:*target* 0.01)             ; the after-cuts residual the refining variant aims under, as a share of the bottom line, and what OVER TARGET is measured against
 (setq wc:*refine* 0.6)              ; how far each refining pass drops the threshold: nearer 1 refines in smaller steps and uses more of the passes below
@@ -417,41 +421,67 @@
   )
 )
 
-(defun wc:emit (idebt rungs pts s wmin maxfeat carry / feats acc k fsum
-                cw f fdev)
-  ;; walk the per-interval correction debt, releasing a dart (mouth
-  ;; capped at wc:*dart-cap*) or an insert whenever the accumulator
-  ;; reaches WMIN.
-  ;; CARRY non-nil: the un-released remainder carries to the next rung
-  ;; (large corrections split into several capped darts - best fit);
-  ;; CARRY nil: the accumulator resets after each release (fewest cuts)
-  ;; -> (feats fsum): feats = ((x width type local-depth) ...) in band
-  ;;    order, fsum = inserts added - dart widths removed
-  (setq feats nil acc 0.0 k 0 fsum 0.0)
-  (while (< k (length idebt))
-    (setq acc (+ acc (nth k idebt)))
-    (if (and (>= (abs acc) wmin) (< (length feats) maxfeat))
+(defun wc:emit (turns s w wmin maxfeat carry toplen / feats acc mx md k
+                n d tot c m cw x i rel fsum right)
+  ;; walk the BENDS of the straightened side.  Each turn there leaves
+  ;; the far edge (turn x width) too long (a turn towards it) or too
+  ;; short (a turn away); that debt accumulates bend by bend and is
+  ;; released as a dart or an insert the moment it reaches WMIN -- at
+  ;; the debt's own centre, which for one sharp bend is the bend and for
+  ;; a run of gentle ones is the middle of the run.  Rungs play no part
+  ;; here: they set the width and nothing else.  Released at the rung
+  ;; that ENDED the interval instead, a band drawn with its two end
+  ;; rungs got one dart, on the band's end, and a curve drawn in 3-deg
+  ;; chords with a rung every ten of them got four darts for 20 slots,
+  ;; two thirds of its excess left in the summary line.
+  ;; CARRY non-nil (best fit): a correction wider than wc:*dart-cap* is
+  ;; cut as several equal darts side by side, wc:*dart-space* of bottom
+  ;; line between them, and what the feature cap leaves uncut carries
+  ;; to the next release.  CARRY nil (fewest cuts): one capped dart per
+  ;; release, then the accumulator resets.
+  ;; No mouth crosses either end of the band and no two mouths overlap.
+  ;; -> (feats fsum): feats = ((x width type) ...) in band order,
+  ;;    type 1 = dart, -1 = insert; fsum = inserts added - dart widths
+  (setq feats nil acc 0.0 mx 0.0 md 0.0 fsum 0.0 right -1.0e18
+        k 1 n (length turns))
+  (while (and (< k (1- n)) (< (length feats) maxfeat))
+    (setq d   (* (nth k turns) w)
+          acc (+ acc d)
+          mx  (+ mx (* (abs d) (nth k s)))
+          md  (+ md (abs d)))
+    (if (>= (abs acc) wmin)
       (progn
-        (setq cw (abs acc))
-        (if (< acc 0) (setq cw (min cw wc:*dart-cap*)))  ; dart mouth cap
-        (setq f (nth (1+ k) rungs)
-              fdev (wc:dev-point (caddr f) pts s)
-        )
-        ;; turn towards the far side = dart
-        (setq feats (cons (list (nth (car f) s) cw
-                                (if (< acc 0) 1 -1)
-                                (- (cadr fdev)))
-                          feats)
-              fsum (+ fsum (if (< acc 0) (- cw) cw))
-              acc (if carry
-                    (if (< acc 0) (+ acc cw) (- acc cw))
-                    0.0
-                  )
-        )
-      )
-    )
-    (setq k (1+ k))
-  )
+        (setq tot (abs acc)
+              c   (if (> md 1.0e-9) (/ mx md) (nth k s)))
+        (if (< acc 0)
+          ;; a turn towards the far side leaves it long: dart(s)
+          (progn
+            (setq m   (if carry (fix (+ 0.999999 (/ tot wc:*dart-cap*))) 1)
+                  m   (max 1 (min m (- maxfeat (length feats))))
+                  cw  (min wc:*dart-cap* (/ tot m))
+                  rel (* m cw)
+                  i   0)
+            (while (< i m)
+              (setq x (+ c (* (- i (/ (1- m) 2.0)) (+ cw wc:*dart-space*)))
+                    x (max x (+ right wc:*dart-space* (/ cw 2.0))) ; clear of the last mouth
+                    x (max x (/ cw 2.0))                            ; inside the band's start
+                    x (min x (- toplen (/ cw 2.0)))                 ; and its end
+                    right (+ x (/ cw 2.0))
+                    feats (cons (list x cw 1) feats)
+                    i (1+ i)))
+            (setq fsum (- fsum rel)))
+          ;; a turn away from it opens a gap: one slit, the sliver as
+          ;; wide as the gap
+          (progn
+            (setq cw  tot
+                  rel tot
+                  x   (max (/ cw 2.0) (min c (- toplen (/ cw 2.0)))))
+            (setq feats (cons (list x cw -1) feats)
+                  fsum  (+ fsum rel))))
+        (setq acc (if carry (if (< acc 0) (+ acc rel) (- acc rel)) 0.0)
+              mx  0.0
+              md  0.0)))
+    (setq k (1+ k)))
   (list (reverse feats) fsum)
 )
 
@@ -487,6 +517,8 @@
   ;; over DPS (a list of dev-points sorted ascending by car); used to
   ;; land dart feet exactly on the bottom line
   (setq res (cadr (car dps)) found nil)
+  (if (> xv (car (last dps)))           ; past the far end: that end's
+    (setq res (cadr (last dps)) found T)) ; depth, not the near end's
   (while (and (cdr dps) (not found))
     (setq a (car dps) b (cadr dps))
     (if (and (<= (car a) xv) (<= xv (car b)))
@@ -509,6 +541,30 @@
     (if (and (>= xv (car r)) (<= xv (cadr r))) (setq hit T))
   )
   hit
+)
+
+(defun wc:inwin (sgm wins / hit lo hi wn)
+  ;; T when BOTH ends of segment SGM lie inside one of the windows in
+  ;; WINS, each a (corner corner) pair in any order -- AutoCAD's own
+  ;; Window rule, applied to one segment rather than to a whole entity.
+  ;; A far side drawn as one polyline is what this is for: a selection
+  ;; took the whole entity, and with it the whole far side became the
+  ;; "stair section" -- developed rigidly, every dart dropped, and the
+  ;; summary reading a bottom line 0.00% off.
+  (setq hit nil)
+  (foreach wn wins
+    (setq lo (list (min (car (car wn)) (car (cadr wn)))
+                   (min (cadr (car wn)) (cadr (cadr wn))))
+          hi (list (max (car (car wn)) (car (cadr wn)))
+                   (max (cadr (car wn)) (cadr (cadr wn)))))
+    (if (and (wc:ptin (car sgm) lo hi) (wc:ptin (cadr sgm) lo hi))
+      (setq hit T)))
+  hit
+)
+
+(defun wc:ptin (p lo hi)
+  (and (>= (car p) (car lo)) (<= (car p) (car hi))
+       (>= (cadr p) (cadr lo)) (<= (cadr p) (cadr hi)))
 )
 
 (defun wc:notch (dps dfeats / runs run dp dd lx rx curr)
@@ -589,14 +645,14 @@
 
 (defun c:WCALST (/ *error* oldlay ss segs nodes pick en pk seed sg d2min
                  d2c i r ids pts chainkeys s n p0 p1 dch j far ang rungs
-                 widths w mid side cross ni f k turns d0 d1 idebt i0 i1
-                 tsum total wmin maxfeat acc feats fdev farlay fseed
+                 widths w mid side cross ni f k turns d0 d1
+                 total wmin maxfeat feats farlay fseed fsum
                  fsegs cands rfar rr farpts farids fk seen ordered devpts
                  minx miny maxx maxy sgp x0 y0 wpt a b ld hz cw x
                  dl dr yb enda endb lay2 inundo conns nmk sgm dp1 dp2
                  bandlays tileh toplen botb bota tx th pass stop
                  resid featsb residb paircnt bndpts vy vfeats vresid
-                 vlab ssstairs stsegs stkeys synth comp compkeys grow
+                 vlab stwins stp1 stp2 stdrop stsegs stkeys synth comp compkeys grow
                  rsgns rsgn rkeep rmaj sumk ln
                  strest nodes2 endpts dpa stentry stpath usedj stpt stgo
                  stcand se pA pB stang stca stsn sttot stlen stprev stdx
@@ -616,16 +672,17 @@
 
   ;; ---- 1.-7. the questions, staged so every prompt after the first
   ;; offers Back (Undo works too): the side pick returns to the band
-  ;; selection, the numeric prompts to the side pick - the trace is
-  ;; recomputed from whatever is re-answered.  A trace that fails now
-  ;; re-opens the pick it came from instead of ending the command.
+  ;; selection, the numeric prompts to the side pick, the stair windows
+  ;; to the tile height - the trace is recomputed from whatever is
+  ;; re-answered.  A trace that fails now re-opens the pick it came
+  ;; from instead of ending the command.
   ;; Lines highlighted before WCALST was typed (pickfirst) are the band -
   ;; the first pass through stage 1 takes them; a too-small band or Back
   ;; re-asks interactively.
   (setq wc-pick (ssget "_I" '((0 . "LINE,LWPOLYLINE,POLYLINE"))))
   (if lzd:watch (lzd:watch wc-pick) wc-pick)
-  (setq stage 1)
-  (while (< stage 6)
+  (setq stage 1 stwins nil)
+  (while (< stage 7)
     (cond
 
       ;; ---- 1. selection ----------------------------------------------
@@ -811,21 +868,13 @@
                )
                (setq turns (reverse (cons 0.0 turns)))
 
-               (setq idebt nil k 0)
-               (while (< k (1- (length rungs)))
-                 (setq i0 (car (nth k rungs))
-                       i1 (car (nth (1+ k) rungs))
-                       tsum 0.0
-                       j (1+ i0)
-                 )
-                 (while (<= j i1)
-                   (setq tsum (+ tsum (nth j turns)) j (1+ j))
-                 )
-                 (setq idebt (cons (* tsum w) idebt) k (1+ k))
-               )
-               (setq idebt (reverse idebt)
-                     total (apply '+ (mapcar 'abs idebt))
-               )
+               ;; the whole correction the band calls for -- every
+               ;; bend's turn times the width, sign dropped -- which the
+               ;; feature cap is shared out over; and the developed
+               ;; length, which is where a mouth may not go past
+               (setq total 0.0)
+               (foreach d0 turns (setq total (+ total (abs (* d0 w)))))
+               (setq toplen (car (reverse s)))
                (setq stage 4)
              )
            )
@@ -847,7 +896,7 @@
        ))
       ;; a tile of this height sits along the straightened edge: cuts
       ;; may only come up to (width - tile height - 1") from the far edge
-      (T
+      ((= stage 5)
        (initget "Back Undo")
        (setq tileh (getreal (strcat "\nTile height along the straightened"
                                     " edge [Back] <none>: ")))
@@ -856,18 +905,49 @@
          (setq stage 4)
          (progn
            (if (and tileh (< tileh 0.0)) (setq tileh nil))
+           ;; a tile that leaves less than the clearance under it on a
+           ;; band this wide bottoms the apex rule out: every cut stops
+           ;; wc:*tile-clear* above the far edge, and a drafter not told
+           ;; so reads the inch-high darts that come out as missing
+           (if (and tileh (> (+ tileh wc:*tile-clear* wc:*tile-clear*) w))
+             (princ (strcat "\nWCALST: a tile " (wc:num tileh)
+                            " high on a band " (wc:num w)
+                            " wide leaves no room under it - every cut"
+                            " stops " (wc:num wc:*tile-clear*)
+                            " above the far edge, so the darts will be"
+                            " shallow.")))
            (setq stage 6)
+         )
+       ))
+      ;; stair sections: the far edge wraps around steps there, and each
+      ;; windowed section is developed rigidly as one piece so every
+      ;; tread length and riser rise is kept exactly (treads come out
+      ;; level, equal steps up and down stay equal).  The window is two
+      ;; corners, and a far-side SEGMENT is in it when both its ends are
+      ;; -- a selection would take whole entities, and a far side drawn
+      ;; as one polyline came in whole: the entire band became the stair
+      ;; section, developed rigidly with every dart dropped and a
+      ;; summary that read 0.00%.  Enter with none windowed means none;
+      ;; after one, Enter means done.
+      (T
+       (initget "Back Undo")
+       (setq stp1 (getpoint (strcat "\nWindow a STAIR section - first corner"
+                                    " [Back] (Enter = "
+                                    (if stwins "done" "none") "): ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") stp1) stp1)
+       (cond
+         ((= (type stp1) 'STR) (setq stwins nil stage 5))
+         ((not stp1) (setq stage 7))
+         (T
+          (setq stp2 (getcorner stp1 "\nOpposite corner: "))
+          (if lzd:ask (lzd:ask "\nOpposite corner: " stp2) stp2)
+          (if stp2
+            (setq stwins (cons (list stp1 stp2) stwins))
+            (princ "  (no second corner - that window is dropped)"))
          )
        ))
     )
   )
-  ;; stair sections: the bottom line wraps around steps there; each
-  ;; windowed section is developed rigidly as one piece so every tread
-  ;; length and riser rise is kept exactly (treads come out level,
-  ;; equal steps up and down stay equal)
-  (princ "\nWindow the STAIR section(s) if any (Enter = none): ")
-  (setq ssstairs (ssget))
-  (if lzd:watch (lzd:watch ssstairs) ssstairs)
 
   ;; ---- 8. develop the far edge ----------------------------------------
   ;; far side points = every rung far foot + the far chain traced from a
@@ -984,13 +1064,14 @@
   ;; keeps its exact rise (validated against a hand-drawn example:
   ;; every segment length is preserved to the hundredth)
   (setq synth nil stkeys nil stairrng nil)
-  (if ssstairs
+  (if stwins
     (progn
-      ;; candidate segments: in the window, on the far side's layer,
-      ;; outline (drawn once), touching neither end of the chain
+      ;; candidate segments: both ends inside a window, on the far
+      ;; side's layer, outline (drawn once), touching neither end of
+      ;; the chain
       (setq stsegs nil)
       (foreach sgm segs
-        (if (and (ssmemb (cadddr sgm) ssstairs)
+        (if (and (wc:inwin sgm stwins)
                  (equal (caddr sgm) farlay)
                  (= 1 (wc:mult sgm paircnt))
                  (not (wc:member-key (car sgm) chainkeys))
@@ -1140,18 +1221,18 @@
   ;;   B) target <1%: the threshold is refined until the after-cuts
   ;;      residual (bottom-after - darts + inserts vs bottom-before)
   ;;      aims under 1% of the original bottom length
-  ;; dart mouths are capped at 4" on the bottom line in both (larger
-  ;; corrections split across consecutive rungs)
+  ;; dart mouths are capped at wc:*dart-cap* on the bottom line in both
+  ;; (B cuts a wider correction as several darts side by side)
   (setq wmin (max (* wc:*wmin-f* w) (/ total maxfeat)))
 
-  (setq rr (wc:emit idebt rungs pts s wmin maxfeat nil)
+  (setq rr (wc:emit turns s w wmin maxfeat nil toplen)
         featsb (car rr)                            ; minimum variant
         residb (+ (- bota botb) (cadr rr))
   )
 
   (setq pass 0 stop nil)
   (while (not stop)
-    (setq rr (wc:emit idebt rungs pts s wmin maxfeat T)
+    (setq rr (wc:emit turns s w wmin maxfeat T toplen)
           feats (car rr)
           resid (+ (- bota botb) (cadr rr))
           pass (1+ pass)
@@ -1170,12 +1251,15 @@
   ;; darts landing inside a windowed stair section are dropped (the
   ;; stairs are developed rigidly and get their darts added by hand);
   ;; inserts are left in place
+  (setq stdrop 0)
   (if stairrng
     (progn
-      (setq feats  (vl-remove-if
+      (setq k      (length feats)
+            feats  (vl-remove-if
                      '(lambda (f) (and (= 1 (caddr f))
                                        (wc:instair (car f) stairrng)))
                      feats)
+            stdrop (- k (length feats))
             featsb (vl-remove-if
                      '(lambda (f) (and (= 1 (caddr f))
                                        (wc:instair (car f) stairrng)))
@@ -1218,8 +1302,7 @@
 
   ;; two stacked drawings: the <1% target version, and below it the
   ;; minimum darts+inserts version
-  (setq toplen (car (reverse s))
-        nmk 0
+  (setq nmk 0
         vy y0
   )
   (foreach vr (list (list feats resid "TARGET <1%")
@@ -1413,6 +1496,9 @@
                    (if (> (abs (cadr vr)) (* wc:*target* botb))
                      " OVER TARGET" "")))
   )
+  (if (> stdrop 0)
+    (princ (strcat "\n  " (itoa stdrop) " dart(s) fall inside the stair"
+                   " section(s) and are left for the hand work there.")))
   (princ (strcat "\n  top line " (wc:num toplen)
                  ", bottom before " (wc:num botb)
                  ", bottom after " (wc:num bota)

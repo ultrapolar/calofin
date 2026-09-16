@@ -3,10 +3,12 @@
 Dimensions a highlighted plan in one pass -- perimeter sides and arc
 radii, the stairs, two floor-dim chains it asks about, and the two
 overall dims -- picking the right dimension style for each measurement
-and never doubling up on a dim that is already there. Turn the floor
-dims down and it offers pads instead, handing the plan straight to
-`PADDLE`. Highlight a flight of steps drawn in side view instead and
-AUTODIM recognises it and dimensions the depth of every step.
+and never doubling up on a dim that is already there. It asks whether
+a size that repeats gets one dim noted `Typ.` or every one of them
+dimensioned where it is. Turn the floor dims down and it offers pads
+instead, handing the plan straight to `PADDLE`. Highlight a flight of
+steps drawn in side view instead and AUTODIM recognises it and
+dimensions the depth of every step.
 
 ## What it does
 
@@ -20,11 +22,15 @@ AUTODIM recognises it and dimensions the depth of every step.
    to 5 are skipped and the side-view flow runs instead: the depth of
    every step down the right of the flight, plus the overall depth
    further right, all in `STANDARD INCHES`.
-2. **Perimeter.** From the midpoint of every straight segment a test
-   ray is cast perpendicular to each side; a segment with one side
-   completely clear of highlighted geometry is on the perimeter, and
-   its aligned dimension is placed on that clear side, at least a foot
-   out. Arcs, circles and bulged polyline segments get radius dims.
+2. **Perimeter.** Asks first what to do about a size that repeats --
+   `A size that repeats - dimension every one, or note one "Typ."?
+   [All/Typ] <Typ>` -- and then dimensions. From the midpoint of every
+   straight segment a test ray is cast perpendicular to each side; a
+   segment with one side completely clear of highlighted geometry is
+   on the perimeter, and its aligned dimension is placed on that clear
+   side, at least a foot out. Arcs, circles and bulged polyline
+   segments get radius dims. `Back` at the question re-opens the
+   step-1 highlight, which is the whole of what is in front of it.
 3. **Stairs.** You highlight the stairs; the largest group of parallel
    lines is taken as the treads. Step widths are dimensioned (repeated
    only when the width changes) and the distances between treads are
@@ -51,11 +57,35 @@ three it would otherwise have been. A style the drawing does not have
 falls back to the style that was current when the command started, and
 that style is restored when it finishes.
 
-**One dim per size.** A measurement that repeats is called out once
-with ` Typ.` appended and the rest are left to that note -- from two
-equal straight sides up, and from four equal radii up (a pair or trio
-of matching curves reads better dimensioned where each one is). Two
-lengths within a sixteenth of an inch count as the same measurement.
+**One dim per size, if you want it.** Step 2 asks before it places
+anything:
+
+```
+A size that repeats - dimension every one, or note one "Typ."? [All/Typ] <Typ>:
+```
+
+`Typ` is the rule and the Enter answer, so a run pressed straight
+through is the run every version before v2.0 gave: a measurement that
+repeats is called out once with ` Typ.` appended and the rest are left
+to that note -- from two equal straight sides up, and from four equal
+radii up (a pair or trio of matching curves reads better dimensioned
+where each one is). Two lengths within a sixteenth of an inch count as
+the same measurement.
+
+`All` turns the rule off for the run: every side and every arc is
+dimensioned where it is, counts and note left out of it. That is the
+drawing a shop that calls out each one wants, and the one to start from
+when the dims are going to be moved by hand. `ad:*typ-default*` moves
+the Enter answer to `All` for a shop that wants it every time.
+
+The question is the first AUTODIM puts, so `Back` there re-opens the
+step-1 highlight -- a pickfirst run included, which is how a set picked
+before the command started gets changed. It is asked before the undo
+group opens, so backing out of it leaves nothing behind. A selection
+that turns out to be a flight of steps in side view is never asked: the
+side view dimensions the depth of each step, not a perimeter of
+repeating sizes, and `STAIRDIM`, `FLOORDIM` and `AUTODIMSIDEPOV` place
+no perimeter dims at all.
 
 **One dimension per place.** Every linear, aligned and radius dim
 already in model space is read first; a dim is skipped when one is
@@ -185,6 +215,7 @@ crammed against the plan.
 | `ad:*typ-note*` | `" Typ."` | Suffix on the one dim that stands for its group |
 | `ad:*typ-lines*` | `2` | Equal straight sides it takes before one is noted and the rest left to it |
 | `ad:*typ-curves*` | `4` | The same for equal radii -- higher on purpose: a pair or a trio of matching curves reads better dimensioned where each one is |
+| `ad:*typ-default*` | `"Typ"` | The Enter answer at step 2's question. `"All"` dimensions every repeat where it is and leaves the two counts above out of it; anything else spelled here reads as `"Typ"`, which is what the tool did before there was a question to ask |
 
 ### Recognising steps drawn in side view
 
@@ -250,6 +281,16 @@ override, the already-dimensioned skip (either way round, dim line
 within a foot), the overall dims still landing two feet out and a
 second run adding none, chain breaks at taken spans and style changes,
 and the missing-style fallback.
+
+Step 2's question is in there both halves at once: `All` and `Typ` at
+`ad:dimperim` (the pair that was one noted dim comes out as two plain
+ones, the four equal radii as four, and an `ad:*typ-curves*` low enough
+to group them stops mattering), and the question itself through a whole
+run -- `Typ`, `All`, Enter on the `<Typ>` default, `ad:*typ-default*`
+moving that default and a value spelled as neither falling back on the
+rule, `Back` re-opening the highlight with one undo group opened across
+the two passes, the side-view route never being asked, and a pickfirst
+plan being asked without its highlight re-opening.
 
 It also holds the tool to its contingencies: every setting is in the
 `SETTINGS` block and each one is wired to what it claims to change, a

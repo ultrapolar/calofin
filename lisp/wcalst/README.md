@@ -16,16 +16,26 @@ command relieves it automatically with:
   sliver — the material to be added — is drawn detached below the band
   under each slit.
 
-The number of darts + inserts is deliberately conservative: the needed
-correction is accumulated along the band and only released once it
-reaches a minimum useful width, and the total is capped (default
-**20**, prompt lets you change it per run).
+The number of darts + inserts is deliberately conservative: the
+correction each bend of the straightened side calls for is accumulated
+along the band and only released once it reaches a minimum useful
+width, and the total is capped (default **20**, prompt lets you change
+it per run). A cut lands at the bends that built it up -- at the bend
+itself for one sharp corner, at the middle of the run for a stretch of
+gentle ones -- **not at the nearest rung**: the rungs set the band
+width and nothing else, so a band drawn with only its two end rungs
+gets the same darts as the ladder it was measured from. (Until v2.0 the
+correction was released at the rung that ended each rung interval, so
+a band's dart count was bounded by its rung count: two end rungs gave
+one dart, on the band's end.)
 
 Sizing rules:
 
 * **Darts are at most 4" wide on the bottom line** (`wc:*dart-cap*`) —
-  a larger correction is split into several ≤ 4" darts at consecutive
-  rungs.
+  a bend that calls for more is cut as several equal ≤ 4" darts side
+  by side, `wc:*dart-space*` (default 2") of bottom line between
+  them. No mouth crosses either end of the band and no two mouths
+  overlap.
 * **Insert slivers are 1" wide at the top** (`wc:*sliver-top*`), the
   gap width at the bottom, and their sides are about 1" longer than
   the slit they go into (`wc:*sliver-extra*` — extra to trim on
@@ -60,12 +70,19 @@ Every number above is a named tunable at the top of `wcalst.lsp`; see
    `wc:*apex-f*`); a negative answer is read as Enter. Where the band
    is locally too shallow to hold that clearance, the apex is held at
    20 % of the local depth below the straightened edge
-   (`wc:*apex-min-f*`) rather than being pushed through it.
-7. *Window the STAIR section(s) if any (Enter = none)* — window-select
-   the part of the band that wraps around stairs (Enter if there are
-   none). That section is developed as one rigid piece, so every tread
-   length and riser rise is kept exactly; see
-   [Stair sections](#stair-sections).
+   (`wc:*apex-min-f*`) rather than being pushed through it. A tile that
+   leaves less than the clearance under it on a band this wide is said
+   so at the prompt — every cut then stops 1" above the far edge and the
+   darts come out shallow, which otherwise reads as no darts at all.
+7. *Window a STAIR section - first corner [Back] (Enter = none)* — click
+   two corners round the part of the band that wraps around stairs
+   (Enter if there are none; after one window Enter means done, so
+   several separate sections can be windowed one after the other). A
+   far-side segment is in the section when **both its ends** are inside
+   the window — a far side drawn as one polyline is clipped to the part
+   you windowed, not taken whole. The section is developed as one rigid
+   piece, so every tread length and riser rise is kept exactly; see
+   [Stair sections](#stair-sections). Back returns to the tile height.
 
 **Two developed drawings** are placed below the lowest point of the
 selection, one under the other, each labelled and with its own summary:
@@ -88,21 +105,32 @@ rounded off.
 
 ### Stair sections
 
-After the tile-height prompt, WCALST asks *Window the STAIR section(s)
-if any* (Enter = none). A windowed section is developed as **one rigid
-piece**: the whole outline path is rotated by the chord of the
-straightened side across the section and anchored where the section
-begins. Treads come out level with their exact lengths, every riser
-keeps its exact rise, and matching steps up/down stay equal — the
-bottom line wraps the stairs with zero length distortion (validated
-segment-by-segment against a hand-drawn example). Several separate
-stair sections can be windowed in one selection.
+After the tile-height prompt, WCALST asks *Window a STAIR section -
+first corner* (Enter = none) and then *Opposite corner*, and repeats
+until Enter. A far-side segment belongs to the section when both its
+ends lie inside a window — AutoCAD's own Window rule, applied segment
+by segment rather than to whole entities. That matters for a far side
+drawn as **one polyline**: a selection took the entity whole, the
+entire band became the "stair section", every dart was dropped and the
+summary read a bottom line 0.00% off. The window clips it to the part
+you drew the box round.
+
+A windowed section is developed as **one rigid piece**: the whole
+outline path is rotated by the chord of the straightened side across
+the section and anchored where the section begins. Treads come out
+level with their exact lengths, every riser keeps its exact rise, and
+matching steps up/down stay equal — the bottom line wraps the stairs
+with zero length distortion (validated segment-by-segment against a
+hand-drawn example).
 
 **Darts are not placed inside a windowed stair section** — the stairs
 are laid out rigidly and their darts are meant to be added by hand
 afterward, so WCALST leaves that region alone (inserts are still
-placed). Because the skipped darts no longer take up their share of the
-excess, the AFTER CUTS residual for a run with stairs will usually read
+placed). The report says how many darts fell inside the stair sections
+and were left for that hand work, so a window that swallowed more than
+the stairs is visible in the command line and not only in the drawing.
+Because the skipped darts no longer take up their share of the excess,
+the AFTER CUTS residual for a run with stairs will usually read
 `** OVER TARGET **`; that is expected and accounts for the by-hand work
 still to do.
 
@@ -198,7 +226,8 @@ every knob present, with the default it really has -- and
 | Knob | Default | What changing it does |
 | --- | --- | --- |
 | `wc:*maxfeat*` | `20` | the darts+inserts cap the prompt offers, and what an out-of-range answer falls back to |
-| `wc:*dart-cap*` | `4.0` | widest mouth ONE dart may open: lower it and a big correction splits across more rungs, raise it for fewer, wider Vs |
+| `wc:*dart-cap*` | `4.0` | widest mouth ONE dart may open: lower it and a big bend splits across more darts side by side, raise it for fewer, wider Vs |
+| `wc:*dart-space*` | `2.0` | bottom line left between two darts cut side by side for one bend, and between any two mouths: less packs them tighter, more spreads a wide correction along the band |
 | `wc:*wmin-f*` | `0.04` | smallest correction worth a cut, as a share of the band width - the floor that stops the refining pass cutting hair-width darts |
 | `wc:*target*` | `0.01` | the after-cuts residual the refining variant aims under, as a share of the bottom line, and what OVER TARGET is measured against |
 | `wc:*refine*` | `0.6` | how far each refining pass drops the threshold: nearer 1 refines in smaller steps and uses more of the passes below |
@@ -259,11 +288,15 @@ every knob present, with the default it really has -- and
    segment it belongs to (the band is never stretched).
 5. At every bend of the chosen side the opposite side over- or
    under-shoots by `turn-angle × width`. That error is accumulated
-   rung by rung; each time it exceeds the release threshold
+   bend by bend; each time it exceeds the release threshold
    `max(4 % of width, total-error / max-features)` a dart (overlap) or
-   insert (gap) is emitted at that rung and the accumulator resets.
-   Bends smaller than the threshold stay as the gentle waviness of the
-   unrolled side.
+   insert (gap) is emitted at the centre of the bends that built it up
+   and the accumulator resets. In the TARGET variant a correction wider
+   than the dart cap is cut as several equal darts side by side; in the
+   MINIMUM variant one capped dart is cut and the rest is left in the
+   residual. Bends smaller than the threshold stay as the gentle
+   waviness of the unrolled side. The rungs take no part in this: they
+   give the band width (the median rung) and the far edge's feet.
 
 ## Limitations
 
@@ -301,5 +334,10 @@ python3 tests/test_tunables.py                        # the block above
 15-degree chords, nine radial rungs of exactly 24 -- and pins every
 figure it reports. Beside it the contingencies: a drawing with undo
 switched off, a band that closes on itself, a datum line touching a
-long side, a band flared at one end, and a half-inch-deep band under a
-6" tile. Each of those five was a defect before it was a test.
+long side, a band flared at one end, a half-inch-deep band under a 6"
+tile, the same band drawn with only its two end rungs, a curve in
+3-degree chords with a rung every ten, a one-polyline far side under a
+stair window, a tile taller than the band, and the band of a real run
+(`tests/data/wcalst_two_rung_band.txt`: two long sides as chains of
+lines joined only by their end lines) that came back with one dart on
+its end. Each of those was a defect before it was a test.
