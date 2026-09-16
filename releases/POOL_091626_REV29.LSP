@@ -124,7 +124,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091626 REV28")
+(setq pool:*version* "091626 REV29")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -1047,6 +1047,17 @@
       (progn
         (setq v (* pool:*half-ratio* (/ tot n)))
         (if (> v 1.0e-6) v))))
+
+;; A crew that could not tape one corner-cut letter usually could not
+;; tape its matched partner either (S / S1 close a taped S2 face at 45
+;; either way -- see the overall-sheet note above pool:grecflow's ask
+;; block).  Said right where the partner is asked, not only in the
+;; block's opening note.  A pure side effect: always nil, so the
+;; question it decorates keeps its own kind and default untouched.
+(defun pool:sugnahint (ans key subject / )
+  (if (not (pool:sq ans key))
+      (princ (strcat "\n(" subject " was NA -- NA is a likely answer here too.)")))
+  nil)
 
 ;;; -------------------- form answers -----------------------------------
 ;;;
@@ -2569,7 +2580,8 @@
                                 (list 'a 'REQ "A - overall width" (cdr (assoc "A" pvo)))))
                       (list (list 'tt 'NAX "T - top side length" (cdr (assoc "T" pvo)))
                             (list 'ss 'NAX "S - corner cut along the side" (cdr (assoc "S" pvo)))
-                            (list 's1 'NAX "S1 - corner cut down the end" (cdr (assoc "S1" pvo)))
+                            (list 's1 'NAX "S1 - corner cut down the end" (cdr (assoc "S1" pvo))
+                                  nil nil nil '(pool:sugnahint ans 'ss "S"))
                             (list 'vv 'NAX "V - end width" (cdr (assoc "V" pvo)))
                             (list 's2 'NAX "S2 - corner cut face (check, sets NA S/S1)" (cdr (assoc "S2" pvo)))))
                     t))
@@ -2874,15 +2886,15 @@
   (foreach p pts (setq cen (pool:v+ cen p)))
   (setq cen (pool:v* cen (/ 1.0 8.0)))
 
-  ;; -------- perimeter (POOL) + internal end chords (dashed,
-  ;; POOL-NOTES).  Perimeter walls run between the corner TREATMENT
-  ;; ends and the treatment itself closes each corner (a square corner
-  ;; degenerates to the plain corner-to-corner wall); the two internal
-  ;; chords are not walls, so they stay on the true corners.
+  ;; -------- perimeter (POOL).  Perimeter walls run between the corner
+  ;; TREATMENT ends and the treatment itself closes each corner (a
+  ;; square corner degenerates to the plain corner-to-corner wall); the
+  ;; two internal end chords are not walls -- they are construction,
+  ;; not the pool -- so they are left off the drawing entirely and
+  ;; shown only in the mini-model beside the report (dashed, below).
   (foreach e pool:*grecedges*
     (setq p (nth (car e) pts) qq (nth (cadr e) pts))
-    (if (member (caddr e) '(ad bc))
-        (pool:lined p qq)
+    (if (not (member (caddr e) '(ad bc)))
         (pool:line (cadr (nth (car e) gce))          ; eNext(i)
                    (car (nth (cadr e) gce)) pool:*lay-pool*))) ; ePrev(j)
   (setq gcarcs (pool:ringarcs gce gcs pool:*lay-pool*))
@@ -3015,11 +3027,14 @@
   (pool:askgiven failed)
   (setq rbox (pool:report rows notes (+ xmax (* pool:*rep-gap* doff)) ymax th pool:*lay-notes*))
   ;; perimeter mini-model with the corner letters, right of the report
+  ;; -- the two internal end chords (A-D, B-C) show here, dashed, as
+  ;; the reference lines they are; they are not part of the pool drawn
+  ;; full-size above
   (setq mprims nil k 0)
   (foreach e pool:*grecedges*
-    (if (not (member (caddr e) '(ad bc)))
-        (setq mprims (cons (list 'l (nth (car e) pts) (nth (cadr e) pts))
-                           mprims))))
+    (setq mprims (cons (list (if (member (caddr e) '(ad bc)) 'ld 'l)
+                             (nth (car e) pts) (nth (cadr e) pts))
+                       mprims)))
   (setq mlbls nil)
   (foreach p pts
     (setq mlbls (append mlbls (list (cons p (nth (length mlbls) pool:*grecnames*))))))
@@ -3914,9 +3929,10 @@
 ;; at a small fixed size with the corner LETTERS on it.  The letters
 ;; used to sit in the corners of the full-size drawing; they live here
 ;; now, so the drawing itself stays clean.
-;;   prims  ('l p1 p2) line | ('a p1 pmid p2) arc as three points
-;;          (uniform scaling keeps an arc an arc) | ('rb cen b a) a
-;;          round/elliptical body
+;;   prims  ('l p1 p2) line | ('ld p1 p2) dashed reference line (the
+;;          body-end chords that are construction, not perimeter) |
+;;          ('a p1 pmid p2) arc as three points (uniform scaling keeps
+;;          an arc an arc) | ('rb cen b a) a round/elliptical body
 ;;   poly   the corner ring, for keeping letters outside the outline
 ;;          (nil -> plain outward-from-centre offsets)
 ;;   lbls   ((pt . "A") ...)
@@ -3949,6 +3965,8 @@
           (cond
             ((eq (car p) 'l)
              (pool:line (pool:mms (cadr p)) (pool:mms (caddr p)) pool:*lay-notes*))
+            ((eq (car p) 'ld)
+             (pool:lined (pool:mms (cadr p)) (pool:mms (caddr p))))
             ((eq (car p) 'a)
              (pool:arc3p (pool:mms (cadr p)) (pool:mms (caddr p))
                          (pool:mms (cadddr p)) pool:*lay-notes*))
@@ -7403,13 +7421,12 @@
         th (max pool:*th-min* (/ (max tv araw) pool:*th-div*))
         pool:*dashlt* (pool:ltload "DASHED"))
   ;; sides run between the corner-treatment ends (the true corners
-  ;; when the corners are square); the dashed body chords stay on the
-  ;; true corners -- they are construction, not walls
+  ;; when the corners are square); the body end chords A-D / B-C are
+  ;; construction, not walls, so they are left off the pool entirely
+  ;; and shown only in the mini-model beside the report (dashed, below)
   (setq rce (pool:ringends quad rcs))
   (pool:line (cadr (nth 0 rce)) (car (nth 1 rce)) pool:*lay-pool*)
   (pool:line (cadr (nth 2 rce)) (car (nth 3 rce)) pool:*lay-pool*)
-  (pool:lined b c)
-  (pool:lined d a)
   (setq rcarcs (pool:ringarcs rce rcs pool:*lay-pool*))
   (setq ml (pool:unit (pool:perp (pool:v- d a))))
   (if (< (pool:dot (pool:v- (pool:mid a d) cen) ml) 0.0)
@@ -7533,13 +7550,16 @@
   (pool:askgiven failed)
   (setq rbox (pool:report rows notes (+ xmax (* pool:*rep-gap* doff)) ymax th pool:*lay-notes*))
   ;; perimeter mini-model with the corner letters, right of the report:
-  ;; the two sides, the S1 stubs and the end arcs
+  ;; the two sides, the S1 stubs, the end arcs and the two body end
+  ;; chords A-D / B-C, dashed, as the reference lines they are -- they
+  ;; are not part of the pool drawn full-size above
   (pool:minimap
     (list (list 'l a b) (list 'l d c)
           (list 'l d (cadr lend)) (list 'l a (caddr lend))
           (list 'a (cadr lend) tipl (caddr lend))
           (list 'l c (cadr rend)) (list 'l b (caddr rend))
-          (list 'a (cadr rend) tipr (caddr rend)))
+          (list 'a (cadr rend) tipr (caddr rend))
+          (list 'ld d a) (list 'ld b c))
     quad
     (list (cons a "A") (cons b "B") (cons c "C") (cons d "D"))
     (+ (car rbox) (* pool:*map-gap* th)) (cadr rbox) (* pool:*map-size* th) th)
