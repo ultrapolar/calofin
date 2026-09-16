@@ -127,7 +127,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091626 REV31")
+(setq pool:*version* "091626 REV32")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -293,12 +293,20 @@
 ;; ---- corner marks and callouts, as multiples of doff
 ;;;
 ;;;  The square-corner mark of STANDARDS.md section 2 is a small circle
-;;;  on the corner with a leader out along its outward diagonal; a
-;;;  NotGiven corner adds a "Not Given" note past the leader tip.
+;;;  on the corner point, DIMENSIONED: a radius dim on that circle
+;;;  carries the mark as its text -- "90%%d" where the corner really is
+;;;  one, a BOXED "?" where the sheet never said -- dragged out along
+;;;  the corner's outward diagonal.  A NotGiven corner adds a "Not
+;;;  Given" note on a leader off the box.
+;;;
+;;;  The three distances are the approved sample sheet's, read back as
+;;;  multiples of the mark circle it is built round: the mark's text at
+;;;  6.7 r, the note's leader leaving the box at 8.4 r, and the note
+;;;  itself at 11.4 r.
 (setq pool:*mark-r*     0.18)   ; circle radius on the corner point
-(setq pool:*mark-lead*  1.2)    ; how far out the leader runs
-(setq pool:*ng-txt*     0.25)   ; "Not Given" text height
-(setq pool:*ng-off*     1.45)   ; how far out that note sits
+(setq pool:*mark-lead*  1.2)    ; how far out the mark's own text sits
+(setq pool:*ng-lead*    1.5)    ; where the "Not Given" leader leaves it
+(setq pool:*ng-off*     2.05)   ; ... and how far out that note sits
 (setq pool:*rad-off*    0.9)    ; radius dim, dragged out past the arc
 (setq pool:*cut-off*    0.5)    ; cut-face dim, out past the face
 
@@ -4133,36 +4141,57 @@
 ;; aligned dim on a cut face, dropped outward along outd, with an
 ;; optional " Typ." suffix.  Square corners are not this helper's job.
 ;; The square-corner mark of STANDARDS.md section 2: a small circle on
-;; the corner point with a leader out along the corner's outward
-;; diagonal.  Ported from spa:dim90 (lisp/spa/SPA.LSP), the reference
-;; implementation, so the two tools' sheets match.  txt is what the
-;; leader says -- "90%%d" on a square corner, "?" on a NotGiven one,
-;; either with a " Typ." suffix when one mark speaks for several.
+;; the corner point, and a RADIUS DIMENSION on that circle whose
+;; measurement is replaced by the mark -- so the mark arrives the way
+;; the approved sample sheet draws it, with a dimension arrow landing
+;; on the circle, the leader out along the corner's outward diagonal
+;; and the text in the sheet's own dimension style rather than at a
+;; size of this routine's choosing.  Ported from spa:dim90
+;; (lisp/spa/SPA.LSP), the reference implementation, so the two tools'
+;; sheets match.  txt is what it says -- "90%%d" on a square corner,
+;; "?" on a NotGiven one, either with a " Typ." suffix when one mark
+;; speaks for several.
+;;
+;; The dim is drawn in whatever style the run is already in: the mark
+;; is an ANGLE, not a length, so the under-24" switch to inches
+;; (pool:dimsbegin) has no business reading the little circle's radius
+;; and shrinking the mark to match.
 (defun pool:dim90 (p outd doff txt / r)
   (setq r (* pool:*mark-r* doff))
   (entmake (list '(0 . "CIRCLE")
                  (cons 8 pool:*lay-dim*)
                  (cons 10 (pool:wp p))
                  (cons 40 r)))
-  (command "_.LEADER" (pool:wp (cal:v+ p (cal:v* outd r)))
-           (pool:wp (cal:v+ p (cal:v* outd (* pool:*mark-lead* doff))))
-           "" txt ""))
+  (command "_.DIMRADIUS"
+           (list (entlast) (pool:wp (cal:v+ p (cal:v* outd r))))
+           "_T" txt
+           (pool:wp (cal:v+ p (cal:v* outd (* pool:*mark-lead* doff))))))
 
-;; A NotGiven corner: the same circled mark, but the leader asks a
-;; question instead of asserting an angle, and a note under it spells
-;; the reason out.  The sheet has to SAY the treatment was never
-;; recorded -- drawing a bare 90 would claim a measurement nobody took.
-(defun pool:dimng (p outd doff sfx / h tp)
+;; A NotGiven corner: the same circled mark, but it asks a question
+;; instead of asserting an angle, and a note beside it spells the
+;; reason out.  The sheet has to SAY the treatment was never recorded
+;; -- drawing a bare 90 would claim a measurement nobody took.
+;;
+;; The "?" goes in a BOX, which is what a negative DIMGAP draws: a bare
+;; question mark out on a leader reads as a stray character, and the
+;; box is what the sample sheet puts round it.  DIMGAP comes back
+;; immediately; an Esc between the two is caught by the handler's
+;; (pool:dimsend pool:*dimstyle0*), because restoring a dim style
+;; restores every dim variable with it.
+(defun pool:dimng (p outd doff sfx / og)
+  (setq og (getvar "DIMGAP"))
+  (setvar "DIMGAP" (- (abs og)))
   (pool:dim90 p outd doff (strcat "?" sfx))
-  ;; the note sits just past the leader tip, and is pulled back by its
-  ;; own width when the corner points LEFT -- text runs left-to-right
-  ;; from its insertion point, so an unadjusted note on a left-hand
-  ;; corner would read back across its own leader and into the pool
-  (setq h (* pool:*ng-txt* doff)
-        tp (cal:v+ p (cal:v* outd (* pool:*ng-off* doff))))
-  (if (< (car outd) 0.0)
-      (setq tp (list (- (car tp) (* 9.0 0.6 h)) (cadr tp))))
-  (pool:text tp h "Not Given" pool:*lay-dim*))
+  (setvar "DIMGAP" og)
+  ;; the note the mark cannot carry, on a leader off the box.  The
+  ;; leader's own annotation, not a text entity of ours: it is sized
+  ;; and placed by the dim style like the mark it belongs to, and
+  ;; AutoCAD hangs it on the side the leader points, so a note on a
+  ;; LEFT-hand corner cannot read back across itself into the pool
+  (command "_.LEADER"
+           (pool:wp (cal:v+ p (cal:v* outd (* pool:*ng-lead* doff))))
+           (pool:wp (cal:v+ p (cal:v* outd (* pool:*ng-off* doff))))
+           "" "Not Given" ""))
 
 ;; One corner's annotation, whichever of the four treatments it
 ;; carries.  ang is the corner's real wedge angle, and it decides

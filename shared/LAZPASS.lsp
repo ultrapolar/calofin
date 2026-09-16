@@ -3033,7 +3033,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091626 REV31")
+(setq pool:*version* "091626 REV32")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -3199,12 +3199,20 @@
 ;; ---- corner marks and callouts, as multiples of doff
 ;;;
 ;;;  The square-corner mark of STANDARDS.md section 2 is a small circle
-;;;  on the corner with a leader out along its outward diagonal; a
-;;;  NotGiven corner adds a "Not Given" note past the leader tip.
+;;;  on the corner point, DIMENSIONED: a radius dim on that circle
+;;;  carries the mark as its text -- "90%%d" where the corner really is
+;;;  one, a BOXED "?" where the sheet never said -- dragged out along
+;;;  the corner's outward diagonal.  A NotGiven corner adds a "Not
+;;;  Given" note on a leader off the box.
+;;;
+;;;  The three distances are the approved sample sheet's, read back as
+;;;  multiples of the mark circle it is built round: the mark's text at
+;;;  6.7 r, the note's leader leaving the box at 8.4 r, and the note
+;;;  itself at 11.4 r.
 (setq pool:*mark-r*     0.18)   ; circle radius on the corner point
-(setq pool:*mark-lead*  1.2)    ; how far out the leader runs
-(setq pool:*ng-txt*     0.25)   ; "Not Given" text height
-(setq pool:*ng-off*     1.45)   ; how far out that note sits
+(setq pool:*mark-lead*  1.2)    ; how far out the mark's own text sits
+(setq pool:*ng-lead*    1.5)    ; where the "Not Given" leader leaves it
+(setq pool:*ng-off*     2.05)   ; ... and how far out that note sits
 (setq pool:*rad-off*    0.9)    ; radius dim, dragged out past the arc
 (setq pool:*cut-off*    0.5)    ; cut-face dim, out past the face
 
@@ -7039,36 +7047,57 @@
 ;; aligned dim on a cut face, dropped outward along outd, with an
 ;; optional " Typ." suffix.  Square corners are not this helper's job.
 ;; The square-corner mark of STANDARDS.md section 2: a small circle on
-;; the corner point with a leader out along the corner's outward
-;; diagonal.  Ported from spa:dim90 (lisp/spa/SPA.LSP), the reference
-;; implementation, so the two tools' sheets match.  txt is what the
-;; leader says -- "90%%d" on a square corner, "?" on a NotGiven one,
-;; either with a " Typ." suffix when one mark speaks for several.
+;; the corner point, and a RADIUS DIMENSION on that circle whose
+;; measurement is replaced by the mark -- so the mark arrives the way
+;; the approved sample sheet draws it, with a dimension arrow landing
+;; on the circle, the leader out along the corner's outward diagonal
+;; and the text in the sheet's own dimension style rather than at a
+;; size of this routine's choosing.  Ported from spa:dim90
+;; (lisp/spa/SPA.LSP), the reference implementation, so the two tools'
+;; sheets match.  txt is what it says -- "90%%d" on a square corner,
+;; "?" on a NotGiven one, either with a " Typ." suffix when one mark
+;; speaks for several.
+;;
+;; The dim is drawn in whatever style the run is already in: the mark
+;; is an ANGLE, not a length, so the under-24" switch to inches
+;; (pool:dimsbegin) has no business reading the little circle's radius
+;; and shrinking the mark to match.
 (defun pool:dim90 (p outd doff txt / r)
   (setq r (* pool:*mark-r* doff))
   (entmake (list '(0 . "CIRCLE")
                  (cons 8 pool:*lay-dim*)
                  (cons 10 (pool:wp p))
                  (cons 40 r)))
-  (command "_.LEADER" (pool:wp (cal:v+ p (cal:v* outd r)))
-           (pool:wp (cal:v+ p (cal:v* outd (* pool:*mark-lead* doff))))
-           "" txt ""))
+  (command "_.DIMRADIUS"
+           (list (entlast) (pool:wp (cal:v+ p (cal:v* outd r))))
+           "_T" txt
+           (pool:wp (cal:v+ p (cal:v* outd (* pool:*mark-lead* doff))))))
 
-;; A NotGiven corner: the same circled mark, but the leader asks a
-;; question instead of asserting an angle, and a note under it spells
-;; the reason out.  The sheet has to SAY the treatment was never
-;; recorded -- drawing a bare 90 would claim a measurement nobody took.
-(defun pool:dimng (p outd doff sfx / h tp)
+;; A NotGiven corner: the same circled mark, but it asks a question
+;; instead of asserting an angle, and a note beside it spells the
+;; reason out.  The sheet has to SAY the treatment was never recorded
+;; -- drawing a bare 90 would claim a measurement nobody took.
+;;
+;; The "?" goes in a BOX, which is what a negative DIMGAP draws: a bare
+;; question mark out on a leader reads as a stray character, and the
+;; box is what the sample sheet puts round it.  DIMGAP comes back
+;; immediately; an Esc between the two is caught by the handler's
+;; (pool:dimsend pool:*dimstyle0*), because restoring a dim style
+;; restores every dim variable with it.
+(defun pool:dimng (p outd doff sfx / og)
+  (setq og (getvar "DIMGAP"))
+  (setvar "DIMGAP" (- (abs og)))
   (pool:dim90 p outd doff (strcat "?" sfx))
-  ;; the note sits just past the leader tip, and is pulled back by its
-  ;; own width when the corner points LEFT -- text runs left-to-right
-  ;; from its insertion point, so an unadjusted note on a left-hand
-  ;; corner would read back across its own leader and into the pool
-  (setq h (* pool:*ng-txt* doff)
-        tp (cal:v+ p (cal:v* outd (* pool:*ng-off* doff))))
-  (if (< (car outd) 0.0)
-      (setq tp (list (- (car tp) (* 9.0 0.6 h)) (cadr tp))))
-  (pool:text tp h "Not Given" pool:*lay-dim*))
+  (setvar "DIMGAP" og)
+  ;; the note the mark cannot carry, on a leader off the box.  The
+  ;; leader's own annotation, not a text entity of ours: it is sized
+  ;; and placed by the dim style like the mark it belongs to, and
+  ;; AutoCAD hangs it on the side the leader points, so a note on a
+  ;; LEFT-hand corner cannot read back across itself into the pool
+  (command "_.LEADER"
+           (pool:wp (cal:v+ p (cal:v* outd (* pool:*ng-lead* doff))))
+           (pool:wp (cal:v+ p (cal:v* outd (* pool:*ng-off* doff))))
+           "" "Not Given" ""))
 
 ;; One corner's annotation, whichever of the four treatments it
 ;; carries.  ang is the corner's real wedge angle, and it decides
@@ -14373,7 +14402,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091526 REV24")
+(setq spa:*version* "091626 REV25")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -14448,12 +14477,18 @@
 ;;;
 ;;;  A radius corner takes a radius dim read from outside the arc, a cut
 ;;;  corner an aligned dim across its face, a square one the circled
-;;;  90-degree mark of STANDARDS.md section 2, and a NotGiven corner
-;;;  that same mark with a "?" and a "Not Given" note past its tip.
+;;;  90-degree mark of STANDARDS.md section 2 -- a radius dim on the
+;;;  mark circle carrying "90%%d" in place of its measurement -- and a
+;;;  NotGiven corner that same mark with a BOXED "?" and a "Not Given"
+;;;  note on a leader off the box.
+;;;
+;;;  The three distances are the approved sample sheet's, read back as
+;;;  multiples of the mark circle: the mark's text at 6.7 r, the note's
+;;;  leader leaving the box at 8.4 r, the note itself at 11.4 r.
 (setq spa:*mark-r*    0.18)     ; circle radius on the corner point
-(setq spa:*mark-lead* 1.2)      ; how far out its leader runs
-(setq spa:*ng-txt*    0.25)     ; "Not Given" text height
-(setq spa:*ng-off*    1.45)     ; how far out that note sits
+(setq spa:*mark-lead* 1.2)      ; how far out the mark's own text sits
+(setq spa:*ng-lead*   1.5)      ; where the "Not Given" leader leaves it
+(setq spa:*ng-off*    2.05)     ; ... and how far out that note sits
 (setq spa:*rad-off*   0.9)      ; radius dim, dragged out past the arc
 (setq spa:*cut-off*   0.6)      ; cut-face dim, out past the face
 (setq spa:*oct-off*   0.8)      ; the octagon's one cut callout
@@ -16800,7 +16835,12 @@
   same)
 
 ;; The order sheet's 90-degree corner mark: a small circle on the corner
-;; point with a leader out of it.  Assumes CLAYER is already DIMENSION.
+;; point, DIMENSIONED -- a radius dim on that circle with its
+;; measurement replaced by the mark, so the arrow lands on the circle,
+;; the leader runs out along the corner's outward diagonal and the text
+;; comes out in the sheet's own dimension style.  That is how the
+;; approved sample sheet draws it, and it is what POOL ports.  Assumes
+;; CLAYER is already DIMENSION.
 (defun spa:dim90 (quad i cen doff txt / p outd r)
   (setq p (nth i quad)
         outd (spa:unit (cal:v- p cen))
@@ -16809,25 +16849,32 @@
                  (cons 8 spa:*lay-dim*)
                  (cons 10 (spa:wp p))
                  (cons 40 r)))
-  (command "_.LEADER" (spa:wp (cal:v+ p (cal:v* outd r)))
-           (spa:wp (cal:v+ p (cal:v* outd (* spa:*mark-lead* doff))))
-           "" txt ""))
+  (command "_.DIMRADIUS"
+           (list (entlast) (spa:wp (cal:v+ p (cal:v* outd r))))
+           "_T" txt
+           (spa:wp (cal:v+ p (cal:v* outd (* spa:*mark-lead* doff))))))
 
-;; A NotGiven corner's mark: the circled corner with a ? leader, and a
-;; "Not Given" note past the leader tip -- the sheet must SHOW the
-;; treatment was never recorded, not silently claim a 90.  The note is
-;; pulled back by its own width on a left-pointing corner, so it cannot
-;; read back across its leader into the shape.  (pool:dimng is the
-;; donor; STANDARDS section 2.)
-(defun spa:dimng (quad i cen doff sfx / p outd h tp)
+;; A NotGiven corner's mark: the circled corner asking a question
+;; instead of asserting an angle, and a "Not Given" note on a leader
+;; off it -- the sheet must SHOW the treatment was never recorded, not
+;; silently claim a 90.  The "?" sits in a BOX (a negative DIMGAP is
+;; how AutoCAD draws one), so it reads as a callout rather than as a
+;; stray character; DIMGAP comes straight back, and spa:*dimvars*
+;; carries it home if a run dies in between.  The note is the leader's
+;; own annotation, so AutoCAD hangs it on the side the leader points
+;; and it cannot read back across itself into the shape.
+;; (pool:dimng is the donor; STANDARDS section 2.)
+(defun spa:dimng (quad i cen doff sfx / p outd og)
   (setq p (nth i quad)
-        outd (spa:unit (cal:v- p cen)))
+        outd (spa:unit (cal:v- p cen))
+        og (getvar "DIMGAP"))
+  (setvar "DIMGAP" (- (abs og)))
   (spa:dim90 quad i cen doff (strcat "?" sfx))
-  (setq h (* spa:*ng-txt* doff)
-        tp (cal:v+ p (cal:v* outd (* spa:*ng-off* doff))))
-  (if (< (car outd) 0.0)
-      (setq tp (list (- (car tp) (* 9.0 0.6 h)) (cadr tp))))
-  (spa:text tp h "Not Given" spa:*lay-dim*))
+  (setvar "DIMGAP" og)
+  (command "_.LEADER"
+           (spa:wp (cal:v+ p (cal:v* outd (* spa:*ng-lead* doff))))
+           (spa:wp (cal:v+ p (cal:v* outd (* spa:*ng-off* doff))))
+           "" "Not Given" ""))
 
 ;; Corner callouts, laid out the way the order sheet does them: the note
 ;; sits OUTSIDE the corner, on the 45-degree line out of it.
@@ -57488,6 +57535,29 @@
 ;; Dim style for the step-width dim, with the same fallback.
 (if (not (boundp '*cs-width-dimstyle*)) (setq *cs-width-dimstyle* "SIDE STANDARD"))
 
+;; Dim style for the CORNER MARK (STANDARDS.md section 2).  The sample
+;; sheet carries the mark at two sizes and this is the smaller of them:
+;; a step's corners are a detail inside somebody else's plan, not the
+;; plan's own corners, so their mark reads one size down.  Same
+;; fallback as the two above.
+(if (not (boundp '*cs-mark-dimstyle*)) (setq *cs-mark-dimstyle* "STANDARD INCHES"))
+
+;; Radius of the circle that mark is drawn on, in TEXT HEIGHTS - so it
+;; tracks DIMSCALE (or the annotation scale) like the dim chain does
+;; instead of the drawing's size.  Everything else about the mark is a
+;; multiple of this radius, the way the sample sheet reads back.
+(if (not (boundp '*cs-mark-r*)) (setq *cs-mark-r* 0.5))
+
+;; How far off 90 a corner may sit, in DEGREES, and still be marked
+;; "90%%d".  The mark ASSERTS a right angle, so a corner that is not
+;; one goes unmarked: a run off a wall that leans, or a U picked with a
+;; splayed arm, has a back corner that is not 90, and saying it is
+;; would be a lie.  ("?" asserts nothing about the angle and is drawn
+;; at any.)  20 is POOL's own tolerance, so the two tools read a corner
+;; alike: it sits between the two populations -- a corner a tape calls
+;; square, and a 135 bend nobody would.
+(if (not (boundp '*cs-sq90-deg*)) (setq *cs-sq90-deg* 20.0))
+
 ;; Layer the dimensions are drawn on.  nil = the current layer; a layer
 ;; that is missing, off, frozen or locked is reported and the current
 ;; layer is used, so a run never draws dims where they cannot be seen.
@@ -57495,8 +57565,8 @@
 
 ;; How far the step-tread dim chain stands off the run's axis, in TEXT
 ;; HEIGHTS - so it tracks DIMSCALE (or the annotation scale) instead of
-;; the drawing's size.  2.0 keeps the chain clear of its own text, and
-;; the note a NotGiven corner leaves stands off by the same gap.
+;; the drawing's size.  2.0 keeps the chain clear of its own text.
+;; (A corner mark stands off by its own multiples - see *cs-mark-r*.)
 (if (not (boundp '*cs-dim-offset*)) (setq *cs-dim-offset* 2.0))
 
 ;; How far the step-width dim sits behind the wall, in text heights, on
@@ -57519,7 +57589,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.11") ; printed on load and at command start so a
+(setq *ns-version* "v3.12") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -57728,14 +57798,12 @@
                    (cons 50 (nth 5 pc))
                    (cons 51 (nth 6 pc))))))
 
-;; The back corner where arm AP meets the base BS of a U, cut OFF back
-;; along each of them - KIND "Cut" gives a 45 degree diagonal, "Radius"
-;; a fillet arc tangent to both.  Unlike the recess corner of a run that
-;; comes off an open wall, this one is cut INTO the U, since the arms
-;; are the sides of the step itself.  The piece comes back in the same
-;; form as the rest of the U so the treads trim to it; nil when the
-;; offset will not fit inside the corner.
-(defun ns-ucorner (bs ap kind off / b1 b2 fe ub ua t1 t2 o a1 a2 sw)
+;; Where arm AP meets the base BS of a U, and the two legs that leave
+;; it: the joint, the unit vector IN along the base, the unit vector
+;; OUT along the arm, and the far end of each.  The corner piece below
+;; is cut from exactly these, and the corner MARK sits on the same
+;; joint, so the two read the geometry the one way.
+(defun ns-ujoint (bs ap / b1 b2 fe ub ua)
   (setq b1 (if (< (ns-ptseg (car bs) (car ap) (cadr ap))
                   (ns-ptseg (cadr bs) (car ap) (cadr ap)))
              (car bs)
@@ -57744,7 +57812,21 @@
         fe (ns-far ap b1)
         ub (ns-unit (ns-vec b1 b2))
         ua (ns-unit (ns-vec b1 fe)))
-  (if (and ub ua (> off 0.0)
+  (if (and ub ua) (list b1 ub ua b2 fe)))
+
+;; The back corner where arm AP meets the base BS of a U, cut OFF back
+;; along each of them - KIND "Cut" gives a 45 degree diagonal, "Radius"
+;; a fillet arc tangent to both.  Unlike the recess corner of a run that
+;; comes off an open wall, this one is cut INTO the U, since the arms
+;; are the sides of the step itself.  The piece comes back in the same
+;; form as the rest of the U so the treads trim to it; nil when the
+;; offset will not fit inside the corner.
+(defun ns-ucorner (bs ap kind off / j b1 b2 fe ub ua t1 t2 o a1 a2 sw)
+  (setq j (ns-ujoint bs ap))
+  (if j
+    (setq b1 (car j) ub (cadr j) ua (caddr j)
+          b2 (nth 3 j) fe (nth 4 j)))
+  (if (and j (> off 0.0)
            (< off (distance b1 b2))
            (< off (distance b1 fe)))
     (progn
@@ -57858,8 +57940,7 @@
 (defun ns-fuzz (tol)
   (max (ns-num *cs-join-fuzz* (* 4.0 tol)) 1e-6))
 
-;; How far the step-tread dim chain stands off the run's axis - and how
-;; far a NotGiven corner's note stands off the corner it speaks for.
+;; How far the step-tread dim chain stands off the run's axis.
 (defun ns-dimoff (txth) (* (ns-num *cs-dim-offset* 2.0) txth))
 
 ;; How far the step-width dim sits behind the wall: half the run's own
@@ -57966,14 +58047,6 @@
      (setq o (ns-add t1 (ns-scl uin off)))
      (ns-mkfillet o off t1 t2))))
 
-;; A note on the drawing at PT (WCS), height H.  The geometry cannot
-;; say that a corner treatment was never recorded - this does.
-(defun ns-note (pt h str)
-  (entmake (list '(0 . "TEXT")
-                 (cons 10 (list (car pt) (cadr pt) 0.0))
-                 (cons 40 h)
-                 (cons 1 str))))
-
 ;; make dimension style NAME current, but only if it exists and is not
 ;; already current.  Uses ActiveX so style names containing spaces are
 ;; handled correctly (the -DIMSTYLE command would read a space as ENTER).
@@ -58019,6 +58092,120 @@
                          "_non" (trans b 0 1)
                          "_V"
                          "_non" (trans thru 0 1))
+  (if oldl (setvar "CLAYER" oldl)))
+
+;;; ---- the corner mark of STANDARDS.md section 2 ------------------------
+;;;
+;;;  A step's corners take the same mark a pool's do: a small circle on
+;;;  the corner point with a RADIUS DIMENSION on that circle, its
+;;;  measurement replaced by what the mark says -- "90%%d" where the
+;;;  corner really is one, a boxed "?" where the sheet never said, and
+;;;  a "Not Given" note on a leader off that box.  The treatment is ONE
+;;;  answer for both corners of a run, so one mark carries it with a
+;;;  " Typ." suffix; a mode with a single treated corner marks that one
+;;;  on its own.
+;;;
+;;;  It is drawn in *cs-mark-dimstyle*, the SMALLER of the two sizes
+;;;  the sample sheet carries, and every distance in it is a multiple
+;;;  of the mark circle, the way that sheet reads back: the mark's own
+;;;  text at 6.7 r, the note's leader leaving the box at 8.4 r, the
+;;;  note itself at 11.4 r.
+
+;; The mark circle's radius, in drawing units.
+(defun ns-markr (txth) (* (ns-num *cs-mark-r* 0.5) txth))
+
+;; T when the two legs meeting at a corner really are square, read at
+;; the tolerance a picked outline is worth.
+(defun ns-sq90p (v1 v2 / a b)
+  (setq a (ns-unit v1)
+        b (ns-unit v2))
+  (if (and a b)
+    (< (abs (cal:dot a b))
+       (sin (/ (* pi (ns-num *cs-sq90-deg* 20.0)) 180.0)))))
+
+;; The corners one treatment answer speaks for, the one a single Typ.
+;; mark should prefer first: each as (point outward-direction square-p).
+;; Where the modes put them:
+;;
+;;   LINE    the two corners of the LAST tread, where the side walls
+;;           meet it.  DIR is held square to the treads, so these are
+;;           90 by construction.
+;;   CORNER  the ONE back corner at the wall, where the outer side
+;;           leaves it -- the inner side runs straight on out of the
+;;           line it continues, so there is no corner there to treat.
+;;           Its angle is the angle the two picked lines make, which is
+;;           whatever the pool is, 90 or not.
+;;   U       the two joints where the arms meet the base, again at
+;;           whatever angle they were drawn.
+;;
+;; Outward is the way the mark leads: the bisector pointing away from
+;; the two legs, so the mark and its note land outside the step.
+(defun ns-markpts (mode sp u dir wid cum corner lastinn base arm1 arm2
+                   / run j out)
+  (cond
+    ((= mode "LINE")
+     (list (list (ns-add (ns-add sp (ns-scl u (* 0.5 wid))) (ns-scl dir cum))
+                 (ns-unit (ns-add u dir))
+                 (ns-sq90p u dir))
+           (list (ns-add (ns-add sp (ns-scl u (* -0.5 wid))) (ns-scl dir cum))
+                 (ns-unit (ns-add (ns-scl u -1.0) dir))
+                 (ns-sq90p u dir))))
+    ((= mode "CORNER")
+     (if (and lastinn (setq run (ns-unit (ns-vec corner lastinn))))
+       (list (list (ns-add corner (ns-scl u wid))
+                   (ns-unit (ns-add u (ns-scl run -1.0)))
+                   (ns-sq90p u run)))))
+    ((= mode "U")
+     (foreach j (list (if (and base arm1) (ns-ujoint base arm1))
+                      (if (and base arm2) (ns-ujoint base arm2)))
+       (if j
+         (setq out (cons (list (car j)
+                               (ns-unit (ns-scl (ns-add (cadr j) (caddr j))
+                                                -1.0))
+                               (ns-sq90p (cadr j) (caddr j)))
+                         out))))
+     (reverse out))))
+
+;; One mark: the circle on PT, and a radius dim on it that SAYS TXT
+;; instead of measuring, dragged out along OUTD.  The dim style and the
+;; layer both come back before it returns, so a mark cannot leave the
+;; drawing in the mark's style for whatever is dimensioned next.
+(defun ns-mark (pt outd txth txt / r old oldl)
+  (setq r   (ns-markr txth)
+        old (getvar "DIMSTYLE"))
+  (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
+    (progn (setq oldl (getvar "CLAYER"))
+           (setvar "CLAYER" *cs-dim-layer*)))
+  (entmake (list '(0 . "CIRCLE")
+                 (cons 10 (list (car pt) (cadr pt) 0.0))
+                 (cons 40 r)))
+  (ns-setstyle *cs-mark-dimstyle*)
+  (command "_.DIMRADIUS"
+           (list (entlast) (trans (ns-add pt (ns-scl outd r)) 0 1))
+           "_T" txt
+           "_non" (trans (ns-add pt (ns-scl outd (* 6.7 r))) 0 1))
+  (ns-setstyle old)
+  (if oldl (setvar "CLAYER" oldl)))
+
+;; A corner nobody recorded: the same mark asking a question instead of
+;; asserting an angle, its "?" in a BOX -- which is what a negative
+;; DIMGAP draws -- and the "Not Given" note on a leader off that box.
+;; The gap is handed back immediately, and the run saved it at the top
+;; (OLDGAP) so an Esc inside the mark cannot leave the next dimension
+;; boxed too.
+(defun ns-markng (pt outd txth sfx / r og oldl)
+  (setq r  (ns-markr txth)
+        og (getvar "DIMGAP"))
+  (setvar "DIMGAP" (- (abs og)))
+  (ns-mark pt outd txth (strcat "?" sfx))
+  (setvar "DIMGAP" og)
+  (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
+    (progn (setq oldl (getvar "CLAYER"))
+           (setvar "CLAYER" *cs-dim-layer*)))
+  (command "_.LEADER"
+           "_non" (trans (ns-add pt (ns-scl outd (* 8.4 r))) 0 1)
+           "_non" (trans (ns-add pt (ns-scl outd (* 11.4 r))) 0 1)
+           "" "Not Given" "")
   (if oldl (setvar "CLAYER" oldl)))
 
 ;; entities created since MARK (nil = since the drawing was empty)
@@ -58162,11 +58349,12 @@
                         sp u dir pt s d1 d2 f1 f2 reflen tol txth
                         wid dep n drawn p inn outp e1 e2 bey stopf
                         first1 first2 lastdep dimflag dimoff offd treatback
-                        pprev oldce oldlay oldstyle oldlu slog mark svcum svp svn
+                        pprev oldce oldlay oldstyle oldlu oldgap slog mark
+                        svcum svp svn
                         cum rec rtype roff rrad rcut mouth usquare
                         bc1 bc2 arcps pieces freep chain cure rest nxt
                         basepc side1 side2 pc qc e coff tent te1 te2
-                        rsubj ngp ngv outv
+                        rsubj mcs mc msfx m outv
                         bmark bsides btreads bnums bside bdir bss pr be
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt totrun totdrop px0 cx cy
@@ -58180,6 +58368,10 @@
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlay (setvar "CLAYER" oldlay))
     (if oldlu (setvar "LUNITS" oldlu))
+    ;; a NotGiven mark boxes its "?" by turning DIMGAP negative, and an
+    ;; Esc inside that one command is the path that would leave every
+    ;; later dimension in the drawing boxed too
+    (if oldgap (setvar "DIMGAP" oldgap))
     (redraw)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -58603,7 +58795,8 @@
   (setq cum 0.0 n 1 drawn 0
         pprev sp
         oldce (getvar "CMDECHO")
-        oldlay (getvar "CLAYER"))
+        oldlay (getvar "CLAYER")
+        oldgap (getvar "DIMGAP"))
   (setvar "CMDECHO" 0)
 
   (while
@@ -58816,25 +59009,31 @@
       ;; what AUTOBEAD wants alongside the treads.  Taken before the
       ;; note and the width dim, which are annotation, not pool lines.
       (setq bsides (ns-since bmark))
-      ;; A corner nobody recorded is drawn square, so the drawing must
-      ;; say so or it reads as a measured 90.  One note carries both
-      ;; corners - they share the one answer - and it sits just outside
-      ;; the corner it speaks for.
-      (if (= rtype "NotGiven")
+      ;; The corner mark of STANDARDS.md section 2, one size down (see
+      ;; ns-mark).  The treatment is ONE answer for both corners of a
+      ;; run, so one mark carries it and says " Typ."; a mode with a
+      ;; single treated corner marks that one on its own.
+      ;;
+      ;; A corner nobody recorded is drawn square, so the sheet has to
+      ;; SAY so or it reads as a measured 90 -- that is the boxed "?"
+      ;; and its "Not Given" note, and "?" asserts nothing about the
+      ;; angle, so it is drawn on whatever corner comes first.  The
+      ;; "90%%d" mark does assert one, so it goes only on a corner that
+      ;; really is square: a run off a wall that leans, or a U with a
+      ;; splayed arm, is left unmarked rather than told a lie.
+      (if (member rtype '("Square" "NotGiven"))
         (progn
-          (cond
-            ((= mode "LINE")
-             (setq ngp  (ns-add (ns-add sp (ns-scl u (* 0.5 wid)))
-                                (ns-scl dir cum))
-                   ngv  (ns-unit (ns-add u dir))))
-            ((= mode "CORNER")
-             (setq ngp (ns-add corner (ns-scl u wid))
-                   ngv u))
-            (T
-             (setq ngp (ns-mid2 (car base) (cadr base))
-                   ngv (ns-scl dir -1.0))))
-          (ns-note (ns-add ngp (ns-scl ngv (ns-dimoff txth))) txth
-                   "CORNERS NOT GIVEN - DRAWN SQUARE")))
+          (setq mcs  (ns-markpts mode sp u dir wid cum corner lastinn
+                                 base arm1 arm2)
+                msfx (if (cdr mcs) " Typ." "")
+                mc   nil)
+          (foreach m mcs
+            (if (and (null mc) (or (= rtype "NotGiven") (caddr m)))
+              (setq mc m)))
+          (if mc
+            (if (= rtype "NotGiven")
+              (ns-markng (car mc) (cadr mc) txth msfx)
+              (ns-mark (car mc) (cadr mc) txth (strcat "90%%d" msfx))))))
       (if dimflag
         (ns-dim *cs-width-dimstyle* first1 first2
                 (ns-add sp (ns-scl dir
@@ -59003,6 +59202,7 @@
   (if oldce (setvar "CMDECHO" oldce))
   (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
+  (if oldgap (setvar "DIMGAP" oldgap))
 
   ;; ---- 8. bead the steps -----------------------------------------------
   ;; AUTOBEAD does the beading, on its own rules and in its own undo
@@ -88666,7 +88866,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *upadover-version* "v1.0")
+(setq *upadover-version* "v1.1")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -89098,12 +89298,33 @@
 ;; unwinding the caller's chain: a number nothing carries is a typo, not
 ;; an answer, and the question it belongs to is this one.
 ;;
-;; Returns (position name), name nil for a place, or UPAD-BACK.
-(defun upad:askpoint (msg back cands / v out done dupes hit)
-  (setq done nil out nil)
+;; WHOLE offers the Whole keyword -- all of the curve rather than a
+;; stretch of it -- and is answered UPAD-WHOLE.  The bracket is built
+;; from the keyword list rather than written a second time, so a click
+;; on a bracketed word always sends a word initget accepts (STANDARDS
+;; section 1).
+;;
+;; Returns (position name), name nil for a place, UPAD-WHOLE, or
+;; UPAD-BACK.
+(defun upad:askpoint (msg whole back cands / v out done dupes hit kws)
+  (setq kws  (cond ((and whole back) "Whole Back")
+                   (whole            "Whole")
+                   (back             "Back")
+                   (t                ""))
+        done nil
+        out  nil)
   (while (not done)
-    (if back (initget 129 "Back Undo") (initget 129))
-    (setq v (getpoint (strcat "\n" msg (if back " [Back]" "") ": ")))
+    ;; Undo rides along as a hidden alias for Back, unlisted
+    (if (= kws "")
+      (initget 129)
+      (initget 129 (strcat kws (if back " Undo" ""))))
+    (setq v (getpoint (strcat "\n" msg
+                              (if (= kws "")
+                                ""
+                                (strcat " ["
+                                        (vl-string-translate " " "/" kws)
+                                        "]"))
+                              ": ")))
     (if lzd:ask (lzd:ask msg v) v)
     (cond
       ((null v)
@@ -89111,6 +89332,8 @@
                       " survey point's number.")))
       ((and (= (type v) 'STR) (member v '("Back" "Undo")))
        (setq out 'UPAD-BACK done T))
+      ((and (= (type v) 'STR) (= v "Whole"))
+       (setq out 'UPAD-WHOLE done T))
       ((= (type v) 'STR)
        (setq dupes (cal:cand-matches v cands))
        (cond
@@ -89363,7 +89586,7 @@
 (defun c:UPADOVER (/ *error* undo-open doc space sel en ed segs tot closed
                      cands stage done pick e0 e1 loc base0 base1 s0 s1
                      lf lb sgn runlen otherlen asked pts pads delta
-                     nbridge blkname padsize e gap)
+                     nbridge blkname padsize e gap whole)
 
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
@@ -89397,8 +89620,8 @@
 
       ;; --- 1. the perimeter the run follows ---------------------------
       ((= stage 1)
-       (setq sel (entsel "\nSelect the pool perimeter: "))
-       (if lzd:ask (lzd:ask "\nSelect the pool perimeter: " sel) sel)
+       (setq sel (entsel "\nSelect the perimeter, or the line or polyline to pad: "))
+       (if lzd:ask (lzd:ask "\nSelect the perimeter, or the line or polyline to pad: " sel) sel)
        (if lzd:watch (lzd:watch sel) sel)
        (cond
          ((null sel)
@@ -89420,9 +89643,12 @@
              (setq closed (upad:isclosed en segs)
                    cands  (upad:collect-points))
              (princ (strcat "\nUPADOVER: "
-                            (if closed "a closed perimeter of "
-                              "an open perimeter of ")
-                            (upad:ft tot) "."
+                            (if closed
+                              (strcat "a closed perimeter, " (upad:ft tot)
+                                      " round.")
+                              (strcat "an open run, " (upad:ft tot)
+                                      " long."))
+                            "  Whole at the next question pads all of it."
                             (if cands
                               (strcat "  " (itoa (length cands))
                                       " survey point(s) can be named by"
@@ -89430,12 +89656,26 @@
                               "")))
              (setq stage 2))))))
 
-      ;; --- 2. where the pads start ------------------------------------
+      ;; --- 2. where the pads start -- or Whole, for all of it ---------
       ((= stage 2)
        (setq e0 (upad:askpoint "Where the pads start - click it, or type a point number"
-                               T cands))
+                               T T cands))
        (cond
          ((eq e0 'UPAD-BACK) (setq stage 1))
+         ;; the whole curve, end to end: a line or a polyline drawn as
+         ;; the stretch that needs pads IS the answer to both questions,
+         ;; so neither is put.  It starts where the curve starts, runs
+         ;; its whole length, and on a closed one comes back round to
+         ;; where it began
+         ((eq e0 'UPAD-WHOLE)
+          (setq whole    T
+                base0    (upad:point-at en segs 0.0)
+                s0       0.0
+                sgn      1.0
+                runlen   tot
+                otherlen nil
+                asked    nil
+                stage    6))
          (t
           (setq loc (upad:locate en segs (upad:cd-pt e0)))
           (if (null loc)
@@ -89450,7 +89690,7 @@
       ;; --- 3. and where they end --------------------------------------
       ((= stage 3)
        (setq e1 (upad:askpoint "Where the pads end - click it, or type a point number"
-                               T cands))
+                               nil T cands))
        (cond
          ((eq e1 'UPAD-BACK) (setq stage 2))
          (t
@@ -89477,7 +89717,8 @@
                ((< gap upad:*fuzz*)
                 (princ (strcat "\nThat is where the run already starts -"
                                " the two ends have to be different"
-                               " places on the wall.")))
+                               " places on the wall.  (Whole at the first"
+                               " question pads all of it.)")))
                (t
                 (upad:say-landed e1 base1 "end")
                 (setq stage 4))))))))
@@ -89548,9 +89789,17 @@
          (if (= (cadr e) "bridge") (setq nbridge (1+ nbridge))))
        (princ (strcat "\nUPADOVER: " (itoa (length pads)) " "
                       (upad:in padsize) " pad(s) on layer \"" upad:*layer*
-                      "\", covering " (upad:ft runlen) " of perimeter from "
-                      (upad:endname e0 "the start you clicked") " to "
-                      (upad:endname e1 "the end you clicked") "."))
+                      "\", covering "
+                      (if whole
+                        (strcat "the whole " (upad:ft runlen) " of it"
+                                (if closed
+                                  ", back round to where it started."
+                                  ", end to end."))
+                        (strcat (upad:ft runlen) " of perimeter from "
+                                (upad:endname e0 "the start you clicked")
+                                " to "
+                                (upad:endname e1 "the end you clicked")
+                                "."))))
        (if otherlen
          (princ (strcat "\nUPADOVER: "
                         (if asked "the way you clicked"
@@ -89564,9 +89813,11 @@
                         " than a point.")))
        (princ (strcat "\nUPADOVER: the pads interlock - none overlaps"
                       " another, and where the run leaves one it is"
-                      " already inside the next, so it is under pads from"
-                      " end to end with both ends carried past rather"
-                      " than stopped on."))
+                      " already inside the next, so it is under pads "
+                      (if (and whole closed)
+                        "the whole way round."
+                        (strcat "from end to end, both ends carried past"
+                                " rather than stopped on."))))
        (setq done T))))
 
   (if undo-open (setq undo-open (cal:undoend)))
@@ -116605,7 +116856,7 @@
     ("STOCKCOVER"       "Stock cover placement")
     ("TYDRN"            "Text + point tidy-up")
     ("TYLERDRONESUITE"  "Drone suite: tidy, pad, CDIM")
-    ("UPADOVER"         "Pads point to point")
+    ("UPADOVER"         "Pads a run of wall")
     ("VSCONV"           "VS export onto shop layers")
     ("VSRECONV"         "VS conversion, undone")
     ("WCALST"           "Unroll curved band")
@@ -116724,7 +116975,7 @@
     ("STOCKCOVER" "Replaces a highlighted perimeter with a stock cover drawing")
     ("TYDRN" "Text, pool-point and anchor cleanup in one pass")
     ("TYLERDRONESUITE" "The whole drone trace in one - TYDRN, then PADDLE, then CDIM")
-    ("UPADOVER" "Pads a named stretch of wall end to end - no overlap, no gap, both ends carried past")
+    ("UPADOVER" "Pads a stretch of wall between two points, or the whole of a line or polyline - no overlap, no gap")
     ("VSCONV" "Remaps a VS survey export's numbered layers onto the shop's")
     ("VSRECONV" "Undoes a VSCONV run - layers, properties and the dimension overrides")
     ("WCALST" "Unrolls a curved constant-width band flat, with darts")
@@ -116836,7 +117087,7 @@
     ("STOCKCOVER" "stock cover replace perimeter drawing folder align placement")
     ("TYDRN" "drone trace cleanup text points spa layer pool tidy")
     ("TYLERDRONESUITE" "suite chain drone trace tidy pad dimension selection")
-    ("UPADOVER" "stretch run between wholesale continuous flush interlock staircase shorter way round straddle")
+    ("UPADOVER" "stretch run between entire wholesale continuous flush interlock staircase shorter way round straddle")
     ("VSCONV" "survey export layers perimeter coping anchors dimensions style")
     ("VSRECONV" "undo layer colour linetype lineweight dimension style override")
     ("WCALST" "unroll curved band flat darts inserts width flatten")

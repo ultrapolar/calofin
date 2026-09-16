@@ -209,6 +209,29 @@
 ;; Dim style for the step-width dim, with the same fallback.
 (if (not (boundp '*cs-width-dimstyle*)) (setq *cs-width-dimstyle* "SIDE STANDARD"))
 
+;; Dim style for the CORNER MARK (STANDARDS.md section 2).  The sample
+;; sheet carries the mark at two sizes and this is the smaller of them:
+;; a step's corners are a detail inside somebody else's plan, not the
+;; plan's own corners, so their mark reads one size down.  Same
+;; fallback as the two above.
+(if (not (boundp '*cs-mark-dimstyle*)) (setq *cs-mark-dimstyle* "STANDARD INCHES"))
+
+;; Radius of the circle that mark is drawn on, in TEXT HEIGHTS - so it
+;; tracks DIMSCALE (or the annotation scale) like the dim chain does
+;; instead of the drawing's size.  Everything else about the mark is a
+;; multiple of this radius, the way the sample sheet reads back.
+(if (not (boundp '*cs-mark-r*)) (setq *cs-mark-r* 0.5))
+
+;; How far off 90 a corner may sit, in DEGREES, and still be marked
+;; "90%%d".  The mark ASSERTS a right angle, so a corner that is not
+;; one goes unmarked: a run off a wall that leans, or a U picked with a
+;; splayed arm, has a back corner that is not 90, and saying it is
+;; would be a lie.  ("?" asserts nothing about the angle and is drawn
+;; at any.)  20 is POOL's own tolerance, so the two tools read a corner
+;; alike: it sits between the two populations -- a corner a tape calls
+;; square, and a 135 bend nobody would.
+(if (not (boundp '*cs-sq90-deg*)) (setq *cs-sq90-deg* 20.0))
+
 ;; Layer the dimensions are drawn on.  nil = the current layer; a layer
 ;; that is missing, off, frozen or locked is reported and the current
 ;; layer is used, so a run never draws dims where they cannot be seen.
@@ -216,8 +239,8 @@
 
 ;; How far the step-tread dim chain stands off the run's axis, in TEXT
 ;; HEIGHTS - so it tracks DIMSCALE (or the annotation scale) instead of
-;; the drawing's size.  2.0 keeps the chain clear of its own text, and
-;; the note a NotGiven corner leaves stands off by the same gap.
+;; the drawing's size.  2.0 keeps the chain clear of its own text.
+;; (A corner mark stands off by its own multiples - see *cs-mark-r*.)
 (if (not (boundp '*cs-dim-offset*)) (setq *cs-dim-offset* 2.0))
 
 ;; How far the step-width dim sits behind the wall, in text heights, on
@@ -240,7 +263,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.11") ; printed on load and at command start so a
+(setq *ns-version* "v3.12") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -449,14 +472,12 @@
                    (cons 50 (nth 5 pc))
                    (cons 51 (nth 6 pc))))))
 
-;; The back corner where arm AP meets the base BS of a U, cut OFF back
-;; along each of them - KIND "Cut" gives a 45 degree diagonal, "Radius"
-;; a fillet arc tangent to both.  Unlike the recess corner of a run that
-;; comes off an open wall, this one is cut INTO the U, since the arms
-;; are the sides of the step itself.  The piece comes back in the same
-;; form as the rest of the U so the treads trim to it; nil when the
-;; offset will not fit inside the corner.
-(defun ns-ucorner (bs ap kind off / b1 b2 fe ub ua t1 t2 o a1 a2 sw)
+;; Where arm AP meets the base BS of a U, and the two legs that leave
+;; it: the joint, the unit vector IN along the base, the unit vector
+;; OUT along the arm, and the far end of each.  The corner piece below
+;; is cut from exactly these, and the corner MARK sits on the same
+;; joint, so the two read the geometry the one way.
+(defun ns-ujoint (bs ap / b1 b2 fe ub ua)
   (setq b1 (if (< (ns-ptseg (car bs) (car ap) (cadr ap))
                   (ns-ptseg (cadr bs) (car ap) (cadr ap)))
              (car bs)
@@ -465,7 +486,21 @@
         fe (ns-far ap b1)
         ub (ns-unit (ns-vec b1 b2))
         ua (ns-unit (ns-vec b1 fe)))
-  (if (and ub ua (> off 0.0)
+  (if (and ub ua) (list b1 ub ua b2 fe)))
+
+;; The back corner where arm AP meets the base BS of a U, cut OFF back
+;; along each of them - KIND "Cut" gives a 45 degree diagonal, "Radius"
+;; a fillet arc tangent to both.  Unlike the recess corner of a run that
+;; comes off an open wall, this one is cut INTO the U, since the arms
+;; are the sides of the step itself.  The piece comes back in the same
+;; form as the rest of the U so the treads trim to it; nil when the
+;; offset will not fit inside the corner.
+(defun ns-ucorner (bs ap kind off / j b1 b2 fe ub ua t1 t2 o a1 a2 sw)
+  (setq j (ns-ujoint bs ap))
+  (if j
+    (setq b1 (car j) ub (cadr j) ua (caddr j)
+          b2 (nth 3 j) fe (nth 4 j)))
+  (if (and j (> off 0.0)
            (< off (distance b1 b2))
            (< off (distance b1 fe)))
     (progn
@@ -579,8 +614,7 @@
 (defun ns-fuzz (tol)
   (max (ns-num *cs-join-fuzz* (* 4.0 tol)) 1e-6))
 
-;; How far the step-tread dim chain stands off the run's axis - and how
-;; far a NotGiven corner's note stands off the corner it speaks for.
+;; How far the step-tread dim chain stands off the run's axis.
 (defun ns-dimoff (txth) (* (ns-num *cs-dim-offset* 2.0) txth))
 
 ;; How far the step-width dim sits behind the wall: half the run's own
@@ -687,14 +721,6 @@
      (setq o (ns-add t1 (ns-scl uin off)))
      (ns-mkfillet o off t1 t2))))
 
-;; A note on the drawing at PT (WCS), height H.  The geometry cannot
-;; say that a corner treatment was never recorded - this does.
-(defun ns-note (pt h str)
-  (entmake (list '(0 . "TEXT")
-                 (cons 10 (list (car pt) (cadr pt) 0.0))
-                 (cons 40 h)
-                 (cons 1 str))))
-
 ;; make dimension style NAME current, but only if it exists and is not
 ;; already current.  Uses ActiveX so style names containing spaces are
 ;; handled correctly (the -DIMSTYLE command would read a space as ENTER).
@@ -740,6 +766,120 @@
                          "_non" (trans b 0 1)
                          "_V"
                          "_non" (trans thru 0 1))
+  (if oldl (setvar "CLAYER" oldl)))
+
+;;; ---- the corner mark of STANDARDS.md section 2 ------------------------
+;;;
+;;;  A step's corners take the same mark a pool's do: a small circle on
+;;;  the corner point with a RADIUS DIMENSION on that circle, its
+;;;  measurement replaced by what the mark says -- "90%%d" where the
+;;;  corner really is one, a boxed "?" where the sheet never said, and
+;;;  a "Not Given" note on a leader off that box.  The treatment is ONE
+;;;  answer for both corners of a run, so one mark carries it with a
+;;;  " Typ." suffix; a mode with a single treated corner marks that one
+;;;  on its own.
+;;;
+;;;  It is drawn in *cs-mark-dimstyle*, the SMALLER of the two sizes
+;;;  the sample sheet carries, and every distance in it is a multiple
+;;;  of the mark circle, the way that sheet reads back: the mark's own
+;;;  text at 6.7 r, the note's leader leaving the box at 8.4 r, the
+;;;  note itself at 11.4 r.
+
+;; The mark circle's radius, in drawing units.
+(defun ns-markr (txth) (* (ns-num *cs-mark-r* 0.5) txth))
+
+;; T when the two legs meeting at a corner really are square, read at
+;; the tolerance a picked outline is worth.
+(defun ns-sq90p (v1 v2 / a b)
+  (setq a (ns-unit v1)
+        b (ns-unit v2))
+  (if (and a b)
+    (< (abs (cal:dot a b))
+       (sin (/ (* pi (ns-num *cs-sq90-deg* 20.0)) 180.0)))))
+
+;; The corners one treatment answer speaks for, the one a single Typ.
+;; mark should prefer first: each as (point outward-direction square-p).
+;; Where the modes put them:
+;;
+;;   LINE    the two corners of the LAST tread, where the side walls
+;;           meet it.  DIR is held square to the treads, so these are
+;;           90 by construction.
+;;   CORNER  the ONE back corner at the wall, where the outer side
+;;           leaves it -- the inner side runs straight on out of the
+;;           line it continues, so there is no corner there to treat.
+;;           Its angle is the angle the two picked lines make, which is
+;;           whatever the pool is, 90 or not.
+;;   U       the two joints where the arms meet the base, again at
+;;           whatever angle they were drawn.
+;;
+;; Outward is the way the mark leads: the bisector pointing away from
+;; the two legs, so the mark and its note land outside the step.
+(defun ns-markpts (mode sp u dir wid cum corner lastinn base arm1 arm2
+                   / run j out)
+  (cond
+    ((= mode "LINE")
+     (list (list (ns-add (ns-add sp (ns-scl u (* 0.5 wid))) (ns-scl dir cum))
+                 (ns-unit (ns-add u dir))
+                 (ns-sq90p u dir))
+           (list (ns-add (ns-add sp (ns-scl u (* -0.5 wid))) (ns-scl dir cum))
+                 (ns-unit (ns-add (ns-scl u -1.0) dir))
+                 (ns-sq90p u dir))))
+    ((= mode "CORNER")
+     (if (and lastinn (setq run (ns-unit (ns-vec corner lastinn))))
+       (list (list (ns-add corner (ns-scl u wid))
+                   (ns-unit (ns-add u (ns-scl run -1.0)))
+                   (ns-sq90p u run)))))
+    ((= mode "U")
+     (foreach j (list (if (and base arm1) (ns-ujoint base arm1))
+                      (if (and base arm2) (ns-ujoint base arm2)))
+       (if j
+         (setq out (cons (list (car j)
+                               (ns-unit (ns-scl (ns-add (cadr j) (caddr j))
+                                                -1.0))
+                               (ns-sq90p (cadr j) (caddr j)))
+                         out))))
+     (reverse out))))
+
+;; One mark: the circle on PT, and a radius dim on it that SAYS TXT
+;; instead of measuring, dragged out along OUTD.  The dim style and the
+;; layer both come back before it returns, so a mark cannot leave the
+;; drawing in the mark's style for whatever is dimensioned next.
+(defun ns-mark (pt outd txth txt / r old oldl)
+  (setq r   (ns-markr txth)
+        old (getvar "DIMSTYLE"))
+  (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
+    (progn (setq oldl (getvar "CLAYER"))
+           (setvar "CLAYER" *cs-dim-layer*)))
+  (entmake (list '(0 . "CIRCLE")
+                 (cons 10 (list (car pt) (cadr pt) 0.0))
+                 (cons 40 r)))
+  (ns-setstyle *cs-mark-dimstyle*)
+  (command "_.DIMRADIUS"
+           (list (entlast) (trans (ns-add pt (ns-scl outd r)) 0 1))
+           "_T" txt
+           "_non" (trans (ns-add pt (ns-scl outd (* 6.7 r))) 0 1))
+  (ns-setstyle old)
+  (if oldl (setvar "CLAYER" oldl)))
+
+;; A corner nobody recorded: the same mark asking a question instead of
+;; asserting an angle, its "?" in a BOX -- which is what a negative
+;; DIMGAP draws -- and the "Not Given" note on a leader off that box.
+;; The gap is handed back immediately, and the run saved it at the top
+;; (OLDGAP) so an Esc inside the mark cannot leave the next dimension
+;; boxed too.
+(defun ns-markng (pt outd txth sfx / r og oldl)
+  (setq r  (ns-markr txth)
+        og (getvar "DIMGAP"))
+  (setvar "DIMGAP" (- (abs og)))
+  (ns-mark pt outd txth (strcat "?" sfx))
+  (setvar "DIMGAP" og)
+  (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
+    (progn (setq oldl (getvar "CLAYER"))
+           (setvar "CLAYER" *cs-dim-layer*)))
+  (command "_.LEADER"
+           "_non" (trans (ns-add pt (ns-scl outd (* 8.4 r))) 0 1)
+           "_non" (trans (ns-add pt (ns-scl outd (* 11.4 r))) 0 1)
+           "" "Not Given" "")
   (if oldl (setvar "CLAYER" oldl)))
 
 ;; entities created since MARK (nil = since the drawing was empty)
@@ -883,11 +1023,12 @@
                         sp u dir pt s d1 d2 f1 f2 reflen tol txth
                         wid dep n drawn p inn outp e1 e2 bey stopf
                         first1 first2 lastdep dimflag dimoff offd treatback
-                        pprev oldce oldlay oldstyle oldlu slog mark svcum svp svn
+                        pprev oldce oldlay oldstyle oldlu oldgap slog mark
+                        svcum svp svn
                         cum rec rtype roff rrad rcut mouth usquare
                         bc1 bc2 arcps pieces freep chain cure rest nxt
                         basepc side1 side2 pc qc e coff tent te1 te2
-                        rsubj ngp ngv outv
+                        rsubj mcs mc msfx m outv
                         bmark bsides btreads bnums bside bdir bss pr be
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt totrun totdrop px0 cx cy
@@ -901,6 +1042,10 @@
     (if oldce (setvar "CMDECHO" oldce))
     (if oldlay (setvar "CLAYER" oldlay))
     (if oldlu (setvar "LUNITS" oldlu))
+    ;; a NotGiven mark boxes its "?" by turning DIMGAP negative, and an
+    ;; Esc inside that one command is the path that would leave every
+    ;; later dimension in the drawing boxed too
+    (if oldgap (setvar "DIMGAP" oldgap))
     (redraw)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -1324,7 +1469,8 @@
   (setq cum 0.0 n 1 drawn 0
         pprev sp
         oldce (getvar "CMDECHO")
-        oldlay (getvar "CLAYER"))
+        oldlay (getvar "CLAYER")
+        oldgap (getvar "DIMGAP"))
   (setvar "CMDECHO" 0)
 
   (while
@@ -1537,25 +1683,31 @@
       ;; what AUTOBEAD wants alongside the treads.  Taken before the
       ;; note and the width dim, which are annotation, not pool lines.
       (setq bsides (ns-since bmark))
-      ;; A corner nobody recorded is drawn square, so the drawing must
-      ;; say so or it reads as a measured 90.  One note carries both
-      ;; corners - they share the one answer - and it sits just outside
-      ;; the corner it speaks for.
-      (if (= rtype "NotGiven")
+      ;; The corner mark of STANDARDS.md section 2, one size down (see
+      ;; ns-mark).  The treatment is ONE answer for both corners of a
+      ;; run, so one mark carries it and says " Typ."; a mode with a
+      ;; single treated corner marks that one on its own.
+      ;;
+      ;; A corner nobody recorded is drawn square, so the sheet has to
+      ;; SAY so or it reads as a measured 90 -- that is the boxed "?"
+      ;; and its "Not Given" note, and "?" asserts nothing about the
+      ;; angle, so it is drawn on whatever corner comes first.  The
+      ;; "90%%d" mark does assert one, so it goes only on a corner that
+      ;; really is square: a run off a wall that leans, or a U with a
+      ;; splayed arm, is left unmarked rather than told a lie.
+      (if (member rtype '("Square" "NotGiven"))
         (progn
-          (cond
-            ((= mode "LINE")
-             (setq ngp  (ns-add (ns-add sp (ns-scl u (* 0.5 wid)))
-                                (ns-scl dir cum))
-                   ngv  (ns-unit (ns-add u dir))))
-            ((= mode "CORNER")
-             (setq ngp (ns-add corner (ns-scl u wid))
-                   ngv u))
-            (T
-             (setq ngp (ns-mid2 (car base) (cadr base))
-                   ngv (ns-scl dir -1.0))))
-          (ns-note (ns-add ngp (ns-scl ngv (ns-dimoff txth))) txth
-                   "CORNERS NOT GIVEN - DRAWN SQUARE")))
+          (setq mcs  (ns-markpts mode sp u dir wid cum corner lastinn
+                                 base arm1 arm2)
+                msfx (if (cdr mcs) " Typ." "")
+                mc   nil)
+          (foreach m mcs
+            (if (and (null mc) (or (= rtype "NotGiven") (caddr m)))
+              (setq mc m)))
+          (if mc
+            (if (= rtype "NotGiven")
+              (ns-markng (car mc) (cadr mc) txth msfx)
+              (ns-mark (car mc) (cadr mc) txth (strcat "90%%d" msfx))))))
       (if dimflag
         (ns-dim *cs-width-dimstyle* first1 first2
                 (ns-add sp (ns-scl dir
@@ -1724,6 +1876,7 @@
   (if oldce (setvar "CMDECHO" oldce))
   (if oldlay (setvar "CLAYER" oldlay))
   (if oldlu (setvar "LUNITS" oldlu))
+  (if oldgap (setvar "DIMGAP" oldgap))
 
   ;; ---- 8. bead the steps -----------------------------------------------
   ;; AUTOBEAD does the beading, on its own rules and in its own undo

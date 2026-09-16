@@ -240,10 +240,21 @@ out = rep[:-4] + ".probe.txt"
 check("exit 0 when the control reproduced", code == 0, code)
 check("the probe text is written beside the report", os.path.exists(out))
 check("...and the JSON with --json", os.path.exists(rep[:-4] + ".probe.json"))
-check("--max caps the runs", buf.getvalue().count("same failure")
-      + buf.getvalue().count("ok") <= 8 + 4
+#: The cap is about RUNS, so the runs are what is counted -- the lines
+#: of the probe table, each of which ends in its verdict.  Counting the
+#: words "same failure" and "ok" across the whole report instead put the
+#: answer at exactly its own ceiling (12 of 12: five verdicts, two in the
+#: prose under WHAT THAT SAYS, and two more inside the word "look"), so
+#: one further "ok" anywhere failed the check -- which is what a temp
+#: directory named calofin-probe-m2dvlok0, printed twice as the tool's
+#: path, did about once in every two hundred runs.
+probed = (buf.getvalue().split("THE PROBES", 1)[-1]
+          .split("WHAT THAT SAYS", 1)[0])
+runs = [ln for ln in probed.splitlines()
+        if ln.strip().endswith(("same failure", "ok"))]
+check("--max caps the runs", len(runs) <= 8
       and "THE PROBES (one answer changed at a time, 8 runs)" in buf.getvalue(),
-      buf.getvalue()[:300])
+      "%d run(s): %s" % (len(runs), buf.getvalue()[:300]))
 
 print("\nthe tool is found by the report's command name and version")
 

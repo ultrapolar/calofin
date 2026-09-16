@@ -266,6 +266,36 @@ def selected(call):
     return None
 
 
+def override(call):
+    """The text a dimension command was given after "_T", or None."""
+    for i, x in enumerate(call[:-1]):
+        if isinstance(x, str) and x.upper() == '_T' \
+                and isinstance(call[i + 1], str):
+            return call[i + 1]
+    return None
+
+
+def markcalls(vm):
+    """The corner MARKS: a radius dim on the little circle that sits on
+    the corner point, its measurement replaced by what the mark says
+    ("90%%d", "?", either with a " Typ." suffix)."""
+    return [c for c in dimcalls(vm, '_.DIMRADIUS')
+            if str(override(c)).startswith(('90%%d', '?'))]
+
+
+def radcalls(vm):
+    """Radius dims that MEASURE a corner -- the marks left out."""
+    return [c for c in dimcalls(vm, '_.DIMRADIUS')
+            if not str(override(c)).startswith(('90%%d', '?'))]
+
+
+def raddim(vm, mark):
+    """The DIMENSION entity a mark left behind (group 70 bit 4 = radial,
+    group 1 the text it carries)."""
+    return [d for d in drawn(vm, 'DIMENSION')
+            if d.get(70) == 4 and d.get(1) == mark]
+
+
 def dxf0(vm, e):
     for p in vm.entdata.get(e, []):
         if isinstance(p, Dot) and p.a == 0:
@@ -311,6 +341,65 @@ def test_radius_callout_is_handed_an_arc():
     # on SPA-NOTES; those are the picture, not the scaffold
     assert not stray_arcs(vm), (
         "the arc built to hang the dimension on was left in the drawing")
+
+
+def test_square_corner_mark_is_a_dim_on_its_own_circle():
+    """STANDARDS section 2, the way the sample sheet draws it: the mark
+    is a small circle on the corner point with a RADIUS DIMENSION on
+    that circle, its measurement replaced by what the mark says.  Four
+    identical corners -> one mark, with the Typ. suffix."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, 60.0,
+              'Yes', '90',           # all four square
+              'No', 'No'],
+             'mark/square')
+    calls = markcalls(vm)
+    assert len(calls) == 1, [override(c) for c in calls]
+    assert override(calls[0]) == '90%%d Typ.', override(calls[0])
+    assert not radcalls(vm), "a square corner measures nothing"
+    # it is hung on the mark circle, and picked ON that circle
+    e = selected(calls[0])
+    assert dxf0(vm, e) == 'CIRCLE', dxf0(vm, e)
+    circles = [d for d in drawn(vm, 'CIRCLE', 'DIMENSION')]
+    assert len(circles) == 1, circles
+    on = [x[1] for x in calls[0][1:]
+          if isinstance(x, list) and len(x) == 2 and isinstance(x[0], Ent)][0]
+    c, r = circles[0][10], circles[0][40]
+    assert abs(((on[0] - c[0]) ** 2 + (on[1] - c[1]) ** 2) ** 0.5 - r) < 1e-6
+    # ... and it is NOT boxed: only the "?" of a NotGiven corner is
+    d = raddim(vm, '90%%d Typ.')
+    assert len(d) == 1 and d[0].get(147, 0) > 0, d
+
+
+def test_not_given_corner_is_a_boxed_question_with_its_note():
+    """A corner the sheet never gave: the same mark asking "?" instead
+    of asserting 90, drawn in a BOX (a negative DIMGAP), with the
+    "Not Given" note on a leader off that box.  The gap is handed
+    straight back, so the next dimension is not boxed too."""
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              84.0, 60.0,
+              'No', 'NotGiven', '90', '90', '90',   # A never given
+              'No', 'No'],
+             'mark/notgiven')
+    assert sorted(override(c) for c in markcalls(vm)) == \
+        ['90%%d', '90%%d', '90%%d', '?'], [override(c) for c in markcalls(vm)]
+    boxed = raddim(vm, '?')
+    assert len(boxed) == 1, boxed
+    assert boxed[0].get(147, 0) < 0, "the ? has to come out in a box"
+    for d in raddim(vm, '90%%d'):
+        assert d.get(147, 0) > 0, "only the ? is boxed"
+    # the note is the leader's own annotation, hung off the box
+    leaders = [c for c in vm.commands if c and c[0] == '_.LEADER']
+    assert len(leaders) == 1 and leaders[0][-2] == 'Not Given', leaders
+    # it leaves the mark heading away from the shape, so it cannot read
+    # back across itself
+    start, end = leaders[0][1], leaders[0][2]
+    verts, _ = plverts(vm, 'COVER')
+    cen = [sum(v[i] for v in verts) / len(verts) for i in (0, 1)]
+    dist = lambda p: ((p[0] - cen[0]) ** 2 + (p[1] - cen[1]) ** 2) ** 0.5
+    assert dist(end) > dist(start), (start, end)
+    # and the drawing's own gap survived the run
+    assert vm.sysvars['DIMGAP'] > 0, vm.sysvars['DIMGAP']
 
 
 def test_radius_callout_on_both_outlines():

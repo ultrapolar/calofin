@@ -1969,6 +1969,14 @@ def _command(vm, a):
                              [10] + [float(v) for v in ctr[:2]] + [0.0],
                              [15] + [float(v) for v in pt(on)[:2]] + [0.0],
                              Dot(40, float(rad)), Dot(42, float(rad))]
+            # AutoCAD stores a per-dimension DIMGAP override in xdata,
+            # and a NEGATIVE gap is how it draws the text in a BOX --
+            # which is what a corner mark's "?" is drawn with.  The VM
+            # writes the gap in force under the dimvar's own code so a
+            # test can see a boxed dim from an unboxed one.
+            gap = vm.sysvars.get('DIMGAP')
+            if isinstance(gap, (int, float)):
+                vm.entdata[e].append(Dot(147, float(gap)))
             if loc:
                 vm.entdata[e].append([11] + [float(v) for v in loc[0]])
             for i, x in enumerate(a[:-1]):
@@ -3006,6 +3014,7 @@ def _vl_bb_set(vm, a):
 ACAD_OBJECT = '<acad-object>'
 ACTIVE_DOCUMENT = '<active-document>'
 LAYER_COLLECTION = '<layers>'
+DIMSTYLE_COLLECTION = '<dimstyles>'
 
 BUILTINS[Sym('vlax-get-acad-object')] = lambda vm, a: ACAD_OBJECT
 
@@ -3052,12 +3061,41 @@ def _vla_get_layers(vm, a):
     return LAYER_COLLECTION
 
 
+@bi('vla-get-dimstyles')
+def _vla_get_dimstyles(vm, a):
+    _doc(vm, a, 'vla-get-DimStyles')
+    return DIMSTYLE_COLLECTION
+
+
+@bi('vla-put-activedimstyle')
+def _vla_put_activedimstyle(vm, a):
+    """(vla-put-ActiveDimStyle doc style) -- the way a routine makes a
+    style whose name CONTAINS A SPACE current, which -DIMSTYLE cannot
+    be typed to do (the space reads as ENTER).  It lands in the same
+    DIMSTYLE sysvar and the same log as the command form, so a test
+    sees the two spellings alike."""
+    _doc(vm, a, 'vla-put-ActiveDimStyle')
+    name = a[1][1] if isinstance(a[1], tuple) else a[1]
+    name = str(name)
+    if name not in vm.tables['DIMSTYLE']:
+        raise LispError(f'vla-put-ActiveDimStyle: no dim style {name!r}', vm)
+    vm.sysvars['DIMSTYLE'] = name
+    vm.dimstyle_log.append(name)
+    return NIL
+
+
 @bi('vla-item')
 def _vla_item(vm, a):
     """(vla-Item layers name) -- the layer's table record, the same one
     tblobjname hands out, so a Lock put here shows in group 70 there.
     A name the table does not hold throws, as the real collection's
     Key-not-found does."""
+    if a[0] == DIMSTYLE_COLLECTION:
+        # the DimStyles collection answers with the style itself, and
+        # a style is nothing but its name here
+        if str(a[1]) not in vm.tables['DIMSTYLE']:
+            raise LispError(f'vla-Item: no dim style named {a[1]!r}', vm)
+        return (DIMSTYLE_COLLECTION, str(a[1]))
     if a[0] == BLOCK_COLLECTION:
         # the Blocks collection answers with the DEFINITION, not with
         # anything in the drawing -- what PADDLE deletes to drop the
