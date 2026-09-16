@@ -77,6 +77,35 @@ style on its own. `POOL` draws the same section under the same rule
 (REV23 on); its `STANDARD INCHES` switch is for small **plan** dims --
 corner radii and cut faces -- and `POOLSIDE` draws no plan.
 
+## A form can answer all of it
+
+`LAZSIDE` fills the section in and hands the answers over in
+`psd:*form*`, so a filled-in sheet leaves nothing at the command line
+but the base point. Every question below looks there first, under the
+letter it is asked by -- `b`, `c`, `d`, `c2` and one key per run
+(`psd:key` is what spells them, so the form and the prompts cannot
+drift) -- plus `style` for the bottom type and `mirror` for the deep
+end. Three states, POOL's own:
+
+| | |
+| --- | --- |
+| key absent | the form did not answer it -- ask, as usual |
+| `(key . nil)` | the form answered `NA` -- taken, no prompt |
+| `(key . 84.0)` | the form answered it -- taken, no prompt |
+
+An answer is **removed as it is used**, which is what keeps `Back` from
+deadlocking on a sheet and what gives the two range checks their way
+out: a `D` that is not deeper than `C` is re-asked, and the second pass
+finds the store empty and lets you type the correction rather than
+being re-fed the same bad number for ever. An answer the prompt itself
+would have refused -- a negative run, a zero-length pool, an `NA` where
+a measurement is required -- is spent and then asked for properly. The
+store is cleared on both exits from the command.
+
+The **base point is never form-answered**: it is picked in the drawing
+with your own snaps live, which is the one thing a form cannot do for
+you.
+
 ## Install & run
 
 APPLOAD `POOLSIDE.lsp` (or the dated twin in `releases/`), then:

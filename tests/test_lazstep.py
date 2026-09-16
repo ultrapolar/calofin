@@ -425,49 +425,45 @@ for ty in TYPES:
         ALL = pages(vm, ty, n)
         well_formed(ALL, "%s/%d" % (ty, n))
         opens = [ln.split(' : ')[0] for ln in ALL if ln.endswith(' : dialog {')]
-        # page one for all three types -- so a tab switch needs nothing
-        # from disk -- plus page two for the chart the count generated
-        assert len(opens) == 4, "%s/%d: %d dialogs %r" % (ty, n, len(opens), opens)
+        # ONE page per type, and all three are in the file: a tab
+        # switch is a change of routine at the same count, so it needs
+        # nothing from disk that the count did not already put there
+        assert len(opens) == len(TYPES), \
+            "%s/%d: %d dialogs %r" % (ty, n, len(opens), opens)
         assert len(opens) == len(set(opens)), "duplicate dialog names: %r" % opens
-        vm.loads('(setq t:*n1* (lzt:dlgname 1 "%s"))'
-                 '(setq t:*n2* (lzt:dlgname 2 "%s"))' % (ty, ty))
-        p1 = slice_dialog(ALL, str(vm.globals['t:*n1*']))
-        p2 = slice_dialog(ALL, str(vm.globals['t:*n2*']))
-        for d, label in ((p1, 'page one'), (p2, 'page two')):
-            assert d[0].endswith(' : dialog {'), \
-                "%s %s: does not open with its dialog line: %r" % (ty, label, d[0])
-            assert d[1].strip().startswith('label = '), \
-                "%s %s: the label is not first inside the dialog" % (ty, label)
-            text = '\n'.join(d)
-            tk = re.findall(r'key = "([^"]+)"', text)
-            assert len(tk) == len(set(tk)), \
-                "%s %s: duplicate tile keys: %r" % (
-                    ty, label, sorted(k for k in tk if tk.count(k) > 1))
-            assert text.count('is_cancel = true') == 1, "%s %s" % (ty, label)
-            assert text.count('is_default = true') == 1, "%s %s" % (ty, label)
-            assert ': image_button' not in text, (
-                "%s %s: an image_button -- it repaints on hover and a DCL "
-                "image tile is not retained, so the drawing would vanish "
-                "the first time the cursor crossed it" % (ty, label))
+        vm.loads('(setq t:*n* (lzt:dlgname "%s"))' % ty)
+        page = slice_dialog(ALL, str(vm.globals['t:*n*']))
+        assert page[0].endswith(' : dialog {'), \
+            "%s: does not open with its dialog line: %r" % (ty, page[0])
+        assert page[1].strip().startswith('label = '), \
+            "%s: the label is not first inside the dialog" % ty
+        text = '\n'.join(page)
+        tk = re.findall(r'key = "([^"]+)"', text)
+        assert len(tk) == len(set(tk)), \
+            "%s: duplicate tile keys: %r" % (
+                ty, sorted(k for k in tk if tk.count(k) > 1))
+        assert text.count('is_cancel = true') == 1, ty
+        assert text.count('is_default = true') == 1, ty
+        assert ': image_button' not in text, (
+            "%s: an image_button -- it repaints on hover and a DCL image "
+            "tile is not retained, so the drawing would vanish the first "
+            "time the cursor crossed it" % ty)
 
-        # --- page one: the count, the tabs, and one tile per question
-        t1 = '\n'.join(p1)
-        k1 = re.findall(r'key = "([^"]+)"', t1)
-        assert 'steps' in k1, "%s: page one has no step-count box" % ty
+        # --- the count, the tabs, and one tile per once-only question
+        k1 = tk
+        assert 'steps' in k1, "%s: no step-count box" % ty
         for other in TYPES:
-            assert 'tab_%s' % other in k1, \
-                "%s: page one has no tab for %s" % (ty, other)
+            assert 'tab_%s' % other in k1, "%s: no tab for %s" % (ty, other)
         vm.loads('(setq t:*a* (lzt:asks-of "%s"))' % ty)
         for q in vm.globals['t:*a*']:
             stem, kind = str(q[0]), str(q[1])
-            assert stem in k1, "%s: page one has no tile for %r" % (ty, stem)
+            assert stem in k1, "%s: no tile for %r" % (ty, stem)
             want = 'popup_list' if kind == 'LIST' else 'edit_box'
-            assert re.search(r': %s \{ key = "%s"' % (want, re.escape(stem)), t1), \
+            assert re.search(r': %s \{ key = "%s"' % (want, re.escape(stem)), text), \
                 "%s: %r should be a %s" % (ty, stem, want)
 
-        # --- page two: one tile per drawing key, no more, no fewer
-        t2 = '\n'.join(p2)
-        k2 = re.findall(r'key = "([^"]+)"', t2)
+        # --- one tile per drawing key, no more, no fewer
+        k2 = tk
         vm.loads('(setq t:*k* (lzt:keys lzt:*chart*))'
                  '(setq t:*wk* (lzt:wedge-keys lzt:*chart*))')
         keys = [str(x) for x in vm.globals['t:*k*']]
@@ -491,12 +487,43 @@ for ty in TYPES:
             assert 'chart%d' % b in k2, "%s/%d: no band tile chart%d" % (ty, n, b)
         assert 'chart%d' % (len(vm.globals['lzt:*chart*'][4]) + 1) not in k2, \
             "%s/%d: more band tiles than bands" % (ty, n)
-        assert re.search(r': image \{ key = "chart0"', t2), \
+        assert re.search(r': image \{ key = "chart0"', text), \
             "%s/%d: no passive chart image tile" % (ty, n)
-        for extra in ('accept', 'cancel', 'back'):
-            assert extra in k2, "%s/%d: page two has no %r tile" % (ty, n, extra)
-print("   %d type(s) x %d count(s): 4 dialogs each, balanced, one tile per key"
+        for extra in ('accept', 'cancel', 'recall', 'msg', 'state'):
+            assert extra in k2, "%s/%d: no %r tile" % (ty, n, extra)
+        # the two pages were merged: there is nowhere left to go Back to
+        assert 'back' not in k2, \
+            "%s/%d: a Back button on a one-page form" % (ty, n)
+print("   %d type(s) x %d count(s): one dialog each, balanced, one tile per key"
       % (len(TYPES), len(COUNTS)))
+
+
+print("== the count drives the boxes: N treads, N widths, N+1 drops ==")
+# The headline. Type a number and the page is rebuilt for it, so the
+# boxes that exist are exactly the boxes that number implies -- no
+# greyed remainder standing in for the steps that are not there.
+for ty in TYPES:
+    for n in COUNTS:
+        ALL = pages(vm, ty, n)
+        vm.loads('(setq t:*n* (lzt:dlgname "%s"))' % ty)
+        text = '\n'.join(slice_dialog(ALL, str(vm.globals['t:*n*'])))
+        k = set(re.findall(r'key = "([^"]+)"', text))
+        treads = {x for x in k if re.match(r'tread\d+$', x)}
+        widths = {x for x in k if re.match(r'width\d+$', x)}
+        depths = {x for x in k if re.match(r'depth\d+$', x)}
+        assert treads == {'tread%d' % i for i in range(1, n + 1)}, \
+            "%s/%d: tread boxes %r" % (ty, n, sorted(treads))
+        assert depths == {'depth%d' % i for i in range(1, n + 1)}, \
+            "%s/%d: depth boxes %r" % (ty, n, sorted(depths))
+        assert 'depthafter' in k, "%s/%d: no DA box" % (ty, n)
+        if ty == 'NORMIESTEP':
+            # one width for the whole run, and it has no number on it
+            assert not widths and 'width' in k, \
+                "%s/%d: width boxes %r" % (ty, n, sorted(widths))
+        else:
+            assert widths == {'width%d' % i for i in range(1, n + 1)}, \
+                "%s/%d: width boxes %r" % (ty, n, sorted(widths))
+print("   every count from %d to %d, all three types" % (min(COUNTS), max(COUNTS)))
 
 
 print("== the wedge boxes land on their letters, and the rows fit ==")
@@ -509,12 +536,12 @@ for ty in TYPES:
     worst, widest = 0.0, 0.0
     for n in COUNTS:
         ALL = pages(vm, ty, n)
-        vm.loads('(setq t:*n2* (lzt:dlgname 2 "%s"))' % ty)
-        p2 = slice_dialog(ALL, str(vm.globals['t:*n2*']))
+        vm.loads('(setq t:*n* (lzt:dlgname "%s"))' % ty)
+        page = slice_dialog(ALL, str(vm.globals['t:*n*']))
         centers = {str(d[1]): (int(d[2]) + int(d[4])) / 2.0 * CHART_W / 1000.0
                    for d in vm.globals['lzt:*chart*'][3]}
         pos, expect = None, False
-        for line in p2:
+        for line in page:
             t = line.strip()
             if re.match(r': image \{ key = "chart\d+"', t):
                 expect, pos = True, None
@@ -551,35 +578,41 @@ for ty in TYPES:
 
 print("== nothing is wider than a screen will take ==")
 # DCL does not scroll, so a line wider than the screen is a dialog that
-# will not open.  Two budgets: any single labelled line, and the SIDE
-# COLUMN of page two, which stands beside a chart 58 cells wide.
+# will not open.  Three budgets: a tile that declares its own width is
+# held to that width, any other labelled line to LINE_BUDGET, and the
+# ANSWER COLUMN, which stands beside a chart 58 cells wide.
 LINE_BUDGET = 90
 COLUMN_BUDGET = 46
 for ty in TYPES:
     for n in COUNTS:
         ALL = pages(vm, ty, n)
-        vm.loads('(setq t:*n1* (lzt:dlgname 1 "%s"))'
-                 '(setq t:*n2* (lzt:dlgname 2 "%s"))' % (ty, ty))
-        for name, budget in ((str(vm.globals['t:*n1*']), LINE_BUDGET),
-                             (str(vm.globals['t:*n2*']), LINE_BUDGET)):
-            d = slice_dialog(ALL, name)
-            for line in d:
-                t = line.strip()
-                m = re.search(r'label = "([^"]*)"', t)
-                if not m:
-                    continue
-                w = len(m.group(1)) + 4
-                m2 = re.search(r'edit_width = (\d+)', t)
-                if m2:
-                    w += int(m2.group(1)) + 4
-                assert w <= budget, (
-                    "%s/%d: a line about %d cells wide, over the %d budget: %r"
-                    % (ty, n, w, budget, t))
-        # ...and the side column, row by row: a button plus a box plus
+        vm.loads('(setq t:*n* (lzt:dlgname "%s"))' % ty)
+        page = slice_dialog(ALL, str(vm.globals['t:*n*']))
+        for line in page:
+            t = line.strip()
+            m = re.search(r'label = "([^"]*)"', t)
+            if not m:
+                continue
+            # `width` proper, not the `edit_width` of a box: the two
+            # measure different things and one ends with the other
+            mw = re.search(r'(?<![_a-z])width = (\d+);', t)
+            if mw:
+                # it says how wide it is; the label has to fit in that
+                assert len(m.group(1)) <= int(mw.group(1)), (
+                    "%s/%d: a %d-character label in a %s-cell tile: %r"
+                    % (ty, n, len(m.group(1)), mw.group(1), t))
+                continue
+            w = len(m.group(1)) + 4
+            m2 = re.search(r'edit_width = (\d+)', t)
+            if m2:
+                w += int(m2.group(1)) + 4
+            assert w <= LINE_BUDGET, (
+                "%s/%d: a line about %d cells wide, over the %d budget: %r"
+                % (ty, n, w, LINE_BUDGET, t))
+        # ...and the answer column, row by row: a button plus a box plus
         # its label, which is what stands beside the chart
-        d = slice_dialog(ALL, str(vm.globals['t:*n2*']))
         row, wide = None, 0
-        for line in d:
+        for line in page:
             t = line.strip()
             if t == ': row {':
                 row = 0.0
@@ -595,7 +628,7 @@ for ty in TYPES:
                 if m:
                     row += int(m.group(1)) + len(m.group(2)) + 4
         assert wide <= COLUMN_BUDGET, (
-            "%s/%d: the side column is about %.0f cells wide against a chart "
+            "%s/%d: the answer column is about %.0f cells wide against a chart "
             "of %d -- together they would run past the screen"
             % (ty, n, wide, CHART_W))
 print("   every labelled line under %d cells; the side column under %d"
@@ -741,41 +774,126 @@ for bad, why in (('0', 'zero'), ('-1', 'negative'), ('nine', 'a word'),
     v.loads(typed([('steps', bad), ('accept', 'a'), ('cancel', 'x')]))
     v.loads('(setq t:*f* (lzt:show))')
     assert v.globals['t:*f*'] is None, "%s was accepted as a count" % why
-    assert not [n for n, _ in OPENED if '_p2_' in n], \
-        "%s opened a drawing page: %r" % (why, OPENED)
+    # the drawing on screen stayed the NOMINAL one: nothing was built
+    # for a number the page cannot be built for
+    assert v.globals['lzt:*steps*'] is None, \
+        "%s was taken as the count anyway: %r" % (why, v.globals['lzt:*steps*'])
     assert str(v.globals['lzt:*msg*']).strip(), \
         "%s was refused with no message" % why
 v = stubbed()
 v.loads(typed([('steps', '9'), ('accept', 'a'), ('cancel', 'x')]))
 v.loads('(setq t:*f* (lzt:show))')
-assert not [n for n, _ in OPENED if '_p2_' in n], \
-    "nine steps opened a page anyway: %r" % OPENED
+assert v.globals['lzt:*steps*'] is None, \
+    "nine steps was taken as the count anyway: %r" % v.globals['lzt:*steps*']
 assert '8' in str(v.globals['lzt:*msg*']), \
     "the ceiling message does not name the ceiling: %r" % v.globals['lzt:*msg*']
 print("   0, -1, 2.5, a word and an empty box all refused with a message;")
 print("   9 is refused too and the message names the ceiling of 8")
 
 
-print("== the page loop: tabs, Back, and the position round-trip ==")
+print("== one page: the count and the drawing on it together ==")
+# The count that matches the drawing already on screen rebuilds
+# NOTHING -- there is no page to turn -- and its boxes still come alive
+# and still travel.  That is the whole of what the merge bought.
 v = stubbed()
-v.loads(typed([('steps', '3'), ('accept', 'a'),
+v.loads(typed([('steps', '3'),
                ('tread1', '24'), ('tread2', '24'), ('tread3', '24'),
-               ('cancel', 'x')]))
+               ('accept', 'a')]))
 v.loads('(setq lzt:*type* "CORNERSTP") (setq t:*f* (lzt:show))')
 names = [n for n, _ in OPENED]
-assert names[0].endswith('_p1_cornerstp'), names
-assert names[1].endswith('_p2_cornerstp'), names
-assert DRAW['vec'], "the drawing page opened and drew nothing into its chart"
-# DCL has no way to ask an open dialog where it is; done_dialog
-# reporting its position as it closes is the only chance to find out,
-# and new_dialog only accepts one back in its FOUR-argument form.
-assert [k for _, k in OPENED][:2] == [2, 4], (
-    "the second page did not carry the dialog's position back: %r" % OPENED)
+assert names == ['lazstep_cornerstp'], (
+    "the count opened a second page: %r" % names)
+assert DRAW['vec'], "the page opened and drew nothing into its chart"
+form = dict(pair(p) for p in v.globals['t:*f*'])
+assert int(form['steps']) == 3, form
+for k in ('tread1', 'tread2', 'tread3'):
+    assert abs(float(form[k]) - 24.0) < 1e-9, (
+        "%s was typed on the same page as the count and did not travel: %r"
+        % (k, form))
 wired = {str(a[0]) for a in (v.globals.get('stub:*act*') or [])}
 assert not [k for k in wired if k.startswith('chart')], (
     "an action is wired to a chart tile: it would be repainted on hover "
     "and a DCL image tile is not retained")
-print("   page one -> page two, drawn on open, reopened where it was left")
+print("   count, treads and Insert in one page, one open, no page turn")
+
+print("== the count box: type a number and BOTH follow it ==")
+# The headline, at the callback the box is actually wired to.  A count
+# that matches the drawing already on screen rebuilds nothing and
+# brings its boxes alive where they stand; a count that MOVES closes
+# the page so it can be reopened with the boxes that number needs.
+cv = stubbed()
+cv.loads('(setq lzt:*type* "CORNERSTP" lzt:*vals* nil lzt:*sel* nil)')
+cv.loads('(setq lzt:*steps* nil)')
+cv.loads('(setq lzt:*chart* (lzt:chart "CORNERSTP" (lzt:drawncount)))')
+cv.loads('(setq t:*nom* (length (lzt:treads lzt:*chart*)))')
+NOM = int(str(cv.globals['t:*nom*']))
+cv.loads('(setq stub:*done* nil stub:*mode* nil) (lzt:count "%d")' % NOM)
+assert cv.globals['stub:*done*'] is None, (
+    "a count that matches the drawing on screen rebuilt the page anyway")
+assert int(str(cv.globals['lzt:*steps*'])) == NOM, \
+    "the count did not go live without a rebuild"
+modes = {str(a[0]): int(a[1]) for a in (cv.globals.get('stub:*mode*') or [])}
+assert modes.get('tread1') == 0, \
+    "the boxes did not come alive with the count: %r" % modes
+# ...and a count that moves closes the page, with the number in hand so
+# the loop can build the next one for it
+cv.loads('(setq stub:*done* nil) (lzt:count "%d")' % (NOM + 2))
+assert int(str(cv.globals['stub:*done*'])) == 6, (
+    "a new count did not ask for the page to be rebuilt: %r"
+    % cv.globals['stub:*done*'])
+assert int(str(cv.globals['lzt:*steps*'])) == NOM + 2, cv.globals['lzt:*steps*']
+# a count the page cannot be built for rebuilds nothing and goes back
+# to having no count at all, so the boxes grey again
+for bad in ('', '0', '99', 'nine'):
+    cv.loads('(setq stub:*done* nil stub:*mode* nil) (lzt:count "%s")' % bad)
+    assert cv.globals['stub:*done*'] is None, \
+        "%r rebuilt the page" % bad
+    assert cv.globals['lzt:*steps*'] is None, \
+        "%r was taken as a count: %r" % (bad, cv.globals['lzt:*steps*'])
+    modes = {str(a[0]): int(a[1]) for a in (cv.globals.get('stub:*mode*') or [])}
+    assert modes.get('tread1') == 1, \
+        "%r left the boxes live: %r" % (bad, modes)
+print("   a matching count goes live in place; a new one asks for the")
+print("   rebuild; a count the page cannot use greys them again")
+
+# ...and the PICTURE follows the number: more steps, more drawn.  The
+# chart is one image per band and lzt:redraw paints every one of them,
+# so counting what reached the tile is counting what the drafter sees.
+seen = {}
+for n in (1, 3, 8):
+    _reset()
+    cv.loads('(setq lzt:*steps* %d lzt:*focus* nil)' % n)
+    cv.loads('(setq lzt:*chart* (lzt:chart "CORNERSTP" %d)) (lzt:redraw)' % n)
+    seen[n] = len(DRAW['vec'])
+    assert seen[n], "%d steps drew nothing into the chart" % n
+assert seen[1] < seen[3] < seen[8], (
+    "the picture does not follow the count: %r" % seen)
+print("   and the picture follows it: %d vectors at 1 step, %d at 3, %d at 8"
+      % (seen[1], seen[3], seen[8]))
+
+
+print("== until a count is given, nothing on the drawing is live ==")
+# The picture is the NOMINAL one and every box on it is greyed: a box
+# with no step to belong to is not a box anybody should type into, and
+# nothing typed into one may travel.
+gv = fresh()
+gv.loads('(setq lzt:*vals* nil lzt:*sel* nil lzt:*type* "CORNERSTP")')
+gv.loads('(setq lzt:*steps* nil lzt:*chart* (lzt:chart "CORNERSTP" 3))')
+gv.loads('(setq t:*l* (lzt:livekeys))')
+assert not gv.globals['t:*l*'], (
+    "a box was live with no count: %r" % gv.globals['t:*l*'])
+gv.loads('(lzt:put "tread1" "24") (setq t:*f* (lzt:form))')
+sent = {str(q.a) if isinstance(q, Dot) else str(q[0])
+        for q in gv.globals['t:*f*']}
+assert 'tread1' not in sent, \
+    "a greyed box travelled: %r" % sorted(sent)
+gv.loads('(setq t:*s* (lzt:p2state))')
+assert 'Type a step count' in str(gv.globals['t:*s*']), gv.globals['t:*s*']
+# ...and the keystroke that makes the count usable brings them alive
+gv.loads('(setq lzt:*steps* 3) (setq t:*l* (lzt:livekeys))')
+assert 'tread1' in [str(x) for x in gv.globals['t:*l*']], \
+    "the count did not bring the boxes alive"
+print("   greyed, withheld, and named on the line until the count arrives")
 
 print("== where it was left outlives the session, not just the page ==")
 # lzt:*pos* is cleared at the top of every run and dies with the file,
@@ -836,26 +954,32 @@ assert [int(v) for v in vmr.globals['t:*r*']] == [300, 200], (
 print("   a profile value this build did not write centres the dialog,")
 print("   and a point off the current screen is dragged back onto it")
 
-# a tab switches the routine being filled in, and page one is regenerated
+# a tab switches the routine being filled in, and the page is rebuilt
 v = stubbed()
 v.loads(typed([('tab_HEMISTEP', 'x'), ('cancel', 'c')]))
 v.loads('(setq lzt:*type* "CORNERSTP") (setq t:*f* (lzt:show))')
 assert str(v.globals['lzt:*type*']) == 'HEMISTEP', \
     "the tab did not switch the routine: %r" % v.globals['lzt:*type*']
-assert [n for n, _ in OPENED] == ['lazstep_p1_cornerstp', 'lazstep_p1_hemistep'], \
+assert [n for n, _ in OPENED] == ['lazstep_cornerstp', 'lazstep_hemistep'], \
     OPENED
-print("   a tab closes page one and reopens it on the other routine")
+# DCL has no way to ask an open dialog where it is; done_dialog
+# reporting its position as it closes is the only chance to find out,
+# and new_dialog only accepts one back in its FOUR-argument form.
+assert [k for _, k in OPENED] == [2, 4], (
+    "the reopened page did not carry the dialog's position back: %r" % OPENED)
+print("   a tab closes the page and reopens it, in place, on the other routine")
 
 
 print("== changing the count regenerates the drawing, keeping what fits ==")
-# five steps, five treads typed, Back, three steps: the drawing is
-# built again for three, tread1..3 keep what was typed, and tread4 and
-# tread5 are still in the store for a trip back up.
+# five steps, five treads typed, then 3 in the same count box: the
+# drawing is built again for three, tread1..3 keep what was typed, and
+# tread4 and tread5 are still in the store for a trip back up.  No Back
+# button to press -- the count is a field on the page it redraws.
 v = stubbed()
-v.loads(typed([('steps', '5'), ('accept', 'a'),
+v.loads(typed([('steps', '5'),
                ('tread1', '11'), ('tread2', '12'), ('tread3', '13'),
-               ('tread4', '14'), ('tread5', '15'), ('back', 'b'),
-               ('steps', '3'), ('accept', 'c'),
+               ('tread4', '14'), ('tread5', '15'),
+               ('steps', '3'),
                ('accept', 'd')]))
 v.loads('(setq lzt:*type* "NORMIESTEP") (setq t:*f* (lzt:show))')
 v.loads('(setq t:*n* (length (lzt:treads lzt:*chart*)))')
@@ -874,12 +998,15 @@ for k in ('tread4', 'tread5'):
     v.loads('(setq t:*v* (lzt:get "%s"))' % k)
     assert str(v.globals['t:*v*']) in ('14', '15'), \
         "%s was thrown away rather than kept for a trip back up" % k
-assert [n for n, _ in OPENED] == ['lazstep_p1_normiestep',
-                                  'lazstep_p2_normiestep',
-                                  'lazstep_p1_normiestep',
-                                  'lazstep_p2_normiestep'], OPENED
-print("   5 -> Back -> 3: three treads sent, all three keep their numbers,")
-print("   and 4 and 5 are still in the store")
+# three opens: the nominal picture, the five-step one, the three-step
+# one.  A count that MOVES rebuilds; nothing else on the page does.
+assert [n for n, _ in OPENED] == ['lazstep_normiestep',
+                                  'lazstep_normiestep',
+                                  'lazstep_normiestep'], OPENED
+assert [k for _, k in OPENED] == [2, 4, 4], (
+    "a rebuild lost the dialog's position: %r" % OPENED)
+print("   5 -> 3 in the count box: three treads sent, all three keep their")
+print("   numbers, and 4 and 5 are still in the store")
 
 
 print("== greying: what a run will never ask is greyed, and does not travel ==")
@@ -952,7 +1079,7 @@ v = stubbed('HEMISTEP')
 v.loads(typed([('cancel', 'x')]))
 v.loads('(setq lzt:*type* "CORNERSTP")')
 v.run('c:LAZSTEP', [])
-assert [n for n, _ in OPENED] == ['lazstep_p1_hemistep'], (
+assert [n for n, _ in OPENED] == ['lazstep_hemistep'], (
     "LAZSTEP opened on a routine that is not loaded: %r" % OPENED)
 m = modes(v)
 assert ('tab_CORNERSTP', 1) in m and ('tab_NORMIESTEP', 1) in m, \
@@ -1001,8 +1128,10 @@ DEPTH_BOXES = [('depth1', DEPTHS[0]), ('depth2', DEPTHS[1]),
 TREAD_BOXES = [('tread1', TREAD), ('tread2', TREAD), ('tread3', TREAD)]
 
 CASES = [
-    # tool, walls?, page-one boxes, page-two boxes, the picks the form
-    # never sends, and the same run answered at the prompts
+    # tool, walls?, the run's boxes, the drawing's boxes, the picks the
+    # form never sends, and the same run answered at the prompts.  Both
+    # sets of boxes are on ONE page now, so they are filled in one go
+    # and Insert is pressed once.
     ('CORNERSTP', True,
      [('steps', '3'), ('direction', '1'), ('dims', '2'), ('bench', '2'),
       ('profile', '1')],
@@ -1031,7 +1160,7 @@ CASES = [
 for tool, pair_of_walls, p1, p2, picks, prompts in CASES:
     # ...through the form
     fv = stubbed(tool)
-    fv.loads(typed(p1 + [('accept', 'a')] + p2 + [('accept', 'b')]))
+    fv.loads(typed(p1 + p2 + [('accept', 'a')]))
     fv.loads('(setq lzt:*type* "%s")' % tool)
     ws = walls(fv, pair_of_walls)
     try:
@@ -1075,10 +1204,10 @@ for tool, pair_of_walls, p1, p2, picks, prompts in CASES:
 # ...and with the dimensions on, so the dimension path is equal too
 fv = stubbed('CORNERSTP')
 fv.loads(typed([('steps', '3'), ('direction', '1'), ('dims', '1'),
-                ('bench', '2'), ('profile', '1'), ('accept', 'a')]
+                ('bench', '2'), ('profile', '1')]
                + TREAD_BOXES
                + [('width1', 'NA'), ('width2', 'NA'), ('width3', 'NA')]
-               + DEPTH_BOXES + [('accept', 'b')]))
+               + DEPTH_BOXES + [('accept', 'a')]))
 fv.loads('(setq lzt:*type* "CORNERSTP")')
 ws = walls(fv, True)
 fv.run('c:LAZSTEP', [None, ws, PICK])
@@ -1091,7 +1220,7 @@ assert snapshot(fv) == snapshot(pv), \
 print("   CORNERSTP with the dims on: dimensions identical too")
 
 
-print("== page one states itself, and holds Next back ==")
+print("== the run line states itself, and holds Insert back ==")
 sv = fresh()
 
 
@@ -1119,7 +1248,8 @@ sv.loads('(setq t:*ok* (lzt:count-ok)) (setq t:*m* lzt:*msg*)')
 assert sv.globals['t:*ok*'] is None
 assert str(sv.globals['t:*m*']) == p1(sv), "the two disagree on a bad count"
 sv.loads('(lzt:put "steps" "3")')
-assert p1(sv) == '3 steps - Next builds the drawing to fill in.', p1(sv)
+assert p1(sv) == ('3 steps - the drawing and its boxes are built for'
+                  ' that many.'), p1(sv)
 sv.loads('(lzt:put "steps" "1")')
 assert p1(sv).startswith('1 step -'), "a single step is not '1 steps': %r" % p1(sv)
 sv.loads('(lzt:put "steps" "3") (setq t:*ok* (lzt:count-ok)) (setq t:*n* lzt:*steps*)')
@@ -1145,18 +1275,18 @@ bad = p1(sv)
 assert bad.startswith('Bench offset off the wall:'), bad
 assert 'is not a measurement' in bad, bad
 sv.loads('(lzt:put "benchoffset" "12")')
-assert p1(sv).endswith('Next builds the drawing to fill in.'), p1(sv)
+assert p1(sv).endswith('are built for that many.'), p1(sv)
 # a greyed question is not asked, so rubbish in it is not complained
 # about: Outside drops the bench questions entirely
 sv.loads('(lzt:sput "direction" 2) (lzt:put "benchoffset" "wide")')
 sv.loads('(setq t:*sk* (lzt:skip))')
 assert 'benchoffset' in [str(x) for x in sv.globals['t:*sk*']]
-assert p1(sv).endswith('Next builds the drawing to fill in.'), \
+assert p1(sv).endswith('are built for that many.'), \
     "rubbish in a greyed question is being complained about: %r" % p1(sv)
 print("   a whole-number box and a measurement box, each read its own way")
 
 
-print("== page two states itself, and holds Insert back ==")
+print("== the hand-off line states itself, and holds Insert back ==")
 tv = fresh()
 tv.loads('(setq lzt:*vals* nil lzt:*sel* nil lzt:*type* "CORNERSTP")')
 tv.loads('(setq lzt:*steps* 3 lzt:*chart* (lzt:chart "CORNERSTP" 3))')
@@ -1212,7 +1342,7 @@ print("   %d live boxes: %d sent, %d still to ask, %d unreadable, no overlap"
       % (len(LIVE), len(SENT), len(TOGO), len(BAD)))
 
 
-print("== both pages wire their state line ==")
+print("== the page wires BOTH of its state lines ==")
 rv = stubbed()
 rv.loads('(setq lzt:*vals* nil lzt:*sel* nil lzt:*type* "CORNERSTP")')
 rv.loads('(setq lzt:*steps* 3 lzt:*chart* (lzt:chart "CORNERSTP" 3))')
@@ -1225,32 +1355,37 @@ def accept_mode(v):
     return hits[0]
 
 
-# page one: Next is held back until the count is usable
-rv.loads('(setq stub:*mode* nil stub:*tiles* nil) (lzt:p1restate)')
-assert accept_mode(rv) == 1, "Next was live with no count typed at all"
+# ONE button, TWO reasons to hold it back: a count that cannot be
+# used, and a box that would be silently dropped.  A page with one
+# Insert cannot have two opinions about it.
+rv.loads('(setq lzt:*steps* nil)')
+rv.loads('(setq stub:*mode* nil stub:*tiles* nil) (lzt:restate)')
+assert accept_mode(rv) == 1, "Insert was live with no count typed at all"
 rv.loads('(setq t:*m* (stub:tile "msg"))')
 assert 'How many steps' in str(rv.globals['t:*m*']), rv.globals['t:*m*']
-rv.loads('(setq stub:*mode* nil) (lzt:put "steps" "3") (lzt:p1restate)')
-assert accept_mode(rv) == 0, "a good count did not let Next through"
-rv.loads('(setq stub:*mode* nil) (lzt:sput "direction" 1) (lzt:sput "bench" 1)'
-         '(lzt:put "benchstep" "3.5") (lzt:p1restate)')
-assert accept_mode(rv) == 1, "Next stayed live with a box that would be dropped"
-
-# page two: Insert is held back the same way
-rv.loads('(setq stub:*mode* nil stub:*tiles* nil) (lzt:p2restate)')
-assert accept_mode(rv) == 0, "Insert was greyed on a drawing with nothing wrong"
 rv.loads('(setq t:*s* (stub:tile "state"))')
 assert rv.globals['t:*s*'] is not None, "the state tile was never written"
-rv.loads('(setq stub:*mode* nil) (lzt:put "tread1" "nonsense") (lzt:p2restate)')
-assert accept_mode(rv) == 1, "Insert stayed live with an unreadable box"
-print("   Next and Insert both held back, both released when it is fixed")
+rv.loads('(setq stub:*mode* nil) (lzt:put "steps" "3")'
+         '(setq lzt:*steps* 3) (lzt:restate)')
+assert accept_mode(rv) == 0, "a good count did not let Insert through"
+rv.loads('(setq stub:*mode* nil) (lzt:sput "direction" 1) (lzt:sput "bench" 1)'
+         '(lzt:put "benchstep" "3.5") (lzt:restate)')
+assert accept_mode(rv) == 1, "Insert stayed live with a box that would be dropped"
+rv.loads('(setq stub:*mode* nil) (lzt:put "benchstep" "2") (lzt:restate)')
+assert accept_mode(rv) == 0, "Insert stayed greyed once the box was fixed"
+rv.loads('(setq stub:*mode* nil) (lzt:put "tread1" "nonsense") (lzt:restate)')
+assert accept_mode(rv) == 1, "Insert stayed live with an unreadable dimension"
+print("   one Insert, held back by the count AND by a box that would be dropped")
 
-# and the callbacks: every box on either page puts the line back
+# and the callbacks: every box on the page puts BOTH lines back
 wv = stubbed('CORNERSTP')
-wv.loads('(setq lzt:*type* "CORNERSTP") (setq t:*d* (lzt:dcl-lines))')
-wv.loads('(setq stub:*rc* 0) (lzt:page1 7)')
+wv.loads('(setq lzt:*type* "CORNERSTP" lzt:*steps* 3)')
+wv.loads('(setq lzt:*chart* (lzt:chart "CORNERSTP" 3))')
+wv.loads('(setq t:*d* (lzt:dcl-lines))')
+wv.loads('(setq stub:*rc* 0) (lzt:page 7)')
 acts = {str(a[0]): str(a[1]) for a in (wv.globals.get('stub:*act*') or [])}
-assert 'lzt:p1restate' in acts['steps'], "the count box does not restate"
+assert 'lzt:count' in acts['steps'], \
+    "the count box does not rebuild the page: %r" % acts['steps']
 # EVERY typed question is wired, greyed or not: what is greyed changes
 # while the page is open, so a box wired only when it happened to be
 # live at open would go dead the moment a dropdown un-greyed it
@@ -1262,24 +1397,16 @@ for d in wv.globals['t:*a*']:
         assert 'lzt:p1pick' in acts[k], "dropdown %r does not re-grey" % k
     else:
         typed += 1
-        assert 'lzt:p1restate' in acts[k], "page-one box %r does not restate" % k
-assert typed, "no typed question on page one at all"
-wv.loads('(setq t:*m* (stub:tile "msg"))')
-assert wv.globals['t:*m*'] is not None, \
-    "page one opened without ever writing its state line"
-
-wv.loads('(setq stub:*act* nil stub:*tiles* nil)')
-wv.loads('(setq lzt:*steps* 3 lzt:*chart* (lzt:chart "CORNERSTP" 3))')
-wv.loads('(setq stub:*rc* 0) (lzt:page2 7)')
-acts2 = {str(a[0]): str(a[1]) for a in (wv.globals.get('stub:*act*') or [])}
+        assert 'lzt:restate' in acts[k], "run box %r does not restate" % k
+assert typed, "no typed question in the run block at all"
 wv.loads('(setq t:*k* (lzt:keys lzt:*chart*))')
 for k in [str(x) for x in wv.globals['t:*k*']]:
-    assert 'lzt:p2restate' in acts2[k], "page-two box %r does not restate" % k
-wv.loads('(setq t:*s* (stub:tile "state"))')
-assert wv.globals['t:*s*'] is not None, \
-    "page two opened without ever writing its state line"
-print("   %d page-one callbacks and %d page-two callbacks, both lines written"
-      % (len(acts), len(acts2)))
+    assert 'lzt:restate' in acts[k], "drawing box %r does not restate" % k
+for tile in ('msg', 'state'):
+    wv.loads('(setq t:*t* (stub:tile "%s"))' % tile)
+    assert wv.globals['t:*t*'] is not None, \
+        "the page opened without ever writing its %s line" % tile
+print("   %d callbacks on one page, both lines written on open" % len(acts))
 
 
 print("== Recall last: the drawing you just filled in, back in it ==")
