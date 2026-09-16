@@ -109554,6 +109554,13 @@
 (setq lzp:*aliasval* "Alias")
 (setq lzp:*capval* "Caption")
 
+;; The longest caption LAZNAME will let a drafter set.  A ceiling, not a
+;; preference: tools/check_dcl.py measures the SHIPPED tables and can
+;; never see an override, so this is the only thing standing between a
+;; long rename and a page too wide to open.  40 keeps the widest
+;; category page inside the budget.
+(setq lzp:*capmax* 40)
+
 ;; How wide, in DCL character cells, a row of pinned or recent buttons
 ;; may be before the next button starts a new row.  DCL does not
 ;; scroll: a row past the screen's width does not clip the page, it
@@ -112504,8 +112511,6 @@
 ;;  already defined answers until the drawing is closed: AutoLISP has
 ;;  no way to take a defun back, and pretending otherwise would be the
 ;;  lie.  The state line says so.
-
-(setq lzp:*capmax* 40)            ; longest caption a drafter may set
 
 ;; Records joined with ";" as Pins, Recent and Hidden already are, but
 ;; a record here is a PAIR -- NAME=VALUE.  Both separators are single
