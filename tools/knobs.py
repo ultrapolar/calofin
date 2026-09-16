@@ -3,12 +3,16 @@
 
 A tool's knobs are the ``(setq prefix:*name* LITERAL)`` lines inside the
 block at the top of its file -- ruled off as ``tunables``, ``TUNABLES``
-or (AutoDim's spelling) ``SETTINGS`` -- and tests/test_tunables.py is
-what keeps that true.  This reads the same blocks for a different
-reason: LAZTUNE lets a drafter set their own value for any knob without
-editing the file, and needs to know every knob's name, its shipped
-value ("Alec's choice") and what changing it does.  tools/gen_knobs.py
-writes that catalog into LAZPANEL.lsp from what this returns.
+or (AutoDim's spelling) ``SETTINGS``, or under one of the older names
+STANDARDS.md leaves alone: ``configuration``, ``settings``, ``the
+knobs``, ``adjustable constants`` -- and tests/test_tunables.py is what
+keeps that true for the files it lists.  This reads the same blocks for
+a different reason: LAZTUNE lets a drafter set their own value for any
+knob without editing the file, and needs to know every knob's name, its
+shipped value ("Alec's choice") and what changing it does.
+tools/gen_knobs.py writes that catalog into LAZPANEL.lsp from what this
+returns, and tests/test_knobs.py pins each header spelling to a file
+that uses it.
 
 Nothing here decides anything: a knob is what the block says it is,
 and its meaning is the comment the block already carries.
@@ -21,10 +25,24 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from callib import LISP_DIR, ROOT, lsp_files, read  # noqa: E402
 
-#: how a block opens: the three header spellings the tree uses, at the
-#: start of a line.  The first one found in a file wins.
+#: how a block opens: the three header spellings STANDARDS.md asks new
+#: work for, at the start of a line.  The first one found in a file
+#: wins, and a file that has one is read by nothing else.
 HEAD = re.compile(r'^;;; -------------------- tunables |^;;;  TUNABLES|^;;;  SETTINGS',
                   re.M)
+#: ...and the older names STANDARDS.md says are "the same block under an
+#: older name and fine to leave": a rule line (two or three semicolons,
+#: dashes or equals) that names the block -- ABFIND's `configuration`,
+#: PADDLE's `settings`, LINGUTTER's `the knobs`, POOLSIDE's `adjustable
+#: constants`, MOHAMADDLE's own `tunables` on a two-semicolon rule --
+#: and the title-case `;;;  Tunables` banner UPADOVER and PERPMARK rule
+#: theirs off with.  Read only when HEAD finds nothing, so the files it
+#: already covered read exactly as before.  A candidate is taken only if
+#: its block holds a setq: CDCREATE's header prose says ";;;  Tunables:"
+#: forty lines above its real banner, and a header with no knob under
+#: it is prose, not a block.
+OLDER = re.compile(r'^;;;? ?[-=]{3,}[^\n]*\b(?:tunables|settings|configuration|knobs|'
+                   r'adjustable constants)\b[^\n]*|^;;;  Tunables\b', re.M | re.I)
 #: how it closes.  An explicit end line wins wherever it sits -- abhd
 #: rules its groups off with bare dashes INSIDE the block and says
 #: "end of tunables" where it really ends -- and only a block with no
@@ -41,11 +59,9 @@ NAME = r'(?:[a-z0-9]+:\*[a-z0-9-]+\*|\*[a-z][a-z0-9-]+\*)'
 SETQ = re.compile(r'^\(setq (' + NAME + r')\s', re.M | re.I)
 
 
-def block_of(src):
-    """(block text, header spelling) or (None, None)."""
-    m = HEAD.search(src)
-    if not m:
-        return None, None
+def _block_at(src, m):
+    """The block a header match M opens: to the explicit end line, else
+    the next ;;; rule, else the first defun."""
     i = m.start()
     e = EXPLICIT.search(src, m.end())
     if not e:
@@ -59,7 +75,31 @@ def block_of(src):
         e2 = RULE.search(src, k + 1)
         j2 = e2.start() if e2 else src.find('\n(defun ', k)
         block = src[i:j2] if j2 > 0 else src[i:]
-    return block, m.group(0).strip()
+    return block
+
+
+def block_of(src):
+    """(block text, header spelling) or (None, None).
+
+    A HEAD spelling wins outright, first one in the file.  Failing that,
+    the first OLDER header whose block actually holds a setq -- so a
+    line of prose that happens to say "Tunables" (CDCREATE's file
+    comment, HONEFILLET's) is passed over for the banner under it, or
+    for nothing."""
+    m = HEAD.search(src)
+    if m:
+        return _block_at(src, m), m.group(0).strip()
+    for m in OLDER.finditer(src):
+        block = _block_at(src, m)
+        # a setq that is not the version banner: LINGUTTER's file
+        # comment says "Tunables" too, and reading on from it reaches
+        # (setq *lingutter-version* ...) before the real rule does.
+        # Every pair of a setq counts -- AUTOBEAD's one setq names its
+        # banner first and its knobs after it
+        if any('version' not in name.lower()
+               for n in SETQ.finditer(block) for name, _ in pairs_of(block, n)):
+            return block, m.group(0).strip()
+    return None, None
 
 
 def sexp_end(text, start):

@@ -2620,6 +2620,23 @@ assert prof(vm, 'CalofinKnob-ad.~style-plan~') == '"STANDARD INCHES"', \
 assert str(vm.globals.get('ad:*style-plan*')) == 'STANDARD INCHES', vm.globals.get('ad:*style-plan*')
 print("   STANDARD INCHES where the block says SIDE STANDARD, as text that reads back")
 
+# a knob shipped nil is "off, or a value" -- AutoDim's ad:*layer* is
+# nil for the current layer or a layer NAME -- so a string goes in
+# where nil was; only a list is refused
+vm = setvm([1])
+vm.loads('(setq lzp:*tunetool* %d lzp:*tunesel* "ad:*layer*")' % LABELS.index('AUTODIM'))
+vm.loads('(setq stub:*click* "tune_val" stub:*clickval* "\\"POOL\\"")')
+run(vm, 'c:LAZTUNE', 'tune-nil-string')
+assert prof(vm, 'CalofinKnob-ad.~layer~') == '"POOL"', prof(vm, 'CalofinKnob-ad.~layer~')
+assert str(vm.globals.get('ad:*layer*')) == 'POOL', vm.globals.get('ad:*layer*')
+vm = setvm([1])
+vm.loads('(setq lzp:*tunetool* %d lzp:*tunesel* "ad:*layer*")' % LABELS.index('AUTODIM'))
+vm.loads('(setq stub:*click* "tune_val" stub:*clickval* "(1 2)")')
+run(vm, 'c:LAZTUNE', 'tune-nil-list')
+assert prof(vm, 'CalofinKnob-ad.~layer~') == '', prof(vm, 'CalofinKnob-ad.~layer~')
+assert 'accept' in {str(x) for x in (vm.globals.get('stub:*disabled*') or [])}
+print("   a knob shipped nil -- off, or a value -- takes a name; a list is still refused")
+
 # Alec's choice: the button clears a stored override and puts the
 # shipped value back in the session
 vm = setvm([1], click='tune_reset',

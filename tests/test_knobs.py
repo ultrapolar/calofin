@@ -109,6 +109,43 @@ check("every knob test_tunables.py counts is in the table (%d files)"
 check("...with the literal the block spells", not differing,
       repr(differing[:3]))
 
+print("== 4. the older header names are read too ==")
+# STANDARDS.md (Tunables): `tunables` is the word, and "PADDLE spells
+# its rule `settings` and LINGUTTER `the knobs`, which is the same block
+# under an older name and fine to leave".  Fine to leave means the
+# catalog reads them, or LAZTUNE reaches some tools and not others --
+# which it did: ABFIND, FITABHD, CABHD, LHD and ABLOBF, five of the
+# largest, had no knob a drafter could set.  Each spelling in use is
+# pinned here to the file that uses it.
+OLDER = [
+    ('lisp/abfind/ABFIND.lsp', 'configuration', 30),
+    ('lisp/ablobf/ABLOBF.lsp', 'configuration', 25),
+    ('lisp/cabhd/CABHD.lsp', 'configuration', 25),
+    ('lisp/fitabhd/FITABHD.lsp', 'configuration', 50),
+    ('lisp/lhd/lhd.lsp', 'configuration', 25),
+    ('lisp/paddle/PADDLE.lsp', 'settings', 10),
+    ('lisp/autobead/AUTOBEAD.lsp', 'SETTINGS', 1),
+    ('lisp/mohamaddle/MOHAMADDLE.lsp', 'tunables', 10),
+    ('lisp/lingutter/LINGUTTER.lsp', 'the knobs', 10),
+    ('lisp/poolside/POOLSIDE.lsp', 'adjustable constants', 5),
+    ('lisp/upadover/UPADOVER.lsp', 'Tunables', 10),
+    ('lisp/perpmark/PERPMARK.lsp', 'Tunables', 10),
+]
+for rel, word, least in OLDER:
+    block, head = knobs.block_of(read(ROOT / rel))
+    n = len(knobs.knobs_of(ROOT / rel))
+    check("%s: the block under %r, %d knobs" % (rel.split('/')[-1], word, n),
+          head is not None and word in head and n >= least, repr(head))
+# a line of file-comment prose that says "Tunables" above the real
+# rule is prose: the rule under it is the block
+for rel in ('lisp/cdcreate/CDCREATE.lsp', 'lisp/honefillet/HONEFILLET.lsp',
+            'lisp/smartfillet/SMARTFILLET.lsp'):
+    src_ = read(ROOT / rel)
+    block, head = knobs.block_of(src_)
+    check("%s: the tunables rule, not the ;;;  Tunables prose above it" % rel.split('/')[-1],
+          head == ';;; -------------------- tunables'
+          and src_.find(';;;  Tunables') < src_.find(head), repr(head))
+
 print("== 3. one name, one knob ==")
 
 names = [str(e[0]) for t in table for e in t[2:]]
