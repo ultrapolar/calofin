@@ -197,12 +197,25 @@ you're asked where the cross dims were measured from:
 | **Corner** | To the true (extended) sharp corner | A-C, B-D |
 | **Middle** | To the middle of each cut face/arc | A-C, B-D |
 | **Ends** | To the treatment endpoints — **both** ends of each diagonal, **crossing** | A-C (A>B end→C>D end, A>D end→C>B end), B-D likewise |
+| **NotGiven** | The sheet's two cross dims exist, but nothing says which reference they were taped to | A-C, B-D (same prompts as **Corner**) |
 
 In **Ends** mode the two ties of a diagonal **cross each other**: each
 runs from one end of a corner treatment to the *opposite* end of the
 far treatment, the way the tape actually goes. (Pairing the same side
 at both corners would give two near-parallel ties, which pin the
 out-of-squareness down far less.)
+
+**NotGiven** asks its two numbers the same way **Corner** does, then
+fits the pool **both** ways — once reading them as true-corner ties,
+once as cut/arc-middle ties — and keeps whichever interpretation's own
+reference points land closest to what was actually taped (ties go to
+Corner). `Ends` is never guessed at this way: it takes four ties, not
+two, so a NotGiven sheet can't mean that. The report carries a
+`CROSS DIMS REFERENCE NOT GIVEN - ASSUMED CORNER` (or `MIDDLE`) note
+naming the pick, and every cross-dim report row and dimension uses
+whichever reference was chosen. If both cross dims come back `NA`
+there's nothing to choose between, so nothing is assumed and no note
+is added.
 
 The measurements are converted to equivalent true-corner diagonals
 (corrected against the fitted corner geometry) so the body still

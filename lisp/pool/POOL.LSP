@@ -124,7 +124,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091626 REV29")
+(setq pool:*version* "091626 REV30")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -4706,6 +4706,21 @@
                 n (1+ n)))))
   (if (> n 0) (/ sum n) nil))
 
+;; How far a candidate reference-mode reading actually sits from what
+;; the tape read: XMEAS's own reference points, measured on the quad Q
+;; that was fit to them.  Used to score a NotGiven guess between the
+;; Corner and Middle interpretations of the same two raw numbers --
+;; smaller is the better-fitting guess.  0.0 (not nil) when nothing was
+;; taped for this diagonal, so it drops out of a summed score untouched.
+(defun pool:crossresid (q corners xmeas diagkey / sum ra rc)
+  (setq sum 0.0)
+  (foreach m xmeas
+    (if (and (eq (car m) diagkey) (nth 7 m))
+        (setq ra (pool:cornerpoint q corners (nth 3 m) (nth 4 m))
+              rc (pool:cornerpoint q corners (nth 5 m) (nth 6 m))
+              sum (+ sum (abs (- (nth 7 m) (distance ra rc)))))))
+  sum)
+
 ;;; -------------------- pool bottom / hopper (rectangle) ---------------
 ;;;
 ;;;  Field-sheet letters (plan view):
@@ -6382,7 +6397,7 @@
                              tp bo le ri dac dbd totl lrad rrad tpna bona
                              corners cmode anycut cc prevty prevsz lbl
                              gq gcorners xmeas xg tm hl val m rpa rpb pass
-                             ans xitems cc2
+                             ans xitems cc2 autores xrefnote
                              fitres quad failed a b c d cen meas notes tri
                              doff th endoff pr odim k
                              midl midr ml mr tipl tipr
@@ -6711,11 +6726,18 @@
     (if (and (not pool:*insq*) anycut)
         (progn
           ;; a bare "Cut corners" would now read as the Cut keyword, and
-          ;; this gate covers Radius corners too -- but NOT NotGiven,
-          ;; which has no treatment ends to tape between
+          ;; this gate covers Radius corners too -- but NOT a NotGiven
+          ;; CORNER TREATMENT, which has no treatment ends to tape
+          ;; between.  The NotGiven answered HERE is a different thing:
+          ;; the sheet's two cross dims exist but never says which
+          ;; reference they were taped to -- see qf:autocross below.
+          (princ (strcat "\nNotGiven: Corner and Middle are both tried against"
+                         " the numbers given; whichever fits is used and"
+                         " named in the report."))
           (setq v (pool:askkwf 'cmode
                                "Radius/Cut corners -- cross dims measured from"
-                               "Corner Middle Ends" "Corner/Middle/Ends" nil t))
+                               "Corner Middle Ends NotGiven"
+                               "Corner/Middle/Ends/NotGiven" nil t))
           (if (eq v 'POOL-BACK) v (progn (setq cmode v) nil)))
         nil))
 
@@ -6763,6 +6785,40 @@
                 (setq xmeas (reverse xmeas))
                 nil)))))
 
+  ;; -------- NotGiven reference mode: the sheet's two cross dims were
+  ;; asked and taped like Corner (pool:crosstemplate's default template,
+  ;; the one NotGiven also uses to ask with -- see there), but nothing
+  ;; says whether the tape actually ran to the true corners or to the
+  ;; cut/radius midpoints.  Fit both ways -- Ends is never guessed here,
+  ;; it takes four ties, not two, so a NotGiven sheet cannot mean that
+  ;; -- and keep whichever interpretation's OWN reference points, on ITS
+  ;; OWN fitted quad, land closest to the numbers actually taped; ties
+  ;; go to Corner, the more common tape point.  Called with QUAD/FAILED
+  ;; already holding the Corner fit (the outer body computes that first
+  ;; regardless of cmode).  Returns (cmode quad failed xmeas) so every-
+  ;; thing after this reads the winner as if it had been asked outright.
+  (defun qf:autocross ( / xmeasm quadc quadm failedc failedm fitres2
+                          dacm dbdm residc residm pass)
+    (setq quadc quad failedc failed)
+    (setq xmeasm (mapcar '(lambda (tm m) (append tm (list (nth 7 m))))
+                         (pool:crosstemplate "Middle") xmeas))
+    (setq quadm quadc pass 0)
+    (while (< pass 2)
+      (setq dacm (pool:effcross quadm corners xmeasm 'ac)
+            dbdm (pool:effcross quadm corners xmeasm 'bd)
+            fitres2 (pool:fitquad bo tp le ri dacm dbdm pool:*side-tol* pool:*cross-tol*)
+            quadm (car fitres2)
+            failedm (cadr fitres2)
+            pass (1+ pass)))
+    (setq residc (+ (pool:crossresid quadc corners xmeas 'ac)
+                    (pool:crossresid quadc corners xmeas 'bd))
+          residm (+ (pool:crossresid quadm corners xmeasm 'ac)
+                    (pool:crossresid quadm corners xmeasm 'bd)))
+    (if (or (and failedc (not failedm))
+            (and (eq failedc failedm) (< residm residc)))
+        (list "Middle" quadm failedm xmeasm)
+        (list "Corner" quadc failedc xmeas)))
+
   ;; ---- the input phase, with Back working right across it
   (pool:stages (list 'qf:sides 'qf:oval 'qf:corners 'qf:cmode 'qf:cross))
 
@@ -6780,20 +6836,31 @@
         fitres (pool:fitquad bo tp le ri dac dbd pool:*side-tol* pool:*cross-tol*)
         quad (car fitres)
         failed (cadr fitres))
-  (if (/= cmode "Corner")
-      (progn
-        (setq pass 0)
-        (while (< pass 2)
-          (setq dac (pool:effcross quad corners xmeas 'ac)
-                dbd (pool:effcross quad corners xmeas 'bd)
-                fitres (pool:fitquad bo tp le ri dac dbd pool:*side-tol* pool:*cross-tol*)
-                quad (car fitres)
-                failed (cadr fitres)
-                pass (1+ pass)))))
+  (cond
+    ((and (= cmode "NotGiven") (or dac dbd))
+     (setq autores (qf:autocross)
+           cmode (car autores)
+           quad (cadr autores)
+           failed (caddr autores)
+           xmeas (cadddr autores)
+           xrefnote (strcat "CROSS DIMS REFERENCE NOT GIVEN - ASSUMED "
+                            (strcase cmode))))
+    ;; nothing was taped either way -- nothing to guess between, so no
+    ;; note either
+    ((= cmode "NotGiven") (setq cmode "Corner"))
+    ((/= cmode "Corner")
+     (setq pass 0)
+     (while (< pass 2)
+       (setq dac (pool:effcross quad corners xmeas 'ac)
+             dbd (pool:effcross quad corners xmeas 'bd)
+             fitres (pool:fitquad bo tp le ri dac dbd pool:*side-tol* pool:*cross-tol*)
+             quad (car fitres)
+             failed (cadr fitres)
+             pass (1+ pass)))))
   (setq a (car quad) b (cadr quad) c (caddr quad) d (cadddr quad)
         cen (pool:v* (pool:v+ (pool:v+ a b) (pool:v+ c d)) 0.25)
         meas (pool:quadmeas quad)
-        notes nil)
+        notes (if xrefnote (list xrefnote) nil))
 
   ;; dashed linetype + scale for the reference lines
   (setq pool:*dashlt* (pool:ltload "DASHED"))

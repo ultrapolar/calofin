@@ -1981,4 +1981,49 @@ vm = run(["Insquare", "Rectangle"] + BASE +
 assert len([s for s in vm.printed if "Too large" in s]) == 1
 print("   an oversized radius is refused once, and its printed max is taken")
 
+print("== R37. cross-dim reference NotGiven: tried both ways, the better fit wins ==")
+# Cut corners on all four, out-of-square: NotGiven asks the same two
+# numbers Corner would (pool:crosstemplate's default template), then
+# fits them BOTH as Corner and as Middle and keeps whichever lands
+# closest to what was actually taped -- noting the pick in the report.
+vm = run(["Outofsquare", "Rectangle"] + BASE +
+         [240.0, 240.0, 120.0, 120.0,          # TOP BOTTOM LEFT RIGHT
+          "Cut", 24.0,
+          None, None, None, None, None, None,  # B, C, D reuse A's Cut 24
+          "NotGiven",
+          272.0, 264.0,                        # true-corner-style numbers
+          "No"],
+         "R37")
+_txt = [d.get(1) for d in drawn(vm, 'TEXT', 'POOL-NOTES')]
+assert any("ASSUMED CORNER" in (t or '') for t in _txt), _txt
+assert reportrow(vm, "CROSS A-C")[1] == "272.00"
+print("   true-corner-style numbers -> assumed Corner, noted in the report")
+
+print("== R37b. ...and the same question, the other way -- Middle-style numbers ==")
+vm = run(["Outofsquare", "Rectangle"] + BASE +
+         [240.0, 240.0, 120.0, 120.0,
+          "Cut", 24.0,
+          None, None, None, None, None, None,
+          "NotGiven",
+          249.0, 241.0,                        # cut-midpoint-style numbers
+          "No"],
+         "R37b")
+_txt = [d.get(1) for d in drawn(vm, 'TEXT', 'POOL-NOTES')]
+assert any("ASSUMED MIDDLE" in (t or '') for t in _txt), _txt
+assert reportrow(vm, "AC MID")[1] == "249.00"
+print("   cut-midpoint-style numbers -> assumed Middle, noted in the report")
+
+print("== R37c. NotGiven with nothing taped has nothing to guess, notes nothing ==")
+vm = run(["Outofsquare", "Rectangle"] + BASE +
+         [240.0, 240.0, 120.0, 120.0,
+          "Cut", 24.0,
+          None, None, None, None, None, None,
+          "NotGiven",
+          "NA", "NA",
+          "No"],
+         "R37c")
+_txt = [d.get(1) for d in drawn(vm, 'TEXT', 'POOL-NOTES')]
+assert not any("ASSUMED" in (t or '') for t in _txt), _txt
+print("   both cross dims NA: nothing to guess between, so no note either")
+
 print("\nALL RUNTIME SCENARIOS PASSED")
