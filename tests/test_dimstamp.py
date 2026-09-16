@@ -316,11 +316,47 @@ def test_draw_ruler_geometry():
                       if d.get(0) == 'MTEXT'})
     assert len(heights) == 4, heights          # four tiers, four sizes
     assert heights[0] < heights[-1], heights
-    # every row label is on the scratch layer, in the ruler's colour
-    assert all(d.get(8) == 'DIMSTAMP RULER' and d.get(62) == 3
-               for d in live_entities(vm)), live_entities(vm)
-    print("ok  ruler        -> spine + graded ticks/labels + one circled"
-          " current row, all on its own scratch layer")
+    print("ok  ruler        -> spine + graded ticks/labels + one ringed"
+          " current row")
+
+
+def test_the_current_row_is_drawn_as_a_stamp_not_as_a_ruler():
+    """Every row you can PICK is the ruler's: its scratch layer, its
+    colour.  The row you are ON is not an option, so tick, label and
+    ring alike go on the STAMP's layer at the stamp's colour --
+    ByLayer -- which is what makes it stand out from the pickable
+    rows and read as the thing it would stamp."""
+    vm = newvm()
+    vm.loads('(ds:draw-ruler 352 nil)')            # 44", 17 rows
+    ruler = [d for d in live_entities(vm) if d.get(8) == 'DIMSTAMP RULER']
+    mine = [d for d in live_entities(vm) if d.get(8) == 'TEXT']
+    # 16 option ticks + the spine, 16 option labels, all in the ruler's
+    # colour
+    assert len(ruler) == 33, len(ruler)
+    assert all(d.get(62) == 3 for d in ruler), ruler
+    # the current row: its tick, its label and its ring, all ByLayer
+    assert sorted(d.get(0) for d in mine) == ['CIRCLE', 'LINE', 'MTEXT'], mine
+    assert all(62 not in d for d in mine), mine
+    assert [d[1] for d in mine if d.get(0) == 'MTEXT'] == ['44"'], mine
+    print("ok  current row  -> drawn as a stamp (stamp layer, ByLayer),"
+          " not as one of the ruler's options")
+
+
+def test_the_ring_is_bigger_than_it_was_and_is_a_knob():
+    vm = newvm()
+    _, _, rows = vm.loads('(ds:draw-ruler 352 nil)')
+    gap = rows[1][1] - rows[0][1]
+    ring = [d.get(40) for d in live_entities(vm) if d.get(0) == 'CIRCLE'][0]
+    assert abs(ring / gap - 0.26) < 1e-9, (ring, gap)   # was 0.18
+    # ...and it is the knob that says so
+    vm = newvm()
+    vm.loads('(setq ds:*ring-frac* 0.4)')
+    _, _, rows = vm.loads('(ds:draw-ruler 352 nil)')
+    gap = rows[1][1] - rows[0][1]
+    ring = [d.get(40) for d in live_entities(vm) if d.get(0) == 'CIRCLE'][0]
+    assert abs(ring / gap - 0.4) < 1e-9, (ring, gap)
+    print("ok  ring         -> bigger than a tick's reach, and"
+          " ds:*ring-frac* sets it")
 
 
 def test_ruler_is_pinned_to_the_view_and_scales_with_it():
@@ -568,6 +604,8 @@ if __name__ == '__main__':
     test_missing_text_style_is_made_and_reported()
     test_existing_text_style_is_left_alone()
     test_draw_ruler_geometry()
+    test_the_current_row_is_drawn_as_a_stamp_not_as_a_ruler()
+    test_the_ring_is_bigger_than_it_was_and_is_a_knob()
     test_ruler_is_pinned_to_the_view_and_scales_with_it()
     test_first_placement_has_no_ruler_yet()
     test_ruler_is_cleaned_up_at_the_end()

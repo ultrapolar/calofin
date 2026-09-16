@@ -20,8 +20,15 @@
 ;;; the near eighth-inch steps are the smallest text and the shortest
 ;;; ticks, quarters and halves step up from there, and the whole-inch
 ;;; jumps (1", 2", 3" either way) are the tallest and boldest, exactly
-;;; where the deepest mark on a tape measure would be.  A small CIRCLE
-;;; rides the row that is the CURRENT value.
+;;; where the deepest mark on a tape measure would be.
+;;;
+;;; The CURRENT row is not one of the options -- it is where you
+;;; already are -- so it is drawn as a stamp rather than as a ruler:
+;;; tick, label and a RING round the spine all go on the stamp's own
+;;; layer at the stamp's own colour, while every row you can pick
+;;; stays the ruler's.  That is what makes the row you are on read
+;;; differently from the rows you can click, and read as the thing it
+;;; would stamp.
 ;;;
 ;;; The ruler is pinned to the SCREEN, not to the drawing: it is drawn
 ;;; down a strip near the left of whatever the current view is showing
@@ -94,7 +101,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.2")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.3")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -151,6 +158,17 @@
 (setq ds:*ruler-txt-frac* 0.5)     ; the biggest row label's height,
                                     ; as a fraction of the row spacing
 (setq ds:*ruler-tick-frac* 0.6)    ; the longest tick, same measure
+(setq ds:*ring-frac* 0.26)         ; the ring round the CURRENT row, as
+                                    ; a fraction of the row spacing.
+                                    ; Bigger than a tick is long on
+                                    ; purpose: the row you are on should
+                                    ; be the first thing the eye finds
+(setq ds:*current-color* nil)      ; ACI colour of that current row --
+                                    ; nil is ByLayer, and since the row
+                                    ; is drawn on the STAMP's layer that
+                                    ; means it reads in exactly the
+                                    ; colour the stamp will.  A number
+                                    ; here overrides that
 (setq ds:*ruler-reach* 6.0)        ; how far right of the spine, in row
                                     ; spacings, a click still counts as
                                     ; picking a row rather than as an
@@ -446,16 +464,44 @@
 (defun ds:erase-ents (ents / e)
   (foreach e ents (if (and e (entget e)) (entdel e))))
 
+;; A ruler stroke from (X1 Y1) to (X2 Y2) on LAY, in COL -- or ByLayer
+;; when COL is nil, which is how the current row takes the stamp
+;; layer's own colour.
+(defun ds:ruler-line (x1 y1 x2 y2 lay col)
+  (entmakex (append (list '(0 . "LINE") '(100 . "AcDbEntity")
+                          (cons 8 lay))
+                    (if col (list (cons 62 col)))
+                    (list '(100 . "AcDbLine")
+                          (cons 10 (list x1 y1 0.0))
+                          (cons 11 (list x2 y2 0.0))))))
+
+;; The ring that marks the current row, same layer and colour rule.
+(defun ds:ruler-ring (x y r lay col)
+  (entmakex (append (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                          (cons 8 lay))
+                    (if col (list (cons 62 col)))
+                    (list '(100 . "AcDbCircle")
+                          (cons 10 (list x y 0.0))
+                          (cons 40 r)))))
+
 ;; Draw the ruler down its strip of the CURRENT VIEW for the current
 ;; value (TOTAL-EIGHTHS, HASFEET), one row per suggestion plus a
-;; circled CURRENT row among them, the whole thing centred vertically
+;; ringed CURRENT row among them, the whole thing centred vertically
 ;; in the view.  Returns (ENTS BOX ROWS): the entities drawn (for
 ;; ds:erase-ents), BOX as (XMIN XMAX YTOL) for a click's hit test, and
 ;; ROWS as a list of (VALUE ROW-Y) pairs.
+;;
+;; Every row but one is an OPTION, and they are drawn alike: the
+;; ruler's own layer, the ruler's own colour.  The CURRENT row is not
+;; an option -- it is where you already are -- so tick, label and ring
+;; alike go on the STAMP's layer at the stamp's colour, which is what
+;; makes the row you are on read differently from the rows you can
+;; pick, and makes it read as what it would stamp.
 (defun ds:draw-ruler (total-eighths hasfeet / rows n i row val tier y
                           hgt tl spx ents lbl result view vx vy vw vh
-                          gap base)
+                          gap base rlay rcol)
   (cal:ensure-layer ds:*ruler-layer* ds:*ruler-color*)
+  (cal:ensure-layer ds:*layer* ds:*layer-color*)   ; the current row's
   (ds:ensure-style ds:*style*)
   (setq rows (cons (list total-eighths 'current)
                    (ds:suggestions total-eighths hasfeet)))
@@ -476,14 +522,12 @@
     (setq y (+ base (* i gap)))
     (setq hgt (ds:ruler-hgt tier gap))
     (setq tl  (ds:ruler-tick tier gap))
-    (setq ents (cons
-                (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
-                                (cons 8 ds:*ruler-layer*)
-                                (cons 62 ds:*ruler-color*)
-                                '(100 . "AcDbLine")
-                                (cons 10 (list spx y 0.0))
-                                (cons 11 (list (+ spx tl) y 0.0))))
-                ents))
+    ;; where you ARE is drawn as the stamp; what you can PICK is drawn
+    ;; as the ruler
+    (if (eq tier 'current)
+      (setq rlay ds:*layer*       rcol ds:*current-color*)
+      (setq rlay ds:*ruler-layer* rcol ds:*ruler-color*))
+    (setq ents (cons (ds:ruler-line spx y (+ spx tl) y rlay rcol) ents))
     ;; the ruler is drawn text too, so its rows stack the way a stamp
     ;; off that row will -- the label IS the preview
     (setq lbl (ds:stacked val hasfeet))
@@ -491,28 +535,17 @@
     ;; puts the label astride its own row
     (setq ents (cons (ds:mtext (list (+ spx tl (* gap 0.35))
                                      (+ y (/ hgt 2.0)))
-                               hgt lbl ds:*ruler-layer* ds:*ruler-color*)
+                               hgt lbl rlay rcol)
                      ents))
     (if (eq tier 'current)
-      (setq ents (cons
-                  (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                                  (cons 8 ds:*ruler-layer*)
-                                  (cons 62 ds:*ruler-color*)
-                                  '(100 . "AcDbCircle")
-                                  (cons 10 (list spx y 0.0))
-                                  (cons 40 (* gap 0.18))))
-                  ents)))
+      (setq ents (cons (ds:ruler-ring spx y (* gap ds:*ring-frac*)
+                                      rlay rcol)
+                       ents)))
     (setq result (cons (list val y) result))
     (setq i (1+ i)))
-  (setq ents (cons
-              (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
-                              (cons 8 ds:*ruler-layer*)
-                              (cons 62 ds:*ruler-color*)
-                              '(100 . "AcDbLine")
-                              (cons 10 (list spx base 0.0))
-                              (cons 11 (list spx (+ base (* (- n 1) gap))
-                                             0.0))))
-              ents))
+  (setq ents (cons (ds:ruler-line spx base spx (+ base (* (- n 1) gap))
+                                  ds:*ruler-layer* ds:*ruler-color*)
+                   ents))
   (list ents
         (list (- spx (/ gap 2.0)) (+ spx (* gap ds:*ruler-reach*))
               (/ gap 2.0))
