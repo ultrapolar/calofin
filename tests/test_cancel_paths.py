@@ -73,7 +73,7 @@ for _p in lsp_files(LISP_DIR):
 #: drawing, or open a DCL dialog first -- no prompt for an Esc to land on
 NO_PROMPT = {
     'ABFIND', 'ABMOVE', 'ABPCREATE', 'CDCALLOUT', 'POOLDEMO',
-    'LAZFORM', 'LAZFORMCOVER', 'LAZSPA', 'LAZSTEP', 'LAZTXT',
+    'LAZFORM', 'LAZFORMCOVER', 'LAZSIDE', 'LAZSPA', 'LAZSTEP', 'LAZTXT',
     # its pre-flight check runs before its first question, and PADDLE
     # is in another file this VM never loads, so it names the missing
     # stage and stops -- which is the behaviour, not a gap.

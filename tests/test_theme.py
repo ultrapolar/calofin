@@ -206,12 +206,12 @@ for tool in sorted(mirror_shared.TOOLS):
     for local, cal in swap.items():
         if cal in ('cal:ink', 'cal:ui'):
             COPIES.append((tool, mirror_shared.TOOLS[tool]['src'], local, cal))
-#: thirteen tools carry the ink table and LAZPANEL carries the
+#: fourteen tools carry the ink table and LAZPANEL carries the
 #: interface probe its toolbar icon is painted from
-check('the mirror says fourteen copies exist', len(COPIES) == 14,
+check('the mirror says fifteen copies exist', len(COPIES) == 15,
       '%d: %r' % (len(COPIES), [c[0] for c in COPIES]))
-check('thirteen of them are the ink table',
-      len([c for c in COPIES if c[3] == 'cal:ink']) == 13)
+check('fourteen of them are the ink table',
+      len([c for c in COPIES if c[3] == 'cal:ink']) == 14)
 
 for tool, src, local, cal in COPIES:
     vm = VM()
@@ -280,7 +280,7 @@ check('clearing the override (empty string) falls back to the table',
       ev(vm, "(cal:ink 'auto 'flag)") == 1)
 
 print('== the item-type roles: the three review tools agree with the library ==')
-#: unlike the fourteen-copy check above, this is NOT every tool with an
+#: unlike the fifteen-copy check above, this is NOT every tool with an
 #: ink table -- POOL, SPA, ABFIND and the rest have no flag/arc/olap
 #: knobs and were never asked to grow the item-type table, so holding
 #: them to it would fail them for a role they do not use.  Only the

@@ -189,9 +189,9 @@ assert [str(x) for x in vm.globals['test:*pages*']] == flat_rows, \
     "lzp:pages does not flatten lzp:*rows* in strip order"
 
 opens = [l for l in dcl if l.endswith(' : dialog {')]
-# one dialog per page, plus the pin, hide and settings editors
-assert len(opens) == len(PAGES) + 3, (
-    "%d dialogs for %d pages + the pin, hide and settings editors"
+# one dialog per page, plus the pin, hide, settings and names editors
+assert len(opens) == len(PAGES) + 4, (
+    "%d dialogs for %d pages + the pin, hide, settings and names editors"
     % (len(opens), len(PAGES)))
 assert 'lazpanel_pins : dialog {' in opens, \
     "the pin editor dialog is not in the generated file"
@@ -199,6 +199,8 @@ assert 'lazpanel_hidden : dialog {' in opens, \
     "the hide editor dialog is not in the generated file"
 assert 'lazpanel_set : dialog {' in opens, \
     "the settings dialog is not in the generated file"
+assert 'lazpanel_names : dialog {' in opens, \
+    "the names editor dialog is not in the generated file"
 depth = 0
 for line in dcl:
     assert line.count('"') % 2 == 0, "odd quotes: %r" % line
@@ -2181,6 +2183,150 @@ for k in ('CalofinTheme', 'CalofinErrorDir', 'StockCover_Folder'):
     assert '"%s"' % k in setsrc, k
 print("   %d colour keys plus the theme and the two folders, all real"
       % len(inkkeys))
+
+
+print("== LAZNAME: names of the drafter's own, end to end ==")
+# Two things a drafter can rename per machine: the name they TYPE to
+# summon a tool, and the words its BUTTON says.  Neither touches the
+# shipped tables, so everything make check reads is unchanged -- which
+# is exactly why the rules have to be enforced here instead.
+
+# an alias is a wrapper defun, the shape DCE already is, built as data
+nv = fresh()
+nv.loads('(setq t:*made* (lzp:alias-make "PL" "POOL"))')
+assert nv.globals.get('t:*made*'), "alias-make refused a good name"
+assert str(nv.globals.get('t:*x*') or '') == ''
+nv.loads('(setq t:*bound* (lzp:alias-taken-p "PL"))')
+assert nv.globals.get('t:*bound*'), "the alias did not define a command"
+# the wrapper resolves its target at CALL time, so the alias may be
+# applied before the tool it names is loaded -- the standalone tier
+# gives no load-order guarantee and this is what makes that safe
+nv.loads('(defun c:POOL () (setq t:*ran* "POOL") (princ))')
+nv.loads('(c:PL)')
+assert str(nv.globals.get('t:*ran*')) == 'POOL', \
+    "the alias did not reach its tool: %r" % nv.globals.get('t:*ran*')
+print("   an alias is a wrapper defun and resolves its tool when it is called")
+
+# a name the session already answers to is REFUSED.  This is the one
+# that matters: (defun c:CHECK ...) would retarget check_drawing.lsp for
+# the whole session, and DIMARCCHECK -- which is (c:CHECK) -- with it.
+nv.loads('(setq t:*why* (lzp:alias-why "LAZPANEL" "POOL"))')
+assert nv.globals.get('t:*why*') and 'already runs' in str(nv.globals['t:*why*']), \
+    "an alias was allowed to shadow a real command: %r" % nv.globals.get('t:*why*')
+nv.loads('(setq t:*clob* (lzp:alias-make "LAZPANEL" "POOL"))')
+assert not nv.globals.get('t:*clob*'), "alias-make clobbered a live command"
+print("   a name the session already answers to is refused, not shadowed")
+
+# a name read cannot survive is refused BEFORE it reaches read:
+# (read "c:MY TOOL") answers c:my and (read "c:") answers c:, silently
+for bad, why in (('MY TOOL', 'a space'), ('2FAST', 'a leading digit'),
+                 ('', 'nothing at all'), ('WAYTOOLONGANAME', 'twelve characters')):
+    nv.loads('(setq t:*s* (lzp:alias-shape-p "%s"))' % bad)
+    assert not nv.globals.get('t:*s*'), "%s was accepted as a name" % why
+nv.loads('(setq t:*s* (lzp:alias-shape-p "PL2"))')
+assert nv.globals.get('t:*s*'), "a perfectly good name was refused"
+print("   a name that read would mangle is refused before read ever sees it")
+
+# a caption carrying the store's own separators, or a quote that would
+# make every page of the panel unloadable, or one long enough to push a
+# page past the screen check_dcl cannot see
+for bad in ('a;b', 'a=b', 'a"b', 'x' * 41):
+    nv.loads('(setq t:*c* (lzp:cap-why "%s"))' % bad.replace('"', '\\"'))
+    assert nv.globals.get('t:*c*'), "a caption of %r was accepted" % bad[:12]
+nv.loads('(setq t:*c* (lzp:cap-why "Pool, the way I say it"))')
+assert not nv.globals.get('t:*c*'), "an ordinary caption was refused"
+print("   a caption that would break the store or the DCL is refused")
+
+# the override is consulted in the ONE accessor, so a rename reaches
+# every surface the panel has: the grid, Find's rows, Find's search and
+# CALHELP, none of which had to change to make that true
+cv = fresh()
+cv.loads('(setq lzp:*capsof* (list (cons "POOL" "My own pool")))')
+cv.loads('(setq t:*cap* (lzp:caption "POOL"))')
+assert str(cv.globals['t:*cap*']) == 'My own pool', cv.globals['t:*cap*']
+cv.loads('(setq t:*row* (lzp:hitline "POOL" (list "POOL")))')
+assert 'My own pool' in str(cv.globals['t:*row*']), cv.globals['t:*row*']
+cv.loads('(setq t:*m* (lzp:matches "my own"))')
+assert 'POOL' in [str(x) for x in (cv.globals['t:*m*'] or [])], \
+    "Find cannot search the drafter's own words"
+cv.loads('(setq t:*d* (lzp:dcl-one (assoc "Layout" lzp:*groups*)))')
+assert 'My own pool' in '\n'.join(str(l) for l in cv.globals['t:*d*']), \
+    "the grid button kept the shipped caption"
+# and the shipped table is untouched, since it is what the VB catalog
+# is generated from
+cv.loads('(setq t:*orig* (cadr (assoc "POOL" lzp:*captions*)))')
+assert str(cv.globals['t:*orig*']) == 'Pool layout', cv.globals['t:*orig*']
+print("   a renamed caption reaches the grid, Find and CALHELP, table untouched")
+
+# the store: NAME=VALUE joined on ';', filtered through the roster on
+# read exactly as a stale pin is, and an empty value is not written
+kv = setvm([0])
+kv.loads('(defun vl-registry-read (k n) "POOL=PL;NOSUCHTOOL=XX")')
+kv.loads('(setq t:*a* (lzp:kv-read "Alias"))')
+# a cons pair is not a Python list, so the shape is asserted in Lisp
+kv.loads('(setq t:*n* (length t:*a*)'
+         '      t:*k* (car (car t:*a*))'
+         '      t:*v* (cdr (car t:*a*)))')
+assert str(kv.globals['t:*n*']) == '1', \
+    "a stale name survived the roster filter: %r" % kv.globals['t:*n*']
+assert str(kv.globals['t:*k*']) == 'POOL' and str(kv.globals['t:*v*']) == 'PL', \
+    "the pair did not come back intact: %r=%r" % (kv.globals['t:*k*'], kv.globals['t:*v*'])
+kv.loads('(setq t:*w* "") (defun vl-registry-write (k n s) (setq t:*w* s) s)')
+kv.loads('(lzp:kv-write "Alias" (list (cons "POOL" "PL") (cons "SPA" "")))')
+assert str(kv.globals['t:*w*']) == 'POOL=PL', \
+    "an empty value was written: %r" % kv.globals['t:*w*']
+print("   the map stores NAME=VALUE, drops a stale name and skips an empty one")
+
+# end to end: pick a tool, type a name, accept -- and cancel writes none.
+# The dialog opens on the first tool of the roster, so what the alias
+# should land against is asked for rather than assumed.
+
+
+def namevm(rc, click=None, val=''):
+    """Like setvm, but every registry write is kept: LAZNAME writes two
+    values and the last one would otherwise be the only one seen."""
+    v = setvm([rc], click=click, val=val)
+    v.loads('(setq t:*writes* nil)')
+    v.loads('(defun vl-registry-write (k n s)'
+            ' (setq t:*writes* (cons (strcat n "|" s) t:*writes*)) s)')
+    return v
+
+
+def writes(v):
+    return [str(x) for x in (v.globals.get('t:*writes*') or [])]
+
+
+fv = fresh()
+fv.loads('(setq t:*first* (car (lzp:commands)))')
+FIRST = str(fv.globals['t:*first*'])
+
+vm = namevm(1, click='name_alias', val='PL')
+run(vm, 'c:LAZNAME', 'name-accept')
+assert str(vm.globals.get('stub:*dlgname*')) == 'lazpanel_names', \
+    "LAZNAME opened %r" % vm.globals.get('stub:*dlgname*')
+assert ('Alias|%s=PL' % FIRST) in writes(vm), \
+    "the alias was not stored against %s: %r" % (FIRST, writes(vm))
+assert any('answer to a name of yours' in str(p) for p in vm.printed), vm.printed
+print("   typing a name and accepting stores it against the tool that was picked")
+
+vm = namevm(0, click='name_alias', val='PL')
+run(vm, 'c:LAZNAME', 'name-cancel')
+assert not [w for w in writes(vm) if 'PL' in w], \
+    "cancel stored the edit: %r" % writes(vm)
+print("   cancel re-reads the store, as the pin and hide editors do")
+
+# OK is guarded, not merely greyed -- DCL fires an edit box's action
+# before the default button's, so the greying is never the stop
+gn = stubbed()
+gn.loads('(setq lzp:*namesel* "POOL")')
+gn.loads('(setq lzp:*aliases* (list (cons "POOL" "2BAD")))')
+gn.loads('(setq stub:*done* nil) (lzp:name-ok)')
+assert gn.globals.get('stub:*done*') is None, \
+    "OK accepted a name that cannot be a command"
+gn.loads('(setq lzp:*aliases* (list (cons "POOL" "PL"))) (lzp:name-ok)')
+assert str(gn.globals.get('stub:*done*')) == '1', \
+    "OK refused a good name: %r" % gn.globals.get('stub:*done*')
+print("   OK re-checks rather than trusting the greying")
 
 
 print("== LAZPANELVER ==")

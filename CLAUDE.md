@@ -312,7 +312,7 @@ point of use through `tool:ink` (`cal:ink` in the grouped build, one
 swap line in `tools/mirror_shared.py`), by role: `fade`, `guide`,
 `dim`, `hi`. A knob left as a NUMBER is used exactly as given. Resolve
 once into a local before a loop -- the measurement is a COM round
-trip. `tests/test_theme.py` pins the table and holds all fourteen
+trip. `tests/test_theme.py` pins the table and holds all fifteen
 copies against the library's; `CALSET` writes the `CalofinTheme`
 override for a drafter whose screen the measurement gets wrong.
 

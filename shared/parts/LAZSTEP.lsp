@@ -1,23 +1,42 @@
 ;;; ======================================================================
-;;; LAZSTEP.lsp  --  say how many steps, then fill the drawing in
+;;; LAZSTEP.lsp  --  type the step count and the drawing follows it
 ;;; ----------------------------------------------------------------------
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
 ;;;
-;;; Commands:  LAZSTEP        pick a step type, say how many steps, fill
+;;; Commands:  LAZSTEP        pick a step type, type the step count, fill
 ;;;                           the drawing in and run the step routine
 ;;;            LAZSTEPVER     print the loaded version
 ;;;
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
-;;; TWO PAGES, AND THE SECOND ONE IS BUILT FROM THE FIRST.  Page one
-;;; asks which of the three step routines this is -- CORNERSTP,
-;;; HEMISTEP or NORMIESTEP -- HOW MANY STEPS, and the handful of
-;;; questions that routine asks once for the whole run.  Page two is a
-;;; DRAWING GENERATED FOR THAT COUNT: three steps draw three treads,
-;;; eight draw eight, and every dimension the count implies is on it
-;;; with a box against it.  Nothing here is a stored picture; the chart
-;;; is built by lzt:chart from the type and the number.
+;;; ONE PAGE, AND THE COUNT IS ON IT.  The drawing stands on the LEFT
+;;; and everything asked about it in the column beside it: which of the
+;;; three step routines this is -- CORNERSTP, HEMISTEP or NORMIESTEP --
+;;; HOW MANY STEPS, the handful of questions that routine asks once for
+;;; the whole run, and a box against every dimension the count implies.
+;;; Nothing here is a stored picture; the chart is built by lzt:chart
+;;; from the type and the number.
+;;;
+;;; TYPE THE COUNT AND THE PICTURE FOLLOWS IT.  Three steps draw three
+;;; treads, eight draw eight, and the boxes come with them: put 5 in
+;;; the count and there are five tread boxes, five width boxes and six
+;;; depth boxes to fill in, no more and no fewer.  Until a count is
+;;; given the picture is a NOMINAL one (lzt:*steps-nominal*) and every
+;;; dimension box on it is greyed, because a box that has no step to
+;;; belong to is not a box anybody should be typing into.  That is what
+;;; the count being a field rather than a page of its own buys: the
+;;; drawing is the answer to the question standing next to it.
+;;;
+;;; It used to be two pages -- the count on the first, the drawing on
+;;; the second -- so the picture the count describes was the one thing
+;;; you could not see while typing it, and changing a 5 to a 6 meant
+;;; Back, retype, Next.  DCL cannot add a tile to a dialog that is
+;;; already up, so a new count still closes the page and reopens it;
+;;; what changed is that it reopens as ITSELF, in the same place, with
+;;; everything typed still in it (lzt:*vals* is keyed and outlives the
+;;; rebuild) -- so the count reads as a field that redraws rather than
+;;; as a page boundary.
 ;;;
 ;;; That is the whole point.  At the command line the step count is
 ;;; never a question -- the tread loop repeats until Enter -- so the
@@ -28,6 +47,14 @@
 ;;; waiting for an Enter nobody typed, and a form of N rows drives a
 ;;; run of N steps.
 ;;;
+;;; BEADING IS ASKED HERE TOO, and all of it: whether to bead at all,
+;;; which steps carry the bead along their side walls, and which step
+;;; numbers when that answer is Some.  The three routines hand the
+;;; beading itself to AUTOBEAD and ask those three questions in a chain
+;;; at the end of the run; every one of them now takes a form answer,
+;;; so a sheet that says No beads nothing and never mentions it again.
+;;; The side to bead TOWARD stays a pick in the drawing.
+;;;
 ;;; WHAT THE DRAWING SHOWS.  A plan view of the type picked, and under
 ;;; it the side profile every one of the three draws the same way --
 ;;; the flight in elevation, reading down and to the left, N risers and
@@ -36,32 +63,36 @@
 ;;; depth chain is the part that is hardest to hold in your head at the
 ;;; command line, and it is exactly what the routines ask for.
 ;;;
-;;; EACH PAGE SAYS WHAT IT IS ABOUT TO DO.  Page one carries boxes with
-;;; two different readers -- a measurement goes through cal:formanswer, the
-;;; step count and the bench step through lzt:int -- and both turn what
-;;; they cannot use into "not answered".  "3.5" is the case that
-;;; separates them: a perfectly good measurement, and not a step number
-;;; at all.  A state line on each page names a box in that position and
-;;; holds Next or Insert back until it is fixed; page one's is the same
-;;; tile the count refusal writes to, and lzt:countwhy is the one rule
-;;; both the live warning and that refusal read, so they cannot come to
-;;; different conclusions.  With nothing wrong, page two's line is the
-;;; hand-off: how many dimensions are filled and which letters the
-;;; routine will still ask for.
+;;; THE PAGE SAYS WHAT IT IS ABOUT TO DO, ON TWO LINES.  The form
+;;; carries boxes with two different readers -- a measurement goes
+;;; through cal:formanswer, the step count and the bench step through
+;;; lzt:int -- and both turn what they cannot use into "not answered".
+;;; "3.5" is the case that separates them: a perfectly good
+;;; measurement, and not a step number at all.  The line under the
+;;; count (lzt:p1state) is the run's: the count, then a once-only box
+;;; that will be dropped.  The line above the buttons (lzt:p2state) is
+;;; the hand-off: how many dimensions are filled and which letters the
+;;; routine will still ask for.  INSERT IS HELD BACK BY EITHER of them,
+;;; and lzt:countwhy is the one rule all three of the count's readers
+;;; use -- the live warning, the redraw and the refusal at the gate --
+;;; so they cannot come to different conclusions.
 ;;;
 ;;; ZERO INSTALL, like LAZFORM and LAZPANEL: the dialog is plain DCL
 ;;; written to the temp folder at run time and the chart is drawn with
 ;;; vector_image, so there is no artwork file to ship and nothing to
-;;; NETLOAD.  Unlike LAZFORM the file is rewritten each time a page is
-;;; opened, because page two's DCL depends on the count -- N rows of
-;;; boxes cannot be a static dialog.
+;;; NETLOAD.  Unlike LAZFORM the file is rewritten each time the page
+;;; is opened, because its DCL depends on the count -- N rows of boxes
+;;; cannot be a static dialog.
 ;;;
 ;;; DCL HEIGHT IS A HARD FAILURE MODE.  A dialog taller than the screen
 ;;; does not open, and nothing here can measure a screen: N rows of
 ;;; boxes grow the page linearly, so the count is capped (lzt:*max-
-;;; steps*, 8) and the depth boxes are packed two to a row.  A larger
-;;; number is refused on page one with a message rather than opening a
-;;; page that might not fit.
+;;; steps*, 8), the depth boxes are packed two to a row, and the answer
+;;; column SPLITS IN TWO once it is taller than lzt:*colbudget* -- the
+;;; page is as tall as its longest column, so a column that has grown
+;;; past the budget is wrapped rather than shipped.  A count past the
+;;; ceiling is refused with a message on the line under the box rather
+;;; than by building a page that might not open.
 ;;;
 ;;; WHY THE BOXES SIT WHERE THEY DO.  DCL packs tiles into rows and
 ;;; columns -- no absolute positioning, no overlapping, no z-order --
@@ -104,7 +135,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v1.8")
+(setq *lazstep-version* "v2.0")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -159,11 +190,36 @@
 ;;  was generated for, up to this number (ChartCatalog.MaxSteps).
 (setq lzt:*max-steps* 8)
 
+;;  WHAT THE PICTURE SHOWS BEFORE A COUNT IS TYPED.  The page opens with
+;;  the count box empty -- the form invents no answers, and steps is an
+;;  answer that TRAVELS -- but a page with no drawing on it would be a
+;;  page with nothing to read.  So the chart is drawn for this many
+;;  steps and every dimension box on it is greyed until a real count
+;;  is given, which is also what makes "type the count and the boxes
+;;  come alive" the first thing the page teaches.
+(setq lzt:*steps-nominal* 3)
+
 ;; The chart column: width in cells, its total height in rows spread
 ;; over the bands, and the edit_width of a box wedged into the drawing.
 (setq lzt:*chart-w* 58)
 (setq lzt:*chart-h* 20)
 (setq lzt:*wedge-ed* 5)
+
+;;  HOW TALL THE ANSWER COLUMN MAY GET before it is split in two.  The
+;;  page is as tall as its longest column and the count, the once-only
+;;  questions, the widths and the depths now share one page, so the
+;;  column that carries them all grows past the chart beside it at the
+;;  larger counts.  In LINES of generated DCL rather than rows on
+;;  screen -- which is what lzt:packcols counts -- so it is a budget to
+;;  tune against tools/check_dcl.py, not a measurement.
+(setq lzt:*colbudget* 34)
+
+;;  How wide the hint and state lines are, in character cells.  Wider
+;;  than the boxes they sit under, because the page is as tall as its
+;;  longest column and every sentence that does not fit on one line is
+;;  another row of that height; the drawing and two columns of boxes
+;;  are wider than this, so nothing here decides the dialog's width.
+(setq lzt:*hint-w* 96)
 
 ;; Where the dialog remembers its position between restarts (the
 ;; AutoCAD profile, via setenv), and where a sheet's last accepted
@@ -473,10 +529,25 @@
 ;;;  prompt does not list falls through to the prompt anyway, and the
 ;;;  hint says they are ignored on a plain corner.
 
+;;;  BEADING IS THREE QUESTIONS, not one.  All three routines end the
+;;;  same way: bead at all, which steps carry the bead along their side
+;;;  walls, and -- for Some -- which step numbers.  They were a chain of
+;;;  live prompts with only the first of them form-answerable, so a
+;;;  sheet that said "Yes" still stopped twice at the command line after
+;;;  the drawing was finished.  All three take a form answer now.  The
+;;;  side to bead TOWARD is a pick and stays in the drawing.
+;;;
+;;;  A TEXT row is a box whose answer is passed through as the string it
+;;;  was typed as: "1 3 5" is a list of step numbers and neither a
+;;;  measurement nor a whole number, so neither reader would take it.
+
 (setq lzt:*ask-common*
-  '(("dims"    "LIST" "Dimension the steps"   ("(ask)" "Yes" "No"))
-    ("profile" "LIST" "Add a side profile"    ("(ask)" "Yes" "No"))
-    ("bead"    "LIST" "Bead the steps"        ("(ask)" "Yes" "No"))))
+  '(("dims"      "LIST" "Dimension the steps"   ("(ask)" "Yes" "No"))
+    ("profile"   "LIST" "Add a side profile"    ("(ask)" "Yes" "No"))
+    ("bead"      "LIST" "Beading required"      ("(ask)" "Yes" "No"))
+    ("beadsides" "LIST" "Beaded side walls on"
+     ("(ask)" "All" "Some" "None"))
+    ("beadnums"  "TEXT" "...those step numbers" ())))
 
 (setq lzt:*asks*
   '(("CORNERSTP"
@@ -496,8 +567,13 @@
      ("crown"       "DIST" "Last step to the crown (NA = none)" ())
      ("boundary"    "LIST" "Draw the boundary"
       ("(ask)" "Yes" "No")))
+    ;; NORMIESTEP's ONE WIDTH IS NOT HERE.  It is a dimension on the
+    ;; drawing -- the letter W, standing off the run it measures -- so
+    ;; the drawing carries its box.  It used to be in both places
+    ;; because the count and the drawing were separate pages and you
+    ;; could meet either first; on one page that is two tiles with one
+    ;; key, which is not a dialog DCL will open.
     ("NORMIESTEP"
-     ("width"       "DIST" "Step width, the whole run" ())
      ("treat"       "LIST" "Corner treatment"
       ("(ask)" "Square" "Radius" "Cut" "NotGiven"))
      ("treat-sz"    "DIST" "Treatment size" ())
@@ -521,7 +597,6 @@
 (setq lzt:*chart* nil)          ; the chart generated for that count
 (setq lzt:*focus* nil)          ; the key whose box has the caret
 (setq lzt:*pos* nil)            ; where the dialog was last standing
-(setq lzt:*page* 1)             ; which page is open
 (setq lzt:*go* nil)             ; the type a tab click asked for
 (setq lzt:*msg* "")             ; what page one has to say about the count
 
@@ -629,9 +704,28 @@
       (if (not (member tr '("Radius" "Cut")))
         (setq out (cons "treat-sz" out)))
       (if (not (= tr "Cut")) (setq out (cons "cutgiven" out)))))
-  (if (and lzt:*chart* (= (lzt:selword "profile") "No"))
-    (foreach dd (lzt:c-dims lzt:*chart*)
-      (if (lzt:depthkey (cadr dd)) (setq out (cons (cadr dd) out)))))
+  ;; the bead chain closes behind its own answers: nothing is asked
+  ;; about side walls on a run that is not being beaded, and the step
+  ;; numbers are only a question when the answer is Some.  "(ask)" at
+  ;; the head of it leaves both open -- the prompt's own default is
+  ;; Yes, so a chain greyed on an unanswered question would hide the
+  ;; questions the run is most likely to reach
+  (if (= (lzt:selword "bead") "No")
+    (setq out (append (list "beadsides" "beadnums") out))
+    (if (/= (lzt:selword "beadsides") "Some")
+      (setq out (cons "beadnums" out))))
+  ;; UNTIL A COUNT IS GIVEN the drawing is the nominal one, and not one
+  ;; of its dimensions is a question this run will reach: nothing on it
+  ;; is live, nothing on it is complained about, nothing on it travels.
+  ;; One rule, so the greying, the state line and lzt:form cannot come
+  ;; apart.  A run with no side profile asks for no depths either.
+  (if lzt:*chart*
+    (if (null lzt:*steps*)
+      (foreach dd (lzt:c-dims lzt:*chart*)
+        (setq out (cons (cadr dd) out)))
+      (if (= (lzt:selword "profile") "No")
+        (foreach dd (lzt:c-dims lzt:*chart*)
+          (if (lzt:depthkey (cadr dd)) (setq out (cons (cadr dd) out)))))))
   out)
 
 ;; Grey what page one carries and this run will not ask about.  Only
@@ -647,14 +741,24 @@
   (foreach d (lzt:keys lzt:*chart*)
     (mode_tile d (if (member d noask) 1 0))))
 
+;; Both halves of one page.  They touch disjoint sets of keys -- the
+;; once-only questions and the dimensions on the drawing -- and both
+;; read the same lzt:skip, so a dropdown that opens or closes a
+;; question moves whichever half owns it.
+(defun lzt:grey ( )
+  (lzt:p1grey)
+  (lzt:p2grey))
+
 ;; A dropdown changed: remember it, and re-grey what that answer opens
 ;; or closes.
 (defun lzt:p1pick (stem v)
   (lzt:sput stem (atoi v))
-  (lzt:p1grey)
-  ;; direction, bench and the corner treatment all move lzt:skip, so a
-  ;; box that was greyed a moment ago may be live now
-  (lzt:p1restate)
+  ;; direction, bench, the corner treatment and the bead chain all move
+  ;; lzt:skip, so a box that was greyed a moment ago may be live now --
+  ;; and profile moves the DEPTH boxes on the drawing, which is why the
+  ;; whole page is re-greyed rather than the run block alone
+  (lzt:grey)
+  (lzt:restate)
   (princ))
 
 ;;; -------------------- what the page still owes -------------------------
@@ -690,12 +794,15 @@
 
 ;;  -------- page one --------
 
-;; The typed boxes page one carries: a LIST is a dropdown and cannot be
-;; mistyped, and a greyed question is not asked at all.
+;; The typed boxes the run block carries whose contents can be WRONG.
+;; A LIST is a dropdown and cannot be mistyped; a TEXT box is passed
+;; through as the string it holds, so it has no reader to fail either.
+;; A greyed question is not asked at all.
 (defun lzt:p1boxes ( / noask out d)
   (setq noask (lzt:skip))
   (foreach d (lzt:asks)
-    (if (and (/= (cadr d) "LIST") (not (member (car d) noask)))
+    (if (and (not (member (cadr d) '("LIST" "TEXT")))
+             (not (member (car d) noask)))
       (setq out (cons d out))))
   (reverse out))
 
@@ -724,13 +831,19 @@
              "\" " (cdr bad) "."))
     (t
      (setq n (lzt:int (lzt:get "steps")))
-     (strcat (itoa n) (if (= n 1) " step" " steps")
-             " - Next builds the drawing to fill in."))))
+     (strcat (cal:plural n "step" "steps")
+             " - the drawing and its boxes are built for that many."))))
 
 ;; Hold Next back while the count is unusable or a box will be dropped.
-(defun lzt:p1restate ( / )
+;; BOTH LINES, AND THE ONE BUTTON THEY SHARE.  Insert is held back by
+;; either of them: a count that cannot be used and a box that would be
+;; silently dropped are both reasons the sheet is not ready to go, and
+;; a page with one button cannot have two opinions about it.
+(defun lzt:restate ( / )
   (set_tile "msg" (lzt:p1state))
-  (mode_tile "accept" (if (or (lzt:countwhy) (lzt:p1bad)) 1 0))
+  (set_tile "state" (lzt:p2state))
+  (mode_tile "accept"
+             (if (or (lzt:countwhy) (lzt:p1bad) (lzt:unreadable)) 1 0))
   (princ))
 
 ;;  -------- page two --------
@@ -768,6 +881,9 @@
     (bad
      (strcat (lzt:taglist bad)
              " is not a measurement - type a number, or NA, or clear it."))
+    ((null lzt:*steps*)
+     (strcat "Type a step count and the boxes come alive - one per tread,"
+             " one per width, one per drop."))
     ((zerop n)
      (strcat "Nothing on this drawing is live - " lzt:*type*
              " will ask for all of it."))
@@ -799,13 +915,9 @@
              (setq v (cdr (assoc k had))))
       (progn (lzt:put k v) (set_tile k v) (setq n (1+ n)))))
   (lzt:redraw)
-  (lzt:p2restate)
+  (lzt:restate)
   n)
 
-(defun lzt:p2restate ( / )
-  (set_tile "state" (lzt:p2state))
-  (mode_tile "accept" (if (lzt:unreadable) 1 0))
-  (princ))
 
 
 ;;; -------------------- what the routine is handed -----------------------
@@ -825,6 +937,12 @@
            (setq out (cons (cons (read (car k)) v) out))))
         ((= (cadr k) "INT")
          (if (setq v (lzt:int (lzt:get (car k))))
+           (setq out (cons (cons (read (car k)) v) out))))
+        ;; a TEXT answer is a STRING and travels as one: "1 3 5" is a
+        ;; list of step numbers the routine parses for itself, and an
+        ;; empty box is no answer at all rather than an empty list
+        ((= (cadr k) "TEXT")
+         (if (/= (setq v (cal:trim (lzt:get (car k)))) "")
            (setq out (cons (cons (read (car k)) v) out))))
         (t
          (setq a (cal:formanswer (lzt:get (car k))))
@@ -1081,77 +1199,42 @@
     (setq i (1+ i)))
   out)
 
-;; The DCL name of a page.
-(defun lzt:dlgname (p ty)
-  (strcat "lazstep_p" (itoa p) "_" (strcase ty t)))
+;; The DCL name of the page for a type.  One page now, so the type is
+;; the whole of the name.
+(defun lzt:dlgname (ty)
+  (strcat "lazstep_" (strcase ty t)))
 
 ;; One page-one field.
-(defun lzt:p1tile (d)
-  (if (= (cadr d) "LIST")
-      (strcat "    : popup_list { key = \"" (car d) "\"; label = \""
-              (caddr d) "\"; edit_width = 12; }")
-      (strcat "    : edit_box { key = \"" (car d) "\"; label = \""
-              (caddr d) "\"; edit_width = 8; }")))
+(defun lzt:p1tile (d ind)
+  (cond
+    ((= (cadr d) "LIST")
+     (strcat ind ": popup_list { key = \"" (car d) "\"; label = \""
+             (caddr d) "\"; edit_width = 12; }"))
+    ((= (cadr d) "TEXT")
+     (strcat ind ": edit_box { key = \"" (car d) "\"; label = \""
+             (caddr d) "\"; edit_width = 12; }"))
+    (t
+     (strcat ind ": edit_box { key = \"" (car d) "\"; label = \""
+             (caddr d) "\"; edit_width = 8; }"))))
 
-;; PAGE ONE: the type, the count, and the questions asked once.
-(defun lzt:dcl-p1 (ty / out d)
-  ;; out is consed newest-first and reversed once at the end, so this
-  ;; seed list reads BACKWARDS: the label second here puts it second in
-  ;; the file, after the line that opens the dialog.  The other way
-  ;; round emits an attribute before its own dialog, which is not DCL.
-  (setq out (list (strcat "  label = \"LazStep - " (lzt:title ty) "\";")
-                  (strcat (lzt:dlgname 1 ty) " : dialog {")))
-  (setq out (cons "  : row {" out))
-  (foreach d lzt:*types*
-    (setq out (cons (strcat "    : button { key = \"tab_" (car d)
-                            "\"; label = \"" (cadr d) "\"; }")
-                    out)))
-  (setq out (cons "  }" out))
-  (setq out (cons "  : boxed_column {" out))
-  (setq out (cons "    label = \"How many steps\";" out))
-  (setq out (cons (strcat "    : edit_box { key = \"steps\"; label = \""
-                          "Number of steps (1-" (itoa lzt:*max-steps*)
-                          ")\"; edit_width = 4; fixed_width = true; }")
-                  out))
-  ;; The state line, under the box it is mostly about.  The label here
-  ;; is only what it says before the page opens: lzt:p1restate rewrites
-  ;; it before the dialog is shown and on every change after that.
-  (setq out (cons (strcat "    : text { key = \"msg\"; width = 60; label = \""
-                          "The next page is a drawing built for that many"
-                          " steps, with a box on every dimension.\"; }")
-                  out))
-  (setq out (cons "  }" out))
-  (setq out (cons "  : boxed_column {" out))
-  (setq out (cons (strcat "    label = \"" (lzt:title ty) " (" ty
-                          ") - asked once for the run\";")
-                  out))
-  (foreach d (lzt:asks-of ty)
-    (setq out (cons (lzt:p1tile d) out)))
-  (setq out (cons "  }" out))
-  (setq out (cons "  spacer;" out))
-  (foreach d (lzt:hints ty)
-    (setq out (cons (strcat "  : text { width = 60; label = \"" d "\"; }")
-                    out)))
-  (setq out (cons "  : row {" out))
-  (setq out (cons (strcat "    : button { key = \"accept\"; label = \"Next >\";"
-                          " is_default = true; fixed_width = true; }")
-                  out))
-  (setq out (cons (strcat "    : button { key = \"cancel\"; label = \"Cancel\";"
-                          " is_cancel = true; fixed_width = true; }")
-                  out))
-  (setq out (cons "  }" out))
-  (reverse (cons "}" out)))
-
-;; What page one has to say, per type.
+;; What the page has to say in its static lines, per type.  Kept SHORT
+;; and set against lzt:*hint-w* rather than the narrower column the
+;; boxes are in: every one of these is a row of the page's height, and
+;; the page is now carrying the count, the run and the drawing at once.
 (defun lzt:hints (ty / out)
-  (setq out (list (strcat "The walls, the curve, the side to draw toward and"
-                          " the profile's pick all stay")
-                  "in the drawing.  Leave a box empty and the routine asks."))
+  (setq out (list (strcat "Type the step count and the drawing follows it:"
+                          " that many treads, widths and drops.")
+                  (strcat "The walls, the curve, the side to draw toward"
+                          " and the profile's pick stay in the drawing.")
+                  (strcat "NA in a width fits it to the walls or the curve."
+                          "  D1 drops into step 1, DA after the last.")
+                  (strcat "An empty box is asked at the command line - a box"
+                          " takes 24, or a feet-and-inches spelling.")))
   (if (= ty "CORNERSTP")
     (setq out (append out
-                (list (strcat "Measure and Steps-run are asked only when the"
-                              " selection turns up a corner diagonal or")
-                      "fillet; on a plain corner they are ignored."))))
+                (list (strcat "Measure and Steps-run matter only on a corner"
+                              " diagonal or fillet; a plain corner ignores"
+                              " them.")))))
   (if (= ty "HEMISTEP")
     (setq out (append out
                 (list "NA at the wall width or the crown means none."))))
@@ -1167,12 +1250,78 @@
         (strcat "          : edit_box { key = \"" (cadr d)
                 "\"; edit_width = " (itoa ed) "; label = \"" lbl "\"; }")))
 
-;; PAGE TWO: the drawing built for the count, with the boxes on it.
-(defun lzt:dcl-p2 (c / out d wk widths depths pair l)
-  (setq out (list (strcat "  label = \"LazStep - " (lzt:c-title c) ", "
-                          (itoa (length (lzt:treads c))) " steps\";")
-                  (strcat (lzt:dlgname 2 (lzt:c-type c)) " : dialog {")))
+;; The brace depth one generated line adds or removes.  Braces inside a
+;; quoted label are not structure -- a caption may legitimately hold
+;; one -- so the scan steps over the strings.
+(defun lzt:brace (s / i n d ch)
+  (setq i 1 n (strlen s) d 0)
+  (while (<= i n)
+    (setq ch (substr s i 1))
+    (cond
+      ((= ch "\"")
+       (setq i (1+ i))
+       (while (and (<= i n) (/= (substr s i 1) "\"")) (setq i (1+ i))))
+      ((= ch "{") (setq d (1+ d)))
+      ((= ch "}") (setq d (1- d))))
+    (setq i (1+ i)))
+  d)
+
+;; The answer column, split in two once it is past the budget.  The
+;; page is as tall as its longest column, and the count, the once-only
+;; questions, the widths and the depths now share one page: at eight
+;; steps that column runs well past the chart beside it.  Splitting is
+;; done on WHOLE BOXES -- a boxed_column cut in half is not a box --
+;; which is why the lines are gathered into brace-balanced blocks
+;; first.  LAZFORM makes the same split for the same reason.
+(defun lzt:packcols (lines / blocks blk d l tot run half a b out)
+  (setq blocks nil blk nil d 0)
+  (foreach l lines
+    (setq blk (cons l blk) d (+ d (lzt:brace l)))
+    (if (= d 0) (setq blocks (cons (reverse blk) blocks) blk nil)))
+  (if blk (setq blocks (cons (reverse blk) blocks)))
+  (setq blocks (reverse blocks) tot 0)
+  (foreach blk blocks (setq tot (+ tot (length blk))))
+  (if (or (<= tot lzt:*colbudget*) (< (length blocks) 2))
+    ;; short enough, or nothing to split it on: the column as it was
+    (append (list "    : column {") lines (list "    }"))
+    (progn
+      ;; greedy: keep filling the first column while doing so leaves it
+      ;; no further past halfway than stopping would leave it short
+      (setq run 0 half (/ tot 2) a nil b nil)
+      (foreach blk blocks
+        (if (and (<= (+ run (length blk)) half) (null b))
+          (setq a (append a blk) run (+ run (length blk)))
+          (setq b (append b blk))))
+      (if (null a) (setq a (car blocks) b (apply 'append (cdr blocks))))
+      (setq out (append (list "    : column {") a (list "    }")))
+      (append out (list "    : column {") b (list "    }")))))
+
+;; THE PAGE: the drawing on the left, everything asked about it in the
+;; column beside it.  The tread chain runs across the drawing and is
+;; wedged into it as real boxes; the widths and the depths run the
+;; other way and a box cannot stand sideways, so they sit in the answer
+;; column with their values drawn onto the chart in the letter's place.
+(defun lzt:dcl-one (c / out ty d wk widths depths pair l col)
+  ;; out is consed newest-first and reversed once at the end, so this
+  ;; seed list reads BACKWARDS: the label second here puts it second in
+  ;; the file, after the line that opens the dialog.  The other way
+  ;; round emits an attribute before its own dialog, which is not DCL.
+  (setq ty (lzt:c-type c))
+  (setq out (list (strcat "  label = \"LazStep - " (lzt:c-title c)
+                          (if lzt:*steps*
+                              (strcat ", " (itoa lzt:*steps*)
+                                      (if (= lzt:*steps* 1) " step" " steps"))
+                              "")
+                          "\";")
+                  (strcat (lzt:dlgname ty) " : dialog {")))
   (setq wk (lzt:wedge-keys c))
+  ;; the tabs -- one per routine, each a page of its own
+  (setq out (cons "  : row {" out))
+  (foreach d lzt:*types*
+    (setq out (cons (strcat "    : button { key = \"tab_" (car d)
+                            "\"; label = \"" (cadr d) "\"; }")
+                    out)))
+  (setq out (cons "  }" out))
   (setq out (cons "  : row {" out))
   ;; PASSIVE image tiles, deliberately, stacked with the wedge rows
   ;; between them -- see the header for what an image_button costs.
@@ -1180,7 +1329,26 @@
   (foreach l (lzt:bandtiles c)
     (setq out (cons l out)))
   (setq out (cons "    }" out))
-  (setq out (cons "    : column {" out))
+  ;; ---- the answer column, built into COL so it can be shared out
+  ;; between two columns once its size is known
+  (setq col nil)
+  ;; THE COUNT FIRST.  It is the field the rest of the page is built
+  ;; from, so it stands at the head of the column with the drawing it
+  ;; drives beside it.
+  (setq col (cons "      : boxed_column {" col))
+  (setq col (cons "        label = \"How many steps\";" col))
+  (setq col (cons (strcat "        : edit_box { key = \"steps\"; label = \""
+                          "Steps (1-" (itoa lzt:*max-steps*)
+                          ")\"; edit_width = 4; fixed_width = true; }")
+                  col))
+  (setq col (cons "      }" col))
+  (setq col (cons "      : boxed_column {" col))
+  (setq col (cons (strcat "        label = \"" (lzt:title ty) " (" ty
+                          ") - asked once for the run\";")
+                  col))
+  (foreach d (lzt:asks-of ty)
+    (setq col (cons (lzt:p1tile d "        ") col)))
+  (setq col (cons "      }" col))
   ;; the widths: one row each, labelled, because what a width means
   ;; differs between the three types
   (foreach d (lzt:c-dims c)
@@ -1189,13 +1357,13 @@
   (setq widths (reverse widths))
   (if widths
     (progn
-      (setq out (cons "      : boxed_column {" out))
-      (setq out (cons "        label = \"Step widths\";" out))
+      (setq col (cons "      : boxed_column {" col))
+      (setq col (cons "        label = \"Step widths\";" col))
       (foreach d widths
-        (setq out (cons "        : row {" out))
-        (foreach l (lzt:colcell d (nth 7 d) 8) (setq out (cons l out)))
-        (setq out (cons "        }" out)))
-      (setq out (cons "      }" out))))
+        (setq col (cons "        : row {" col))
+        (foreach l (lzt:colcell d (nth 7 d) 8) (setq col (cons l col)))
+        (setq col (cons "        }" col)))
+      (setq col (cons "      }" col))))
   ;; the depths: TWO TO A ROW.  One row each would add N+1 rows to a
   ;; page that already grows with N, and a dialog taller than the
   ;; screen does not open at all.
@@ -1204,39 +1372,42 @@
   (setq depths (reverse depths))
   (if depths
     (progn
-      (setq out (cons "      : boxed_column {" out))
-      (setq out (cons "        label = \"Depths, top step first\";" out))
+      (setq col (cons "      : boxed_column {" col))
+      (setq col (cons "        label = \"Depths, top step first\";" col))
       (setq pair nil)
       (foreach d depths
         (if (null pair)
-          (setq out  (cons "        : row {" out)
+          (setq col  (cons "        : row {" col)
                 pair d)
           (setq pair nil))
-        (foreach l (lzt:colcell d "" 7) (setq out (cons l out)))
-        (if (null pair) (setq out (cons "        }" out))))
-      (if pair (setq out (cons "        }" out)))
-      (setq out (cons "      }" out))))
-  (setq out (cons "    }" out))
+        (foreach l (lzt:colcell d "" 7) (setq col (cons l col)))
+        (if (null pair) (setq col (cons "        }" col))))
+      (if pair (setq col (cons "        }" col)))
+      (setq col (cons "      }" col))))
+  (setq out (append (reverse (lzt:packcols (reverse col))) out))
   (setq out (cons "  }" out))
   (setq out (cons "  spacer;" out))
-  (foreach l (list (strcat "D1 is the drop into step 1; DA is the drop after"
-                           " the last tread.")
-                   (strcat "NA in a width means fit to the walls or the"
-                           " curve.  An empty box is asked for at the")
-                   "command line, where the picks and the selections are."
-                   "A box takes 24, or a feet-and-inches spelling - both read.")
-    (setq out (cons (strcat "  : text { width = 66; label = \"" l "\"; }")
+  (foreach l (lzt:hints ty)
+    (setq out (cons (strcat "  : text { width = " (itoa lzt:*hint-w*)
+                            "; label = \"" l "\"; }")
                     out)))
-  (setq out (cons "  : text { key = \"state\"; width = 66; }" out))
+  ;; THE TWO STATE LINES, and they carry no label here: both are
+  ;; written before the dialog is shown and rewritten on every change,
+  ;; so a label in the file would only be the wrong answer for an
+  ;; instant.  msg is the run's line -- the count, and a once-only box
+  ;; that would be dropped -- and state is the hand-off.  They stand
+  ;; full width under the picture rather than inside the answer column,
+  ;; where a refusal long enough to be useful would not fit.
+  (setq out (cons (strcat "  : text { key = \"msg\"; width = "
+                          (itoa lzt:*hint-w*) "; }") out))
+  (setq out (cons (strcat "  : text { key = \"state\"; width = "
+                          (itoa lzt:*hint-w*) "; }") out))
   (setq out (cons "  : row {" out))
   (setq out (cons (strcat "    : button { key = \"recall\"; "
                           "label = \"Recall last\"; fixed_width = true; }")
                   out))
   (setq out (cons (strcat "    : button { key = \"accept\"; label = \"Insert\";"
                           " is_default = true; fixed_width = true; }")
-                  out))
-  (setq out (cons (strcat "    : button { key = \"back\"; label = \"< Back\";"
-                          " fixed_width = true; }")
                   out))
   (setq out (cons (strcat "    : button { key = \"cancel\"; label = \"Cancel\";"
                           " is_cancel = true; fixed_width = true; }")
@@ -1251,14 +1422,19 @@
     (if (lzt:treadkey (cadr d)) (setq out (cons d out))))
   (reverse out))
 
-;; Every page, in one file.  Page one for all three types -- so a tab
-;; switch needs nothing from disk -- and page two for the chart the
-;; count has generated, when there is one.
-(defun lzt:dcl-lines ( / out ty)
+;; The count the page is drawn for: the one that was given, or the
+;; nominal picture that stands in until one is.
+(defun lzt:drawncount ( )
+  (if lzt:*steps* lzt:*steps* lzt:*steps-nominal*))
+
+;; Every type's page, in one file, each built for the count that is in
+;; hand -- so a tab click is a change of routine and not of count, and
+;; whatever was typed against the steps still comes back.
+(defun lzt:dcl-lines ( / out ty n)
+  (setq n (lzt:drawncount))
   (foreach ty lzt:*types*
-    (setq out (append out (lzt:dcl-p1 (car ty)) (list ""))))
-  (if lzt:*chart*
-    (setq out (append out (lzt:dcl-p2 lzt:*chart*) (list ""))))
+    (setq out (append out (lzt:dcl-one (lzt:chart (car ty) n))
+                      (list ""))))
   out)
 
 (defun lzt:write-lines (fh / l)
@@ -1333,10 +1509,11 @@
   (lzt:pos-save lzt:*pos*)
   rc)
 
-(defun lzt:page1 (dcl / d k)
+(defun lzt:page (dcl / d k wk)
   (cond
-    ((not (lzt:newdlg (lzt:dlgname 1 lzt:*type*) dcl)) 9)
+    ((not (lzt:newdlg (lzt:dlgname lzt:*type*) dcl)) 9)
     (t
+     (setq wk (lzt:wedge-keys lzt:*chart*))
      ;; the tabs -- each closes this page and names the next.  A type
      ;; whose routine is not in this session is greyed rather than
      ;; offered: its Insert could only fail.
@@ -1345,8 +1522,10 @@
          (strcat "(setq lzt:*go* \"" (car d) "\" lzt:*pos* (done_dialog 4))"))
        (if (not (lzt:loaded (car d)))
          (mode_tile (strcat "tab_" (car d)) 1)))
+     ;; THE COUNT, and it is the field the rest of the page follows
      (set_tile "steps" (lzt:get "steps"))
-     (action_tile "steps" "(lzt:put \"steps\" $value) (lzt:p1restate)")
+     (action_tile "steps" "(lzt:count $value)")
+     ;; the questions asked once for the whole run
      (foreach d (lzt:asks)
        (cond
          ((= (cadr d) "LIST")
@@ -1359,28 +1538,14 @@
          (t
           (set_tile (car d) (lzt:get (car d)))
           (action_tile (car d)
-            (strcat "(lzt:put \"" (car d) "\" $value) (lzt:p1restate)")))))
-     (action_tile "accept" "(setq lzt:*pos* (done_dialog 1))")
-     (action_tile "cancel" "(setq lzt:*pos* (done_dialog 0))")
-     (lzt:p1grey)
-     (lzt:p1restate)
-     ;; a refusal from the last time round still wins the line: it says
-     ;; why the page did not move on, which is what the user is looking
-     ;; for.  The first keystroke replaces it with the live state.
-     (if (/= lzt:*msg* "") (set_tile "msg" lzt:*msg*))
-     (lzt:rundlg))))
-
-(defun lzt:page2 (dcl / d wk)
-  (cond
-    ((not (lzt:newdlg (lzt:dlgname 2 lzt:*type*) dcl)) 9)
-    (t
-     (setq wk (lzt:wedge-keys lzt:*chart*))
-     ;; put back what was typed the last time this count was on screen
+            (strcat "(lzt:put \"" (car d) "\" $value) (lzt:restate)")))))
+     ;; the dimensions on the drawing: what was typed the last time this
+     ;; count was on screen goes back into them
      (foreach d (lzt:keys lzt:*chart*)
        (set_tile d (lzt:get d))
        (action_tile d
          (strcat "(lzt:put \"" d "\" $value) (setq lzt:*focus* \"" d "\")"
-                 " (lzt:redraw) (lzt:p2restate)")))
+                 " (lzt:redraw) (lzt:restate)")))
      ;; a wedge dim has no pick button -- its box already sits on the
      ;; drawing where the letter was
      (foreach d (lzt:c-dims lzt:*chart*)
@@ -1389,18 +1554,48 @@
            (strcat "(setq lzt:*focus* \"" (cadr d) "\") (lzt:redraw)"
                    " (mode_tile \"" (cadr d) "\" 2)"
                    " (mode_tile \"" (cadr d) "\" 3)"))))
-     ;; the chart takes no action at all -- it is a passive image tile
+     ;; the chart takes no action at all -- it is a passive image tile.
      ;; Recall does NOT close the page: it fills the empty boxes where
      ;; you are standing, and the state line moves to say so
      (action_tile "recall" "(lzt:recall)")
      (if (not (lzt:recall-read (lzt:recall-slot))) (mode_tile "recall" 1))
-     (action_tile "back" "(setq lzt:*pos* (done_dialog 5))")
      (action_tile "accept" "(setq lzt:*pos* (done_dialog 1))")
      (action_tile "cancel" "(setq lzt:*pos* (done_dialog 0))")
      (lzt:redraw)
-     (lzt:p2grey)
-     (lzt:p2restate)
+     (lzt:grey)
+     (lzt:restate)
+     ;; a refusal from the last time round still wins the line: it says
+     ;; why the page came back, which is what the user is looking for.
+     ;; The first keystroke replaces it with the live state.
+     (if (/= lzt:*msg* "") (set_tile "msg" lzt:*msg*))
      (lzt:rundlg))))
+
+;; THE COUNT BOX CHANGED.  Remember it, and -- when it is a number this
+;; page can be built for and is not the number it was built for already
+;; -- close the page and reopen it for the new one.  DCL cannot add or
+;; remove a tile from a dialog that is up, so N boxes for N steps means
+;; a new dialog; it comes back in the same place (done_dialog hands the
+;; position over) with everything typed still in it (lzt:*vals* is
+;; keyed and outlives the rebuild), which is what makes the count read
+;; as a field that redraws rather than as a page boundary.
+;;
+;; A count that cannot be used rebuilds nothing: the line under the
+;; picture says why and Insert stays greyed, which is what lzt:restate
+;; is for.
+(defun lzt:count (v / n)
+  (lzt:put "steps" v)
+  ;; the count is LIVE from the keystroke that makes it usable, not
+  ;; from the rebuild: a number that matches the drawing already on
+  ;; screen rebuilds nothing, and its boxes still have to come alive.
+  ;; It goes back to nil the moment the box stops holding a count, so
+  ;; a half-deleted number greys the drawing again rather than leaving
+  ;; boxes live against a step that is no longer there
+  (setq n            (if (lzt:countwhy) nil (lzt:int (cal:trim v)))
+        lzt:*steps*  n)
+  (if (and n (/= n (length (lzt:treads lzt:*chart*))))
+    (setq lzt:*pos* (done_dialog 6))
+    (progn (lzt:grey) (lzt:restate)))
+  (princ))
 
 ;; The count, checked before a page is built for it.  Nothing here can
 ;; measure a screen and N rows of boxes grow the page linearly, so a
@@ -1408,10 +1603,11 @@
 ;; opening a dialog that might not fit on it.
 
 ;; Why this count cannot be used, or nil when it can.  One function,
-;; two callers: the state line says it while the number is being typed
-;; and holds Next back, and count-ok is still the gate that refuses to
-;; build a page for it -- so the live warning and the refusal cannot
-;; come to different conclusions.
+;; three callers: the state line says it while the number is being
+;; typed and holds Insert back, lzt:count reads it before rebuilding
+;; the page for a new number, and count-ok is still the gate that sets
+;; lzt:*steps* -- so the live warning, the redraw and the refusal
+;; cannot come to different conclusions.
 (defun lzt:countwhy ( / n)
   (setq n (lzt:int (lzt:get "steps")))
   (cond
@@ -1452,22 +1648,31 @@
   (if lzd:begin (lzd:begin "LAZSTEP" *lazstep-version*))
   (setq lzt:*vals*  nil
         lzt:*sel*   nil
-        lzt:*steps* nil
+        lzt:*steps* nil                 ; no count is an ANSWER the form
+                                        ; invents: the drawing opens on
+                                        ; the nominal picture with every
+                                        ; box on it greyed
         lzt:*chart* nil
         lzt:*focus* nil
         lzt:*pos*   nil                 ; the profile decides where this
                                         ; run opens, not the last page
-        lzt:*msg*   ""
-        lzt:*page*  1)
-  ;; THE PAGE LOOP.  DCL has no tab tile and no way to rebuild a dialog
-  ;; that is already up, so a page change closes this one and opens the
-  ;; next -- and because done_dialog hands back where the dialog was
-  ;; standing, it reopens exactly there instead of wandering off to the
-  ;; middle of the screen.  Everything typed lives in lzt:*vals*, keyed,
-  ;; so it survives the switch: change the count, come back, and the
-  ;; steps that still exist still carry what was typed against them.
+        lzt:*msg*   "")
+  ;; THE PAGE LOOP.  DCL has no way to add a tile to a dialog that is
+  ;; already up, so a change of COUNT or of TYPE closes this page and
+  ;; opens the one that answer needs -- and because done_dialog hands
+  ;; back where the dialog was standing, it reopens exactly there
+  ;; instead of wandering off to the middle of the screen.  Everything
+  ;; typed lives in lzt:*vals*, keyed, so it survives the rebuild:
+  ;; change the count, and the
+  ;; steps that still exist still carry what was typed
+  ;; against them -- while what was typed against the ones that went
+  ;; away is still there if the number goes back up.
   (while (not done)
-    (setq f (lzt:write-dcl))
+    ;; the drawing this page is built for, generated here and nowhere
+    ;; else: the count when there is one, the nominal picture until
+    ;; there is
+    (setq lzt:*chart* (lzt:chart lzt:*type* (lzt:drawncount))
+          f           (lzt:write-dcl))
     (cond
       ((null f)
        (princ "\nLAZSTEP error: could not write the dialog file.")
@@ -1477,7 +1682,7 @@
        (vl-file-delete f)
        (setq f nil done T))
       (t
-       (setq rc (if (= lzt:*page* 1) (lzt:page1 dcl) (lzt:page2 dcl)))
+       (setq rc (lzt:page dcl))
        (unload_dialog dcl)
        (setq dcl nil)
        (vl-file-delete f)
@@ -1487,24 +1692,33 @@
           (princ "\nLAZSTEP error: could not open the form.")
           (setq done T))
          ((= rc 0) (setq done T))
-         ((and (= lzt:*page* 1) (= rc 4))
-          (setq lzt:*type* lzt:*go* lzt:*msg* ""))
-         ((and (= lzt:*page* 1) (= rc 1))
-          ;; the drawing is generated HERE, from the count that was
-          ;; just accepted -- come back with a different number and a
-          ;; different drawing is built for it
-          (if (lzt:count-ok)
-            (setq lzt:*chart* (lzt:chart lzt:*type* lzt:*steps*)
-                  lzt:*focus* nil
-                  lzt:*msg*   ""
-                  lzt:*page*  2)))
-         ((and (= lzt:*page* 2) (= rc 5))
-          (setq lzt:*page* 1 lzt:*msg* "" lzt:*focus* nil))
-         ((and (= lzt:*page* 2) (= rc 1))
-          ;; an accepted drawing is what gets remembered -- a cancelled
-          ;; one was not a drawing anybody used
-          (lzt:recall-save (lzt:recall-slot))
-          (setq out (lzt:form) done T))
+         ((= rc 4)                      ; a tab: the same count, drawn
+          (setq lzt:*type* lzt:*go* lzt:*msg* "" lzt:*focus* nil))
+         ((= rc 6)                      ; the count moved: redraw for it
+          (lzt:count-ok)
+          (setq lzt:*msg* "" lzt:*focus* nil))
+         ((= rc 1)
+          (cond
+            ;; Insert with a count the page cannot be built for: the
+            ;; refusal goes on the line and the page comes back.  The
+            ;; button is greyed for this, so it takes a keyboard
+            ;; default to reach -- which is exactly why it is checked
+            ((not (lzt:count-ok)))
+            ;; Insert typed straight over a NEW count, before the box
+            ;; ever lost focus: the drawing on screen is not the one
+            ;; the number asks for, so it is rebuilt and the sheet is
+            ;; handed over on the next press rather than against a
+            ;; picture nobody has seen
+            ((/= lzt:*steps* (length (lzt:treads lzt:*chart*)))
+             (setq lzt:*msg*
+                   (strcat (cal:plural lzt:*steps* "step" "steps")
+                           " - the drawing has been rebuilt for that"
+                           " many.  Press Insert again to draw it.")))
+            (t
+             ;; an accepted drawing is what gets remembered -- a
+             ;; cancelled one was not a drawing anybody used
+             (lzt:recall-save (lzt:recall-slot))
+             (setq out (lzt:form) done T))))
          (t (setq done T))))))
   out)
 

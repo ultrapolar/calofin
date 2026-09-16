@@ -5,8 +5,8 @@ Imports System.Windows.Media
 Imports AcadApp = Autodesk.AutoCAD.ApplicationServices.Application
 
 ''' <summary>
-''' The step sheet: say how many steps, then fill in the drawing built
-''' for that count.
+''' The step sheet: type the step count and fill in the drawing built
+''' for it.
 '''
 ''' <para>LAZSTEP's argument, on the palette. A flight of steps has no
 ''' fixed chart -- the sheet IS the count -- so ChartCatalog carries one
@@ -48,9 +48,8 @@ Public Class StepFormView
     ''' every row away and builds another -- and without this that took
     ''' the flight with it. LAZSTEP does not, and says why in as many
     ''' words: "everything typed lives in lzt:*vals*, keyed, so it
-    ''' survives the switch: change the count, come back, and the steps
-    ''' that still exist still carry what was typed against
-    ''' them."</para>
+    ''' survives the rebuild: change the count, and the steps that still
+    ''' exist still carry what was typed against them."</para>
     ''' </summary>
     Private ReadOnly _typed As New Dictionary(Of String, String)
 

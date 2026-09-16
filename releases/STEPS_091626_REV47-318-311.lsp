@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_091526_REV46-317-310.lsp
+;;; STEPS_091626_REV47-318-311.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,9 +8,9 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v4.6 -> REV46   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
-;;;     HEMISTEP.lsp    v3.17 -> REV317   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
-;;;     NORMIESTEP.lsp  v3.10 -> REV310   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
+;;;     CORNERSTP.lsp   v4.7 -> REV47   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
+;;;     HEMISTEP.lsp    v3.18 -> REV318   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
+;;;     NORMIESTEP.lsp  v3.11 -> REV311   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
 ;;;        window) and every command listed above comes with it.
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v4.6) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v4.7) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -269,7 +269,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.6") ; printed on load and at command start so a
+(setq *cs-version* "v4.7") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -706,6 +706,12 @@
 ;;;  questions; a keyword is checked against the live prompt's own
 ;;;  list and falls through to the prompt when it does not fit.
 ;;;  Selections and point picks are never form-answered.
+;;;
+;;;  BEADING IS THREE KEYS, not one.  bead is whether to bead at all,
+;;;  beadsides is All/Some/None along the step side walls, and
+;;;  beadnums is the step numbers Some asks for, as the string the
+;;;  prompt would have taken ("1 3 5").  The whole chain comes off a
+;;;  sheet now; the side to bead TOWARD is a pick and stays here.
 ;;;
 ;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used - removed.
 ;;;  Otherwise Back deadlocks: step back onto a form-answered question,
@@ -1774,13 +1780,21 @@
                (progn
                  ;; every tread but the last is beaded - the side walls
                  ;; are the question, and None leaves them bare
-                 (initget "All Some None Back Undo")
-                 (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
-                                      (getkword (strcat "\nWhich steps have"
-                                                        " beaded side walls?"
-                                                        " [All/Some/None/Back]"
-                                                        " <All>: "))))
-                                   ("All")))
+                 ;; the form can answer this one: a sheet that said
+                 ;; All or None has nothing left to ask here.  Back is
+                 ;; not reachable from a form answer -- there is no
+                 ;; prompt to step back from, and the question above it
+                 ;; came off the same sheet
+                 (if (null (setq bside (cs-fkw 'beadsides
+                                               "All Some None" "All")))
+                   (progn
+                     (initget "All Some None Back Undo")
+                     (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+                                          (getkword (strcat "\nWhich steps have"
+                                                            " beaded side walls?"
+                                                            " [All/Some/None/Back]"
+                                                            " <All>: "))))
+                                       ("All")))))
                  (if (member bside '("Back" "Undo"))
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 1))
@@ -1790,9 +1804,17 @@
                (setq bstep 4)
                (progn
                  (princ (strcat "\n  Steps drawn: " (cs-numsay btreads)))
-                 (setq s (getstring T (strcat "\nStep numbers with"
-                                              " beaded sides (B = back): ")))
-                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
+                 ;; ...and this one, as the string the prompt would
+                 ;; have taken: "1 3 5".  Anything that is not a string
+                 ;; is no answer at all rather than one the number
+                 ;; reader would have to guess at
+                 (if (cs-fhas 'beadnums)
+                   (progn (setq s (cs-ftake 'beadnums))
+                          (if (/= (type s) 'STR) (setq s "")))
+                   (progn
+                     (setq s (getstring T (strcat "\nStep numbers with"
+                                                  " beaded sides (B = back): ")))
+                     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)))
                  (if (cs-back-word s)
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 2))
@@ -2051,7 +2073,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> HEMISTEP.lsp (v3.17) - verbatim from lisp/cornerstp/HEMISTEP.lsp
+;;; >>> HEMISTEP.lsp (v3.18) - verbatim from lisp/cornerstp/HEMISTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; HEMISTEP.lsp
@@ -2282,7 +2304,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.17") ; printed on load and at command start so a
+(setq *hs-version* "v3.18") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -2829,6 +2851,12 @@
 ;;;  keyword is checked against the live prompt's own list and falls
 ;;;  through to the prompt when it does not fit.  Selections and
 ;;;  point picks are never form-answered.
+;;;
+;;;  BEADING IS THREE KEYS, not one.  bead is whether to bead at all,
+;;;  beadsides is All/Some/None along the step side walls, and
+;;;  beadnums is the step numbers Some asks for, as the string the
+;;;  prompt would have taken ("1 3 5").  The whole chain comes off a
+;;;  sheet now; the side to bead TOWARD is a pick and stays here.
 ;;;
 ;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used - removed.
 ;;;  Otherwise Back deadlocks: step back onto a form-answered question,
@@ -3631,13 +3659,21 @@
                (progn
                  ;; every tread but the last is beaded - the side walls
                  ;; are the question, and None leaves them bare
-                 (initget "All Some None Back Undo")
-                 (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
-                                      (getkword (strcat "\nWhich steps have"
-                                                        " beaded side walls?"
-                                                        " [All/Some/None/Back]"
-                                                        " <All>: "))))
-                                   ("All")))
+                 ;; the form can answer this one: a sheet that said
+                 ;; All or None has nothing left to ask here.  Back is
+                 ;; not reachable from a form answer -- there is no
+                 ;; prompt to step back from, and the question above it
+                 ;; came off the same sheet
+                 (if (null (setq bside (hs-fkw 'beadsides
+                                               "All Some None" "All")))
+                   (progn
+                     (initget "All Some None Back Undo")
+                     (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+                                          (getkword (strcat "\nWhich steps have"
+                                                            " beaded side walls?"
+                                                            " [All/Some/None/Back]"
+                                                            " <All>: "))))
+                                       ("All")))))
                  (if (member bside '("Back" "Undo"))
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 1))
@@ -3647,9 +3683,17 @@
                (setq bstep 4)
                (progn
                  (princ (strcat "\n  Steps drawn: " (hs-numsay btreads)))
-                 (setq s (getstring T (strcat "\nStep numbers with"
-                                              " beaded sides (B = back): ")))
-                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
+                 ;; ...and this one, as the string the prompt would
+                 ;; have taken: "1 3 5".  Anything that is not a string
+                 ;; is no answer at all rather than one the number
+                 ;; reader would have to guess at
+                 (if (hs-fhas 'beadnums)
+                   (progn (setq s (hs-ftake 'beadnums))
+                          (if (/= (type s) 'STR) (setq s "")))
+                   (progn
+                     (setq s (getstring T (strcat "\nStep numbers with"
+                                                  " beaded sides (B = back): ")))
+                     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)))
                  (if (hs-back-word s)
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 2))
@@ -3899,7 +3943,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> NORMIESTEP.lsp (v3.10) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
+;;; >>> NORMIESTEP.lsp (v3.11) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; NORMIESTEP.lsp
@@ -4139,7 +4183,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.10") ; printed on load and at command start so a
+(setq *ns-version* "v3.11") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -4726,6 +4770,12 @@
 ;;;  checked against the live prompt's own list and falls through to
 ;;;  the prompt when it does not fit.  Selections and point picks are
 ;;;  never form-answered.
+;;;
+;;;  BEADING IS THREE KEYS, not one.  bead is whether to bead at all,
+;;;  beadsides is All/Some/None along the step side walls, and
+;;;  beadnums is the step numbers Some asks for, as the string the
+;;;  prompt would have taken ("1 3 5").  The whole chain comes off a
+;;;  sheet now; the side to bead TOWARD is a pick and stays here.
 ;;;
 ;;;  AN ANSWER IS REMOVED AS IT IS USED.  Not marked used - removed.
 ;;;  Otherwise Back deadlocks: step back onto a form-answered question,
@@ -5702,13 +5752,21 @@
                (progn
                  ;; every tread but the last is beaded - the side walls
                  ;; are the question, and None leaves them bare
-                 (initget "All Some None Back Undo")
-                 (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
-                                      (getkword (strcat "\nWhich steps have"
-                                                        " beaded side walls?"
-                                                        " [All/Some/None/Back]"
-                                                        " <All>: "))))
-                                   ("All")))
+                 ;; the form can answer this one: a sheet that said
+                 ;; All or None has nothing left to ask here.  Back is
+                 ;; not reachable from a form answer -- there is no
+                 ;; prompt to step back from, and the question above it
+                 ;; came off the same sheet
+                 (if (null (setq bside (ns-fkw 'beadsides
+                                               "All Some None" "All")))
+                   (progn
+                     (initget "All Some None Back Undo")
+                     (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
+                                          (getkword (strcat "\nWhich steps have"
+                                                            " beaded side walls?"
+                                                            " [All/Some/None/Back]"
+                                                            " <All>: "))))
+                                       ("All")))))
                  (if (member bside '("Back" "Undo"))
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 1))
@@ -5718,9 +5776,17 @@
                (setq bstep 4)
                (progn
                  (princ (strcat "\n  Steps drawn: " (ns-numsay btreads)))
-                 (setq s (getstring T (strcat "\nStep numbers with"
-                                              " beaded sides (B = back): ")))
-                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
+                 ;; ...and this one, as the string the prompt would
+                 ;; have taken: "1 3 5".  Anything that is not a string
+                 ;; is no answer at all rather than one the number
+                 ;; reader would have to guess at
+                 (if (ns-fhas 'beadnums)
+                   (progn (setq s (ns-ftake 'beadnums))
+                          (if (/= (type s) 'STR) (setq s "")))
+                   (progn
+                     (setq s (getstring T (strcat "\nStep numbers with"
+                                                  " beaded sides (B = back): ")))
+                     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)))
                  (if (ns-back-word s)
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 2))

@@ -117,24 +117,23 @@ for chart in [str(x) for x in vm.globals['t:*c*']]:
 print("   LAZSPA     %2d charts, %4d callbacks"
       % (len(vm.globals['t:*c*']), n))
 
-# page two is BUILT for the count, so its tiles are only as good as the
-# count they were built for: one, a middling one, and the ceiling
+# the page is BUILT for the count, so its tiles are only as good as the
+# count they were built for: none at all (the nominal picture), one, a
+# middling one, and the ceiling
 vm = fresh('lisp/lazstep/LAZSTEP.lsp')
 vm.loads('(setq t:*t* (mapcar (quote car) lzt:*types*)) (setq t:*m* lzt:*max-steps*)')
 TYPES = [str(x) for x in vm.globals['t:*t*']]
 MAX = int(str(vm.globals['t:*m*']))
 n = 0
 for ty in TYPES:
-    vm.loads('(setq lzt:*type* "%s" lzt:*vals* nil lzt:*sel* nil)' % ty)
-    vm.loads('(setq stub:*act* nil) (lzt:page1 7)')
-    n += sweep(vm, 'LAZSTEP %s page 1' % ty)
-    for count in (1, 3, MAX):
-        vm.loads('(setq lzt:*steps* %d lzt:*chart* (lzt:chart "%s" %d))'
-                 % (count, ty, count))
-        vm.loads('(setq stub:*act* nil) (lzt:page2 7)')
-        n += sweep(vm, 'LAZSTEP %s page 2, %d step(s)' % (ty, count))
-print("   LAZSTEP    %2d types x (page 1 + 3 counts), %4d callbacks"
-      % (len(TYPES), n))
+    for count in (None, 1, 3, MAX):
+        vm.loads('(setq lzt:*type* "%s" lzt:*vals* nil lzt:*sel* nil)' % ty)
+        vm.loads('(setq lzt:*steps* %s lzt:*chart* (lzt:chart "%s" %d))'
+                 % ('nil' if count is None else count, ty,
+                    count or 3))
+        vm.loads('(setq stub:*act* nil) (lzt:page 7)')
+        n += sweep(vm, 'LAZSTEP %s, %s step(s)' % (ty, count or 'no'))
+print("   LAZSTEP    %2d types x 4 counts, %4d callbacks" % (len(TYPES), n))
 
 # the panel with a pin and a recent tool on the row, so both extra
 # button families are wired rather than skipped as empty

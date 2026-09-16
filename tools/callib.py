@@ -117,8 +117,10 @@ NOT_A_TOOL = "standards_checker"
 #: LAZPIN edits the pinned row: machinery, not drafting tools.  LAZHIDE
 #: is LAZPIN's opposite number -- it edits the list of tools put OUT of
 #: sight -- and carries no button for the same reason; LAZSET is the
-#: settings dialog the panel's own Options button opens.  LAZASCII
-#: is LAZFORM's font probe -- it draws nothing and answers nothing.
+#: settings dialog the panel's own Options button opens, and LAZNAME is
+#: where a drafter renames what they type and what a button says --
+#: machinery for the panel, not a tool that draws.  LAZASCII is
+#: LAZFORM's font probe -- it draws nothing and answers nothing.
 #: CALHELP reads the panel's own captions out at the command line and
 #: CALSET shows the settings calofin keeps in the AutoCAD profile:
 #: both are the panel's machinery wearing a command name, and a button
@@ -126,7 +128,7 @@ NOT_A_TOOL = "standards_checker"
 #: expense.
 NAMED_SATELLITES = frozenset({
     "DCE", "STOCKLIST", "LAZPANEL", "LAZBUTTON", "LAZICON", "LAZPIN",
-    "LAZHIDE", "LAZSET", "LAZASCII", "CALHELP", "CALSET",
+    "LAZHIDE", "LAZSET", "LAZNAME", "LAZASCII", "CALHELP", "CALSET",
 })
 
 

@@ -82,6 +82,7 @@ def cases():
     for tool, sub, expr in (
         ("LAZFORM", "lazform", "(lzf:dcl-lines)"),
         ("LAZSPA", "lazspa", "(lzs:dcl-lines)"),
+        ("LAZSIDE", "lazside", "(lzv:dcl-lines)"),
     ):
         p = LISP / sub / (tool + ".lsp")
         out.append((tool, "all charts", render(p, [], expr)))
@@ -98,20 +99,22 @@ def cases():
         out.append(("LAZFORM", "%s text view" % k,
                     render(form, [], '(lzf:dcl-txt (lzf:chart "%s"))' % k)))
 
-    # LAZSTEP: page one per type, then page two at every step count it
-    # will accept -- the chart is a row per step, so the last one is the
-    # tall one.
+    # LAZSTEP: one page per type, at every step count it will accept.
+    # The chart is a row per step and the answer column grows with it,
+    # so the last count is the tall one -- and lzt:*steps* is what the
+    # page reads for its own count, so it is set rather than implied.
     step = LISP / "lazstep" / "LAZSTEP.lsp"
-    out.append(("LAZSTEP", "page 1", render(step, [], "(lzt:dcl-lines)")))
+    out.append(("LAZSTEP", "no count yet", render(step, [], "(lzt:dcl-lines)")))
     vm = VM()
     vm.load(str(step))
     vm.loads('(setq zz:*t* (mapcar (function car) lzt:*types*))')
     types = [str(t) for t in vm.globals["zz:*t*"]]
     mx = int(vm.globals["lzt:*max-steps*"])
     for ty in types:
-        out.append(("LAZSTEP", "%s page 2, %d steps" % (ty, mx),
-                    render(step, [], '(lzt:dcl-p2 (lzt:chart "%s" %d))'
-                           % (ty, mx))))
+        for n in range(1, mx + 1):
+            out.append(("LAZSTEP", "%s, %d steps" % (ty, n),
+                        render(step, ['(setq lzt:*steps* %d)' % n],
+                               '(lzt:dcl-one (lzt:chart "%s" %d))' % (ty, n))))
     return out
 
 

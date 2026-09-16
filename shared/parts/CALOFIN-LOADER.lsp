@@ -118,7 +118,7 @@
     ;; all, after everything its buttons name.
     (foreach m '(
                  "CALOFIN-LIB.lsp" "LAZDIAG.lsp" "POOL.lsp" "POOLDEMO.lsp"
-                 "TUTORIALPOOL.lsp" "POOLSIDE.lsp"
+                 "TUTORIALPOOL.lsp" "POOLSIDE.lsp" "LAZSIDE.lsp"
                  "SPA.lsp" "TUTORIALSPA.lsp"
                  "OASIS.lsp" "abcdef.lsp" "ABFIND.lsp"
                  "ALTABCDEF.lsp" "abhd.lsp" "ABCURCHECK.lsp" "ABPCHECK.lsp"

@@ -491,4 +491,86 @@ assert len(treat_asks) == 2 and all('/Back]' in p for p in treat_asks), \
 print("   Back re-asked the width; 45-after-Back drew the straight-45 run")
 
 
+print("== 7. the BEAD chain comes off the form, all three of it ==")
+
+# Beading is three questions, not one: bead at all, which steps carry
+# the bead along their side walls, and -- for Some -- which numbers.
+# Only the first was form-answerable, so a sheet that said Yes still
+# stopped twice at the command line after the drawing was finished.
+# AUTOBEAD has to be loaded for any of it to be reached at all.
+AUTOBEAD = os.path.join(HERE, '..', 'lisp', 'autobead', 'AUTOBEAD.lsp')
+BEADPICK = (50.0, -50.0)
+
+
+def beadrun(path, cmd, pair, script, form=None, label=""):
+    """drive(), with AUTOBEAD loaded under the tool so the bead chain
+    at the end of the run is actually reached."""
+    vm = VM()
+    vm.load(AUTOBEAD)
+    vm.load(path)
+    for st in ('STANDARD INCHES', 'SIDE STANDARD'):
+        vm.tables['DIMSTYLE'].add(st)
+    vm.sysvars['DIMTXT'], vm.sysvars['DIMSCALE'] = 0.125, 48.0
+    if form:
+        vm.eval(parse_all("(setq %s %s)" % (STORE[cmd], form))[0])
+    script = list(script)
+    if script and script[0] == 'WALLS':
+        script[0] = walls(vm, pair)
+    else:
+        walls(vm, pair)
+    try:
+        vm.run(cmd, [None] + script)
+    except LispError as e:
+        raise AssertionError("[%s] %s" % (label, e)) from None
+    return vm
+
+
+BEADQ = ('Bead the steps?', 'beaded side walls?', 'Step numbers with')
+
+# the canonical scripts, which every other scenario here already reads:
+# whatever the run asks before the bead chain, in the order it asks it
+for cmd, path, pair, script in (
+        ('c:NORMIESTEP', NORMIESTEP, False, normiestep_prompts),
+        ('c:HEMISTEP', HEMISTEP, False, hemistep_prompts),
+        ('c:CORNERSTP', CORNERSTP, True, cornerstp_prompts)):
+    pre = script()
+    # All, at the prompts and off the sheet
+    a = beadrun(path, cmd, pair, pre + ["Yes", "All", BEADPICK],
+                label="%s bead prompts" % cmd)
+    b = beadrun(path, cmd, pair, pre + [BEADPICK],
+                form="""'((bead . "Yes") (beadsides . "All"))""",
+                label="%s bead form" % cmd)
+    same(a, b, "%s: All, from the sheet" % cmd)
+    asked = [p for p, _ in b.prompts]
+    for q in BEADQ:
+        assert not [p for p in asked if q in p], \
+            "%s: %r was asked despite the sheet answering it: %r" % (cmd, q, asked)
+    assert [p for p in asked if 'bead toward' in p], \
+        "%s: the side to bead toward is a PICK and must stay one" % cmd
+
+    # Some, and the step numbers with it -- the deepest of the three
+    c = beadrun(path, cmd, pair,
+                pre + ["Yes", "Some", "1 3", BEADPICK],
+                label="%s some prompts" % cmd)
+    d = beadrun(path, cmd, pair, pre + [BEADPICK],
+                form="""'((bead . "Yes") (beadsides . "Some")
+                          (beadnums . "1 3"))""",
+                label="%s some form" % cmd)
+    same(c, d, "%s: Some 1 3, from the sheet" % cmd)
+    asked = [p for p, _ in d.prompts]
+    for q in BEADQ:
+        assert not [p for p in asked if q in p], \
+            "%s: %r was asked on the Some path: %r" % (cmd, q, asked)
+
+    # ...and No beads nothing and never mentions it again
+    e = beadrun(path, cmd, pair, pre,
+                form="""'((bead . "No"))""", label="%s no form" % cmd)
+    asked = [p for p, _ in e.prompts]
+    for q in BEADQ + ('bead toward',):
+        assert not [p for p in asked if q in p], \
+            "%s: a sheet that said No still asked %r: %r" % (cmd, q, asked)
+    print("   %-12s All, Some+numbers and No, all three off the sheet"
+          % cmd.replace('c:', ''))
+
+
 print("\nALL STEPS FORM SCENARIOS PASSED")

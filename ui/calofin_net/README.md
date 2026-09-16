@@ -221,8 +221,8 @@ has to agree with.
 
 ## The Steps tab
 
-`LAZSTEP`'s argument, on the palette: say how many steps, then fill in
-the drawing built for that count.
+`LAZSTEP`'s argument, on the palette: type the step count and fill in
+the drawing built for it.
 
 A flight has no fixed chart — **the sheet is the count** — so
 `ChartCatalog` carries one per routine per count, up to

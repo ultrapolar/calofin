@@ -6,6 +6,91 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.16 -- 2026-09-16
+
+**The step count is a field on the page it redraws.**  LAZSTEP v2.0.
+
+It was two pages: the count on the first, the drawing built for it on
+the second.  So the one thing you could not see while typing the number
+was the picture the number describes, and going from 5 to 6 meant Back,
+retype, Next -- three keystrokes to change one digit, with the drawing
+off screen for all three of them.
+
+One page now.  The drawing stands on the left and everything asked
+about it in the column beside it, the count at the head of that column.
+Type a number and the picture follows it: five steps draw five treads,
+and the boxes come with them -- five tread boxes, five width boxes, six
+depth boxes, no more and no fewer.  DCL cannot add a tile to a dialog
+that is already up, so a count that MOVES still closes the page and
+opens the one that number needs; what changed is that it reopens as
+*itself*, in the same place, with everything typed still in it.  A
+count that matches the drawing already on screen rebuilds nothing at
+all and simply brings its boxes alive.
+
+Until a count is given the picture is a NOMINAL one and every dimension
+box on it is greyed.  The form invents no answers and `steps` is an
+answer that TRAVELS, so the box opens empty -- but a page with no
+drawing on it is a page with nothing to read.  Greyed is the honest
+middle: the picture teaches the letters, and nothing on it is a
+question this run will reach or a value that could travel.  One rule
+(`lzt:skip`) says so, and the greying, the state line and `lzt:form`
+all read it, so they cannot come apart.
+
+The page carries TWO state lines now -- the run's and the hand-off's --
+and **Insert is held back by either**, because a page with one button
+cannot have two opinions about it.  `NORMIESTEP`'s single width moved
+onto the drawing, where its letter W is: it used to appear on both
+pages, and on one page that is two tiles with one key, which is not a
+dialog DCL will open.  The answer column splits in two once it is
+taller than `lzt:*colbudget*`, the way LAZFORM's does, because the page
+is as tall as its longest column and the count, the run and the drawing
+now share one.
+
+**Beading is three questions, and all three come off the sheet.**
+CORNERSTP v4.7, HEMISTEP v3.18, NORMIESTEP v3.11.
+
+Every one of the three step routines ends the same way: bead at all,
+which steps carry the bead along their side walls, and -- for Some --
+which step numbers.  Only the first was form-answerable, so a sheet
+that said Yes still stopped twice at the command line *after* the
+drawing was finished, which is the worst place to be asked anything.
+`beadsides` and `beadnums` join `bead`, held to the same keyword list
+the live prompt holds you to; the side to bead TOWARD is a pick and
+stays in the drawing.
+
+**The side view has a form.**  LAZSIDE v1.0, POOLSIDE v1.6.
+
+LAZFORM's argument applied to the section alone: the longitudinal
+section on the left as one whole picture, a labelled box against every
+letter it carries, and POOLSIDE run from what was typed.  Six bottom
+types, six tabs -- and the tab you are on IS the answer POOLSIDE's
+first prompt asks for, so a sheet cannot be filled in for one floor and
+drawn as another.
+
+POOLSIDE had no answer store at all: it asked every letter at the
+command line, every time.  It has POOL's now, same shape and same three
+states, keyed by the letters themselves (`psd:key` spells them, so the
+form and the prompts cannot drift) with `style` and `mirror` alongside.
+An answer is spent as it is read, which is what keeps Back working and
+what gives the two range checks their way out; an answer the prompt
+itself would have refused -- a negative run, an NA where a measurement
+is required -- is spent and then asked for properly.
+
+Two things the form knows that a prompt cannot.  A DEPTH has no NA, so
+an NA in C, D or C2 is demoted to an empty box and the line says so
+rather than leaving you to meet it at the prompt.  And the DEPTH PAIR:
+POOLSIDE loops until D is deeper than C and C2 sits between them, which
+is right at a prompt and wrong to hand a sheet to -- the run would draw
+half a section and then stop to argue.  A form can see both numbers at
+once, so it greys Insert and says which one is wrong.
+
+The section is not a stored picture: it is built from POOLSIDE's own
+run chain, depth stations and nominal proportions, carried across
+because a `lisp/` file has to load alone -- and `tests/test_lazside.py`
+re-reads all three out of POOLSIDE.lsp and holds them against the copy
+entry by entry, the same bargain LAZFORM strikes with OASIS's reference
+outlines.
+
 ## v3.15 -- 2026-09-15
 
 **Borrow only what you move: seven commands snapshotted OSMODE they
@@ -189,23 +274,34 @@ can be said to have changed, and a division by zero is an AutoLISP
 error -- "divide by zero" -- that reaches the handler for a real as
 much as for an int, rather than a Python one.
 
-**LINGUTTER keeps a radius call-out on the perimeter, and asks before
-it spares a cross dim.** LINGUTTER v2.6. A corner radius under a foot
-lands in `STANDARD INCHES` the same as any other short measurement --
-which is not in `lg:*perimstyles*`, so the very call-out for the corner
-`PADDLE` was about to pad used to be the thing erased. A RADIUS or
-DIAMETER dimension on the perimeter is now kept regardless of its
-style, judged on its one attachment point (DXF 10) the way
-`lg:*perimstyles*` dims are judged on 13/14.
+**LINGUTTER keeps a radius call-out on the perimeter, and judges a
+cross dim by its shape, not just where it sits.** LINGUTTER v2.7. A
+corner radius under a foot lands in `STANDARD INCHES` the same as any
+other short measurement -- which is not in `lg:*perimstyles*`, so the
+very call-out for the corner `PADDLE` was about to pad used to be the
+thing erased. A RADIUS or DIAMETER dimension on the perimeter is now
+kept regardless of its style, judged on its one attachment point (DXF
+10) the way `lg:*perimstyles*` dims are judged on 13/14.
 
 `CROSS DIM*` dims stop being kept unconditionally: LINGUTTER now asks
-"Keep CROSS DIMENSIONS?" once, and a Yes spares only the ones that
-belong to the pool just gutted -- every attachment point either inside
-the traced perimeter or within `lg:*ontol*` of it, so a cross dim
-answering to a second pool sitting in the same highlight is no longer
-swept up with it. Answered No, those dims get no exemption at all and
-are judged, and counted, like any other style. Neither question is a
-confirmation to erase -- LINGUTTER still never asks that.
+"Keep CROSS DIMENSIONS?" once, and a Yes spares only the ones that read
+as a genuine cross measurement of the pool just gutted. Both points
+first have to belong to the pool at all (inside the traced perimeter,
+or on it), and from there a dim is kept when it spans at least
+`lg:*crossspan*` of the perimeter's own width or height -- "goes full
+X" or "goes full Y" -- *or* sits at two of the perimeter's own
+vertices, corner to corner along one whole edge however short (a short
+notch side would otherwise never reach `lg:*crossspan*` on its own).
+Neither way is satisfied by a dim running from one corner to some
+other point along that SAME edge -- the start of a line to the middle
+of it -- which is dropped regardless of how much of the pool it happens
+to span; nor by a small dim sitting entirely inside the pool and
+touching nothing, which is no more a cross measurement of it than a
+stray one answering to a different pool in the same highlight.
+Answered No, every `CROSS DIM*` dim gets no exemption at all regardless
+of shape, and is judged, and counted, like any other style. Neither
+question is a confirmation to erase -- LINGUTTER still never asks
+that.
 
 **Every AB note leads with a bullet.** `ABMOVE` and `ABPCREATE` leave a
 note per point on one layer, and a run that settles several of them
