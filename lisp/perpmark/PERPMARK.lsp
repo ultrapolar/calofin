@@ -147,7 +147,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.3")
+(setq *perpmark-version* "v1.4")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -820,7 +820,12 @@
 
 (setq pm:*sysold* nil)
 
-(defun pm:sysvars () '("OSMODE" "CMDECHO" "CLAYER"))
+;; OSMODE is deliberately NOT in this list.  PERPMARK never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
+(defun pm:sysvars () '("CMDECHO" "CLAYER"))
 
 (defun pm:syssave ( / v)
   (if (not pm:*sysold*)

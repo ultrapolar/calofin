@@ -228,7 +228,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091526 REV22")
+(setq spa:*version* "091526 REV24")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -3915,11 +3915,21 @@
   (foreach v (spa:sysvars)
     (setq p (assoc v spa:*sysold*))
     (if p (setvar v (cdr p))))
-  ;; the current dimension style is read-only, so it takes a command
+  ;; The snapshot is dropped HERE, before the one form below that can
+  ;; throw -- not after it.  spa:syssave refuses to overwrite a snapshot
+  ;; that already exists (it has to: a second save mid-run would capture
+  ;; the zeroed OSMODE and "restore" 0 for ever).  So a throw that
+  ;; stranded this setq left the table standing, and every LATER run in
+  ;; the session then saved nothing and restored run one's OSMODE --
+  ;; silently undoing whatever the drafter had since ticked in Drafting
+  ;; Settings.  Sticky, session-long, and invisible.
+  (setq spa:*sysold* nil)
+  ;; the current dimension style is read-only, so it takes a command --
+  ;; and this runs from *error*, where a bare one can itself fail
   (if (and spa:*odstyle* (tblsearch "DIMSTYLE" spa:*odstyle*))
-      (command "_.-DIMSTYLE" "_Restore" spa:*odstyle*))
-  (setq spa:*sysold* nil
-        spa:*odstyle* nil))
+      (vl-catch-all-apply 'command-s
+                          (list "_.-DIMSTYLE" "_Restore" spa:*odstyle*)))
+  (setq spa:*odstyle* nil))
 
 ;;; -------------------- main command -----------------------------------
 
@@ -4013,8 +4023,15 @@
          (progn (princ "\nStepping back one question.") (setq sstep 1))
          (setq sstep 3)))
       ((= sstep 3)
-       ;; the base point is picked with the user's own snaps still live;
-       ;; only afterwards do snaps drop for the command-fed drawing work
+       ;; The base point is picked with the user's own snaps still live;
+       ;; only afterwards do snaps drop for the command-fed drawing work.
+       ;; spa:osup is what makes that true and it did not used to be here:
+       ;; spa:readblock runs before the three questions above and ends on
+       ;; spa:osdown like every other ask helper, so snaps were already at
+       ;; 0 by the time this prompt came up -- the one pick that places
+       ;; the whole spa, made with nothing to snap to.  POOL and POOLSIDE
+       ;; hold the drafter's snaps at the identical prompt.
+       (spa:osup)
        (if (spa:fhas 'base)
          (setq base  (spa:ftake 'base)
                sstep 4)
@@ -4028,6 +4045,9 @@
   (setq spa:*base* (if (and base (listp base))
                        (list (car base) (cadr base))
                        (list 0.0 0.0)))
+  ;; and down again for the command-fed drawing work below, whichever
+  ;; way the base point arrived -- picked, typed, or handed over by the
+  ;; form, which skips the prompt entirely
   (setvar "OSMODE" 0)
 
   ;; ------------------------------------------------ layers

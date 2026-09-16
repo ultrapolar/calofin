@@ -687,6 +687,32 @@ out that never reaches the `(tool:sysrestore)` at the bottom.  Left at
 two commands later, when a line drawn by eye refuses to snap to an
 endpoint.
 
+A restore that is PRESENT is not a restore that RUNS.  An error raised
+inside `*error*` aborts the handler: every form after the throwing one
+is skipped, the OSMODE line included.  So nothing that can throw may
+sit in front of it.  What can throw inside a handler is a bare
+`(command ...)` -- a 2015+ engine refuses one unless the error mode was
+pushed, and even where it was, the Esc that fired the handler may have
+left a command PENDING, so the call is fed in as answers to that
+instead.  Putting back a value the run captured itself is pure `setvar`
+and cannot throw, which is why it goes first and the risky work goes
+after.  `check_osnap.py` fails a handler that has them the other way
+round.  Four did: `OASIS` opened with an unwrapped `-DIMSTYLE` restore
+-- above the very pending-command valve its own comment said must come
+first -- and `AUTOBEAD`, `XFTCONV` and `XFTRECONV` each put their drain
+loop ahead of the only OSMODE restore they have.
+
+The mirror-image rule is about the SNAPSHOT.  A `syssave` here refuses
+to overwrite one that already exists, because a second save mid-run
+would capture the zeroed OSMODE and "restore" 0 for ever.  The price is
+that a snapshot never dropped silences every later run: they save
+nothing and restore the FIRST run's values, quietly undoing whatever
+the drafter has ticked in Drafting Settings since.  So the drop must
+not sit behind a form that can throw either.  `spa:sysrestore` did --
+its `(setq spa:*sysold* nil)` was behind a bare `-DIMSTYLE` -- which
+made one failed SPA run enough to freeze the drafter's snaps at that
+run's value for the rest of the session.
+
 The saved value has to be somewhere the handler can see: a local of the
 command (the handler is nested inside it, so `oos` is in scope) or the
 `tool:*sysold*` snapshot.  A helper that saves into a local of its OWN

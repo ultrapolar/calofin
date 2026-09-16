@@ -12786,7 +12786,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091526 REV22")
+(setq spa:*version* "091526 REV24")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -16411,8 +16411,15 @@
          (progn (princ "\nStepping back one question.") (setq sstep 1))
          (setq sstep 3)))
       ((= sstep 3)
-       ;; the base point is picked with the user's own snaps still live;
-       ;; only afterwards do snaps drop for the command-fed drawing work
+       ;; The base point is picked with the user's own snaps still live;
+       ;; only afterwards do snaps drop for the command-fed drawing work.
+       ;; spa:osup is what makes that true and it did not used to be here:
+       ;; spa:readblock runs before the three questions above and ends on
+       ;; spa:osdown like every other ask helper, so snaps were already at
+       ;; 0 by the time this prompt came up -- the one pick that places
+       ;; the whole spa, made with nothing to snap to.  POOL and POOLSIDE
+       ;; hold the drafter's snaps at the identical prompt.
+       (cal:osup)
        (if (spa:fhas 'base)
          (setq base  (spa:ftake 'base)
                sstep 4)
@@ -16426,6 +16433,9 @@
   (setq spa:*base* (if (and base (listp base))
                        (list (car base) (cadr base))
                        (list 0.0 0.0)))
+  ;; and down again for the command-fed drawing work below, whichever
+  ;; way the base point arrived -- picked, typed, or handed over by the
+  ;; form, which skips the prompt entirely
   (setvar "OSMODE" 0)
 
   ;; ------------------------------------------------ layers
@@ -17252,7 +17262,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v8.8")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v9.0")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -20174,8 +20184,18 @@
       nil
       (progn
         (setq off  (car (nth 2 ans))
-              bot  (cadr (nth 2 ans))
-              done (oasis:drawbottom bot arcs base w h lt
+              bot  (cadr (nth 2 ans)))
+        ;; The questions above are answered WITH the drafter's snaps --
+        ;; the break points are picked onto the outline.  What follows is
+        ;; the drawing, fed computed points to DIMALIGNED and to the
+        ;; hopper-offset cross dim, and it needs them off like every
+        ;; other command-fed stretch of this run.  The caller's osup
+        ;; used to span both halves, so the bottom flow's four dimension
+        ;; commands were the only ones of the run laid down with running
+        ;; osnap live -- free to be pulled onto whatever the outline
+        ;; happened to pass near.
+        (cal:osdown)
+        (setq done (oasis:drawbottom bot arcs base w h lt
                                      (nth 3 ans) (nth 4 ans) off))
         (list
           (strcat "\nBottom on layer " oasis:*poollayer*
@@ -20275,8 +20295,14 @@
                    rl rt rr ftl ftr fbc fbr off cbase arcs ents nests prev
                    lt a nchk gotbot)
   (defun *error* (msg)
-    ;; user settings come back FIRST so nothing below can skip them
-    (cal:dimstyrestore)
+    ;; user settings come back FIRST so nothing below can skip them --
+    ;; and that means FIRST, which this handler did not used to be.  It
+    ;; opened with (cal:dimstyrestore), whose (command ...) is exactly
+    ;; what the valve below exists to make safe: on the Esc-mid-dimension
+    ;; the comment there describes, the style restore was fed into the
+    ;; PENDING command as answers, and a throw there took this line with
+    ;; it -- leaving the drafter with every object snap unticked.
+    ;; Nothing above this line may drive a command.
     (cal:sysrestore)
     ;; a form's leftovers go with the run that was reading them: an Esc
     ;; part-way through must not leave answers behind for the next one
@@ -20288,6 +20314,9 @@
     (while (and (> (getvar "CMDACTIVE") 0) (< guard oasis:*cmdguard*))
       (command)
       (setq guard (1+ guard)))
+    ;; and only now, with nothing pending, the style -- it is read-only
+    ;; to setvar, so it is the one restore here that needs a command
+    (cal:dimstyrestore)
     ;; the preview is scaffolding, not a result -- it goes whether the run
     ;; finished or the user pressed Esc part-way through the questions.
     ;; So are the pool-bottom flow's numbered tangency marks, which are
@@ -32550,7 +32579,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.8")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -32689,7 +32718,12 @@
 ;;; ----------------------------------------------------------------------
 ;;;  END TUNABLES.  The sysvar list and its snapshot below are not
 ;;;  knobs: they are what the run puts back on the way out.
-(setq acc:*sysvars* '("OSMODE" "CMDECHO" "CLAYER"))  ; saved and put back
+;; OSMODE is deliberately NOT in this list.  none of the three ABCURCHECK commands never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
+(setq acc:*sysvars* '("CMDECHO" "CLAYER"))  ; saved and put back
 ;;; ======================================================================
 
 ;; ---- small 2D vector helpers -----------------------------------------
@@ -34703,7 +34737,7 @@
 ;;; layer everything landed on.
 ;;; ======================================================================
 
-(setq *olauto-version* "v1.2")       ; announced on load; release_lisp.py
+(setq *olauto-version* "v1.3")       ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -34854,7 +34888,12 @@
 ;;; ----------------------------------------------------------------------
 ;;;  END TUNABLES.  The sysvar list and its snapshot below are not
 ;;;  knobs: they are what the run puts back on the way out.
-(setq ola:*sysvars* '("OSMODE" "CMDECHO" "CLAYER"))  ; saved and put back
+;; OSMODE is deliberately NOT in this list.  OLAUTO never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
+(setq ola:*sysvars* '("CMDECHO" "CLAYER"))  ; saved and put back
 ;;; ======================================================================
 
 ;; ---- small 2D vector helpers -----------------------------------------
@@ -44454,7 +44493,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.8"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.9"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -44753,11 +44792,17 @@
   ;; -- error handler: cancel stuck commands, purge temp geometry,
   ;;    restore system variables, close the undo group -------------------
   (defun *error* (msg)
+    ;; the drafter's settings come back FIRST, ahead of the flush below.
+    ;; autobead-flush is a bare (command) drain -- the one form up here
+    ;; that can throw -- and it used to sit in front of these two, so a
+    ;; drain that died left every object snap unticked and PEDITACCEPT
+    ;; at 1.  Two setvars of values this run captured itself cannot
+    ;; throw, so nothing is risked by putting them above it.
+    (if oldos (setvar "OSMODE" oldos))
+    (if oldpa (setvar "PEDITACCEPT" oldpa))
     (autobead-flush)
     (foreach e temps
       (if (and e (entget e)) (entdel e)))
-    (if oldpa (setvar "PEDITACCEPT" oldpa))
-    (if oldos (setvar "OSMODE" oldos))
     ;; only close a group that was actually opened -- an error thrown
     ;; before the _Begin below (a cancelled selection, a failed getvar)
     ;; used to run _End on nothing, which errors inside the handler
@@ -62750,7 +62795,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cleardim-version* "v3.0")   ; announced on load; release_lisp.py
+(setq *cleardim-version* "v3.1")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -64675,10 +64720,13 @@
 
 ;;; -------------------- the commands -----------------------------------
 
-;; The sysvars either command changes, in the order they come back --
-;; OSMODE first, because object snaps are the setting a drafter misses
-;; most if a run is ever cut short partway.
-(defun cd:sysvars () '("OSMODE" "CMDECHO"))
+;; The sysvars either command changes, in the order they come back.
+;; OSMODE is deliberately NOT in this list.  CLEARDIM, and neither does CLEARDIMSCAN, never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
+(defun cd:sysvars () '("CMDECHO"))
 
 (defun c:CLEARDIM ( / *error* undo-open ss recs results n res)
   (defun *error* (msg)
@@ -69425,7 +69473,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v2.9")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.0")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -74148,7 +74196,10 @@
     (if lzd:report (lzd:report "FITABHD" *fitabhd-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "FITABHD" *fitabhd-version*))
-  (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
+  ;; no OSMODE: FITABHD never changes it, and listing it here would
+  ;; put this run's opening snapshot back over any snap the drafter
+  ;; ticked on during the seven steps -- on a clean exit.
+  (cal:syssave '("CMDECHO" "CLAYER"))
   (setvar "CMDECHO" 0)
   ;; a pickfirst selection if there is one - kept for step 7, probed
   ;; before the undo group opens, which would clear the set
@@ -85558,7 +85609,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.14")
+(setq *perp-version* "v0.15")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -85982,24 +86033,35 @@
   ;; single cleanup path shared by normal exit, Esc and errors
   (defun perp:finish (/ guard)
     ;; cancel any command left pending by an Esc mid-PLINE/DIMALIGNED
+    ;; The drafter's settings come back FIRST -- ahead of the drain
+    ;; below, which is the one form in here that can throw.  A bare
+    ;; (command) from *error* is legal only while a pushed error mode is
+    ;; actually in effect; where it is not, AutoCAD rejects it, the throw
+    ;; lands inside the handler and every line after it is skipped.  This
+    ;; whole defun WAS those lines: the handler is nothing but a call to
+    ;; it, so a rejected drain used to take the OSMODE restore, the layer,
+    ;; the creation defaults and the error-mode pop with it.  Putting back
+    ;; values this run captured itself is pure setvar and cannot throw.
+    (if os    (setvar "OSMODE"    os))
+    (if pd    (setvar "PDMODE"    pd))
+    (if cec   (setvar "CECOLOR"   cec))
+    (if celt  (setvar "CELTYPE"   celt))
+    (if celw  (setvar "CELWEIGHT" celw))
+    (if celts (setvar "CELTSCALE" celts))
+    (if plt   (setvar "PLINETYPE" plt))
+    ;; CLAYER last of the setvars: it is the one that can throw here, if
+    ;; the layer it names was purged while the run was open
+    (if clay  (setvar "CLAYER"    clay))
     (setq guard 0)
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)
       (setq guard (1+ guard)))
     (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
     (setq tmpEnts nil)
-    ;; leave the drawing's creation defaults exactly as they were found
-    (if cec   (setvar "CECOLOR"   cec))
-    (if celt  (setvar "CELTYPE"   celt))
-    (if celw  (setvar "CELWEIGHT" celw))
-    (if celts (setvar "CELTSCALE" celts))
     (if (and cdim (tblsearch "DIMSTYLE" cdim))
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" cdim)))
-    (if clay (setvar "CLAYER"  clay))
-    (if pd   (setvar "PDMODE"  pd))
-    (if os   (setvar "OSMODE"  os))
-    (if plt  (setvar "PLINETYPE" plt))
-    (if ce   (setvar "CMDECHO" ce))
+    ;; CMDECHO after the drain, so the drain itself stays quiet
+    (if ce (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
              (setq undoOpen nil)))
@@ -86678,7 +86740,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.14")
+(setq *cperp-version* "v0.15")
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -87007,23 +87069,35 @@
 
   ;; single cleanup path shared by normal exit, Esc and errors
   (defun cperp:finish (/ guard)
+    ;; The drafter's settings come back FIRST -- ahead of the drain
+    ;; below, which is the one form in here that can throw.  A bare
+    ;; (command) from *error* is legal only while a pushed error mode is
+    ;; actually in effect; where it is not, AutoCAD rejects it, the throw
+    ;; lands inside the handler and every line after it is skipped.  This
+    ;; whole defun WAS those lines: the handler is nothing but a call to
+    ;; it, so a rejected drain used to take the OSMODE restore, the layer,
+    ;; the creation defaults and the error-mode pop with it.  Putting back
+    ;; values this run captured itself is pure setvar and cannot throw.
+    (if os    (setvar "OSMODE"    os))
+    (if pd    (setvar "PDMODE"    pd))
+    (if cec   (setvar "CECOLOR"   cec))
+    (if celt  (setvar "CELTYPE"   celt))
+    (if celw  (setvar "CELWEIGHT" celw))
+    (if celts (setvar "CELTSCALE" celts))
+    (if plt   (setvar "PLINETYPE" plt))
+    ;; CLAYER last of the setvars: it is the one that can throw here, if
+    ;; the layer it names was purged while the run was open
+    (if clay  (setvar "CLAYER"    clay))
     (setq guard 0)
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)
       (setq guard (1+ guard)))
     (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
     (setq tmpEnts nil)
-    (if cec   (setvar "CECOLOR"   cec))
-    (if celt  (setvar "CELTYPE"   celt))
-    (if celw  (setvar "CELWEIGHT" celw))
-    (if celts (setvar "CELTSCALE" celts))
     (if (and cdim (tblsearch "DIMSTYLE" cdim))
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" cdim)))
-    (if clay (setvar "CLAYER"  clay))
-    (if pd   (setvar "PDMODE"  pd))
-    (if os   (setvar "OSMODE"  os))
-    (if plt  (setvar "PLINETYPE" plt))
-    (if ce   (setvar "CMDECHO" ce))
+    ;; CMDECHO after the drain, so the drain itself stays quiet
+    (if ce (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
              (setq undoOpen nil)))
@@ -88545,7 +88619,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.3")
+(setq *perpmark-version* "v1.4")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -89087,7 +89161,12 @@
 ;;; ----------------------------------------------------------------------
 
 
-(defun pm:sysvars () '("OSMODE" "CMDECHO" "CLAYER"))
+;; OSMODE is deliberately NOT in this list.  PERPMARK never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
+(defun pm:sysvars () '("CMDECHO" "CLAYER"))
 
 ;;; ----------------------------------------------------------------------
 ;;;  The marks
@@ -91648,7 +91727,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.16")
+(setq *spacheck-version* "v1.17")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -93419,7 +93498,7 @@
   (if (null ss)
     (prompt "\nNothing to check.")
     (progn
-      (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
+      (cal:syssave '("CMDECHO" "CLAYER"))
       (setq oldecho (getvar "CMDECHO"))
       (setvar "CMDECHO" 0)
       ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -100478,7 +100557,7 @@
 
 
 
-(setq *xft-version* "v1.16") ; printed on load and at command start so a
+(setq *xft-version* "v1.17") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -101285,15 +101364,23 @@
 ;;;  XFTCONV
 ;;; -------------------------------------------------------------------
 
-(defun c:XFTCONV ( / *error* xft:restore oscm osos osclay undone guard
+(defun c:XFTCONV ( / *error* xft:restore xft:sysback oscm osos osclay undone guard
                      ss base wbase i en ed typ locked
                      markers names dots dotnames r recs
                      nmade nblank ndots nleft)
 
-  (defun xft:restore ()
+  ;; The sysvars alone, OSMODE first.  Three setvars of values this run
+  ;; captured itself: nothing here can throw, which is the point -- the
+  ;; handler calls it BEFORE its (command) drain, so a drain that dies
+  ;; cannot take the drafter's object snaps with it.  The pop below
+  ;; cannot move up with them: the drain needs the pushed mode.
+  (defun xft:sysback ()
     (if oscm   (setvar "CMDECHO" oscm))
     (if osos   (setvar "OSMODE"  osos))
-    (if osclay (setvar "CLAYER"  osclay))
+    (if osclay (setvar "CLAYER"  osclay)))
+
+  (defun xft:restore ()
+    (xft:sysback)
     ;; The error mode pushed below is popped HERE, on every way out --
     ;; the three quiet exits, the report, and the handler -- not in the
     ;; handler alone.  A clean run used to leave the mode stacked for
@@ -101307,6 +101394,13 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTCONV error: " msg)))
+    ;; the drafter's settings come back FIRST, ahead of the drain below:
+    ;; that drain is a bare (command), the one form in this handler that
+    ;; can throw, and it used to sit in front of the only OSMODE restore
+    ;; there is -- so an Esc that died in the drain left every object
+    ;; snap unticked AND stranded the pop, which refuses command-s inside
+    ;; every later handler for the rest of the session
+    (xft:sysback)
     ;; back out of SCALE etc.  Bounded: CMDACTIVE carries a
     ;; "dialog is up" bit no keystroke from here can clear, and an
     ;; unbounded drain against it would hang with no Esc out.
@@ -101595,14 +101689,22 @@
   (reverse out)
 )
 
-(defun c:XFTRECONV ( / *error* xft:restore oscm osos osclay undone guard
+(defun c:XFTRECONV ( / *error* xft:restore xft:sysback oscm osos osclay undone guard
                        ss recs runs locked r spec keep i en
                        scale base nback nrebuilt)
 
-  (defun xft:restore ()
+  ;; The sysvars alone, OSMODE first.  Three setvars of values this run
+  ;; captured itself: nothing here can throw, which is the point -- the
+  ;; handler calls it BEFORE its (command) drain, so a drain that dies
+  ;; cannot take the drafter's object snaps with it.  The pop below
+  ;; cannot move up with them: the drain needs the pushed mode.
+  (defun xft:sysback ()
     (if oscm   (setvar "CMDECHO" oscm))
     (if osos   (setvar "OSMODE"  osos))
-    (if osclay (setvar "CLAYER"  osclay))
+    (if osclay (setvar "CLAYER"  osclay)))
+
+  (defun xft:restore ()
+    (xft:sysback)
     ;; popped on every way out, not in the handler alone -- see the
     ;; same note in c:XFTCONV
     (if *pop-error-mode* (*pop-error-mode*))
@@ -101611,6 +101713,13 @@
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTRECONV error: " msg)))
+    ;; the drafter's settings come back FIRST, ahead of the drain below:
+    ;; that drain is a bare (command), the one form in this handler that
+    ;; can throw, and it used to sit in front of the only OSMODE restore
+    ;; there is -- so an Esc that died in the drain left every object
+    ;; snap unticked AND stranded the pop, which refuses command-s inside
+    ;; every later handler for the rest of the session
+    (xft:sysback)
     (setq guard 0)
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)

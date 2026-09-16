@@ -231,7 +231,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091526 REV22")
+(setq spa:*version* "091526 REV24")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -3856,8 +3856,15 @@
          (progn (princ "\nStepping back one question.") (setq sstep 1))
          (setq sstep 3)))
       ((= sstep 3)
-       ;; the base point is picked with the user's own snaps still live;
-       ;; only afterwards do snaps drop for the command-fed drawing work
+       ;; The base point is picked with the user's own snaps still live;
+       ;; only afterwards do snaps drop for the command-fed drawing work.
+       ;; spa:osup is what makes that true and it did not used to be here:
+       ;; spa:readblock runs before the three questions above and ends on
+       ;; spa:osdown like every other ask helper, so snaps were already at
+       ;; 0 by the time this prompt came up -- the one pick that places
+       ;; the whole spa, made with nothing to snap to.  POOL and POOLSIDE
+       ;; hold the drafter's snaps at the identical prompt.
+       (cal:osup)
        (if (spa:fhas 'base)
          (setq base  (spa:ftake 'base)
                sstep 4)
@@ -3871,6 +3878,9 @@
   (setq spa:*base* (if (and base (listp base))
                        (list (car base) (cadr base))
                        (list 0.0 0.0)))
+  ;; and down again for the command-fed drawing work below, whichever
+  ;; way the base point arrived -- picked, typed, or handed over by the
+  ;; form, which skips the prompt entirely
   (setvar "OSMODE" 0)
 
   ;; ------------------------------------------------ layers

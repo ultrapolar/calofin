@@ -102,6 +102,82 @@ for cmd, path, helper, args, answers in CASES:
           vm.sysvars.get("OSMODE") == OSMODE,
           "OSMODE is %r, not %r" % (vm.sysvars.get("OSMODE"), OSMODE))
 
+# The other half of the complaint.  "My snaps got cleared" is what a
+# drafter says when snaps are off where they expect them ON, too -- and
+# SPA's base point, the one pick that places the whole spa, was made
+# that way.  spa:readblock runs before SPA's three opening questions and
+# ends on spa:osdown like every ask helper here, so snaps were already
+# at 0 by the time the base-point prompt came up, thirty lines before
+# the (setvar "OSMODE" 0) that was supposed to be what dropped them.
+# The comment at that prompt has always said the pick is made with the
+# drafter's own snaps live; the spa:osup that makes it true is new.
+print("snaps are live again at the pick that places the spa")
+vm = VM()
+vm.load(os.path.join(ROOT, "lisp/spa/SPA.LSP"))
+vm.sysvars["OSMODE"] = OSMODE
+vm.loads('(defun entsel (m) nil)')            # Enter, skipping the block
+# the grouped twin is mirrored onto the library, so the snapshot pair is
+# spa:* in lisp/ and cal:* in shared/ -- ask the VM which one it loaded
+vm.loads('''(if spa:syssave
+              (spa:syssave)
+              (cal:syssave (list "OSMODE" "LUNITS" "CMDECHO" "CLAYER")))''')
+vm.loads('(spa:readblock)')
+check("spa:readblock leaves snaps down, as every ask helper here does",
+      vm.sysvars.get("OSMODE") == 0, "OSMODE is %r" % vm.sysvars.get("OSMODE"))
+vm.loads('(if spa:osup (spa:osup) (cal:osup))')
+check("spa:osup gives them back for the base-point pick",
+      vm.sysvars.get("OSMODE") == OSMODE,
+      "OSMODE is %r, not %r" % (vm.sysvars.get("OSMODE"), OSMODE))
+
+# The third shape, and the one a drafter meets WITHOUT anything going
+# wrong: a tool that snapshots OSMODE, never changes it, and writes the
+# opening value back at the end.  Tick a snap on part-way through -- and
+# these are review tools you walk item by item, so there is every
+# opportunity -- and the clean exit takes it away again.  A sysvar list
+# is a promise to write the value back; borrow only what you move.
+print("a tool that never moves OSMODE does not write it back either")
+# The grouped twins are mirrored onto the library, so the snapshot pair
+# is <tool>:* in lisp/ and cal:* in shared/.  Each row carries the
+# standalone spelling and the VM picks the one it actually loaded --
+# (if f (f) (cal:...)) reads as nil for an unbound symbol either way.
+BORROWERS = [
+    ("PERPMARK",   "lisp/perpmark/PERPMARK.lsp",     "(pm:syssave)",
+     "(pm:sysrestore)"),
+    ("CLEARDIM",   "lisp/cleardim/CLEARDIM.lsp",     "(cd:syssave (cd:sysvars))",
+     "(cd:sysrestore)"),
+    ("FITABHD",    "lisp/fitabhd/FITABHD.lsp",
+     '(fit:syssave (list "CMDECHO" "CLAYER"))', "(fit:sysrestore)"),
+    ("SPACHECK",   "lisp/spacheck/SPACHECK.lsp",     "(spachk:syssave)",
+     "(spachk:sysrestore)"),
+    ("ABCURCHECK", "lisp/abcurcheck/ABCURCHECK.lsp", "(acc:syssave acc:*sysvars*)",
+     "(acc:sysrestore)"),
+    ("OLAUTO",     "lisp/olauto/OLAUTO.lsp",         "(ola:syssave ola:*sysvars*)",
+     "(ola:sysrestore)"),
+]
+
+#: the grouped fallbacks, run when the standalone symbol is unbound
+SHARED_SAVE = '(cal:syssave (list "CMDECHO" "CLAYER"))'
+SHARED_REST = '(cal:sysrestore)'
+
+
+def either(standalone, shared):
+    """STANDALONE when this tier defines it, else the library's."""
+    fn = standalone[1:].split()[0].rstrip(")")
+    return "(if %s %s %s)" % (fn, standalone, shared)
+
+
+for tool, path, save, restore in BORROWERS:
+    vm = VM()
+    vm.load(os.path.join(ROOT, path))
+    vm.sysvars["OSMODE"] = 0              # the drafter starts with snaps off
+    vm.loads(either(save, SHARED_SAVE))   # the run takes its snapshot
+    vm.sysvars["OSMODE"] = OSMODE         # mid-run, they tick the boxes on
+    vm.loads(either(restore, SHARED_REST))  # and it finishes, cleanly
+    check("%s: a snap ticked on mid-run survives the run" % tool,
+          vm.sysvars.get("OSMODE") == OSMODE,
+          "OSMODE is %r, not the %r the drafter set"
+          % (vm.sysvars.get("OSMODE"), OSMODE))
+
 # The test lies if the injected break never reached the mute: a command
 # whose answers stopped short would "pass" with OSMODE untouched.  So
 # prove the same harness SEES a handler that does not restore.
@@ -130,4 +206,5 @@ except LispError as e:
 if FAILS:
     print("\n%d FAILED: %s" % (len(FAILS), ", ".join(FAILS)))
     sys.exit(1)
-print("\nALL OSNAP-RESTORE CHECKS PASSED (%d commands)" % len(CASES))
+print("\nALL OSNAP-RESTORE CHECKS PASSED (%d commands, plus SPA's base point"
+      " and %d borrowers)" % (len(CASES), len(BORROWERS)))

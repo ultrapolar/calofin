@@ -146,7 +146,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.14")
+(setq *perp-version* "v0.15")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -570,24 +570,35 @@
   ;; single cleanup path shared by normal exit, Esc and errors
   (defun perp:finish (/ guard)
     ;; cancel any command left pending by an Esc mid-PLINE/DIMALIGNED
+    ;; The drafter's settings come back FIRST -- ahead of the drain
+    ;; below, which is the one form in here that can throw.  A bare
+    ;; (command) from *error* is legal only while a pushed error mode is
+    ;; actually in effect; where it is not, AutoCAD rejects it, the throw
+    ;; lands inside the handler and every line after it is skipped.  This
+    ;; whole defun WAS those lines: the handler is nothing but a call to
+    ;; it, so a rejected drain used to take the OSMODE restore, the layer,
+    ;; the creation defaults and the error-mode pop with it.  Putting back
+    ;; values this run captured itself is pure setvar and cannot throw.
+    (if os    (setvar "OSMODE"    os))
+    (if pd    (setvar "PDMODE"    pd))
+    (if cec   (setvar "CECOLOR"   cec))
+    (if celt  (setvar "CELTYPE"   celt))
+    (if celw  (setvar "CELWEIGHT" celw))
+    (if celts (setvar "CELTSCALE" celts))
+    (if plt   (setvar "PLINETYPE" plt))
+    ;; CLAYER last of the setvars: it is the one that can throw here, if
+    ;; the layer it names was purged while the run was open
+    (if clay  (setvar "CLAYER"    clay))
     (setq guard 0)
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)
       (setq guard (1+ guard)))
     (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
     (setq tmpEnts nil)
-    ;; leave the drawing's creation defaults exactly as they were found
-    (if cec   (setvar "CECOLOR"   cec))
-    (if celt  (setvar "CELTYPE"   celt))
-    (if celw  (setvar "CELWEIGHT" celw))
-    (if celts (setvar "CELTSCALE" celts))
     (if (and cdim (tblsearch "DIMSTYLE" cdim))
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" cdim)))
-    (if clay (setvar "CLAYER"  clay))
-    (if pd   (setvar "PDMODE"  pd))
-    (if os   (setvar "OSMODE"  os))
-    (if plt  (setvar "PLINETYPE" plt))
-    (if ce   (setvar "CMDECHO" ce))
+    ;; CMDECHO after the drain, so the drain itself stays quiet
+    (if ce (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
              (setq undoOpen nil)))

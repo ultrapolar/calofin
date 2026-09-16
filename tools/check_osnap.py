@@ -260,6 +260,7 @@ class Tier:
         self.table = set()
         self.tables = set()
         self.muters = set()
+        self.risky = set()        # reaches an unwrapped (command ...)
         for name, bodies in self.dmap.items():
             for body in bodies:
                 if restores_direct(body):
@@ -270,6 +271,32 @@ class Tier:
                     self.tables.add(name)
                 if mutes(body):
                     self.muters.add(name)
+                if unwrapped_command(body):
+                    self.risky.add(name)
+        # a caller of something risky is risky too
+        for _ in range(len(self.dmap)):
+            grew = False
+            for name, bodies in self.dmap.items():
+                if name in self.risky:
+                    continue
+                if any(c in self.risky for b in bodies for c in called(b)):
+                    self.risky.add(name)
+                    grew = True
+            if not grew:
+                break
+        self.putters = set(self.direct)
+        for _ in range(len(self.dmap)):
+            grew = False
+            for name, bodies in self.dmap.items():
+                if name in self.putters:
+                    continue
+                if any(c in self.putters for b in bodies for c in called(b)) \
+                        or (bool(self.tables) and
+                            any(restores_by_table(b) for b in bodies)):
+                    self.putters.add(name)
+                    grew = True
+            if not grew:
+                break
 
     def puts_back(self, body, scope):
         """Does BODY restore OSMODE, directly or through the snapshot?
@@ -308,12 +335,185 @@ def audit(tier):
     return rows
 
 
+def unwrapped_command(form):
+    """A (command ...) / (command-s ...) NOT under vl-catch-all-apply.
+
+    Inside an *error* handler this is the form that can throw.  A bare
+    (command) is refused outright by 2015+ engines unless the error mode
+    was pushed, and even where it is pushed it is fed to whatever command
+    the Esc left PENDING -- so it can fail on the very path a handler
+    exists to clean up after."""
+    hits = []
+
+    def rec(f, guarded):
+        if not isinstance(f, list):
+            return
+        h = head(f)
+        if h in ("vl-catch-all-apply", "vl-catch-all-error-p"):
+            guarded = True
+        if h in ("command", "command-s", "vl-cmdf") and not guarded:
+            hits.append(f)
+        for x in f:
+            if isinstance(x, list):
+                rec(x, guarded)
+
+    rec(form, False)
+    return hits
+
+
+def drops_snapshot(form):
+    """(setq tool:*sysold* nil) -- the run letting go of its snapshot."""
+    if not isinstance(form, list) or head(form) != "setq":
+        return False
+    for i in range(1, len(form) - 1, 2):
+        if is_sym(form[i]) and "*sys" in form[i].lower() \
+                and is_sym(form[i + 1]) and form[i + 1].lower() == "nil":
+            return True
+    return False
+
+
+def body_of(form):
+    """The statements a defun or a lambda runs, in order."""
+    return form[3:] if head(form) == "defun" else form[2:]
+
+
 def rel(path):
     """PATH as the tree spells it, or as given when it is outside the tree."""
     try:
         return path.relative_to(ROOT)
     except ValueError:
         return path
+
+
+def effective(stmts, dmap, depth=0, seen=None):
+    """STMTS with a called helper's own statements spliced in where it sits.
+
+    A handler is often nothing but one call -- c:PERPPTS's whole handler
+    is (perp:finish) -- and the ordering that matters is then INSIDE that
+    helper.  Reading only the handler's own forms sees a single statement
+    that both restores OSMODE and can throw, and concludes the order is
+    fine.  It is not: the drain is at the top of perp:finish and the
+    OSMODE line fourteen forms below it."""
+    if seen is None:
+        seen = set()
+    out = []
+    for st in stmts:
+        if not isinstance(st, list):
+            continue
+        callee = st[0].lower() if st and is_sym(st[0]) else None
+        if (depth < 3 and callee in dmap and callee not in seen
+                and len(st) == 1):          # a plain (helper) call, no args
+            seen.add(callee)
+            for body in dmap[callee]:
+                out += effective(body_of(body), dmap, depth + 1, seen)
+            seen.discard(callee)
+        else:
+            out.append(st)
+    return out
+
+
+def ordering(tier):
+    """Handlers whose OSMODE restore sits BEHIND something that can throw.
+
+    An error raised inside *error* aborts the handler: every form after
+    the throwing one is skipped, the OSMODE restore included.  So the
+    restore being present in the source is not the same as the restore
+    running.  STANDARDS section 5 puts it first for this reason."""
+    out, seen = [], set()
+    for path, dmap in tier.per_file.items():
+        # commands first, so a handler nested in one is reported under
+        # the name a drafter types rather than under "*error*"
+        for owner in sorted(dmap, key=lambda n: (not n.startswith("c:"),
+                                                 n == "*error*", n)):
+            bodies = dmap[owner]
+            for body in bodies:
+                for h in handlers(body):
+                    if id(h) in seen:
+                        continue
+                    seen.add(id(h))
+                    risk = put = None
+                    for i, st in enumerate(effective(body_of(h), dmap)):
+                        if not isinstance(st, list):
+                            continue
+                        if risk is None and (unwrapped_command(st) or
+                                             (called(st) & tier.risky)):
+                            risk = (i, st)
+                        if put is None and (restores_direct(st) or
+                                            (called(st) & tier.putters)):
+                            put = (i, st)
+                    if risk and put and risk[0] < put[0]:
+                        name = risk[1][0] if is_sym(risk[1][0]) else "a command"
+                        out.append((path, owner, name))
+    return out
+
+
+def stranding(tier):
+    """Restore helpers that can be left holding their snapshot.
+
+    Every syssave here refuses to overwrite a snapshot that already
+    exists -- it has to, or a second save mid-run would capture the
+    ZEROED OSMODE and restore 0 for ever after.  The cost of that guard
+    is that a snapshot which is never dropped silences every later run:
+    they save nothing and restore the FIRST run's values, quietly undoing
+    whatever the drafter has ticked in Drafting Settings since.  So the
+    drop must not sit behind a form that can throw."""
+    out = []
+    for path, dmap in tier.per_file.items():
+        for name, bodies in dmap.items():
+            for body in bodies:
+                put = risk = drop = None
+                for i, st in enumerate(body_of(body)):
+                    if not isinstance(st, list):
+                        continue
+                    if put is None and (restores_direct(st) or
+                                        restores_by_table(st)):
+                        put = i
+                    if risk is None and unwrapped_command(st):
+                        risk = i
+                    if drop is None and drops_snapshot(st):
+                        drop = i
+                if None not in (put, risk, drop) and put < risk < drop:
+                    out.append((path, name))
+    return out
+
+
+def borrowed_but_unmoved(tier):
+    """Commands that snapshot OSMODE and never change it.
+
+    A sysvar list is not a wish: it is a promise to WRITE the value back
+    at the end.  A tool that lists OSMODE without ever muting it puts
+    its opening snapshot back over any snap the drafter ticked on WHILE
+    IT WAS RUNNING -- on a clean exit, with no error anywhere, which is
+    the likeliest way anyone meets this.  Seven commands did that, and
+    five of them (PERPMARK, FITABHD, SPACHECK, ABCURCHECK, CLEARDIM) are
+    review tools a drafter walks item by item, with every opportunity to
+    reach for the Object Snap dialog part-way through.
+
+    Borrow only what you move."""
+    out = []
+    for path, dmap in tier.per_file.items():
+        savers = set()
+        for name, bodies in dmap.items():
+            if ("syssave" in name or "sysvar" in name) \
+                    and any(names_osmode(b) for b in bodies):
+                savers.add(name)
+        for body in dmap.values():
+            for b in body:
+                for f in walk(b):
+                    if isinstance(f, list) and f and is_sym(f[0]) \
+                            and "syssave" in f[0].lower() \
+                            and any(isinstance(a, list) and names_osmode([a])
+                                    for a in f[1:]):
+                        savers.add(f[0].lower())
+        if not savers:
+            continue
+        for cmd in sorted(n for n in dmap if n.startswith("c:")):
+            if cmd.endswith("ver"):
+                continue
+            scope = reach(called(dmap[cmd][0]), tier.dmap) | {cmd}
+            if (scope & savers) and not (scope & tier.muters):
+                out.append((path, cmd))
+    return out
 
 
 def check(tier, label):
@@ -341,9 +541,37 @@ def check(tier, label):
                 "handler nested inside can see it -- and put it back FIRST "
                 "in the handler, or restore through the sysvar snapshot."
                 % where)
+    for path, owner, risk in ordering(tier):
+        problems.append(
+            "%s: the *error* handler in %s restores OSMODE only AFTER "
+            "(%s ...), which can throw. An error inside *error* aborts the "
+            "handler, so on the very path it exists for the restore never "
+            "runs and the drafter is left with every object snap unticked. "
+            "Move the setvars above it -- putting back a value this run "
+            "captured itself cannot throw -- or wrap the risky form in "
+            "vl-catch-all-apply."
+            % (rel(path), owner, risk))
+    for path, name in stranding(tier):
+        problems.append(
+            "%s: %s drops its snapshot only AFTER a bare command that can "
+            "throw, so a throw leaves the snapshot standing. syssave then "
+            "refuses to re-save, and every later run in the session "
+            "restores THIS run's OSMODE over whatever the drafter has "
+            "ticked since. Drop the snapshot before the command, or wrap "
+            "the command." % (rel(path), name))
+    for path, cmd in borrowed_but_unmoved(tier):
+        problems.append(
+            "%s: %s snapshots OSMODE but never changes it, so on the way "
+            "out it writes its OPENING value back over any snap the "
+            "drafter ticked on while it was running -- on a clean exit, "
+            "no error needed. A sysvar list is a promise to write the "
+            "value back; borrow only what you move. Drop \"OSMODE\" from "
+            "this tool's list."
+            % (rel(path), cmd.upper()))
     if not problems:
         print("check_osnap: %s -- %d command%s move OSMODE, every one of "
-              "them puts it back on both the clean and the failed path"
+              "them puts it back on both the clean and the failed path, "
+              "ahead of anything that can throw"
               % (label, len(rows), "" if len(rows) == 1 else "s"))
     return problems
 

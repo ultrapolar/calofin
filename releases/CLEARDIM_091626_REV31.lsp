@@ -181,7 +181,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cleardim-version* "v3.0")   ; announced on load; release_lisp.py
+(setq *cleardim-version* "v3.1")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -2138,10 +2138,13 @@
 
 ;;; -------------------- the commands -----------------------------------
 
-;; The sysvars either command changes, in the order they come back --
-;; OSMODE first, because object snaps are the setting a drafter misses
-;; most if a run is ever cut short partway.
-(defun cd:sysvars () '("OSMODE" "CMDECHO"))
+;; The sysvars either command changes, in the order they come back.
+;; OSMODE is deliberately NOT in this list.  CLEARDIM, and neither does CLEARDIMSCAN, never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
+(defun cd:sysvars () '("CMDECHO"))
 
 (defun cd:syssave (vars / v)
   (foreach v vars

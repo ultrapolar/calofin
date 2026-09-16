@@ -96,7 +96,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.8")   ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -235,7 +235,12 @@
 ;;; ----------------------------------------------------------------------
 ;;;  END TUNABLES.  The sysvar list and its snapshot below are not
 ;;;  knobs: they are what the run puts back on the way out.
-(setq acc:*sysvars* '("OSMODE" "CMDECHO" "CLAYER"))  ; saved and put back
+;; OSMODE is deliberately NOT in this list.  none of the three ABCURCHECK commands never
+;; changes it, and a list is a promise to WRITE the value back: the run
+;; would put its opening snapshot back over any snap the drafter ticked
+;; on while it was up -- on a clean exit, with no error involved, which
+;; is the likeliest way anyone meets it.  Borrow only what you move.
+(setq acc:*sysvars* '("CMDECHO" "CLAYER"))  ; saved and put back
 (setq acc:*sysold* nil)                ; the snapshot itself
 ;;; ======================================================================
 
