@@ -112138,7 +112138,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.33")
+(setq *lazpanel-version* "v3.34")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -112158,6 +112158,12 @@
 ;;;                     thing
 ;;;  tools/check_registry.py --fix maintains both; the VB palette's
 ;;;  catalog is generated from them (tools/gen_ui_data.py).
+;;;    lzp:*blurbs*     one sentence per command, for Find's rows and
+;;;                     CALHELP -- copied from ui/calofin_net/blurbs.txt,
+;;;                     not written twice; tests/test_lazpanel.py holds
+;;;                     the two to each other word for word.
+;;;    lzp:*keywords*   search-only synonyms lzp:matches also checks, for
+;;;                     a word the name, caption and blurb never use
 
 ;; The Find page's tab title.  Find is a page but not a group: it stays
 ;; out of lzp:*groups* -- what Rest is computed against and what
@@ -112419,6 +112425,224 @@
 (defun lzp:caption (name / p)
   (cond ((setq p (assoc name lzp:*capsof*)) (cdr p))
         ((setq p (assoc name lzp:*captions*)) (cadr p))
+        (t "")))
+
+;; What a command IS, in one sentence.  Copied in from the palette's
+;; own tooltip file (ui/calofin_net/blurbs.txt) rather than written a
+;; second time, so the Find page, CALHELP and the palette all say the
+;; same thing about a tool instead of three editors drifting apart.
+;; tests/test_lazpanel.py holds this table to that file word for word,
+;; so an edited or newly registered tooltip that is not carried over
+;; here fails the suite instead of quietly falling out of step.
+(setq lzp:*blurbs*
+  '(
+    ("ABCDEF" "Plot rectangle points")
+    ("ABCURCHECK" "Grades how continuous a drawn perimeter is")
+    ("ABCURCHECKSCAN" "ABCURCHECK without marking the drawing")
+    ("ABLOBF" "Fits an OPEN run of arcs and lines through points, between two ends you pick")
+    ("ABPCHECK" "ABHD's measuring half as a checker - how far each point is off the line")
+    ("ABPCREATE" "Plots a point that is not there yet from the two readings it was taped at")
+    ("ABFIND" "Ties Pt.## back to the A and B survey stakes")
+    ("ABHD" "Fits a pool perimeter and bottom through surveyed points")
+    ("ABHDCOVER" "ABHD for a cover sheet that stops at the perimeter")
+    ("ABMOVE" "Moves a point, offering every mis-read tape it could be")
+    ("ADAB" "Freeform perimeter through surveyed points")
+    ("ALTABCDEF" "ABCDEF with the clockwise corner order")
+    ("AUTOBEAD" "Offsets selected pool lines toward a clicked side")
+    ("AUTODIM" "Automatic dimensioning")
+    ("AUTODIMSIDEPOV" "Dimensions a side-view flight of steps")
+    ("BPCALLOUT" "Rings clicked bad points and writes the callout")
+    ("CABHD" "ABHD's perimeter half, for a survey that runs past the pool")
+    ("CCPRECHECK" "Walks the Tech Flow Chart decision tree")
+    ("CDCALLOUT" "Cross-dimensions from Pt.## to Pt.## by typed number")
+    ("CDCREATE" "Turns every highlighted line into a cross dimension")
+    ("CHECK" "General drawing check")
+    ("CLEARDIM" "Slides dimension text along its own dimension line until it is readable")
+    ("CLEARDIMSCAN" "Names the dimension text CLEARDIM would move, and moves nothing")
+    ("CONSTELLATION" "Places points from the distances between them, inside a known box")
+    ("CORNERSTP" "Corner step layout")
+    ("COVERCHECK" "Cover check")
+    ("COVERSCAN" "Scan drawing for covers")
+    ("CPERPPTS" "PERPPTS for a curved run")
+    ("CUSTBLOCK" "Custom block in pictorial view from three typed sizes")
+    ("DIMARCCHECK" "Dim arc endpoint check")
+    ("DIMCHECK" "Guided, one-at-a-time dimension review")
+    ("DIMCONTEND" "Chains a seed dimension out to every feature point")
+    ("DIMSCAN" "Scan drawing for dimensions")
+    ("DIMSTAMP" "Click a point, type 4'4.5 or 44.5; stamps it canonically, an on-screen ruler picks the next")
+    ("DRONE" "Drone cleanup routine")
+    ("FITABHD" "Fits a typed pool template through surveyed points")
+    ("FITABHDCOVER" "FITABHD for a cover sheet - skips the bottom question")
+    ("FLOORDIM" "Floor dimensioning")
+    ("G2MCONV" "Puts a G2M architectural pool plan onto the shop's layers and styles")
+    ("G2MRECONV" "Undoes a G2MCONV run - layers, appearance, text and dimension styles")
+    ("HEMISTEP" "Hemi step layout")
+    ("HONEFILLET" "Bracket two of SMARTFILLET's radii and hone between them at half inches")
+    ("LAZDIAG" "Write the last failure out as a DXF to send in - and, with nothing to report, prove that path works")
+    ("LAZFORM" "Fill the dimension chart in and draw the pool from it")
+    ("LAZLOG" "Every calofin command that finished, was backed out of or FAILED - the log a report's history comes from")
+    ("LAZSIDE" "Read the section, type the letters beside it, and POOLSIDE draws the side view")
+    ("LAZTXT" "LAZFORM's chart built from DCL tiles instead of vectors")
+    ("LAZFORMCOVER" "LAZFORM for a cover sheet - the pool-bottom gate closed")
+    ("LAZSPA" "LAZFORM's argument applied to SPA - fill the chart in and the spa is drawn")
+    ("LAZSTEP" "Type the step count and the drawing follows it - fill it in and the steps are drawn")
+    ("LHD" "Laser-point outline fit, open or closed")
+    ("LINCHECK" "Line / text check")
+    ("LINFINCHECK" "Full liner-finish drawing QA, guided")
+    ("LINFINSCAN" "The liner-finish QA as one scan")
+    ("LINTXTCHK" "Places the vinyl-liner QA checklist as drawing text")
+    ("LITECOVERSCAN" "Cover rules only - skips the dimension audit")
+    ("LITELINFINSCAN" "Liner rules only - skips the dimension audit")
+    ("LITESPACHECKSCAN" "Spa rules only - skips the dimension audit")
+    ("LOBF" "Fits a construction line through points that should be on one line")
+    ("MOHAMADDLE" "PADDLE's perimeter pads with a size pick first - 24in or 36in")
+    ("NORMIESTEP" "Normie step layout")
+    ("OASIS" "Continuous-tangent pool drawn live from envelope and radii")
+    ("LINGUTTER" "Guts a highlighted area back to the pool, walking the outer face")
+    ("LINGUTTERSCAN" "LINGUTTER's report only - reads the drawing, changes nothing")
+    ("OLAUTO" "Best-fit overlay of a new perimeter on the original, worst error dimensioned")
+    ("PADDLE" "Paddle perimeter pads")
+    ("PERPMARK" "Name a survey point, type what it measured: circle, perpendicular, dimension")
+    ("PERPPTS" "Perpendicular offset points along a line or curve")
+    ("POINTRENAMER" "Hands the survey point numbers back out in perimeter order")
+    ("POOL" "Full pool layout tool")
+    ("POOLCOVER" "POOL for a cover sheet - the bottom question pre-answered No")
+    ("POOLDEMO" "Draws a worked example pool end to end")
+    ("POOLSIDE" "POOL's longitudinal section on its own, from the floor run chain")
+    ("SIMPABHD" "ABHD with nothing to decide: five ready-made perimeters, keep one")
+    ("SMARTFILLET" "Fillet a corner after previewing every radius that fits")
+    ("SOCONV" "Puts an SO site-survey export onto the shop's layers in one pass")
+    ("SORECONV" "Undoes a SOCONV run - every object back on the export's own layers")
+    ("SPA" "Spa / hot-tub template layout")
+    ("SPACHECK" "Audits a spa sheet against what SPA draws")
+    ("SPACHECKSCAN" "The spa sheet review as one scan")
+    ("SPACOVCREATE" "Offsets a selected spa outline into its cover and hinges it to the taper")
+    ("STAIRDIM" "Stair dimensioning")
+    ("STOCKCOVER" "Replaces a highlighted perimeter with a stock cover drawing")
+    ("TYDRN" "Text, pool-point and anchor cleanup in one pass")
+    ("TYLERDRONESUITE" "The whole drone trace in one - TYDRN, then PADDLE, then CDIM")
+    ("VSCONV" "Remaps a VS survey export's numbered layers onto the shop's")
+    ("VSRECONV" "Undoes a VSCONV run - layers, properties and the dimension overrides")
+    ("WCALST" "Unrolls a curved constant-width band flat, with darts")
+    ("XFTCONV" "Cleans up a Leica XFT/DXF import or a site trace")
+    ("XFTRECONV" "Undoes an XFTCONV run - the markers and text back, and the scale with them")
+    ("XYPLOT" "Plot an X/Y sheet, twice: points, and dimensioned")
+   ))
+
+;; No per-drafter override the way lzp:caption has one -- LAZNAME lets
+;; a drafter rename a button, not rewrite what it does, so a blurb is
+;; always the shipped one.  A command that somehow has no row (there is
+;; always one; the test above is what keeps that true) falls back to
+;; its caption rather than showing blank.
+(defun lzp:blurb (name / p)
+  (cond ((setq p (assoc name lzp:*blurbs*)) (cadr p))
+        (t (lzp:caption name))))
+
+;; Search-only synonyms a one-sentence blurb has no room for: the words
+;; a drafter might type who does not know calofin's name or caption for
+;; what they want -- LHD's blurb says "laser-scanned" but not
+;; "topdown", ABHD's caption never says "tolerance" though its settings
+;; are exactly that trade-off.  Never shown on screen anywhere, only
+;; matched against in lzp:matches below.
+(setq lzp:*keywords*
+  '(
+    ("ABCDEF" "tape measurement rectangle corners points plot confidence locate excel")
+    ("ABCURCHECK" "continuity smooth gaps kinks crossings curvature comb grade")
+    ("ABCURCHECKSCAN" "continuity smooth gaps kinks crossings report unmarked grade")
+    ("ABLOBF" "polyline curve fit survey points wall coping bench step")
+    ("ABPCHECK" "survey points distance offset limit report ring arcs")
+    ("ABPCREATE" "point create missing tape reading plot stake survey")
+    ("ABFIND" "survey stake tie dimension cross point taped move")
+    ("ABHD" "perimeter bottom survey points curve fit deduced tolerance")
+    ("ABHDCOVER" "perimeter survey cover sheet skip bottom fit points")
+    ("ABMOVE" "taped wrong reading transposed marker note circle sweep")
+    ("ADAB" "organic freeform shape survey points perimeter bottom curve")
+    ("ALTABCDEF" "rectangle corners clockwise frame diagonal distances crossed plot")
+    ("AUTOBEAD" "offset bead lines pool clicked side select")
+    ("AUTODIM" "perimeter sides arcs radii stairs floor overall dimensions")
+    ("AUTODIMSIDEPOV" "steps stairs depth side view flight dimensions inches")
+    ("BPCALLOUT" "bad point circle callout mark step flag list")
+    ("CABHD" "perimeter walls corners points cutoff edge last survey")
+    ("CCPRECHECK" "flow chart decision tree product type summary check")
+    ("CDCALLOUT" "cross dimensions points survey tie pair typed repeat")
+    ("CDCREATE" "cross dimension line convert layer erase tie style")
+    ("CHECK" "audit dimension point geometry stray fix drawing")
+    ("CLEARDIM" "clear overlapping dimension text move readable crowded drawing")
+    ("CLEARDIMSCAN" "scan report crowded overlapping dimension text readable analysis")
+    ("CONSTELLATION" "distance chart solve coordinates rectangle radius arc dimension points layout")
+    ("CORNERSTP" "corner step layout pool geometry select routine read")
+    ("COVERCHECK" "cover review rules suggest title date update quality")
+    ("COVERSCAN" "cover scan rules suggest title date outdated report")
+    ("CPERPPTS" "perpendicular offset points curve segments arc resize boundary limit meet")
+    ("CUSTBLOCK" "pictorial block length width height dimension inches faces")
+    ("DIMARCCHECK" "audit arc endpoint geometry stray fix dimension")
+    ("DIMCHECK" "dimension placement arc attachment overlapping lines review style guided")
+    ("DIMCONTEND" "chain continue dimension seed feature points")
+    ("DIMSCAN" "dimension placement arc attachment overlapping lines scan style report")
+    ("DIMSTAMP" "dimension text stamp label mtext ruler measurement tape")
+    ("DRONE" "cleanup text style height points perimeter pool spa")
+    ("FITABHD" "pool template shape survey points rectangle oval roman oasis hopper")
+    ("FITABHDCOVER" "pool template shape survey points cover sheet rectangle oval oasis")
+    ("FLOORDIM" "floor dimensions plan alternative pads standard typical")
+    ("G2MCONV" "architect plan layers styles stairs dimensions text overrides remap convert")
+    ("G2MRECONV" "undo restore record layers styles dimensions report original session")
+    ("HEMISTEP" "wall drop tread flat profile hemi corner step")
+    ("HONEFILLET" "corner radius fillet round refine steps dimension precise")
+    ("LAZDIAG" "error report failure diagnosis transcript log downloads crash")
+    ("LAZFORM" "dimension chart form letters boxes corners draw pool")
+    ("LAZLOG" "log monthly command quit fail rate file prompt")
+    ("LAZSIDE" "section letters tabs insert base point bottom type depth recall")
+    ("LAZTXT" "tiles text chart form boxed cluster hopper rectangle")
+    ("LAZFORMCOVER" "cover sheet bottom gate chart form shape closed")
+    ("LAZSPA" "chart form octagon round rectangle cover hinge taper")
+    ("LAZSTEP" "step count dimensions tread riser beading sheet form")
+    ("LHD" "laser points outline fit scan topdown closed open")
+    ("LINCHECK" "checklist companion flowchart walker routine paired")
+    ("LINFINCHECK" "liner finish dimensions steps wall pattern title block")
+    ("LINFINSCAN" "liner finish scan report wiping updating dimension audit")
+    ("LINTXTCHK" "vinyl liner checklist quality assurance inspection text")
+    ("LITECOVERSCAN" "cover scan rules quality suggest title date report")
+    ("LITELINFINSCAN" "liner finish scan report wiping updating skip dims")
+    ("LITESPACHECKSCAN" "scan audit report outlines hinges title chart readonly")
+    ("LOBF" "points straight line wall anchors stations outlier measure")
+    ("MOHAMADDLE" "pads size placement default session scan engine")
+    ("NORMIESTEP" "recess outside corner lines select pool sides normie")
+    ("OASIS" "freeform continuous tangent cloud kidney bulge radius hopper slope bottom")
+    ("LINGUTTER" "guts perimeter highlight erase interior dimensions pad outline")
+    ("LINGUTTERSCAN" "perimeter highlight report unchanged question gut keep drop")
+    ("OLAUTO" "overlay perimeter alignment fit bead track dimensions rigid")
+    ("PADDLE" "concave perimeter features pads blocks insert find")
+    ("PERPMARK" "survey points wall offsets bench ledge gutter dimension")
+    ("PERPPTS" "perpendicular offset points line segments arc resize boundary limit meet")
+    ("POINTRENAMER" "renumber sequence perimeter clockwise order callout survey number")
+    ("POOL" "field measurements rectangle oval grecian lazy plan shape")
+    ("POOLCOVER" "cover sheet bottom depth hopper corner skip plan")
+    ("POOLDEMO" "worked example sample rectangle oval grecian lazy plan shape")
+    ("POOLSIDE" "section length depths floor run bottom type base point")
+    ("SIMPABHD" "perimeter survey points automatic preset choices error curves")
+    ("SMARTFILLET" "fillet radius corner arcs preview dimension typical tangent")
+    ("SOCONV" "survey export layers remap points dimensions obstacles perimeter")
+    ("SORECONV" "undo layer colour xdata purge recreate record moved")
+    ("SPA" "hot tub template rectangle octagon round shape")
+    ("SPACHECK" "review audit outlines dimensions hinges taper title date")
+    ("SPACHECKSCAN" "scan audit report outlines dimensions hinges title readonly")
+    ("SPACOVCREATE" "spa cover lap taper hinge foam sheet offset")
+    ("STAIRDIM" "stairs steps dimensions plan flight standard typical")
+    ("STOCKCOVER" "stock cover replace perimeter drawing folder align placement")
+    ("TYDRN" "drone trace cleanup text points spa layer pool tidy")
+    ("TYLERDRONESUITE" "suite chain drone trace tidy pad dimension selection")
+    ("VSCONV" "survey export layers perimeter coping anchors dimensions style")
+    ("VSRECONV" "undo layer colour linetype lineweight dimension style override")
+    ("WCALST" "unroll curved band flat darts inserts width flatten")
+    ("XFTCONV" "survey import scale points blocks leica trace markers")
+    ("XFTRECONV" "undo revert survey markers text scale xdata blocks")
+    ("XYPLOT" "survey offset origin graph dimension chain reduced points")
+   ))
+
+;; A command with no row here searches on name, caption and blurb alone
+;; -- keywords widen a search, they are not load-bearing for it.
+(defun lzp:keywords (name / p)
+  (cond ((setq p (assoc name lzp:*keywords*)) (cadr p))
         (t "")))
 
 ;;  THE PAGES, AS COLUMNS.  Each page is (title (heading cmd ...) ...) --
@@ -112918,24 +113142,40 @@
        (setq i (1+ i)))
      (<= i (1+ (- n m))))))
 
-;; The roster narrowed to what matches, in roster order.  Name first,
-;; then caption, so the order the panel is laid out in survives.  A
-;; hidden tool is not a hit: it is out of sight everywhere the panel
-;; shows itself, and Find is one more place that is true.
-(defun lzp:matches (s / up out n)
-  (setq up (strcase s))
+;; The roster narrowed to what matches, in roster order.  The typed
+;; string is split into words (lzp:split on a space) and EVERY word has
+;; to turn up somewhere -- an AND across words, so a two-word search
+;; narrows rather than widening.  Where a word may turn up is the OR:
+;; the name, the caption, the one-sentence blurb or the keyword list,
+;; so "cover no bottom" finds ABHDCOVER without the drafter guessing
+;; that its own caption never says "no bottom" in those words -- its
+;; blurb does.  An empty search has no word left to fail on, so it
+;; still matches everything, same as before.  A hidden tool is not a
+;; hit: it is out of sight everywhere the panel shows itself, and Find
+;; is one more place that is true.
+(defun lzp:matches (s / words n cap kw bl ok w out)
+  (setq words (lzp:split (strcase s) " "))
   (foreach n (lzp:visible)
-    (if (or (lzp:instr n up)
-            (lzp:instr (strcase (lzp:caption n)) up))
-      (setq out (cons n out))))
+    (setq cap (strcase (lzp:caption n))
+          kw  (strcase (lzp:keywords n))
+          bl  (strcase (lzp:blurb n))
+          ok  t)
+    (foreach w words
+      (if (not (or (lzp:instr n w) (lzp:instr cap w)
+                   (lzp:instr kw w) (lzp:instr bl w)))
+        (setq ok nil)))
+    (if ok (setq out (cons n out))))
   (reverse out))
 
-;; One row of the list.  The name and its caption are joined the way the
-;; category pages join them, and NOT padded into columns: whether the
-;; dialog font is fixed-pitch is exactly what LAZASCII exists to ask, so
-;; nothing here may assume that spaces line up.
+;; One row of the list: the name, its caption and its one-sentence
+;; blurb, joined the way the category pages join a name and its
+;; caption, and NOT padded into columns: whether the dialog font is
+;; fixed-pitch is exactly what LAZASCII exists to ask, so nothing here
+;; may assume that spaces line up.  The caption stays first and alone
+;; reachable through lzp:caption, so a drafter's own LAZNAME rename
+;; still lands here exactly as it always has; the blurb is what is new.
 (defun lzp:hitline (n have)
-  (strcat n "  -  " (lzp:caption n)
+  (strcat n "  -  " (lzp:caption n) "  -  " (lzp:blurb n)
           (if (member n have) "" "   (not loaded)")))
 
 ;; The message line under the list: how much the search left, or why
@@ -113458,7 +113698,10 @@
   (append out
     (list (strcat "  : edit_box { key = \"filter\"; "
                   "label = \"Find\"; edit_width = 30; }")
-          (strcat "  : list_box { key = \"hits\"; width = 60; "
+          ;; wide enough for a row's worst case -- name, caption AND a
+          ;; blurb, over 100 characters for the longest of the three --
+          ;; confirmed against the screen budget by tools/check_dcl.py
+          (strcat "  : list_box { key = \"hits\"; width = 130; "
                   "height = 14; }")
           "  : text { key = \"msg\"; width = 60; }"
           "  spacer;"
@@ -114603,11 +114846,14 @@
 ;;  NAMED_SATELLITES in tools/callib.py, so neither asks for a panel
 ;;  button it has no use for.
 
-;; What a command IS, at the command line.  The captions have been
-;; here all along and the only way to read one was to open the panel
-;; and find the page the tool was filed on -- which is the same
-;; complaint the Find page answered inside the dialog, unanswered
-;; outside it.  Enter lists the lot.
+;; What a command IS, at the command line: its caption and its
+;; one-sentence blurb, both.  They have been here all along and the
+;; only way to read one was to open the panel and find the page the
+;; tool was filed on -- which is the same complaint the Find page
+;; answered inside the dialog, unanswered outside it.  The search
+;; behind it is lzp:matches, so a keyword nobody would guess from the
+;; name finds the tool here exactly as it does on the Find page.
+;; Enter lists the lot.
 (defun c:CALHELP ( / *error* s hits n)
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg)
@@ -114633,7 +114879,7 @@
                     " session:"))
      (foreach n hits
        (princ (strcat "\n  " (if (lzp:has n) (strcat n) (strcat "(" n ")"))
-                      "  " (lzp:caption n))))))
+                      "  " (lzp:caption n) "  -  " (lzp:blurb n))))))
   (if lzd:end (lzd:end "CALHELP"))
   (princ))
 

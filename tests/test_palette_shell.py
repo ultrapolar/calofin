@@ -184,8 +184,16 @@ check("the panel spells the substring search out rather than wcmatch",
 check("the palette uses Contains, not a pattern matcher",
       '.Contains(needle)' in VB and 'Regex' not in VB)
 check("both search the caption as well as the name",
-      '(lzp:instr (strcase (lzp:caption n)) up)' in PANEL_SRC
+      '(setq cap (strcase (lzp:caption n))' in PANEL_SRC
+      and '(lzp:instr n w) (lzp:instr cap w)' in PANEL_SRC
       and 'e.Caption.ToUpperInvariant().Contains(needle)' in VB)
+# the panel also searches the one-sentence blurb and the keyword list --
+# two fields the palette has no reader for yet, the same kind of
+# exemption Alias and Caption carry in section 1: a LISP-SIDE widening
+# of the search, not a parity gap, until the palette learns to read
+# either.
+check("...and the blurb and keyword list too, Lisp-side only for now",
+      '(lzp:instr kw w) (lzp:instr bl w)' in PANEL_SRC)
 
 # lzp:fill selects the top hit so a search and Enter runs it
 check("the top hit is selected for you, both sides",

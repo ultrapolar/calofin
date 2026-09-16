@@ -11,34 +11,47 @@ off the tree and `make check` fails when the prose disagrees.)
 ## Find
 
 The one page that does not need you to know where a tool was filed.
-Type any part of a name **or of its caption** and the list narrows to
-what matches; the top hit is selected as you type, so Enter runs it.
+Type any part of a name, its caption, its one-sentence blurb, or a
+search keyword calofin has attached to it, and the list narrows to what
+matches; the top hit is selected as you type, so Enter runs it. Type
+more than one word and EVERY word has to turn up somewhere -- narrowing,
+never widening.
 
 ```
-Find  [cover                      ]
-+----------------------------------------------------+
-| POOLCOVER    -  Pool layout, no bottom             |
-| LAZFORMCOVER -  Chart to pool, no bottom           |
-| ABHDCOVER    -  Survey perimeter, no bottom        |
-| FITABHDCOVER -  Typed template fit, no bottom      |
-| STOCKCOVER   -  Stock cover placement  (not loaded)|
-| COVERCHECK   -  Cover review                       |
-+----------------------------------------------------+
-8 of 67 match "cover"
+Find  [cover                                                          ]
++------------------------------------------------------------------------------+
+| POOLCOVER     -  Pool layout, no bottom  -  POOL for a cover sheet -         |
+|                  the bottom question pre-answered No                        |
+| ABHDCOVER     -  Survey perimeter, no bottom  -  ABHD for a cover sheet      |
+|                  that stops at the perimeter                                |
+| LAZSPA        -  Spa from a filled-in chart  -  LAZFORM's argument          |
+|                  applied to SPA - fill the chart in and the spa is drawn    |
+| STOCKCOVER    -  Stock cover placement  -  Replaces a highlighted           |
+|                  perimeter with a stock cover drawing  (not loaded)         |
++------------------------------------------------------------------------------+
+10 of 91 match "cover"
 ```
 
-Searching the captions is the point rather than a bonus. `cover` would
-have worked either way -- all eight of its hits carry the word in their
-names. `survey` is the case that matters: it finds `ABHD`, `ABHDCOVER`
-and `ABPCHECK`, and not one of those three says anything about a survey
-in its name. Half of knowing this toolset is knowing what the names stand
-for, and this is where you stop needing to.
+(rows wrapped here for the page; the list box itself is one line each.)
+
+Searching the caption and the blurb is the point rather than a bonus.
+`cover` would have half-worked on names alone -- most of its hits carry
+the word there too. `survey` is the case that matters: it finds `ABHD`,
+`ABHDCOVER` and `ABPCHECK`, and not one of those three says anything
+about a survey in its name. `LAZSPA` above is the other half of the
+point: neither its name nor its caption ever says "cover", only the
+keyword list attached to it for exactly this search does -- a word the
+name and the blurb never use still finds the tool. Half of knowing this
+toolset is knowing what the names stand for, and this is where you stop
+needing to.
 
 The needle is taken **literally**. `lzp:instr` is a written-out
 substring search rather than a call to `wcmatch`, because the text is
 whatever was typed: `wcmatch` would read `*`, `?`, `~`, `[`, `]`, `@`,
 `.` and `#` as pattern syntax, so a typed `*` would match the whole
-roster and a typed `.` would match none of it.
+roster and a typed `.` would match none of it (though a blurb or
+keyword is free to use `.` or `#` as an ordinary character -- `DIMSTAMP`'s
+blurb has "4.5" in it, so typing `.` alone does find it, literally).
 
 A tool this session has not loaded is **listed** here, marked `(not
 loaded)`, and `Run` refuses it with that reason on the message line
@@ -559,7 +572,7 @@ ones to hide) would be a joke at the drafter's expense.
 
 | Command | Answers |
 | --- | --- |
-| `CALHELP` | what a command IS, at the command line. Type any part of a name **or of its caption** -- the same search the Find page runs, so `survey` finds `ABHD` -- and it prints the matches with their captions; Enter lists every tool that is not hidden. A name in brackets is not loaded in this session. Until this existed the captions were readable in exactly one place: the panel, on whichever page the tool happened to be filed on, which is the complaint Find answers INSIDE the dialog and nothing answered outside it |
+| `CALHELP` | what a command IS, at the command line. Type any part of a name, its caption, its one-sentence blurb or a search keyword -- the same search the Find page runs, so `survey` finds `ABHD` and `cover` finds `LAZSPA` on a keyword alone -- and it prints the matches with their caption AND blurb; Enter lists every tool that is not hidden. A name in brackets is not loaded in this session. Until this existed the captions were readable in exactly one place: the panel, on whichever page the tool happened to be filed on, which is the complaint Find answers INSIDE the dialog and nothing answered outside it |
 | `CALSET` | the settings calofin keeps in the profile -- `CalofinTheme`, `CalofinErrorDir` (where `LAZDIAG` writes its report) and the stock folder -- what each one does, and one prompt to change it, plus a `Hidden` option that routes straight to `LAZHIDE`. The profile is where a setting SURVIVES: `releases/` and `LAZPASS.lsp` are generated, so a number edited into either is gone at the next regeneration. `CalofinTheme` is also written beside the pins in this file's own registry key, because the VB palette reads it there (`ui/calofin_net/PaletteTheme.vb`) -- the same bargain the pinned row already strikes |
 | `LAZHIDE` | opens the checklist of every tool, ticked to match what is currently hidden -- see "Hiding a tool" above. Accept stores the new list; Cancel re-reads the stored one, exactly as `LAZPIN`'s editor does |
 | `LAZNAME` | your own name for a tool and for its button -- see "Names of your own" above. Reached from `Names...` in `LAZSET`, or typed |

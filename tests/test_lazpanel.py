@@ -46,6 +46,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))
 from lispvm import VM, LispError  # noqa: E402
 import callib  # noqa: E402
+import gen_ui_data  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, '..'))
@@ -140,6 +141,36 @@ assert len(FOLDED) == len(set(FOLDED)), "lzp:commands repeats: %r" % FOLDED
 assert set(FOLDED) == set(PANEL), "lzp:commands lost a command"
 print("   %s, %d buttons over %d commands, none twice on a page"
       % (ver, len(BUTTONS), len(PANEL)))
+
+
+print("== lzp:*blurbs* and lzp:*keywords*: complete, and blurbs match blurbs.txt ==")
+# The one-sentence blurb is not invented here a second time: it is
+# copied in from the palette's own tooltip file, and this is what keeps
+# the copy honest.  A mismatch means someone edited one and not the
+# other, or registered a new tool without carrying its blurb across.
+TXT_BLURBS = gen_ui_data.blurbs()
+BLURBS = {str(c[0]): str(c[1]) for c in vm.globals.get('lzp:*blurbs*') or []}
+missing_blurb = [c for c in PANEL if c not in BLURBS]
+assert not missing_blurb, "buttons with no lzp:*blurbs* row: %r" % missing_blurb
+orphan_blurb = [c for c in BLURBS if c not in set(PANEL)]
+assert not orphan_blurb, "lzp:*blurbs* rows with no button: %r" % orphan_blurb
+assert all(BLURBS.values()), \
+    "blank blurb: %r" % [c for c, v in BLURBS.items() if not v]
+mismatched = [c for c in PANEL if BLURBS[c] != TXT_BLURBS.get(c)]
+assert not mismatched, (
+    "lzp:*blurbs* has drifted from blurbs.txt: %r" % mismatched)
+
+# lzp:*keywords* has no outside source to match -- it exists only to
+# widen the search -- but every command still needs a row, or a search
+# silently loses the extra reach for whichever ones do not.
+KEYWORDS = {str(c[0]): str(c[1])
+            for c in vm.globals.get('lzp:*keywords*') or []}
+missing_kw = [c for c in PANEL if c not in KEYWORDS or not KEYWORDS[c]]
+assert not missing_kw, "buttons with no lzp:*keywords* row: %r" % missing_kw
+orphan_kw = [c for c in KEYWORDS if c not in set(PANEL)]
+assert not orphan_kw, "lzp:*keywords* rows with no button: %r" % orphan_kw
+print("   %d blurbs match blurbs.txt word for word, %d keyword rows, none blank"
+      % (len(BLURBS), len(KEYWORDS)))
 
 
 print("== roster pin: panel == headline commands under lisp/ ==")
@@ -1593,17 +1624,30 @@ def captions(v):
     return {str(c[0]): str(c[1]) for c in v.globals['lzp:*captions*']}
 
 
+def blurbs(v):
+    return {str(c[0]): str(c[1]) for c in v.globals['lzp:*blurbs*']}
+
+
+def keywords(v):
+    return {str(c[0]): str(c[1]) for c in v.globals['lzp:*keywords*']}
+
+
 CAPS = captions(fv)
+BLURBS = blurbs(fv)
+KEYWORDS = keywords(fv)
 # an empty box is not a filter: the whole roster, in roster order
 fv.loads('(setq test:*all* (lzp:commands))')
 ALL = [str(x) for x in fv.globals['test:*all*']]
 assert matches(fv, '') == ALL, "an empty search does not list the roster"
 
-# the search reads the caption as well as the name, which is the whole
-# point: half of knowing this toolset is knowing what the names mean
+# the search reads the name, the caption, the one-sentence blurb and
+# the keyword list -- an OR across all four fields for a single word,
+# which is half of knowing this toolset: knowing what the names mean
 for needle in ('cover', 'check', 'spa', 'survey', 'dim'):
     want = [c for c in ALL
-            if needle.upper() in c or needle.upper() in CAPS[c].upper()]
+            if needle.upper() in c or needle.upper() in CAPS[c].upper()
+            or needle.upper() in BLURBS.get(c, '').upper()
+            or needle.upper() in KEYWORDS.get(c, '').upper()]
     assert matches(fv, needle) == want, (
         "%r matched %r, expected %r" % (needle, matches(fv, needle), want))
     assert matches(fv, needle.upper()) == want, "%r is case sensitive" % needle
@@ -1616,15 +1660,47 @@ assert matches(fv, 'survey'), "no tool's caption mentions a survey"
 print("   %d tools match \"survey\" on their captions alone, none by name"
       % len(matches(fv, 'survey')))
 
+# a word that turns up ONLY in the keyword list -- never in the name,
+# the caption or the blurb -- is the whole reason lzp:*keywords* exists:
+# ABHD trades curve count for how far a point may sit off the fit, and
+# nothing but the keyword list ever spells that "tolerance"
+assert 'TOLERANCE' not in CAPS['ABHD'].upper()
+assert 'TOLERANCE' not in BLURBS['ABHD'].upper()
+assert 'TOLERANCE' in KEYWORDS['ABHD'].upper()
+assert matches(fv, 'tolerance') == ['ABHD'], (
+    "a keyword-only word did not find its tool: %r" % matches(fv, 'tolerance'))
+print("   a word found in no name, caption or blurb still finds its tool")
+
+# two words narrow rather than widen: EVERY word has to turn up
+# somewhere, not both in the same field.  "closed" alone is LAZFORMCOVER
+# as well as LHD (LAZFORMCOVER's blurb: "the pool-bottom gate closed");
+# adding "laser" -- LHD's caption, not LAZFORMCOVER's -- drops it to LHD
+# alone, which only happens if the two words are ANDed rather than
+# either one being enough on its own.
+assert matches(fv, 'closed') == ['LAZFORMCOVER', 'LHD'], matches(fv, 'closed')
+assert matches(fv, 'laser closed') == ['LHD'], (
+    "a two-word search did not AND across fields: %r"
+    % matches(fv, 'laser closed'))
+print("   \"laser closed\" narrows \"closed\" from two tools to one")
+
 # The needle is whatever was typed.  wcmatch would read these as
 # pattern syntax -- "*" would match the whole roster and "." none of it
 # -- so a literal search is the difference between a useful box and a
-# baffling one.
+# baffling one.  A blurb or keyword is free to use "." or "#" as an
+# ordinary character (DIMSTAMP's "4.5", ABFIND's "Pt.##"), so the check
+# is that each wildcard finds exactly the commands whose text really
+# holds that character, not that every one of them comes back empty.
+def hay(c):
+    return (c + ' ' + CAPS[c] + ' ' + KEYWORDS.get(c, '')
+            + ' ' + BLURBS.get(c, '')).upper()
+
+
 for wild in ('*', '?', '~', '[A]', '@', '.', '#'):
-    assert matches(fv, wild) == [], \
-        "%r matched %r -- the search is going through wcmatch" \
-        % (wild, matches(fv, wild))
-print("   wildcard characters are searched for, not obeyed")
+    want = [c for c in ALL if wild.upper() in hay(c)]
+    assert matches(fv, wild) == want, \
+        "%r matched %r, expected %r -- literal or wcmatch?" \
+        % (wild, matches(fv, wild), want)
+print("   wildcard characters are searched for literally, not obeyed")
 
 # a row says what a tool is, and says when the session cannot run it
 fv.loads('(setq test:*a* (lzp:hitline "POOL" \'("POOL")))')
@@ -1632,10 +1708,12 @@ fv.loads('(setq test:*b* (lzp:hitline "POOL" nil))')
 assert 'POOL' in str(fv.globals['test:*a*'])
 assert CAPS['POOL'] in str(fv.globals['test:*a*']), \
     "the row does not carry the caption: %r" % fv.globals['test:*a*']
+assert BLURBS['POOL'] in str(fv.globals['test:*a*']), \
+    "the row does not carry the one-sentence blurb: %r" % fv.globals['test:*a*']
 assert 'not loaded' not in str(fv.globals['test:*a*'])
 assert 'not loaded' in str(fv.globals['test:*b*']), \
     "an unloaded tool is listed with nothing to say so"
-print("   a row is NAME - caption, plus (not loaded) when it is not")
+print("   a row is NAME - caption - blurb, plus (not loaded) when it is not")
 
 
 print("== find: filling, picking and running ==")
