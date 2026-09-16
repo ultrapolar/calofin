@@ -720,7 +720,8 @@ STUB = '''
       stub:*bitmaps* nil stub:*float* nil stub:*visible* nil
       stub:*deleted-tb* nil stub:*addfail* nil stub:*rcs* nil
       stub:*nosupport* nil stub:*tiles* nil stub:*list* nil
-      stub:*listing* nil stub:*clickval* nil stub:*clickreason* nil)
+      stub:*listing* nil stub:*clickval* nil stub:*clickreason* nil
+      stub:*curlist* nil stub:*lists* nil)
 (defun stub:ev (e) (setq stub:*events* (cons e stub:*events*)) e)
 (defun vl-filename-mktemp (pat dir ext) (strcat "/stub/" pat ext))
 (defun open (f mode) f)
@@ -744,10 +745,19 @@ STUB = '''
 (defun stub:tile (k / p) (if (setq p (assoc k stub:*tiles*)) (cadr p)))
 ;; A list box is filled between start_list and end_list, so the stub
 ;; keeps the rows in the order they were added rather than the order
-;; the caller consed them.
-(defun start_list (k) (setq stub:*listing* nil) (stub:ev (strcat "list " k)) k)
+;; the caller consed them.  stub:*list* is the LAST one filled -- fine
+;; where a page fills exactly one, like Find's "hits" -- and
+;; stub:*lists* keeps every one by its own key, for a page like
+;; LAZSET's that fills several dropdowns in the same open.
+(defun start_list (k)
+  (setq stub:*listing* nil stub:*curlist* k) (stub:ev (strcat "list " k)) k)
 (defun add_list (s) (setq stub:*listing* (cons s stub:*listing*)) s)
-(defun end_list () (setq stub:*list* (reverse stub:*listing*)) nil)
+(defun end_list ( / items)
+  (setq items (reverse stub:*listing*) stub:*list* items)
+  (setq stub:*lists*
+        (cons (cons stub:*curlist* items)
+              (vl-remove (assoc stub:*curlist* stub:*lists*) stub:*lists*)))
+  nil)
 (defun action_tile (k expr)
   (setq stub:*action* (cons (list k expr) stub:*action*)) t)
 (defun mode_tile (k m)
@@ -2124,11 +2134,21 @@ print("   opens the settings page, unloads it and deletes the temp DCL")
 # list -- and comes up on whatever the profile already says
 vm = setvm([0], env={'CalofinTheme': 'LIGHT'})
 run(vm, 'c:LAZSET', 'set-theme-shown')
-assert [str(x) for x in (vm.globals.get('stub:*list*') or [])] \
-    == ['Auto', 'Dark', 'Light'], vm.globals.get('stub:*list*')
+vm.loads('(setq t:*themelist* (cdr (assoc "set_theme" stub:*lists*)))')
+assert [str(x) for x in (vm.globals.get('t:*themelist*') or [])] \
+    == ['Auto', 'Dark', 'Light'], vm.globals.get('t:*themelist*')
 assert tile(vm, 'set_theme') == '2', \
     "the dropdown did not open on Light: %r" % tile(vm, 'set_theme')
 print("   the Theme dropdown is filled and opens on the stored answer")
+
+# every role's family dropdown is filled too, Auto first and Custom
+# last, and opens on Auto when nothing is stored for it
+vm.loads('(setq t:*famlist* (cdr (assoc "inkfam_flag" stub:*lists*)))')
+famlist = [str(x) for x in vm.globals['t:*famlist*']]
+assert famlist[0] == 'Auto' and famlist[-1].startswith('Custom'), famlist
+assert tile(vm, 'inkfam_flag') == '0', \
+    "an unset role did not open on Auto: %r" % tile(vm, 'inkfam_flag')
+print("   every role's family dropdown is filled the same way, Auto by default")
 
 # picking Dark and accepting writes the profile AND the registry copy
 # the VB palette reads, which is the bargain CALSET's own Theme strikes
@@ -2140,30 +2160,43 @@ assert [str(x) for x in (vm.globals.get('t:*reg*') or [])] == ['Theme', 'DARK'],
 assert any('settings saved' in str(p) for p in vm.printed), vm.printed
 print("   picking a theme and accepting writes the profile and the registry")
 
-# an item colour is stored under the key cal:ink actually reads
-vm = setvm([1], click='ink_flag', val='42')
-run(vm, 'c:LAZSET', 'set-ink')
-assert prof(vm, 'CalofinInk-FLAG') == '42', prof(vm, 'CalofinInk-FLAG')
-print("   a colour box lands under CalofinInk-<ROLE>")
+# a family pick lands its preset's ACI under CalofinInk-<ROLE> -- index
+# 1 is the first preset, Red
+vm = setvm([1], click='inkfam_flag', val='1')
+run(vm, 'c:LAZSET', 'set-ink-family')
+vm.loads('(setq t:*red* (cadr (assoc "Red" lzp:*inkpresets*)))')
+assert prof(vm, 'CalofinInk-FLAG') == str(vm.globals['t:*red*']), \
+    (prof(vm, 'CalofinInk-FLAG'), vm.globals['t:*red*'])
+print("   a family pick lands its preset's ACI under CalofinInk-<ROLE>")
 
-# ...and emptying one puts that role back to auto
-vm = setvm([1], click='ink_flag', val='', env={'CalofinInk-FLAG': '42'})
+# ...and index 0, Auto, puts that role back to auto -- the same job an
+# emptied box used to do when there was only one box
+vm = setvm([1], click='inkfam_flag', val='0', env={'CalofinInk-FLAG': '42'})
 run(vm, 'c:LAZSET', 'set-ink-clear')
 assert prof(vm, 'CalofinInk-FLAG') == '', \
-    "an emptied colour box did not go back to auto: %r" % prof(vm, 'CalofinInk-FLAG')
-print("   ...and emptying it puts the role back to auto")
+    "picking Auto did not go back to auto: %r" % prof(vm, 'CalofinInk-FLAG')
+print("   ...and picking Auto puts the role back to auto")
 
-# a colour box that is not a colour: the state line names it, OK is
+# the hex box snaps to the nearest recommended preset, the same mapping
+# CALSET's own command line now uses
+vm = setvm([1], click='inkhex_flag', val='fe0100')  # near-red, not exact
+run(vm, 'c:LAZSET', 'set-ink-hex')
+vm.loads('(setq t:*near* (lzp:aci-near 254 1 0))')
+assert prof(vm, 'CalofinInk-FLAG') == str(vm.globals['t:*near*']), \
+    (prof(vm, 'CalofinInk-FLAG'), vm.globals['t:*near*'])
+print("   a hex code snaps to the nearest recommended preset's ACI")
+
+# a hex box that is not a hex colour: the state line names it, OK is
 # greyed, and the value never reaches the profile
-vm = setvm([1], click='ink_flag', val='red')
+vm = setvm([1], click='inkhex_flag', val='notacolor')
 run(vm, 'c:LAZSET', 'set-ink-bad')
 assert 'Flag' in tile(vm, 'state'), \
     "the state line does not name the bad box: %r" % tile(vm, 'state')
 assert 'accept' in {str(x) for x in (vm.globals.get('stub:*disabled*') or [])}, \
-    "OK was not greyed while a colour box was unreadable"
+    "OK was not greyed while a hex box was unreadable"
 assert prof(vm, 'CalofinInk-FLAG') == '', \
-    "a value that is not a colour was stored: %r" % prof(vm, 'CalofinInk-FLAG')
-print("   a box that is not a colour greys OK and is never written")
+    "a value that is not a hex colour was stored: %r" % prof(vm, 'CalofinInk-FLAG')
+print("   a hex box that is not a hex colour greys OK and is never written")
 
 # ...and a typo must not ERASE the override that was already there.
 # Greying is not a hard stop: DCL fires an edit box's action before the
@@ -2171,7 +2204,7 @@ print("   a box that is not a colour greys OK and is never written")
 # lands anyway.  The write skips a box it cannot read rather than
 # clearing it, which is the difference between ignoring a typo and
 # throwing away the colour the drafter had.
-vm = setvm([1], click='ink_flag', val='3x', env={'CalofinInk-FLAG': '3'})
+vm = setvm([1], click='inkhex_flag', val='3x', env={'CalofinInk-FLAG': '3'})
 run(vm, 'c:LAZSET', 'set-ink-typo-keeps')
 assert prof(vm, 'CalofinInk-FLAG') == '3', \
     "a typo erased the stored override: %r" % prof(vm, 'CalofinInk-FLAG')
@@ -2182,13 +2215,33 @@ print("   ...and a typo leaves the override that was already stored alone")
 # drives lzp:set-ok directly rather than through start_dialog.
 gv = stubbed()
 gv.loads('(lzp:set-read)')
-gv.loads('(lzp:set-put "CalofinInk-FLAG" "3x") (setq stub:*done* nil) (lzp:set-ok)')
+gv.loads('(lzp:set-put "CalofinInkHex-FLAG" "3x") (setq stub:*done* nil) (lzp:set-ok)')
 assert gv.globals.get('stub:*done*') is None, \
-    "OK closed the dialog with an unreadable colour box in it"
-gv.loads('(lzp:set-put "CalofinInk-FLAG" "3") (lzp:set-ok)')
+    "OK closed the dialog with an unreadable hex box in it"
+gv.loads('(lzp:set-put "CalofinInkHex-FLAG" "") (lzp:set-ok)')
 assert str(gv.globals.get('stub:*done*')) == '1', \
     "OK did not go through once the box was fixed: %r" % gv.globals.get('stub:*done*')
 print("   OK re-checks rather than trusting the greying, as LAZFORM's Insert does")
+
+# the presets themselves: distinct ACI numbers, all real, and a pure
+# colour snaps to its OWN preset rather than a neighbour
+pv = fresh()
+pv.loads('(setq t:*acis* nil)')
+pv.loads('(foreach p lzp:*inkpresets*'
+         ' (setq t:*acis* (cons (cadr p) t:*acis*)))')
+pacis = [int(str(x)) for x in pv.globals['t:*acis*']]
+assert len(pacis) == len(set(pacis)), "a preset ACI repeats: %r" % pacis
+assert all(1 <= a <= 255 for a in pacis), pacis
+pv.loads('(setq t:*near* (lzp:aci-near 0 255 0))')  # pure green
+pv.loads('(setq t:*green* (cadr (assoc "Green" lzp:*inkpresets*)))')
+assert str(pv.globals['t:*near*']) == str(pv.globals['t:*green*']), \
+    (pv.globals['t:*near*'], pv.globals['t:*green*'])
+pv.loads('(setq t:*a* (lzp:hex2rgb "#00FF00"))')
+pv.loads('(setq t:*b* (lzp:hex2rgb "gggggg"))')
+assert [int(str(x)) for x in pv.globals['t:*a*']] == [0, 255, 0]
+assert pv.globals.get('t:*b*') is None, "6 letters that are not hex parsed anyway"
+print("   %d presets, distinct ACI numbers, and a pure colour snaps to its own"
+      % len(pacis))
 
 # a padded profile value is what every other reader in the tree trims
 # before deciding: lzp:ui reads " dark " as dark, so the dialog must
@@ -2407,6 +2460,95 @@ assert str(gn.globals.get('stub:*done*')) == '1', \
 print("   OK re-checks rather than trusting the greying")
 
 
+print("== LAZBACKUP: names and settings, out to a file and back ==")
+# export: the registry copy of Alias/Caption, and the profile's
+# settings, all land in one plain file -- lzp:*aliases*/lzp:*capsof*
+# come from the REGISTRY (lzp:names-read runs first), not whatever a
+# previous test happened to leave in memory
+bv = fresh()
+bv.loads('(defun vl-registry-read (k n)'
+         ' (cond ((= n "Alias") "POOL=PL;SPA=SP2")'
+         '       ((= n "Caption") "POOL=My own pool")'
+         '       (t "")))')
+bv.env['CalofinTheme'] = 'DARK'
+bv.env['CalofinInk-FLAG'] = '3'
+bv.run('c:LAZBACKUP', ['Export', 'C:\\backup.txt'])
+out = ''.join(str(p) for p in bv.printed)
+assert 'Wrote 2 names, 1 caption and 11 settings to C:\\backup.txt.' in out, out
+content = bv.files.get('C:\\backup.txt')
+assert content is not None, "nothing was written"
+assert content.splitlines()[0].startswith('; calofin LAZBACKUP'), content
+assert '[Alias]' in content and 'POOL=PL' in content and 'SPA=SP2' in content
+assert '[Caption]' in content and 'POOL=My own pool' in content
+assert '[Settings]' in content and 'CalofinTheme=DARK' in content
+assert 'CalofinInk-FLAG=3' in content
+# an unset setting still gets its line -- empty means auto, a real
+# answer, not an omission
+assert 'CalofinInk-ARC=' in content
+print("   Export writes both name maps and every setting to one file")
+
+# a target that cannot be written is reported, not silently dropped
+wv = fresh()
+wv.readonly_dirs.add('C:')
+wv.run('c:LAZBACKUP', ['Export', 'C:\\backup.txt'])
+assert 'Could not write C:\\backup.txt.' in ''.join(str(p) for p in wv.printed)
+print("   ...and a folder that refuses the write is reported, not silent")
+
+# import: applies what it can, skips what it cannot, and says which is
+# which -- an unknown command, a bad hex-free ACI, both named
+iv = fresh()
+iv.files['C:\\backup.txt'] = (
+    '; calofin LAZBACKUP -- v3.37\n'
+    '[Alias]\n'
+    'POOL=PL\n'
+    'BOGUS=XX\n'
+    '[Caption]\n'
+    'POOL=My own pool\n'
+    '[Settings]\n'
+    'CalofinTheme=DARK\n'
+    'CalofinInk-FLAG=3\n'
+    'CalofinInk-ARC=notanumber\n')
+iv.loads('(setq t:*writes* nil)')
+iv.loads('(defun vl-registry-write (k n s)'
+         ' (setq t:*writes* (cons (strcat n "=" s) t:*writes*)) s)')
+iv.run('c:LAZBACKUP', ['Import', 'C:\\backup.txt'])
+out = ''.join(str(p) for p in iv.printed)
+assert '4 lines applied from C:\\backup.txt.' in out, out
+assert '2 skipped:' in out, out
+assert 'BOGUS=XX (no such command)' in out, out
+assert 'CalofinInk-ARC=notanumber (not a colour number)' in out, out
+assert iv.env.get('CalofinTheme') == 'DARK', iv.env
+assert iv.env.get('CalofinInk-FLAG') == '3', iv.env
+assert 'CalofinInk-ARC' not in iv.env, \
+    "a bad colour was written anyway: %r" % iv.env
+writes = [str(x) for x in (iv.globals.get('t:*writes*') or [])]
+assert any(w.startswith('Alias=') and 'POOL=PL' in w for w in writes), writes
+assert any(w.startswith('Caption=') and 'POOL=My own pool' in w for w in writes), writes
+# the alias works from the next command typed, not only after a reload
+iv.loads('(setq t:*f* (car (atoms-family 1 (list "C:PL"))))')
+assert str(iv.globals.get('t:*f*')) == 'C:PL', \
+    "an imported alias did not define its wrapper"
+print("   Import applies what it can, skips and names what it cannot")
+
+# a file that does not exist, and an empty answer either way
+mv = fresh()
+mv.run('c:LAZBACKUP', ['Import', 'C:\\nope.txt'])
+assert 'Could not read C:\\nope.txt.' in ''.join(str(p) for p in mv.printed)
+ev = fresh()
+ev.run('c:LAZBACKUP', ['Export', ''])
+assert 'Nothing written.' in ''.join(str(p) for p in ev.printed)
+print("   a missing file to read, or nothing typed either way, is reported")
+
+# the path questions take Back, typed, the same way CALSET's folder
+# questions already do; the Backup [...] question ahead of them is the
+# first of the chain and does not need to
+kv = fresh()
+kv.run('c:LAZBACKUP', ['Export', 'Back', 'Quit'])
+out = ''.join(str(p) for p in kv.printed)
+assert 'Nothing changed.' in out and 'Nothing written' not in out, out
+print("   Back on the file question re-asks Backup, typed like CALSET's own")
+
+
 print("== LAZPANELVER ==")
 vm = fresh()
 vm.run('c:LAZPANELVER', [])
@@ -2511,6 +2653,17 @@ out = ''.join(str(p) for p in vm.printed)
 assert vm.env.get('CalofinInk-FLAG') == '42', vm.env
 assert 'Flag colour is now ACI 42' in out, out
 print("   Itemcolors -> Flag -> 42 writes CalofinInk-FLAG")
+
+# a hex code works at the command line too, the same nearest-preset
+# mapping the LAZSET dialog's hex box uses
+vm = fresh()
+vm.run('c:CALSET', ['Itemcolors', 'Arc', '#0000FE'])  # near-blue
+out = ''.join(str(p) for p in vm.printed)
+vm.loads('(setq t:*near* (lzp:aci-near 0 0 254))')
+near = str(vm.globals['t:*near*'])
+assert vm.env.get('CalofinInk-ARC') == near, (vm.env, near)
+assert ('Arc colour is now ACI %s' % near) in out, out
+print("   ...and a hex code snaps to the nearest preset there too")
 
 vm = fresh()
 vm.env['CalofinInk-ARC'] = '99'

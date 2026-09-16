@@ -128,7 +128,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.36")
+(setq *lazpanel-version* "v3.38")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -154,6 +154,12 @@
 ;;;                     the two to each other word for word.
 ;;;    lzp:*keywords*   search-only synonyms lzp:matches also checks, for
 ;;;                     a word the name, caption and blurb never use
+;;;    lzp:*inkpresets* LAZSET's Item colours dropdown: a small, curated
+;;;                     set of named colour families, each already
+;;;                     mapped to an ACI number and an RGB target a
+;;;                     typed hex code is matched against (lzp:aci-near)
+;;;                     -- see the comment on the table itself for why
+;;;                     it is not the full 255-colour AutoCAD palette
 
 ;; The Find page's tab title.  Find is a page but not a group: it stays
 ;; out of lzp:*groups* -- what Rest is computed against and what
@@ -2931,7 +2937,78 @@
     ("Constr" . "constr")
     ("Report" . "report")))
 
-(defun lzp:setshow ( / r v)
+;; The dropdown's recommended presets, so a drafter picks a colour
+;; family by name instead of guessing an ACI number.  Each entry is
+;; (label ACI r g b).  Deliberately NOT the full 255-colour AutoCAD
+;; palette: 1-9 are the standard colours every "Select Color" dialog
+;; shows first and 250-254 are its grey ramp, both unambiguous and
+;; nowhere else in this tree to check a memory of the other 240
+;; against -- a wrongly-remembered mid-palette shade would draw the
+;; wrong colour and nothing here would ever notice.  The RGB is what a
+;; typed hex code (lzp:hex2rgb) snaps to the nearest of, in
+;; lzp:aci-near -- so "recommended presets, then hex codes" is one
+;; mechanism, not two: every hex answer lands on one of these ACI
+;; numbers too, which is what lets storage stay a bare ACI number and
+;; cal:ink stay exactly as it was.
+(setq lzp:*inkpresets*
+  '(("Red"                            1 255   0   0)
+    ("Yellow"                         2 255 255   0)
+    ("Green"                          3   0 255   0)
+    ("Cyan"                           4   0 255 255)
+    ("Blue"                           5   0   0 255)
+    ("Magenta"                        6 255   0 255)
+    ("White / Black (auto-contrast)"  7 255 255 255)
+    ("Gray - Darkest"               250  51  51  51)
+    ("Gray - Dark"                  251 102 102 102)
+    ("Gray - Medium"                252 128 128 128)
+    ("Gray - Light"                 253 178 178 178)
+    ("Gray - Palest"                254 204 204 204)))
+
+(defun lzp:pname (p) (nth 0 p))
+(defun lzp:paci  (p) (nth 1 p))
+(defun lzp:pr    (p) (nth 2 p))
+(defun lzp:pg    (p) (nth 3 p))
+(defun lzp:pb    (p) (nth 4 p))
+
+;; One hex digit's value, or nil -- either case, spelled out rather
+;; than handed to a base conversion AutoLISP does not have.
+(defun lzp:hexdigit (c)
+  (vl-string-search (strcase c) "0123456789ABCDEF"))
+
+;; (R G B) out of a 6-digit hex string, an optional leading # either
+;; way -- nil when it is not exactly that, so a half-typed or garbled
+;; hex is refused the same way lzp:aci-p refuses a bad ACI number.
+(defun lzp:hex2rgb (s / h ok i)
+  (setq h (if (= (substr s 1 1) "#") (substr s 2) s))
+  (setq ok (= (strlen h) 6) i 1)
+  (while (and ok (<= i 6))
+    (if (not (lzp:hexdigit (substr h i 1))) (setq ok nil))
+    (setq i (1+ i)))
+  (if ok
+    (list (+ (* 16 (lzp:hexdigit (substr h 1 1))) (lzp:hexdigit (substr h 2 1)))
+          (+ (* 16 (lzp:hexdigit (substr h 3 1))) (lzp:hexdigit (substr h 4 1)))
+          (+ (* 16 (lzp:hexdigit (substr h 5 1))) (lzp:hexdigit (substr h 6 1))))))
+
+;; The preset whose RGB is closest to (R G B), by squared distance --
+;; no sqrt needed, only the ordering does.  A tie keeps the FIRST
+;; preset checked, which is lzp:*inkpresets*'s own order above.
+(defun lzp:aci-near (r g b / best bestd p d)
+  (foreach p lzp:*inkpresets*
+    (setq d (+ (expt (- r (lzp:pr p)) 2)
+               (expt (- g (lzp:pg p)) 2)
+               (expt (- b (lzp:pb p)) 2)))
+    (if (or (not bestd) (< d bestd))
+      (setq bestd d best p)))
+  (lzp:paci best))
+
+;; The preset name an ACI number matches exactly, or nil -- an override
+;; CALSET's command line or a hand-edited profile set outside the
+;; presets entirely still reports as a bare number, same as always.
+(defun lzp:presetname (aci / p out)
+  (foreach p lzp:*inkpresets* (if (= (lzp:paci p) aci) (setq out (lzp:pname p))))
+  out)
+
+(defun lzp:setshow ( / r v p)
   (princ "\ncalofin settings, as this session reads them:")
   (foreach r lzp:*settings*
     (setq v (getenv (car r)))
@@ -2947,7 +3024,11 @@
   (foreach r lzp:*inkroles*
     (setq v (getenv (strcat "CalofinInk-" (strcase (cdr r)))))
     (princ (strcat "\n      " (car r) ": "
-                   (if (and v (/= v "")) (strcat "ACI " v) "(auto)"))))
+                   (cond
+                     ((not (and v (/= v ""))) "(auto)")
+                     ((setq p (lzp:presetname (atoi v)))
+                      (strcat "ACI " v " (" p ")"))
+                     (t (strcat "ACI " v))))))
   ;; Not a row of lzp:*settings*: a hidden list is not one scalar in
   ;; the profile, it is a name list in the registry, the same shape
   ;; Pins and Recent already are -- so it gets its own line rather than
@@ -2960,7 +3041,7 @@
                  "\n      LAZHIDE picks which, or Hidden below"))
   (princ))
 
-(defun c:CALSET ( / *error* pick key v role)
+(defun c:CALSET ( / *error* pick key v role rgb)
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -2992,17 +3073,24 @@
        (t
         (setq key (strcat "CalofinInk-" (strcase (cdr (assoc role lzp:*inkroles*)))))
         (setq v (getstring T (strcat "\n" role
-                                     " ACI colour (a number, Back to leave it, "
-                                     "or . for Auto): ")))
+                                     " colour -- an ACI number, a hex code, "
+                                     "Back to leave it, or . for Auto: ")))
         (if lzd:ask (lzd:ask (strcat role " colour") v) v)
+        (setq rgb (lzp:hex2rgb v))
         (cond
           ((member (strcase v) '("B" "BACK" "U" "UNDO")) (c:CALSET))
           ((= v "") (princ "\nUnchanged."))
           ((= v ".")
            (setenv key "")
            (princ (strcat "\n" role " colour cleared -- back to Auto.")))
+          (rgb
+           (setenv key (itoa (lzp:aci-near (car rgb) (cadr rgb) (caddr rgb))))
+           (princ (strcat "\n" role " colour is now ACI " (getenv key)
+                          " -- the closest recommended preset to " v
+                          ".  COVERCHECK, DIMCHECK and LINFINCHECK read it"
+                          " on their next run.")))
           ((= (atoi v) 0)
-           (princ "\nNot a colour number -- unchanged."))
+           (princ "\nNot a colour number or hex code -- unchanged."))
           (t
            (setenv key (itoa (atoi v)))
            (princ (strcat "\n" role " colour is now ACI " (itoa (atoi v))
@@ -3098,6 +3186,14 @@
 ;; The profile key one item-colour role's override lives under.
 (defun lzp:inkkey (r) (strcat "CalofinInk-" (strcase (cdr r))))
 
+;; The scratch key its hex box's typed text lives under, in
+;; lzp:*setvals* only -- never a real profile key, never setenv'd.
+;; lzp:set-write reaches lzp:inkkey's key alone; this one exists so the
+;; box can be repainted (and its typo re-checked) across a trip through
+;; Hidden... or Names..., the same reason CalofinErrorDir's own box
+;; survives that hop.
+(defun lzp:inkhexkey (r) (strcat "CalofinInkHex-" (strcase (cdr r))))
+
 (defun lzp:set-get (key / p)
   (if (setq p (assoc key lzp:*setvals*)) (cdr p) ""))
 
@@ -3126,12 +3222,14 @@
     (setq i (1+ i)))
   (if (and ok (> (atoi s) 0) (< (atoi s) 256)) t nil))
 
-;; The roles whose box holds something that is not a colour.  Empty is
-;; not one of them: empty is how a role is put back to auto.
+;; The roles whose HEX box holds something that is not a hex colour.
+;; Empty is not one of them: an empty hex box simply defers to whatever
+;; the family dropdown beside it says, which -- built from the presets
+;; below -- can never itself be unreadable.
 (defun lzp:set-badinks ( / r v out)
   (foreach r lzp:*inkroles*
-    (setq v (lzp:set-get (lzp:inkkey r)))
-    (if (and (/= v "") (not (lzp:aci-p v)))
+    (setq v (lzp:set-get (lzp:inkhexkey r)))
+    (if (and (/= v "") (not (lzp:hex2rgb v)))
       (setq out (cons (car r) out))))
   (reverse out))
 
@@ -3146,8 +3244,8 @@
   (foreach b bad (setq msg (strcat msg (if (= msg "") "" ", ") b)))
   (lzp:settile "state"
     (if bad
-      (strcat "Not a colour number: " msg
-              " -- type 1 to 255, or empty for auto")
+      (strcat "Not a hex colour: " msg
+              " -- type RRGGBB or #RRGGBB, or leave the box empty")
       "OK writes these to your AutoCAD profile, where they survive a rebuild"))
   (lzp:setmode "accept" (if bad 1 0))
   (princ))
@@ -3209,11 +3307,12 @@
     (list lzp:*pinkey* "Theme" (if (= v "AUTO") "" v)))
   (foreach r '("CalofinErrorDir" "StockCover_Folder")
     (setenv r (lzp:set-get r)))
-  ;; A box that does not read as a colour is LEFT ALONE rather than
-  ;; cleared.  Empty still clears -- that is how a role goes back to
-  ;; auto -- but a typo must not: erasing an override the drafter
-  ;; already had is the one outcome worse than ignoring what they just
-  ;; typed, and lzp:set-ok is not the only way this can be reached.
+  ;; lzp:inkkey's value is always "" or one of the presets' own ACI
+  ;; numbers by construction now -- a family pick or a valid hex both
+  ;; go through lzp:aci-near -- so this guard is defensive rather than
+  ;; load-bearing, the same posture lzp:profread already takes: nothing
+  ;; here trusts that a hand-edited profile, or a value CALSET's own
+  ;; command line wrote before this dialog existed, still reads as one.
   (foreach r lzp:*inkroles*
     (setq v (lzp:set-get (lzp:inkkey r)))
     (if (or (= v "") (lzp:aci-p v)) (setenv (lzp:inkkey r) v)))
@@ -3249,15 +3348,23 @@
                   "  }"
                   "  : boxed_row {"
                   (strcat "    label = \"Item colours - COVERCHECK, DIMCHECK"
-                          " and LINFINCHECK; empty is auto\";")))
-  ;; three to a column, so the box is a block rather than one tall stack
+                          " and LINFINCHECK; a family, a hex code, or empty"
+                          " for auto\";")))
+  ;; three to a column, so the box is a block rather than one tall
+  ;; stack; each role is a family dropdown beside its hex box, in a row
+  ;; of its own, so a column stays three rows tall exactly as it was
+  ;; when a role was one plain edit_box -- only the row gets wider.
   (foreach col (lzp:chunk lzp:*inkroles* 3)
     (setq out (append out (list "    : column {")))
     (foreach r col
       (setq out (append out
-        (list (strcat "      : edit_box { key = \"ink_" (cdr r)
-                      "\"; label = \"" (car r)
-                      "\"; edit_width = 5; fixed_width = true; }")))))
+        (list "      : row {"
+              (strcat "        : popup_list { key = \"inkfam_" (cdr r)
+                      "\"; label = \"" (car r) "\"; edit_width = 28; }")
+              (strcat "        : edit_box { key = \"inkhex_" (cdr r)
+                      "\"; label = \"hex\"; edit_width = 7;"
+                      " fixed_width = true; }")
+              "      }"))))
     (setq out (append out (list "    }"))))
   (append out
     (list "  }"
@@ -3295,7 +3402,57 @@
 ;; Open it, wire it, and keep reopening while the Hidden... button is
 ;; the way out.  Answers "ok" when OK was pressed and nil otherwise, so
 ;; the caller is what decides to write.
-(defun lzp:set-edit (dcl / rc r done out)
+;; The family dropdown's list, in the order DCL will hand indices back:
+;; Auto first, then the presets, then Custom -- a landing state for a
+;; value none of the presets name.
+(defun lzp:inkfam-names ( / p out)
+  (setq out (list "Auto"))
+  (foreach p lzp:*inkpresets* (setq out (append out (list (lzp:pname p)))))
+  (append out (list "Custom (typed hex below)")))
+
+;; Which entry of that list a STORED value is, as the index DCL wants.
+;; 0 is Auto (empty), 1..N a preset that matches it exactly, and the
+;; last is Custom -- a value CALSET's own command line, a hand-edited
+;; profile, or an earlier ACI-only build can still leave that none of
+;; the presets name.
+(defun lzp:inkfam-index (v / i out p)
+  (cond
+    ((= v "") 0)
+    (t
+     (setq out (1+ (length lzp:*inkpresets*)) i 1)
+     (foreach p lzp:*inkpresets*
+       (if (= v (itoa (lzp:paci p))) (setq out i))
+       (setq i (1+ i)))
+     out)))
+
+;; A family choice fires.  0 writes Auto, 1..N a preset's own ACI, and
+;; the last -- Custom -- is a no-op: there is no single ACI it could
+;; mean by itself, only the hex box beside it says, so picking it by
+;; hand leaves whatever was already stored exactly alone.  Choosing an
+;; actual family clears that box, visibly as well as in the store, so
+;; the two controls never show two different answers at once.
+(defun lzp:inkfam-pick (key hexkey tile v / n)
+  (setq v (atoi v) n (length lzp:*inkpresets*))
+  (cond
+    ((= v 0) (lzp:set-put key "") (lzp:set-put hexkey "") (set_tile tile ""))
+    ((<= v n)
+     (lzp:set-put key (itoa (lzp:paci (nth (1- v) lzp:*inkpresets*))))
+     (lzp:set-put hexkey "")
+     (set_tile tile "")))
+  (lzp:set-state))
+
+;; The hex box fires.  A valid 6-digit code snaps to the nearest
+;; preset's ACI, exactly as CALSET's own Itemcolors prompt now does;
+;; anything else is left for lzp:set-badinks to catch, the same bargain
+;; every other box on this page already keeps -- a typo greys OK
+;; without touching what was stored before it.
+(defun lzp:inkhex-pick (key hexkey v / rgb)
+  (lzp:set-put hexkey v)
+  (if (setq rgb (lzp:hex2rgb v))
+    (lzp:set-put key (itoa (lzp:aci-near (car rgb) (cadr rgb) (caddr rgb)))))
+  (lzp:set-state))
+
+(defun lzp:set-edit (dcl / rc r nm done out)
   (while (not done)
     (cond
       ((not (new_dialog "lazpanel_set" dcl)) (setq done t))
@@ -3307,10 +3464,18 @@
        (set_tile "set_theme" (itoa (lzp:theme-index)))
        (action_tile "set_theme" "(lzp:set-theme $value)")
        (foreach r lzp:*inkroles*
-         (set_tile (strcat "ink_" (cdr r)) (lzp:set-get (lzp:inkkey r)))
-         (action_tile (strcat "ink_" (cdr r))
-           (strcat "(lzp:set-put \"" (lzp:inkkey r) "\" $value)"
-                   " (lzp:set-state)")))
+         (start_list (strcat "inkfam_" (cdr r)))
+         (foreach nm (lzp:inkfam-names) (add_list nm))
+         (end_list)
+         (set_tile (strcat "inkfam_" (cdr r))
+                   (itoa (lzp:inkfam-index (lzp:set-get (lzp:inkkey r)))))
+         (set_tile (strcat "inkhex_" (cdr r)) (lzp:set-get (lzp:inkhexkey r)))
+         (action_tile (strcat "inkfam_" (cdr r))
+           (strcat "(lzp:inkfam-pick \"" (lzp:inkkey r) "\" \""
+                   (lzp:inkhexkey r) "\" \"inkhex_" (cdr r) "\" $value)"))
+         (action_tile (strcat "inkhex_" (cdr r))
+           (strcat "(lzp:inkhex-pick \"" (lzp:inkkey r) "\" \""
+                   (lzp:inkhexkey r) "\" $value)")))
        (set_tile "set_errdir" (lzp:set-get "CalofinErrorDir"))
        (action_tile "set_errdir" "(lzp:set-put \"CalofinErrorDir\" $value)")
        (set_tile "set_stockdir" (lzp:set-get "StockCover_Folder"))
@@ -3678,6 +3843,191 @@
                     " answer to a name of yours, "
                     (itoa (length lzp:*capsof*)) " renamed on the panel."))))
   (if lzd:end (lzd:end "LAZNAME"))
+  (princ))
+
+;;; -------------------- carrying it with you -----------------------------
+;;  LAZNAME's names and CALSET/LAZSET's settings already survive an
+;;  ordinary LAZPASS rebuild: both live in the registry or the AutoCAD
+;;  profile, outside releases/ and LAZPASS.lsp, which is what lets a
+;;  regenerated build change under them without losing either -- see
+;;  the comment on lzp:*settings* above.  What neither reaches is
+;;  somewhere the profile does not: a new machine, a rebuilt profile, a
+;;  drafter who wants their own setup on somebody else's seat for a
+;;  day.  LAZBACKUP is that -- one plain text file, written and read
+;;  back with nothing but this file's own open/write-line/read-line.
+
+;; The settings LAZBACKUP carries -- the three lzp:*settings* keys plus
+;; one CalofinInk-<ROLE> per role -- as their profile key names, in the
+;; order they will be written.
+(defun lzp:backup-keys ( / out r)
+  (setq out (mapcar 'car lzp:*settings*))
+  (foreach r lzp:*inkroles* (setq out (append out (list (lzp:inkkey r)))))
+  out)
+
+;; The header a written file opens with.  It is a plain ; comment line,
+;; the same syntax a hand-edited addition anywhere else in the file
+;; would use, so an import never refuses a file for missing it or for
+;; carrying an older or newer version after the "--" -- it is here so a
+;; file opened in a text editor names itself, not to gate reading it.
+;; NOT A KNOB: identifies the format to a person reading the file, not
+;; a setting -- changing the words here changes nothing LAZBACKUP reads
+;; or writes, only what a human sees at the top of the file.
+(setq lzp:*backup-header* "; calofin LAZBACKUP")
+
+;; Write everything, under lzp:backup-export's vl-catch-all-apply -- a
+;; disk that fills up mid-write must not leave FH unclosed.  Returns
+;; (aliases captions settings), the counts the command reports.  Empty
+;; overrides are skipped in Alias/Caption, the same convention
+;; lzp:kv-write already keeps for the registry copy; a Settings key is
+;; written even when empty, because empty there is Auto, a real answer.
+(defun lzp:backup-writebody (fh / p k na nc)
+  (setq na 0 nc 0)
+  (write-line (strcat lzp:*backup-header* " -- " *lazpanel-version*) fh)
+  (write-line "[Alias]" fh)
+  (foreach p lzp:*aliases*
+    (if (/= (cdr p) "")
+      (progn (write-line (strcat (car p) "=" (cdr p)) fh) (setq na (1+ na)))))
+  (write-line "[Caption]" fh)
+  (foreach p lzp:*capsof*
+    (if (/= (cdr p) "")
+      (progn (write-line (strcat (car p) "=" (cdr p)) fh) (setq nc (1+ nc)))))
+  (write-line "[Settings]" fh)
+  (foreach k (lzp:backup-keys) (write-line (strcat k "=" (lzp:profread k)) fh))
+  (list na nc (length (lzp:backup-keys))))
+
+(defun lzp:backup-export (path / fh counts)
+  (setq fh (vl-catch-all-apply 'open (list path "w")))
+  (cond
+    ((or (vl-catch-all-error-p fh) (not fh)) nil)
+    (t
+     (setq counts (vl-catch-all-apply 'lzp:backup-writebody (list fh)))
+     (close fh)
+     (if (vl-catch-all-error-p counts) nil counts))))
+
+;; One imported Settings KEY=VALUE, checked the same way its own box
+;; would check it -- Theme against the three words every reader takes,
+;; a folder taken as typed, an ink role through lzp:aci-p -- and
+;; applied straight to the profile.  "" for applied, or the reason it
+;; was not, so the caller can report both without a second pass.
+(defun lzp:backup-apply-setting (key val / role)
+  (cond
+    ((= key "CalofinTheme")
+     (cond
+       ((member (strcase val) '("" "AUTO" "DARK" "LIGHT"))
+        (setenv key (strcase val)) "")
+       (t (strcat key "=" val " (not Auto, Dark or Light)"))))
+    ((member key '("CalofinErrorDir" "StockCover_Folder"))
+     (setenv key val) "")
+    ((setq role (car (vl-remove-if-not
+                       '(lambda (r) (= (lzp:inkkey r) key)) lzp:*inkroles*)))
+     (cond
+       ((or (= val "") (lzp:aci-p val)) (setenv key val) "")
+       (t (strcat key "=" val " (not a colour number)"))))
+    (t (strcat key "=" val " (not a setting this build has)"))))
+
+;; One imported line, section already known.  Alias and Caption are
+;; checked exactly as LAZNAME's own boxes check them -- lzp:alias-why,
+;; lzp:cap-why -- so an import can refuse only what typing the same
+;; answer into LAZNAME would also refuse, and a command the roster does
+;; not carry is refused before either helper sees it, the same
+;; roster-first rule lzp:kv-read already applies to the registry copy.
+(defun lzp:backup-apply (section key val / why)
+  (cond
+    ((= section "Alias")
+     (cond
+       ((not (member key (lzp:commands))) (strcat key "=" val " (no such command)"))
+       ((setq why (lzp:alias-why (strcase val) key)) (strcat key "=" val " (" why ")"))
+       (t (setq lzp:*aliases* (lzp:put-pair key (strcase val) lzp:*aliases*)) "")))
+    ((= section "Caption")
+     (cond
+       ((not (member key (lzp:commands))) (strcat key "=" val " (no such command)"))
+       ((setq why (lzp:cap-why val)) (strcat key "=" val " (" why ")"))
+       (t (setq lzp:*capsof* (lzp:put-pair key val lzp:*capsof*)) "")))
+    ((= section "Settings") (lzp:backup-apply-setting key val))
+    (t (strcat key "=" val " (not inside a known section)"))))
+
+;; Read every line, section by section, applying as it goes -- under
+;; lzp:backup-import's vl-catch-all-apply, the same belt lzp:write-dcl
+;; already wears for the write side.  (n-applied (skipped ...)).
+(defun lzp:backup-readbody (fh / line section eq key val res n skipped)
+  (setq section "" n 0)
+  (while (setq line (read-line fh))
+    (cond
+      ;; blank, or a ; comment -- the header line reads as one of these
+      ((or (= line "") (= (substr line 1 1) ";")) nil)
+      ((and (>= (strlen line) 2) (= (substr line 1 1) "[")
+            (= (substr line (strlen line) 1) "]"))
+       (setq section (substr line 2 (- (strlen line) 2))))
+      ((setq eq (vl-string-search "=" line))
+       (setq key (substr line 1 eq) val (substr line (+ eq 2))
+             res (lzp:backup-apply section key val))
+       (if (= res "") (setq n (1+ n)) (setq skipped (cons res skipped))))
+      (t (setq skipped (cons (strcat line " (not KEY=VALUE)") skipped)))))
+  (list n (reverse skipped)))
+
+(defun lzp:backup-import (path / fh res)
+  (setq fh (vl-catch-all-apply 'open (list path "r")))
+  (cond
+    ((or (vl-catch-all-error-p fh) (not fh)) nil)
+    (t
+     (setq res (vl-catch-all-apply 'lzp:backup-readbody (list fh)))
+     (close fh)
+     (cond
+       ((vl-catch-all-error-p res) nil)
+       ;; the registry copy AND this session's alias wrapper defuns --
+       ;; an imported name works from the next command typed, not only
+       ;; after a reload
+       (t (lzp:names-write) res)))))
+
+;; Export your names and settings to a file, or read them back from
+;; one.  Both prompts take Back/Undo, typed, the same way CALSET's own
+;; Theme/Errordir/Stockdir question already does -- "Backup [...]" is
+;; the first question of the command and does not, matching
+;; tools/back_baseline.txt's reason for CALSET's own first prompt.
+(defun c:LAZBACKUP ( / *error* pick path counts res n skipped s)
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nLAZBACKUP error: " msg)))
+    (if lzd:report (lzd:report "LAZBACKUP" *lazpanel-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZBACKUP" *lazpanel-version*))
+  (lzp:names-read)
+  (initget "Export Import Quit")
+  (setq pick (getkword "\nBackup [Export/Import/Quit] <Quit>: "))
+  (if lzd:ask (lzd:ask "Backup" pick) pick)
+  (cond
+    ((= pick "Export")
+     (setq path (getstring T "\nFile to write the backup to, Back to leave it: "))
+     (if lzd:ask (lzd:ask "File to write" path) path)
+     (cond
+       ((member (strcase path) '("B" "BACK" "U" "UNDO")) (c:LAZBACKUP))
+       ((= path "") (princ "\nNothing written."))
+       ((setq counts (lzp:backup-export path))
+        (princ (strcat "\nWrote " (itoa (car counts)) " name"
+                       (if (= (car counts) 1) "" "s") ", "
+                       (itoa (cadr counts)) " caption"
+                       (if (= (cadr counts) 1) "" "s") " and "
+                       (itoa (caddr counts)) " setting"
+                       (if (= (caddr counts) 1) "" "s") " to " path ".")))
+       (t (princ (strcat "\nCould not write " path ".")))))
+    ((= pick "Import")
+     (setq path (getstring T "\nFile to read the backup from, Back to leave it: "))
+     (if lzd:ask (lzd:ask "File to read" path) path)
+     (cond
+       ((member (strcase path) '("B" "BACK" "U" "UNDO")) (c:LAZBACKUP))
+       ((= path "") (princ "\nNothing read."))
+       ((setq res (lzp:backup-import path))
+        (setq n (car res) skipped (cadr res))
+        (princ (strcat "\n" (itoa n) " line" (if (= n 1) "" "s")
+                       " applied from " path "."))
+        (if skipped
+          (progn
+            (princ (strcat "\n" (itoa (length skipped)) " skipped:"))
+            (foreach s skipped (princ (strcat "\n  " s))))))
+       (t (princ (strcat "\nCould not read " path ".")))))
+    (t (princ "\nNothing changed.")))
+  (if lzd:end (lzd:end "LAZBACKUP"))
   (princ))
 
 (defun c:LAZPANELVER ()

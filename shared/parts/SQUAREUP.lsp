@@ -154,9 +154,20 @@
 ;;; list and the bracket text, so the two cannot drift.
 
 ;;; -------------------- sysvars -----------------------------------------
-;;; A save refuses to overwrite a snapshot that is already standing: a
-;;; second save mid-run would capture the muted OSMODE and put 0 back
-;;; for ever.
+;;; CALOFIN-LIB's pair under this file's own prefix, copied rather than
+;;; reworded (STANDARDS 4) -- the mirror swaps these two onto cal:, so a
+;;; body that is merely EQUIVALENT is a body the two tiers can diverge
+;;; on.  This one nearly did: a save written to refuse a whole snapshot
+;;; that already stands, instead of refusing one VARIABLE that is
+;;; already in it, also snapshots a sysvar getvar answers nil for -- and
+;;; then "restores" that nil over the 0 the run wrote.  The library
+;;; skips such a variable instead, so on a build where AUNITS does not
+;;; exist the grouped tier left it written and the standalone one did
+;;; not.  Same file, two behaviours, and only the sweep in
+;;; tests/test_cancel_paths.py at BOTH tiers could see it.
+;;;
+;;; The per-variable refusal is what stops a second save mid-run
+;;; capturing the muted OSMODE and putting 0 back for ever.
 
 ;;; -------------------- small 2D helpers --------------------------------
 ;;; Local copies of the generic library helpers, as the standalone tier
