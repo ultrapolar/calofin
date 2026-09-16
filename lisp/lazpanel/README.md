@@ -311,6 +311,46 @@ its own error handler runs, the panel stays closed, and `LAZPANEL`
 brings it back. That is the right way round: the alternative is a panel
 bouncing back in front of the error you are trying to read.
 
+**The Options button.** Beside Close, on every page including Find, an
+`Options...` button opens `LAZSET` -- the settings as a **dialog**, with
+the theme on a dropdown, a box for each of the eight item colours, the
+two folders, and a way into the hidden list, all in front of you at
+once. It is wired exactly like a grid button -- the same full teardown
+before anything runs -- but the pick it sends is a sentinel
+`c:LAZPANEL` reads itself: settings are not on the roster, so clicking
+Options never lands in Recent the way running a real tool does.
+
+**The settings dialog.** `LAZSET` is to `CALSET` what `LAZFORM` is to
+`POOL`: the same answers, as a form rather than an interview. Every box
+comes up filled in from the profile, and **nothing is written until
+`OK`** -- what you type lands in `lzp:*setvals*`, an alist keyed by the
+profile key itself, and `lzp:set-write` is the only place that reaches
+`setenv`. `Cancel` drops the store on the floor.
+
+A colour box holds an ACI number (1 to 255) or nothing at all, where
+nothing means *auto* -- the shared table in `cal:ink`. While a box
+holds anything else the state line names it and `OK` stays greyed, the
+same bargain `LAZFORM`'s `Insert` strikes and for the same reason: a
+value nothing can read must not be stored and then silently ignored by
+the tool that goes looking for it. `lzp:aci-p` is spelled out rather
+than handed to `atoi`, which answers 0 for `red` and reads `12x` as 12.
+
+The theme dropdown is emitted **empty** -- DCL has no way to write a
+`popup_list`'s list into the file -- and filled with `start_list` once
+the dialog is up, exactly as `LAZFORM` fills its corner dropdowns; what
+comes back from it is an *index*, not the word. Picking a theme writes
+the profile **and** the registry copy the VB palette reads, the same
+bargain `CALSET`'s own `Theme` branch strikes.
+
+`Hidden...` closes the dialog, runs the hide editor on the same loaded
+handle and comes back -- which is why the store is a global and not a
+local: the reopen repaints every box from it, so a trip through the
+checklist does not cost you the colour you had just typed.
+
+`CALSET` is unchanged and still there for a drafter who would rather
+type, and it is what a support call reaches for: it *prints* every
+setting before it asks anything.
+
 **The Pinned row.** Pins are the answer to "I run four of these
 eighty-one all day": ticked tools sit in a row at the top of *every*
 page, in the order you pinned them, so the ones you actually use stop
@@ -470,10 +510,10 @@ assembly loaded on every machine.
 
 ## The commands that are not the panel
 
-`CALHELP`, `CALSET` and `LAZHIDE` live in this file because this is
-where their answers already were: the captions are here, so is the
-roster `LAZHIDE` edits, and so were the only settings calofin keeps in
-the AutoCAD profile. None carries a panel button -- all three are
+`CALHELP`, `CALSET`, `LAZHIDE` and `LAZSET` live in this file because
+this is where their answers already were: the captions are here, so is
+the roster `LAZHIDE` edits, and so were the only settings calofin keeps
+in the AutoCAD profile. None carries a panel button -- all four are
 named in `NAMED_SATELLITES` in `tools/callib.py`; `LAZPIN` is there for
 the same reason, and a button that told you what buttons do (or which
 ones to hide) would be a joke at the drafter's expense.
@@ -483,6 +523,7 @@ ones to hide) would be a joke at the drafter's expense.
 | `CALHELP` | what a command IS, at the command line. Type any part of a name **or of its caption** -- the same search the Find page runs, so `survey` finds `ABHD` -- and it prints the matches with their captions; Enter lists every tool that is not hidden. A name in brackets is not loaded in this session. Until this existed the captions were readable in exactly one place: the panel, on whichever page the tool happened to be filed on, which is the complaint Find answers INSIDE the dialog and nothing answered outside it |
 | `CALSET` | the settings calofin keeps in the profile -- `CalofinTheme`, `CalofinErrorDir` (where `LAZDIAG` writes its report) and the stock folder -- what each one does, and one prompt to change it, plus a `Hidden` option that routes straight to `LAZHIDE`. The profile is where a setting SURVIVES: `releases/` and `LAZPASS.lsp` are generated, so a number edited into either is gone at the next regeneration. `CalofinTheme` is also written beside the pins in this file's own registry key, because the VB palette reads it there (`ui/calofin_net/PaletteTheme.vb`) -- the same bargain the pinned row already strikes |
 | `LAZHIDE` | opens the checklist of every tool, ticked to match what is currently hidden -- see "Hiding a tool" above. Accept stores the new list; Cancel re-reads the stored one, exactly as `LAZPIN`'s editor does |
+| `LAZSET` | the same settings as a **dialog** -- theme dropdown, a box per item colour, the two folders, and `Hidden...` into the checklist. This is what the panel's `Options...` button opens; see "The settings dialog" above. Nothing is written until `OK`, and `OK` is greyed while a colour box holds something that is not a colour |
 
 ## The icon follows the theme
 
@@ -503,7 +544,8 @@ carries it along with every tool it lists. The button toolbar appears
 on load; type `LAZPANEL` to open the panel directly, or `LAZBUTTON` to
 re-summon the button, `LAZPIN` to choose the pinned tools, `LAZHIDE` to
 choose which stay off the panel, `CALHELP` to ask what a command does,
-or `CALSET` to see the settings.
+`LAZSET` for the settings dialog, or `CALSET` for the same settings as
+prompts.
 
 ## Tunables
 

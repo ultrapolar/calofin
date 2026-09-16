@@ -146,7 +146,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.14")
+(setq *perp-version* "v0.15")
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -486,6 +486,7 @@
       ((= ans "Grew")
        (initget 7 "Back Undo")                ; a real, positive amount
        (setq v (getdist "\nHow much wider? [Back]: "))
+       (if lzd:ask (lzd:ask "\nHow much wider? [Back]: " v) v)
        (if (perp:back-kw v)
          (progn (princ "\nStepping back one question.") (setq done nil))
          (setq out (+ d v))))
@@ -493,6 +494,7 @@
        (while (and done (null w))
          (initget 7 "Back Undo")
          (setq v (getdist "\nHow much narrower? [Back]: "))
+         (if lzd:ask (lzd:ask "\nHow much narrower? [Back]: " v) v)
          (cond
            ((perp:back-kw v)
             (princ "\nStepping back one question.")
@@ -503,6 +505,7 @@
       (T                                      ; New: the width itself
        (initget 6 "Back Undo")                ; Enter keeps what is drawn
        (setq v (getdist (strcat "\nNew overall width <" (rtos d) "> [Back]: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v)
        (cond
          ((perp:back-kw v)
           (princ "\nStepping back one question.")
@@ -567,24 +570,35 @@
   ;; single cleanup path shared by normal exit, Esc and errors
   (defun perp:finish (/ guard)
     ;; cancel any command left pending by an Esc mid-PLINE/DIMALIGNED
+    ;; The drafter's settings come back FIRST -- ahead of the drain
+    ;; below, which is the one form in here that can throw.  A bare
+    ;; (command) from *error* is legal only while a pushed error mode is
+    ;; actually in effect; where it is not, AutoCAD rejects it, the throw
+    ;; lands inside the handler and every line after it is skipped.  This
+    ;; whole defun WAS those lines: the handler is nothing but a call to
+    ;; it, so a rejected drain used to take the OSMODE restore, the layer,
+    ;; the creation defaults and the error-mode pop with it.  Putting back
+    ;; values this run captured itself is pure setvar and cannot throw.
+    (if os    (setvar "OSMODE"    os))
+    (if pd    (setvar "PDMODE"    pd))
+    (if cec   (setvar "CECOLOR"   cec))
+    (if celt  (setvar "CELTYPE"   celt))
+    (if celw  (setvar "CELWEIGHT" celw))
+    (if celts (setvar "CELTSCALE" celts))
+    (if plt   (setvar "PLINETYPE" plt))
+    ;; CLAYER last of the setvars: it is the one that can throw here, if
+    ;; the layer it names was purged while the run was open
+    (if clay  (setvar "CLAYER"    clay))
     (setq guard 0)
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)
       (setq guard (1+ guard)))
     (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
     (setq tmpEnts nil)
-    ;; leave the drawing's creation defaults exactly as they were found
-    (if cec   (setvar "CECOLOR"   cec))
-    (if celt  (setvar "CELTYPE"   celt))
-    (if celw  (setvar "CELWEIGHT" celw))
-    (if celts (setvar "CELTSCALE" celts))
     (if (and cdim (tblsearch "DIMSTYLE" cdim))
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" cdim)))
-    (if clay (setvar "CLAYER"  clay))
-    (if pd   (setvar "PDMODE"  pd))
-    (if os   (setvar "OSMODE"  os))
-    (if plt  (setvar "PLINETYPE" plt))
-    (if ce   (setvar "CMDECHO" ce))
+    ;; CMDECHO after the drain, so the drain itself stays quiet
+    (if ce (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
              (setq undoOpen nil)))
@@ -637,6 +651,7 @@
   (setq ent nil)
   (while (null ent)
     (setq sel (entsel "\nSelect a line or polyline: "))
+    (if lzd:ask (lzd:ask "\nSelect a line or polyline: " sel) sel)
     (if lzd:watch (lzd:watch sel) sel)
     (cond
       ((null sel)
@@ -714,6 +729,7 @@
   (setq click nil)
   (while (null click)
     (setq click (getpoint "\nClick to pick direction / offset side: "))
+    (if lzd:ask (lzd:ask "\nClick to pick direction / offset side: " click) click)
     (cond
       ((null click)
        (princ "\nA point is required - click one side of the line."))
@@ -807,6 +823,7 @@
                               " - how many values (points) are required?"
                               (if lastN (strcat " <" (itoa lastN) ">") "")
                               " ")))
+      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") n) n)
       (if (null n) (setq n lastN))           ; Enter = same count as last round
       (cond
         ((null n)
@@ -822,6 +839,7 @@
          (setq ans (getkword
                      (strcat "\n" (itoa n) " points means " (itoa n)
                              " dimensions. Continue? [Yes/No/Back] <No>: ")))
+         (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
          (if (not (equal ans "Yes")) (setq n nil)))))
     (setq lastN n)
 
@@ -855,6 +873,7 @@
                                    (strcat " <" (rtos lastLen) ">")
                                    "")
                                  " [Back]: ")))
+      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") len) len)
       (if (null len) (setq len lastLen))     ; Enter = same as last time
       (cond
         ;; step back one point and re-enter it (getdist returned "Back",
@@ -904,6 +923,7 @@
                                    " - how should the points be joined? ["
                                    (vl-string-translate " " "/" kws)
                                    "/Back] <" lastJoin ">: ")))
+      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") join) join)
       (if (null join) (setq join lastJoin))   ; Enter = same as last round
       (cond
         ;; back to the length that was just given: the guide node goes
@@ -922,6 +942,7 @@
            (setq reply (getstring T
                          (strcat "\nWhich segments are arcs (1 to "
                                  (itoa nseg) ", e.g. 1 3-5)? (B = back): ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") reply) reply)
            (cond
              ((member (strcase reply) '("B" "BACK" "U" "UNDO"))
               (setq join nil))
@@ -1031,12 +1052,14 @@
     (while (eq again 'RETRY)
       (initget "Yes No")
       (setq again (getkword "\nRepeat on the new polyline? [Yes/No] <No>: "))
+      (if lzd:ask (lzd:ask "\nRepeat on the new polyline? [Yes/No] <No>: " again) again)
       (if (null again) (setq again "No"))
       (if (equal again "No")
         (progn
           (initget "STandard SIde Back Undo")
           (setq ans (getkword (strcat "\nDimension style - STANDARD INCHES or "
                                       "SIDE STANDARD? [STandard/SIde/Back] <STandard>: ")))
+          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
           (if (member ans '("Back" "Undo"))
             (progn (princ "\nStepping back one question.")
                    (setq again 'RETRY)))))))

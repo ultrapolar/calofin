@@ -304,9 +304,13 @@ The fit is not take-it-or-leave-it:
 
 `Redo` throws the preview away and refits **without leaving the
 command or re-selecting the points**. First it offers to leave points
-out -- pick each one (mis-shots, duplicates, a shot that plainly
-dragged a wall) and it gets a dashed red ring; **the pick is a
-toggle**, so clicking a ringed point puts it back in. Then all five
+out -- name each one, clicked or typed by number the way `PERPMARK`
+names a point (mis-shots, duplicates, a shot that plainly dragged a
+wall) and it gets a dashed red ring; **the pick is a toggle**, so
+naming a ringed point puts it back in. A click has to land within
+`fit:*snap*` (12 units) of a point; a click on nothing, a number
+nothing carries and a number two points share are re-asked where they
+stand, never snapped to whatever was nearest. Then all five
 settings are asked again with your last answers as the defaults, so
 changing just the tolerance is `Redo`, `Enter`×2, a number,
 `Enter`×2. Redo as many times as it takes. `Erase` throws the
@@ -384,7 +388,8 @@ the FITABHD perimeter and run `ADAB` over it.
 All at the top of `FITABHD.lsp`: layers (`fit:*pool-layer*`,
 `fit:*point-layer*`, `fit:*out-layer*`, `fit:*miss-layer*`), the point
 block and tag (`fit:*point-block*`, `fit:*pt-tag*`), the letter that
-marks a *moved* point (`fit:*moved-mark*`, `"M"`), the tolerance
+marks a *moved* point (`fit:*moved-mark*`, `"M"`), how close a click
+has to land to name a point at the omit prompt (`fit:*snap*`, 12), the tolerance
 ceiling (`fit:*tol-max*`, 2"), the snapping increments
 (`fit:*nice-dims*`, feet / half feet / inches / half inches), the
 corner-zone sizing (`fit:*corner-zone*`, `fit:*zone-pad*`,

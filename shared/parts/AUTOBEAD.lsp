@@ -56,7 +56,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.8"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.9"      ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -355,11 +355,17 @@
   ;; -- error handler: cancel stuck commands, purge temp geometry,
   ;;    restore system variables, close the undo group -------------------
   (defun *error* (msg)
+    ;; the drafter's settings come back FIRST, ahead of the flush below.
+    ;; autobead-flush is a bare (command) drain -- the one form up here
+    ;; that can throw -- and it used to sit in front of these two, so a
+    ;; drain that died left every object snap unticked and PEDITACCEPT
+    ;; at 1.  Two setvars of values this run captured itself cannot
+    ;; throw, so nothing is risked by putting them above it.
+    (if oldos (setvar "OSMODE" oldos))
+    (if oldpa (setvar "PEDITACCEPT" oldpa))
     (autobead-flush)
     (foreach e temps
       (if (and e (entget e)) (entdel e)))
-    (if oldpa (setvar "PEDITACCEPT" oldpa))
-    (if oldos (setvar "OSMODE" oldos))
     ;; only close a group that was actually opened -- an error thrown
     ;; before the _Begin below (a cancelled selection, a failed getvar)
     ;; used to run _End on nothing, which errors inside the handler
@@ -627,6 +633,7 @@
       ((= stage 2)
        (initget "Back Undo")
        (setq dirpt (getpoint "\nClick the side to bead toward [Back]: "))
+       (if lzd:ask (lzd:ask "\nClick the side to bead toward [Back]: " dirpt) dirpt)
        (cond
          ((= (type dirpt) 'STR) (setq stage 1))
          ((null dirpt)
@@ -640,6 +647,7 @@
        (setq ans (getkword
                    (strcat "\nWhich steps have beaded side walls?"
                            " [All/Some/None/Back] <All>: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
        (cond
          ((member ans '("Back" "Undo")) (setq stage 2))
          (T
@@ -661,6 +669,7 @@
               (while go
                 (initget "Back Undo")
                 (setq p (getpoint "\n  Click a step <Enter = done> [Back]: "))
+                (if lzd:ask (lzd:ask "\n  Click a step <Enter = done> [Back]: " p) p)
                 (cond
                   ((and (= (type p) 'STR) (member p '("Back" "Undo")))
                    (if treadpts
@@ -708,7 +717,8 @@
 (defun autobead-pause (msg)
   ;; Print a step heading and wait for Enter.
   (prompt (strcat "\n" msg))
-  (getstring "\n      [Enter] to continue: ")
+  ((lambda (v) (if lzd:ask (lzd:ask "\n      [Enter] to continue: " v) v))
+    (getstring "\n      [Enter] to continue: "))
   (princ))
 
 (defun autobead-say (lines)
@@ -840,8 +850,9 @@
           "  uses. It goes on a temporary layer and you will be offered"
           "  a cleanup at the end. Undo (U) also removes all of it."))
 
-  (if (null (setq base (getpoint
-                         "\nPick an empty spot for the demo pool: ")))
+  (if (null (setq base ((lambda (v) (if lzd:ask (lzd:ask "\nPick an empty spot for the demo pool: " v) v))
+                         (getpoint
+                           "\nPick an empty spot for the demo pool: "))))
     (progn (prompt "\nDemo cancelled.") (princ))
 
     (progn
@@ -896,6 +907,7 @@
               "      way. Click INSIDE the pool, out in the main body"
               "      (away from the step lines)."))
       (setq dirpt (getpoint "\n      Click a side to bead toward: "))
+      (if lzd:ask (lzd:ask "\n      Click a side to bead toward: " dirpt) dirpt)
 
       (if (null dirpt)
         (prompt "\nDemo cancelled.")
@@ -932,8 +944,9 @@
 
       ;; cleanup
       (initget "Yes No")
-      (if (/= "No" (getkword
-                     "\nErase the demo pool and its bead? [Yes/No] <Yes>: "))
+      (if (/= "No" ((lambda (v) (if lzd:ask (lzd:ask "\nErase the demo pool and its bead? [Yes/No] <Yes>: " v) v))
+                     (getkword
+                       "\nErase the demo pool and its bead? [Yes/No] <Yes>: ")))
         (progn
           (foreach e ents (if (entget e) (entdel e)))
           (if (setq ss (ssget "_X" (list (cons 8 *autobead-layer*))))
@@ -951,6 +964,7 @@
   (setq ans (getkword
               (strcat "\nAUTOBEAD tutorial - read the Checks, or watch a live Demo?"
                       "\n  [Checks/Demo/Both] <Both>: ")))
+  (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
   (if (null ans) (setq ans "Both"))
   (if (= ans "READ") (setq ans "Checks"))
   (if (member ans '("Checks" "Both")) (autobead-tutorial-read))

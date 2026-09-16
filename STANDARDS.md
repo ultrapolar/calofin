@@ -382,6 +382,71 @@ for the same reason.
   (princ))
 ```
 
+**A question about a survey point NAMES one.** A wall runs from
+Pt.17 to Pt.22, Pt.9 is a corner, Pt.30 is held, Pt.41 is left out:
+each of those is a question about a point the drawing already holds,
+not about a place, so it is asked with `tool:askpoint` (`cal:askpoint`
+in the library, lifted from PERPMARK) -- one prompt that takes a
+click OR a typed number, and never a bare `getpoint` snapped to
+whatever was nearest. The rules it carries:
+
+* a click has to land within the tool's snap radius of a point to
+  pick it (12.0 in every tool that has one, so a drafter's aim
+  carries between them); a typed number never uses the radius -- a
+  name is exact;
+* `"17"`, `"Pt.17"`, `"pt 17"`, `"#17"` and `"017"` all name the same
+  point (`tool:canon`);
+* a click on nothing, a number nothing carries and a number two
+  points share are re-asked where they stand, never guessed at;
+* the answer is a candidate `(position name)`, and the position is
+  the point's identity: a declaration made before the selection is
+  matched to the selected points by it, and one that is not among
+  them is named and dropped, never snapped onto some other point.
+
+```lisp
+;; A survey point, clicked or typed.  TAIL is the prose inside the
+;; angle brackets on a prompt whose Enter means something ("Enter =
+;; done"), nil when a point is required.  CANDS are the (position
+;; name) candidates and SNAP how close a click has to land.  Returns
+;; the candidate, nil for Enter, or TOOL-BACK.
+(defun tool:askpoint (msg tail back cands snap / v out done dupes)
+  (setq done nil out nil)
+  (while (not done)
+    (if back
+      (initget (if tail 128 129) "Back Undo")
+      (initget (if tail 128 129)))
+    (setq v (getpoint (strcat "\n" msg
+                              (if back " [Back]" "")
+                              (if tail (strcat " <" tail ">") "")
+                              ": ")))
+    (cond
+      ((null v)
+       (if tail
+         (setq out nil done T)
+         (princ "\nA survey point is required - click one, or type its number.")))
+      ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+       (setq out 'TOOL-BACK done T))
+      ((= (type v) 'STR)
+       (setq dupes (tool:cand-matches v cands))
+       (cond
+         ((null dupes)
+          (princ (strcat "\nNo survey point is numbered \""
+                         (tool:as-number v)
+                         "\" - try again, or click the point itself.")))
+         ((> (length dupes) 1)
+          (princ (strcat "\n" (itoa (length dupes)) " points are numbered \""
+                         (tool:as-number v)
+                         "\" - click the one you mean.")))
+         (t (setq out (car dupes) done T))))
+      (t
+       (setq out (tool:cand-nearest v cands snap))
+       (if out
+         (setq done T)
+         (princ (strcat "\nNo survey point there - click one, or type"
+                        " its number."))))))
+  out)
+```
+
 ## 5. Code structure
 
 **File.** One tool per `lisp/<tool>/` folder; the file is named after
@@ -610,6 +675,54 @@ done nothing yet, while the `_End` fails at the bottom of one that has
 drawn everything, and it takes the sysvar restore behind it down too --
 so the drafter is left with snap off and a borrowed layer current.
 
+**OSMODE COMES BACK ON EVERY PATH, AND THE HANDLER IS ONE OF THEM.**
+The restore table above leads with OSMODE because object snaps are the
+setting the drafter misses most, and `tools/check_osnap.py` is the
+referee for that line: a command that can change OSMODE restores it
+before it returns AND from its `*error*` handler.  The handler half is
+the one that gets forgotten and the one that matters -- Esc at a prompt
+is the likeliest way out of a prompting command, and it is the only way
+out that never reaches the `(tool:sysrestore)` at the bottom.  Left at
+0 the failure does not look like this tool's: it looks like AutoCAD's,
+two commands later, when a line drawn by eye refuses to snap to an
+endpoint.
+
+A restore that is PRESENT is not a restore that RUNS.  An error raised
+inside `*error*` aborts the handler: every form after the throwing one
+is skipped, the OSMODE line included.  So nothing that can throw may
+sit in front of it.  What can throw inside a handler is a bare
+`(command ...)` -- a 2015+ engine refuses one unless the error mode was
+pushed, and even where it was, the Esc that fired the handler may have
+left a command PENDING, so the call is fed in as answers to that
+instead.  Putting back a value the run captured itself is pure `setvar`
+and cannot throw, which is why it goes first and the risky work goes
+after.  `check_osnap.py` fails a handler that has them the other way
+round.  Four did: `OASIS` opened with an unwrapped `-DIMSTYLE` restore
+-- above the very pending-command valve its own comment said must come
+first -- and `AUTOBEAD`, `XFTCONV` and `XFTRECONV` each put their drain
+loop ahead of the only OSMODE restore they have.
+
+The mirror-image rule is about the SNAPSHOT.  A `syssave` here refuses
+to overwrite one that already exists, because a second save mid-run
+would capture the zeroed OSMODE and "restore" 0 for ever.  The price is
+that a snapshot never dropped silences every later run: they save
+nothing and restore the FIRST run's values, quietly undoing whatever
+the drafter has ticked in Drafting Settings since.  So the drop must
+not sit behind a form that can throw either.  `spa:sysrestore` did --
+its `(setq spa:*sysold* nil)` was behind a bare `-DIMSTYLE` -- which
+made one failed SPA run enough to freeze the drafter's snaps at that
+run's value for the rest of the session.
+
+The saved value has to be somewhere the handler can see: a local of the
+command (the handler is nested inside it, so `oos` is in scope) or the
+`tool:*sysold*` snapshot.  A helper that saves into a local of its OWN
+is out of the handler's reach however carefully it restores inline --
+which is exactly how `TUTORIALCOVERCHECK`, `TUTORIALDIMCHECK` and
+`TUTORIALLINFINCHECK` sat muting OSMODE round a `DIMLINEAR` with no
+handler that could put it back.  The three tutorials hold the drafter's
+value themselves now, the same way `TUTORIALCOVERCHECK` already held
+ATTDIA/ATTREQ/FILEDIA round the same helper.
+
 **EVERY COMMAND REPORTS ITS FAILURES.  This is not optional, and the
 lines are not yours to write.**  A tool is not finished when it draws
 and it is not finished when it prints an error -- it is finished when a
@@ -617,7 +730,7 @@ failure in it produces a file somebody can diagnose from.  That is the
 whole of the rule, and it applies to the tool written next year exactly
 as it applies to the seventy in the tree today.
 
-Four call sites, all of them maintained by
+Five call sites, all of them maintained by
 `tools/check_lazdiag.py --fix`, and `make check` runs the same check so
 a command that is missing any of them cannot ship:
 
@@ -627,12 +740,28 @@ a command that is missing any of them cannot ship:
 | in the `*error*` handler | `(if lzd:report (lzd:report "TOOL" *tool-version* msg))` | the report itself: the DXF, and the words telling the drafter to send it |
 | before the command's `(princ)` | `(if lzd:end (lzd:end "TOOL"))` | the run LOG's "ok" line: a clean run, counted |
 | after a selection | `(if lzd:watch (lzd:watch ss) ss)` | the geometry the run was HANDED, not just what it drew |
-| in an ask helper | `(if lzd:ask (lzd:ask msg v) v)` | the transcript -- which question it died on |
+| after a `(setq v (getX ...))` that is a body statement, ask helpers included | `(if lzd:ask (lzd:ask msg v) v)` | the transcript -- which question it died on, and what was answered |
+| at an input read where it stands | `((lambda (v) (if lzd:ask (lzd:ask "prompt" v) v)) (getpoint "prompt"))` | the same transcript line for a `while`'s test, a keyword inside `(= ...)`, a `getstring` that only pauses -- and the `nil` that ends a loop, written down like any other answer |
 
-The else branch on the last two is load-bearing, not decoration: it
-makes the whole form evaluate to the variable whether LAZDIAG is loaded
-or not, so a call dropped after a `(setq ss (ssget ...))` cannot change
-what the enclosing `progn` or `cond` clause returns.
+The else branch on the `watch` and `ask` forms is load-bearing, not
+decoration: it makes the whole form evaluate to the variable whether
+LAZDIAG is loaded or not, so a call dropped after a
+`(setq ss (ssget ...))` cannot change what the enclosing `progn` or
+`cond` clause returns.  The lambda is the same idea for a call whose
+value something reads in place: it binds the answer for the length of
+the record and hands it straight back, so the wrapped call means
+exactly what the bare one did wherever it sits.  A record dropped in
+AFTER a `while`'s test would have run only when the test passed, and
+the transcript would have been short exactly the answer that ended the
+loop.
+
+The answers are recorded TYPED -- `nil`, `12.5`, `"Yes"`, `(x y z)`,
+`(<ent> (x y z))` -- so a transcript is not just readable but
+replayable: `tools/probe_report.py` feeds a report back to the tool in
+the test VM, confirms the failure, and varies each answer in turn to
+say which one it is tied to.  Every input a new tool takes is
+therefore an input `--fix` will record; do not route one around a
+`getX` call to keep it out of the transcript.
 
 Those four also feed the **run log** -- one line per run into
 `<profile>\calofin\calofin-YYYY-MM.log`, `ok` / `quit` / `FAIL` -- which

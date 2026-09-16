@@ -25,7 +25,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v1.8")
+(setq cal:*version* "v1.9")
 
 
 ;;  WHAT IS LOADED, AND AT WHICH VERSION.  Seventy-two commands report
@@ -210,7 +210,8 @@
 ;; POOL/SPA tutorials keep their own pauses -- theirs can stop the
 ;; tutorial, and the two disagree about which answer means stop.
 (defun cal:pause ()
-  (getstring "\n--- press Enter to continue ---")
+  ((lambda (v) (if lzd:ask (lzd:ask "\n--- press Enter to continue ---" v) v))
+    (getstring "\n--- press Enter to continue ---"))
   (princ))
 
 ;;; -------------------- system variables --------------------------------
@@ -1005,6 +1006,115 @@
       (setq fall v))
     (setq sub (entnext sub)))
   (if val val fall))
+
+;;; -------------------- naming a survey point ---------------------------
+;;; PERPMARK's infrastructure (pm:as-number, pm:canon, pm:matches,
+;;; pm:nearest and pm:askpoint, PERPMARK.lsp), lifted for the fitters
+;;; ABHD, CABHD, LHD, ABLOBF and FITABHD, which ask about survey points
+;;; at every declaration -- the wall runs from Pt.17 to Pt.22, Pt.9 is
+;;; a corner, Pt.30 is held, leave Pt.41 out -- and used to take a
+;;; PLACE for each and snap it to whatever point was nearest, however
+;;; far off the click landed.  A question about a point NAMES one: a
+;;; click within SNAP of a point picks it, a typed number finds it,
+;;; and a miss is re-asked where it stands.
+;;;
+;;; A candidate is (position name ...): the point as the tool holds it
+;;; and what the prompts call it.  The tools keep their own classifier
+;;; (which entities are survey points, and what a moved point is) and
+;;; hand the list in; the tag reader above is what names a block.
+
+;; The NUMBER a typed point name carries: the spelling with the spaces,
+;; the hashes and the "Pt." prefix taken off, and nothing else touched.
+;; Only the dot right after PT is a prefix dot - a point genuinely named
+;; "40.5" keeps its decimal.  (ABFIND's abf:as-number.)
+(defun cal:as-number (s / out i ch)
+  (setq out "" i 1)
+  (while (<= i (strlen s))
+    (setq ch (substr s i 1))
+    (if (not (member ch '(" " "#")))
+      (setq out (strcat out ch)))
+    (setq i (1+ i)))
+  (if (and (>= (strlen out) 2) (= (strcase (substr out 1 2)) "PT"))
+    (progn
+      (setq out (substr out 3))
+      (if (= (substr out 1 1) ".") (setq out (substr out 2)))))
+  out)
+
+;; One comparable form for a point number, so "35", "Pt.35", "pt 35",
+;; "#35" and "035" all meet in the middle.  (ABFIND's abf:canon.)
+(defun cal:canon (s)
+  (setq s (cal:as-number (strcase s)))
+  (if (distof s 2)
+    (rtos (distof s 2) 2 8)
+    s))
+
+;; Every candidate whose name is the number typed.  More than one is a
+;; sheet that numbers two points the same, and is asked about rather
+;; than guessed at.
+(defun cal:cand-matches (s cands / want out c)
+  (setq want (cal:canon s) out nil)
+  (foreach c cands
+    (if (= (cal:canon (cadr c)) want) (setq out (cons c out))))
+  (reverse out))
+
+;; The candidate nearest PK, when one sits within SNAP of it.  A typed
+;; number never comes here - a name is exact.
+(defun cal:cand-nearest (pk cands snap / best bd c d)
+  (setq best nil bd nil)
+  (foreach c cands
+    (setq d (distance (cal:2d pk) (cal:2d (car c))))
+    (if (and (<= d snap) (or (null bd) (< d bd)))
+      (setq best c bd d)))
+  best)
+
+;; A survey point, clicked or typed.  One prompt takes both: (initget
+;; 128) is arbitrary input, which hands typed text back from getpoint as
+;; the string it is where a click comes back as the point it is.  The
+;; misses are re-asked HERE rather than unwinding the caller's chain --
+;; a number nothing carries and a click on nothing are typos, not
+;; answers, and the question they belong to is this one.  TAIL is the
+;; prose inside the angle brackets on a prompt whose Enter means
+;; something - "Enter = done", the point Enter takes - and nil when a
+;; point is required.  CANDS are the (position name) candidates and
+;; SNAP how close a click has to land.  Returns the candidate, nil for
+;; Enter, or CAL-BACK.
+(defun cal:askpoint (msg tail back cands snap / v out done dupes)
+  (setq done nil out nil)
+  (while (not done)
+    (if back
+      (initget (if tail 128 129) "Back Undo")
+      (initget (if tail 128 129)))
+    (setq v (getpoint (strcat "\n" msg
+                              (if back " [Back]" "")
+                              (if tail (strcat " <" tail ">") "")
+                              ": ")))
+    (if lzd:ask (lzd:ask msg v) v)
+    (cond
+      ((null v)
+       (if tail
+         (setq out nil done T)
+         (princ "\nA survey point is required - click one, or type its number.")))
+      ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+       (setq out 'CAL-BACK done T))
+      ((= (type v) 'STR)
+       (setq dupes (cal:cand-matches v cands))
+       (cond
+         ((null dupes)
+          (princ (strcat "\nNo survey point is numbered \""
+                         (cal:as-number v)
+                         "\" - try again, or click the point itself.")))
+         ((> (length dupes) 1)
+          (princ (strcat "\n" (itoa (length dupes)) " points are numbered \""
+                         (cal:as-number v)
+                         "\" - click the one you mean.")))
+         (t (setq out (car dupes) done T))))
+      (t
+       (setq out (cal:cand-nearest v cands snap))
+       (if out
+         (setq done T)
+         (princ (strcat "\nNo survey point there - click one, or type"
+                        " its number."))))))
+  out)
 
 ;;; ----------------------------------------------------------------------
 ;; Quiet inside the whole build, on the same rule every member

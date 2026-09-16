@@ -535,6 +535,7 @@
     ;; wall -- so the section hangs off a known corner.
     (initget "Back Undo")
     (setq base (getpoint "\nInsertion base point (top left of the section) [Back] <0,0>: "))
+    (if lzd:ask (lzd:ask "\nInsertion base point (top left of the section) [Back] <0,0>: " base) base)
     (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
       (progn (princ "\nStepping back one question.")
              (setq base 'RETRY))))

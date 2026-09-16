@@ -224,7 +224,7 @@ check('...and on a run that doubles back it is NOT the real end',
 vm = newvm()
 pts = ab_pts(vm, HOOK)
 vm.pickfirst = ['<ss>'] + pts
-hand = run(vm, WIZARD + ['Number', 1, 'Number', 10, '1'])
+hand = run(vm, WIZARD + ['1', '10', '1'])
 check('a typed survey number names an end',
       'Run: Pt.1 to Pt.10' in hand, hand[hand.find('Run:'):][:80])
 check('and the run really is fitted between them',
@@ -254,7 +254,7 @@ print('ablobf -- the ends are refused when they are the same point')
 vm = newvm()
 pts = ab_pts(vm, HOOK)
 vm.pickfirst = ['<ss>'] + pts
-same = run(vm, WIZARD + ['Number', 4, 'Number', 4, 'Number', 10, '1'])
+same = run(vm, WIZARD + ['4', 'Pt.4', '#10', '1'])
 check('naming one point twice is refused, not fitted',
       'the run needs two different points' in same,
       same[same.find('STARTS'):][:300])
@@ -264,9 +264,19 @@ check('...and the re-ask is taken', 'Run: Pt.4 to Pt.10' in same, same)
 vm = newvm()
 pts = ab_pts(vm, HOOK)
 vm.pickfirst = ['<ss>'] + pts
-nope = run(vm, WIZARD + ['Number', 99, 'Number', 1, None, '1'])
+nope = run(vm, WIZARD + ['99', '1', None, '1'])
 check('a number no point carries is named and re-asked',
-      'No selected point carries the number 99' in nope, nope[:900])
+      'No survey point is numbered "99"' in nope, nope[:900])
+
+# a click on nothing is re-asked where it stands, never snapped to
+# whatever was nearest
+vm = newvm()
+pts = ab_pts(vm, HOOK)
+vm.pickfirst = ['<ss>'] + pts
+far = run(vm, WIZARD + [(900.0, 900.0, 0.0), '1', '10', '1'])
+check('a click on nothing is re-asked, not snapped',
+      'No survey point there' in far and 'Run: Pt.1 to Pt.10' in far,
+      far[far.find('STARTS'):][:400])
 
 # ----------------------------------------------------------------------
 print('ablobf -- stepping back through the chain')
@@ -502,11 +512,11 @@ vm = newvm()
 pts = ab_pts(vm, HOOK)
 vm.pickfirst = ['<ss>'] + pts
 redo = run(vm, WIZARD + [
-    'Number', 1, 'Number', 10,      # the ends
+    '1', '10',                      # the ends
     'Redo',                         # ...and think again
     None,                           # omit nothing
     None, None, None,               # walls / corners / holds: Enter each
-    'Number', 4, 'Number', 10,      # a different START
+    '4', '10',                      # a different START
     None, None, None,               # tolerance / percent / cap: Enter
     '1'])
 check('Redo re-opens the omit list', 'Any points to leave out' in redo,
@@ -526,7 +536,7 @@ vm = newvm()
 pts = ab_pts(vm, HOOK)
 vm.pickfirst = ['<ss>'] + pts
 gone = run(vm, WIZARD + [
-    'Number', 1, 'Number', 10,
+    '1', '10',
     'Redo',
     (90.0, 25.0, 0.0), None,        # omit Pt.10 - the run's own END
     None, None, None,
@@ -664,12 +674,13 @@ for n, (x, y) in zip([1, 2, 3, 3, 5], dup_pts):
              % (x, y, n))
     made += vm.entities[before:]
 vm.pickfirst = ['<ss>'] + made
-dup = run(vm, WIZARD + ['Number', 3, None, '1'])
-check('a number two points share is warned about, not resolved quietly',
-      '2 selected points carry the number 3' in dup,
+dup = run(vm, WIZARD + ['3', (100.0, 0.0, 0.0), None, '1'])
+check('a number two points share is re-asked, not resolved quietly',
+      '2 points are numbered "3" - click the one you mean' in dup,
       dup[dup.find('STARTS'):][:400])
-check('...and the warning says which one it took',
-      'taking the one at' in dup, dup[dup.find('WARNING'):][:200])
+check('...and the click that follows settles it',
+      'taking the one at' not in dup and 'Run: Pt.3 to Pt.' in dup,
+      dup[dup.find('Run:'):][:120])
 check('...and the run is still fitted', 'written to layer POOL' in dup,
       dup[-200:])
 

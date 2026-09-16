@@ -410,8 +410,9 @@ def test_five_piece_hinge_arrangement():
               'Yes', '90',
               'Yes',                # auto-hinge -- asked before the draw
               'No',                 # no spillaway
-              '4-3',                # taper (the block was offered up front)
-              'No'],                # no second outline
+              'No',                 # no second outline
+              '4-3'],               # taper -- asked after (block offered
+                                    # up front, but not read here)
              'hinge/5-piece')
     assert hinge_labels(vm) == ['Hinge', 'Velcro Hinge',
                                 'Velcro Hinge', 'Hinge'], hinge_labels(vm)
@@ -421,7 +422,7 @@ def test_three_piece_hinge_arrangement():
     vm = run([None, 'Coversize', 'Rectangle', None,
               140.0, 60.0,          # 140/48 -> 3 pieces
               'Yes', '90',
-              'Yes', 'No', '4-3', 'No'],
+              'Yes', 'No', 'No', '4-3'],
              'hinge/3-piece')
     assert hinge_labels(vm) == ['Hinge', 'Velcro Hinge'], hinge_labels(vm)
 
@@ -435,8 +436,8 @@ def test_back_in_the_spillaway_loop():
               'Yes', 'Wall', 'Top', 20.0,   # commit one
               'Back',                        # ... and take it back
               'No',
-              '4-3',
-              'No'],                         # no second outline
+              'No',                         # no second outline
+              '4-3'],                        # taper -- asked after
              'hinge/spillaway-back')
     rows = [p for p, _ in vm.prompts]
     assert any('spillaway' in p.lower() for p in rows)
@@ -461,7 +462,7 @@ def test_thermolight_style_all_velcro():
     vm = run([None, 'Coversize', 'Rectangle', None,
               230.0, 60.0,
               'Yes', '90',
-              'Yes', 'No', '1-3/8', 'No'],
+              'Yes', 'No', 'No', '1-3/8'],
              'hinge/thermolight-taper')
     assert hinge_labels(vm), "no hinges drawn"
 
@@ -601,19 +602,24 @@ def hinge_xs(vm):
 
 
 def test_hinge_questions_come_before_the_draw():
-    """The auto-hinge offer, the spillaways and the taper are all asked
-    before the second-outline offer -- nothing on the screen can be
-    turned, so they have to be."""
+    """The auto-hinge offer and the spillaways are asked before the
+    second-outline offer -- nothing on the screen can be turned, so
+    they have to be.  The taper does not turn anything, so it is asked
+    the other way round: after the second-outline offer, once the
+    cover is on the screen (or the offer to add one is declined)."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               140.0, 60.0,
               'Yes', '90',
-              'Yes', 'No', '4-3',
-              'No'],
+              'Yes', 'No',
+              'No',
+              '4-3'],
              'turn/order')
     ps = [p for p, _ in vm.prompts]
     hinge = next(i for i, p in enumerate(ps) if 'Auto-hinge' in p)
     second = next(i for i, p in enumerate(ps) if 'as well' in p)
+    taper = next(i for i, p in enumerate(ps) if 'Taper' in p)
     assert hinge < second, ps
+    assert second < taper, ps
     assert hinge_labels(vm) == ['Hinge', 'Velcro Hinge'], hinge_labels(vm)
 
 
@@ -628,8 +634,8 @@ def test_a_spillway_no_hinge_can_dodge_turns_the_spa():
               'Yes',                        # auto-hinge
               'Yes', 'Wall', 'Top', 60.0,   # right across the top wall
               'No',
-              '4-3',
-              'No'],
+              'No',                         # no second outline
+              '4-3'],                       # taper -- asked after
              'turn/top-wall')
     w, l = cover_size(vm)
     assert abs(w - 60.0) < 1e-9 and abs(l - 100.0) < 1e-9, (w, l)
@@ -651,8 +657,8 @@ def test_a_side_wall_spillway_leaves_the_spa_alone():
               'Yes',
               'Yes', 'Wall', 'Left', 60.0,
               'No',
-              '4-3',
-              'No'],
+              'No',
+              '4-3'],
              'turn/left-wall')
     w, l = cover_size(vm)
     assert abs(w - 100.0) < 1e-9 and abs(l - 60.0) < 1e-9, (w, l)
@@ -670,8 +676,8 @@ def test_a_spillway_the_hinges_already_clear_turns_nothing():
               'Yes',
               'Yes', 'Wall', 'Top', 20.0,
               'No',
-              '4-3',
-              'No'],
+              'No',
+              '4-3'],
              'turn/no-need')
     w, l = cover_size(vm)
     assert abs(w - 100.0) < 1e-9 and abs(l - 60.0) < 1e-9, (w, l)
@@ -800,8 +806,8 @@ def test_the_details_block_is_asked_for_once():
               'Yes', '90',
               'Yes',                # auto-hinge
               'No',                 # no spillaway
-              '4-3',                # ...so the taper is typed
-              'No'],
+              'No',                 # no second outline
+              '4-3'],               # ...so the taper is typed, after
              'block/asked-once')
     picks = [p for p, _ in vm.prompts if 'Spa Cover Details' in p]
     assert len(picks) == 1, [p for p, _ in vm.prompts]
@@ -827,24 +833,28 @@ def test_a_picked_block_still_answers_the_taper():
 
 
 def test_the_guide_stays_up_until_the_real_spa_replaces_it():
-    """The hinge questions are asked before anything is drawn, so the
-    guide is the only spa on the screen while they are answered.  It
-    used to be taken away as the corners were answered, leaving the
-    rest of the run to be answered at a blank screen."""
+    """The auto-hinge offer and the spillaways are asked before anything
+    is drawn, so the guide is the only spa on the screen while they are
+    answered.  It used to be taken away as the corners were answered,
+    leaving the rest of the run to be answered at a blank screen.  The
+    taper is asked later still, once the real spa has already replaced
+    the guide -- it turns nothing, so there is nothing gained by making
+    the drafter answer it against a guide instead of their own drawing."""
     notes = []
     run([None, 'Coversize', 'Rectangle', None,
          140.0, 60.0,
          'Yes', '90',
          watched(notes, 'Yes'),     # auto-hinge
          watched(notes, 'No'),      # spillaway
-         watched(notes, '4-3'),     # taper
-         watched(notes, 'No')],     # second outline -- after the draw
+         watched(notes, 'No'),      # second outline -- after the draw
+         watched(notes, '4-3')],    # taper -- after the draw too
         'guide/stays-up')
     assert notes[0] > 0, "the guide was gone by the auto-hinge question"
     assert notes[1] == notes[0], "the guide thinned out: %r" % (notes,)
-    assert notes[2] == notes[0], "the guide was gone by the taper: %r" % (notes,)
-    assert notes[3] == 0, \
+    assert notes[2] == 0, \
         "the guide outlived the spa that replaced it: %r" % (notes,)
+    assert notes[3] == 0, \
+        "the taper was asked before the real spa replaced the guide: %r" % (notes,)
 
 
 def test_the_octagon_and_round_guides_hand_over_the_same_way():
@@ -855,12 +865,12 @@ def test_the_octagon_and_round_guides_hand_over_the_same_way():
         run([None, 'Coversize', shape, None] + body
             + [watched(notes, 'Yes'),   # auto-hinge
                watched(notes, 'No'),    # spillaway
-               watched(notes, '4-3'),   # taper
-               watched(notes, 'No')],   # second outline -- after the draw
+               watched(notes, 'No'),    # second outline -- after the draw
+               watched(notes, '4-3')],  # taper -- after the draw too
             'guide/%s' % shape)
-        assert notes[0] > 0 and notes[2] == notes[0], \
+        assert notes[0] > 0 and notes[1] == notes[0], \
             "%s took its guide away mid-question: %r" % (shape, notes)
-        assert notes[3] == 0, \
+        assert notes[2] == 0 and notes[3] == 0, \
             "%s left its guide on the screen: %r" % (shape, notes)
 
 
