@@ -31,6 +31,26 @@ both are correct:
     tool:syssave took, whose list names OSMODE.  cal:sysrestore in the
     grouped build is the same shape.
 
+Three things were looked for and are NOT here, recorded so the next
+reader does not re-derive them:
+
+  * NO OUTER+INNER DOUBLE SNAPSHOT.  In the grouped build 24 tools share
+    one cal:*sysold*, and cal:sysrestore restores the whole table and
+    empties it -- so an inner run finishing inside an outer one would
+    leave the outer's own restore a no-op.  There is no such pair: every
+    command that invokes another muting command (POOLCOVER, DCE, the two
+    tutorial SCAN aliases) is a thin wrapper that holds no snapshot of
+    its own, and LAZFORM / LAZSPA / LAZSTEP reach a muter only through
+    the tool they launch -- none of the three writes OSMODE or calls a
+    syssave.  Re-check this if a wrapper ever grows a snapshot.
+  * THE PALETTE DOES NOT NEST.  Both send paths (LispBridge.Send and
+    CalofinPalette.RunCommand) use SendStringToExecute, which QUEUES on
+    the document rather than starting a command inside the running one.
+    A click mid-prompt is fed to that prompt as input; it does not open
+    a second tool around the first.
+  * NOTHING WRITES OSMODE AT LOAD TIME.  No (setvar "OSMODE" ...) sits
+    outside a defun in any of the three tiers, so APPLOAD moves nothing.
+
 What this cannot see, and does not claim to: whether the save runs
 before the mute on every path through a command.  That is an ordering
 question a reader answers, and the (if (not tool:*sysold*) ...) guard
@@ -45,7 +65,8 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from callib import LISP_DIR, PARTS_DIR, ROOT, decomment, lsp_files  # noqa: E402
+from callib import (LISP_DIR, PARTS_DIR, RELEASES_DIR, ROOT,  # noqa: E402
+                    decomment, lsp_files)
 
 OSMODE = "OSMODE"
 
@@ -577,18 +598,30 @@ def check(tier, label):
 
 
 def tiers(which):
+    """The tiers to read.  releases/ is in the default set because it is
+    a tier a drafter really APPLOADs -- a dated twin is what a shop
+    pins to so a loaded routine cannot change underfoot, and it is
+    regenerated rather than written, so an OSMODE bug fixed in lisp/
+    reaches it only when somebody re-runs release_lisp.py.  Reading it
+    costs a second and answers "what is the drafter actually running"
+    rather than "what does the source say"."""
     out = []
-    if which in ("lisp", "both"):
+    if which in ("lisp", "both", "all"):
         out.append((Tier(lsp_files(LISP_DIR)), "lisp/"))
-    if which in ("shared", "both"):
+    if which in ("shared", "both", "all"):
         out.append((Tier(lsp_files(PARTS_DIR)), "shared/parts/"))
+    if which in ("releases", "all"):
+        out.append((Tier(lsp_files(RELEASES_DIR)), "releases/"))
     return out
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--tier", choices=("lisp", "shared", "both"),
-                    default="both", help="which tier to read (default both)")
+    ap.add_argument("--tier",
+                    choices=("lisp", "shared", "releases", "both", "all"),
+                    default="all",
+                    help="which tier to read (default all three: the two "
+                         "sources and the dated twins a shop pins to)")
     ap.add_argument("--list", action="store_true",
                     help="print every command that moves OSMODE and how it "
                          "puts it back")

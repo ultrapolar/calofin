@@ -458,7 +458,11 @@ python3 tools/check_lazdiag.py   # every command REPORTS its failures: the
                                  # the answer is read in place; --fix
                                  # wires what is missing
 python3 tools/check_osnap.py     # the drafter's OBJECT SNAPS survive every
-                    [--list]     # run, the failed ones included: a command
+       [--list] [--tier T]       # run, the failed ones included -- read over
+                                 # all THREE tiers, releases/ included,
+                                 # because a dated twin is what a shop
+                                 # pins to and it only gets a fix when
+                                 # release_lisp.py is re-run: a command
                                  # that mutes OSMODE for its own picks puts
                                  # it back before it returns AND from its
                                  # *error* handler, because Esc is the one
