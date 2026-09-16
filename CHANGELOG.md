@@ -8,23 +8,34 @@ which set of them shipped together. The release name lives in
 
 ## Unreleased
 
-**LINGUTTER keeps a radius call-out on the perimeter, and asks before
-it spares a cross dim.** LINGUTTER v2.6. A corner radius under a foot
-lands in `STANDARD INCHES` the same as any other short measurement --
-which is not in `lg:*perimstyles*`, so the very call-out for the corner
-`PADDLE` was about to pad used to be the thing erased. A RADIUS or
-DIAMETER dimension on the perimeter is now kept regardless of its
-style, judged on its one attachment point (DXF 10) the way
-`lg:*perimstyles*` dims are judged on 13/14.
+**LINGUTTER keeps a radius call-out on the perimeter, and judges a
+cross dim by its shape, not just where it sits.** LINGUTTER v2.7. A
+corner radius under a foot lands in `STANDARD INCHES` the same as any
+other short measurement -- which is not in `lg:*perimstyles*`, so the
+very call-out for the corner `PADDLE` was about to pad used to be the
+thing erased. A RADIUS or DIAMETER dimension on the perimeter is now
+kept regardless of its style, judged on its one attachment point (DXF
+10) the way `lg:*perimstyles*` dims are judged on 13/14.
 
 `CROSS DIM*` dims stop being kept unconditionally: LINGUTTER now asks
-"Keep CROSS DIMENSIONS?" once, and a Yes spares only the ones that
-belong to the pool just gutted -- every attachment point either inside
-the traced perimeter or within `lg:*ontol*` of it, so a cross dim
-answering to a second pool sitting in the same highlight is no longer
-swept up with it. Answered No, those dims get no exemption at all and
-are judged, and counted, like any other style. Neither question is a
-confirmation to erase -- LINGUTTER still never asks that.
+"Keep CROSS DIMENSIONS?" once, and a Yes spares only the ones that read
+as a genuine cross measurement of the pool just gutted. Both points
+first have to belong to the pool at all (inside the traced perimeter,
+or on it), and from there a dim is kept when it spans at least
+`lg:*crossspan*` of the perimeter's own width or height -- "goes full
+X" or "goes full Y" -- *or* sits at two of the perimeter's own
+vertices, corner to corner along one whole edge however short (a short
+notch side would otherwise never reach `lg:*crossspan*` on its own).
+Neither way is satisfied by a dim running from one corner to some
+other point along that SAME edge -- the start of a line to the middle
+of it -- which is dropped regardless of how much of the pool it happens
+to span; nor by a small dim sitting entirely inside the pool and
+touching nothing, which is no more a cross measurement of it than a
+stray one answering to a different pool in the same highlight.
+Answered No, every `CROSS DIM*` dim gets no exemption at all regardless
+of shape, and is judged, and counted, like any other style. Neither
+question is a confirmation to erase -- LINGUTTER still never asks
+that.
 
 **Every AB note leads with a bullet.** `ABMOVE` and `ABPCREATE` leave a
 note per point on one layer, and a run that settles several of them

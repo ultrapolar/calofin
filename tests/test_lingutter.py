@@ -22,8 +22,14 @@ which is the guess the outer-face walk exists to stop making.)
 P4a and P4b are the two keep rules layered on top of the original two:
 a radius or diameter dim survives on the perimeter regardless of its
 style, and a CROSS DIM* dim only survives "Keep CROSS DIMENSIONS?"
-answered Yes AND sitting inside the perimeter or connected to it --
-answered No, it gets no exemption at all.  Every c:LINGUTTER /
+answered Yes AND reading as a genuine cross measurement of the pool --
+both points belonging to it at all, and either a span of at least
+lg:*crossspan* in X or Y or two of the perimeter's own vertices, corner
+to corner along one whole edge.  Neither is satisfied by one corner to
+some other point along that SAME edge -- the start of a line to the
+middle of it -- which is dropped whatever it spans, nor by a small dim
+sitting entirely inside touching nothing.  Answered No, a CROSS DIM*
+dim gets no exemption at all regardless of shape.  Every c:LINGUTTER /
 c:LINGUTTERSCAN run past P4 now scripts an answer to that question as
 the run's last argument, the same way a highlighted set is scripted as
 the first.
@@ -582,8 +588,20 @@ def crossvm():
     vm = newvm()
     rectangle(vm, 0, 0, 300, 200)
     d = {
+        # corner to corner: a real diagonal, spans full X AND full Y,
+        # and both ends happen to be vertices too
         'corner': dim(vm, "CROSS DIMENSIONS", (0, 0), (300, 200)),
-        'half': dim(vm, "CROSS DIMENSIONS 0.5", (20, 20), (80, 80)),
+        # side to side through the MIDDLE of each side, at neither
+        # corner: still "goes full Y" - an overall check dim
+        'midspan': dim(vm, "CROSS DIMENSIONS 0.5", (150, 0), (150, 200)),
+        # a small dim entirely inside, touching nothing, spanning
+        # nowhere near the pool - not a cross measurement of it at all
+        'small': dim(vm, "CROSS DIMENSIONS 0.5", (20, 20), (80, 80)),
+        # one end at a corner, the other partway along that SAME side -
+        # a fraction of one side, not the pool - even though it spans
+        # most of the width (250 of 300, over lg:*crossspan*)
+        'partial': dim(vm, "CROSS DIM", (0, 0), (250, 0)),
+        # neither inside nor anywhere near the perimeter
         'stray': dim(vm, "CROSS DIM", (350, 50), (380, 80)),
     }
     return vm, d
@@ -592,33 +610,59 @@ def crossvm():
 vm, d = crossvm()
 res = analyze(vm, keepcross=True)
 kill = set(res['kill'])
-check("P4b corner to corner: both ends ON the perimeter, kept",
+check("P4b corner to corner: a real diagonal, kept",
       d['corner'] not in kill)
-check("P4b \"CROSS DIMENSIONS 0.5\" matches the wildcard too, and its"
-      " points are INSIDE the perimeter without touching it - kept",
-      d['half'] not in kill)
+check("P4b side to side through the middle: still goes full Y, kept",
+      d['midspan'] not in kill)
+check("P4b a small dim entirely inside, touching nothing: dropped",
+      d['small'] in kill)
+check("P4b corner to a random point along the SAME side: dropped even"
+      " though it spans most of the width",
+      d['partial'] in kill)
 check("P4b neither inside nor touching the perimeter: dropped",
       d['stray'] in kill)
-check("P4b two of the three counted as kept for style",
+check("P4b two of the four counted as kept for style",
       res['nany'] == 2, res['nany'])
-check("P4b the stray one is named by reason",
+check("P4b the other two are named by reason",
       res['dropped']
-      == {"CROSS DIM - not inside or connected to the perimeter": 1},
+      == {"CROSS DIMENSIONS 0.5 - not a full span or a full perimeter"
+          " edge": 1,
+          "CROSS DIM - not a full span or a full perimeter edge": 2},
       res['dropped'])
 
-# Answered No, none of the three gets the exemption -- they are judged
-# like any other style not in lg:*perimstyles*, and named as such
+# a short SIDE, corner to corner, that would never pass lg:*crossspan*
+# on its own - an L-shaped perimeter so one side is short relative to
+# the whole shape's bounding box
+vm = newvm()
+for a, b in [((0, 0), (300, 0)), ((300, 0), (300, 120)),
+             ((300, 120), (120, 120)), ((120, 120), (120, 300)),
+             ((120, 300), (0, 300)), ((0, 300), (0, 0))]:
+    line(vm, a, b)
+short_edge = dim(vm, "CROSS DIMENSIONS", (300, 120), (120, 120))
+short_partial = dim(vm, "CROSS DIM", (300, 120), (200, 120))
+res = analyze(vm, keepcross=True)
+kill = set(res['kill'])
+check("P4b a short side corner to corner is kept on vertices alone",
+      short_edge not in kill)
+check("P4b ...but a corner to a random point on that SAME short side"
+      " is still dropped", short_partial in kill)
+check("P4b the short edge's span really is under lg:*crossspan*",
+      180.0 / 300.0 < 0.8)
+
+# Answered No, none of the CROSS-style dims gets the exemption -- they
+# are judged like any other style not in lg:*perimstyles*, and named
+# as such
 vm, d = crossvm()
 res = analyze(vm, keepcross=False)
 kill = set(res['kill'])
-check("P4b answered No: all three CROSS-style dims go",
-      d['corner'] in kill and d['half'] in kill and d['stray'] in kill)
+check("P4b answered No: every CROSS-style dim goes",
+      all(d[k] in kill for k in d))
 check("P4b ...zero kept for style", res['nany'] == 0, res['nany'])
 check("P4b ...and the reason names the answer, not the geometry",
       res['dropped']
       == {'CROSS DIMENSIONS - "Keep CROSS DIMENSIONS?" answered No': 1,
-          'CROSS DIMENSIONS 0.5 - "Keep CROSS DIMENSIONS?" answered No': 1,
-          'CROSS DIM - "Keep CROSS DIMENSIONS?" answered No': 1},
+          'CROSS DIMENSIONS 0.5 - "Keep CROSS DIMENSIONS?" answered No': 2,
+          'CROSS DIM - "Keep CROSS DIMENSIONS?" answered No': 2},
       res['dropped'])
 
 # a radius dim on the perimeter needs no exemption from the CROSS
@@ -960,7 +1004,8 @@ SRC = open(LINGUTTER, encoding="utf-8").read()
 SRC_LINES = SRC.splitlines()
 KNOBS = ["lg:*poollayer*", "lg:*poolcolor*", "lg:*anystyles*",
          "lg:*perimstyles*", "lg:*keeplayers*", "lg:*skiplayers*",
-         "lg:*ontol*", "lg:*snaps*", "lg:*cover*", "lg:*runpaddle*"]
+         "lg:*ontol*", "lg:*snaps*", "lg:*cover*", "lg:*crossspan*",
+         "lg:*runpaddle*"]
 
 
 def setq_line(name):

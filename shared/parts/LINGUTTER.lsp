@@ -55,12 +55,19 @@
 ;;;         * LINGUTTER asks once, "Keep CROSS DIMENSIONS?".  Answered
 ;;;           Yes, a dimension in a lg:*anystyles* style ("CROSS DIM*",
 ;;;           which catches "CROSS DIM", "CROSS DIMENSIONS" and "CROSS
-;;;           DIMENSIONS 0.5") is kept when every one of its attachment
-;;;           points is either inside the traced perimeter or within
-;;;           lg:*ontol* of it -- a cross dim belongs to THIS pool, not
-;;;           to a second one sitting in the same highlight.  Answered
-;;;           No, those dimensions get no exemption and are judged like
-;;;           any other style below;
+;;;           DIMENSIONS 0.5") is kept when it reads as a genuine cross
+;;;           measurement of THIS pool: both attachment points belong
+;;;           to the perimeter at all (inside it, or on it), AND either
+;;;           the two points span at least lg:*crossspan* of the
+;;;           perimeter's own width or height -- "goes full X" or "goes
+;;;           full Y" -- or they sit at two of its VERTICES, corner to
+;;;           corner along one whole edge however short.  A dim from
+;;;           one corner to some other point along that SAME edge --
+;;;           the start of a line to a point in the middle of it -- is
+;;;           never kept, regardless of span: it is reading a fraction
+;;;           of one side, not the pool.  Answered No, none of these
+;;;           dimensions gets any exemption and each is judged like any
+;;;           other style below;
 ;;;         * a dimension in a lg:*perimstyles* style ("STANDARD",
 ;;;           "SIDE STANDARD") is kept only when it is ON the perimeter
 ;;;           -- every one of its attachment points within
@@ -103,9 +110,10 @@
 ;;;    lg:*poollayer*    layer the perimeter is drawn on    ("POOL")
 ;;;    lg:*poolcolor*    its colour when the layer has to be created
 ;;;    lg:*anystyles*    dim styles kept when "Keep CROSS DIMENSIONS?"
-;;;                      is answered Yes and they sit inside the
-;;;                      perimeter or connected to it, as wildcard
-;;;                      patterns matched against the style name
+;;;                      is answered Yes and the dim is a genuine cross
+;;;                      measurement of this pool (see lg:cross-ok-p
+;;;                      and lg:*crossspan*), as wildcard patterns
+;;;                      matched against the style name
 ;;;    lg:*perimstyles*  dim styles kept only on the perimeter
 ;;;    lg:*keeplayers*   layers left alone entirely (nil = none)
 ;;;    lg:*skiplayers*   layers the perimeter is never traced from
@@ -117,6 +125,10 @@
 ;;;                      typed in cannot change what the report claims
 ;;;    lg:*cover*        how much of the highlight's extent a traced
 ;;;                      exterior must span before it is believed
+;;;    lg:*crossspan*    how much of the perimeter's own bounding box a
+;;;                      kept lg:*anystyles* dim must span, in X or Y,
+;;;                      to count as a full cross measurement rather
+;;;                      than a small local one
 ;;;    lg:*runpaddle*    T to run PADDLE at the end, nil to stop after
 ;;;                      the gut
 ;;;
@@ -144,6 +156,12 @@
 ;;;    * "Keep CROSS DIMENSIONS?" answered No drops every lg:*anystyles*
 ;;;      dimension like any other style not in lg:*perimstyles* -- counted
 ;;;      in the report, not silently.
+;;;    * A lg:*anystyles* dim is judged by SHAPE as well as location: a
+;;;      small one entirely inside the pool, touching nothing, is kept
+;;;      no more than a stray one outside it is -- lg:*crossspan* and
+;;;      lg:vertex-to-vertex-p are what a genuine cross measurement has
+;;;      to satisfy, and "start of one edge to a random point along
+;;;      that SAME edge" satisfies neither one, on purpose.
 ;;;    * The perimeter is always redrawn, even when it was already one
 ;;;      closed polyline on POOL, so the result is the same object
 ;;;      whatever went in.  An associative dimension attached to the old
@@ -160,7 +178,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.6")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.7")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -227,6 +245,15 @@
                                    ; perimeter: a fraction, 0.8 = 80%.
                                    ; Falling short is a warning, never a
                                    ; veto -- see the Notes
+(setq lg:*crossspan*   0.8)        ; how much of the PERIMETER's own
+                                   ; bounding box a kept lg:*anystyles*
+                                   ; dim has to span, in X or in Y, to
+                                   ; count as a full cross measurement
+                                   ; rather than a small local one; a
+                                   ; fraction, 0.8 = 80%.  A dim short
+                                   ; of this is still kept when it runs
+                                   ; corner to corner along one whole
+                                   ; edge instead -- see lg:cross-ok-p
 (setq lg:*runpaddle*   t)          ; T to hand the new perimeter to
                                    ; PADDLE and pad it; nil to stop after
                                    ; the gut and leave it unpadded
@@ -842,20 +869,90 @@
     (setq i (1+ i)))
   inside)
 
-;; T when every attachment point of a lg:*anystyles* dimension is either
-;; INSIDE the traced perimeter or within lg:*ontol* of it.  A cross dim
-;; runs corner to corner of the pool it belongs to; this is what tells
-;; that pool's cross dims from one sitting in the same highlight for a
-;; second pool, or a stray one that answers to nothing here.  Every, not
-;; any -- the same reasoning as lg:on-perim-p.
-(defun lg:cross-ok-p (ed vts / pts ok p)
-  (setq pts (lg:dim-pts ed)
-        ok  (and pts t))
-  (foreach p pts
-    (if (not (or (lg:pt-inside-p p vts)
-                 (<= (lg:pt-loop-dist p vts) lg:*ontol*)))
-      (setq ok nil)))
-  ok)
+;; T when P sits inside the perimeter, or on it -- the baseline "does
+;; this point belong to the pool LINGUTTER just gutted at all" test.  A
+;; point that fails this is not a fraction of an inch off; it is a
+;; stray dim, or one measuring a second pool in the same highlight.
+(defun lg:pt-belongs-p (p vts)
+  (or (lg:pt-inside-p p vts) (<= (lg:pt-loop-dist p vts) lg:*ontol*)))
+
+;; T when P sits within lg:*ontol* of a VERTEX of the perimeter -- a
+;; true corner, not merely somewhere along the edge leaving or
+;; arriving at it.
+(defun lg:at-vertex-p (p vts / hit v)
+  (foreach v vts
+    (if (<= (distance (cal:2d p) (cal:2d v)) lg:*ontol*) (setq hit t)))
+  hit)
+
+;; T when P1 and P2 both sit on some ONE perimeter edge and are NOT
+;; that edge's own two endpoints -- the start of a line to some random
+;; point in the middle of that same line.  A cross dim shaped like this
+;; measures a fraction of one side, not the pool, and is never kept
+;; regardless of span: a long enough side could otherwise make a
+;; partial reading look like it spans the pool by accident.
+;; Every edge is checked in its own right rather than classifying each
+;; point to "the" edge it sits on first: a point sitting exactly at a
+;; shared VERTEX sits on the two edges that meet there, and picking
+;; only one by iteration order could clear a partial read on whichever
+;; edge it did not pick.
+(defun lg:same-edge-partial-p (p1 p2 vts / n i a b blg d1 d2 veto)
+  (setq n (length vts) i 0 veto nil)
+  (repeat n
+    (setq a   (nth i vts)
+          b   (nth (rem (1+ i) n) vts)
+          blg (caddr a)
+          d1  (if (/= blg 0.0)
+                (lg:pt-arc-dist p1 (cal:2d a) (cal:2d b) blg)
+                (lg:pt-seg-dist p1 (cal:2d a) (cal:2d b)))
+          d2  (if (/= blg 0.0)
+                (lg:pt-arc-dist p2 (cal:2d a) (cal:2d b) blg)
+                (lg:pt-seg-dist p2 (cal:2d a) (cal:2d b))))
+    (if (and (<= d1 lg:*ontol*) (<= d2 lg:*ontol*)
+             (not (or (and (<= (distance (cal:2d p1) (cal:2d a)) lg:*ontol*)
+                           (<= (distance (cal:2d p2) (cal:2d b)) lg:*ontol*))
+                      (and (<= (distance (cal:2d p1) (cal:2d b)) lg:*ontol*)
+                           (<= (distance (cal:2d p2) (cal:2d a)) lg:*ontol*)))))
+      (setq veto t))
+    (setq i (1+ i)))
+  veto)
+
+;; T when P1-P2 spans at least lg:*crossspan* of the perimeter's own
+;; bounding box, in X or in Y -- "goes full X" or "goes full Y", an
+;; overall check dimension from one side to the other, corners or not.
+(defun lg:full-span-p (p1 p2 vts / bb w h dx dy)
+  (setq bb (lg:bbox (lg:segs-pts (lg:vts->segs T vts))))
+  (if bb
+    (progn
+      (setq w  (- (nth 2 bb) (car bb))
+            h  (- (nth 3 bb) (cadr bb))
+            dx (abs (- (car (cal:2d p1)) (car (cal:2d p2))))
+            dy (abs (- (cadr (cal:2d p1)) (cadr (cal:2d p2)))))
+      (or (and (> w 1e-9) (>= (/ dx w) lg:*crossspan*))
+          (and (> h 1e-9) (>= (/ dy h) lg:*crossspan*))))))
+
+;; T when P1 and P2 are each within lg:*ontol* of SOME vertex of the
+;; perimeter -- corner to corner, "the start of a line to the end of a
+;; line", whichever two corners they are and however short that run is.
+;; A short notch side would otherwise never pass lg:full-span-p.
+(defun lg:vertex-to-vertex-p (p1 p2 vts)
+  (and (lg:at-vertex-p p1 vts) (lg:at-vertex-p p2 vts)))
+
+;; T when a lg:*anystyles* dimension is a genuine cross dim OF THIS
+;; POOL: both attachment points belong to the perimeter at all, neither
+;; is a partial read along one same edge, and together they either span
+;; most of the pool (lg:full-span-p) or run corner to corner along one
+;; full edge (lg:vertex-to-vertex-p).  Anything else highlighted in
+;; this style -- a small dimension entirely inside touching nothing, a
+;; stray one answering to a different pool -- goes with the rest.
+(defun lg:cross-ok-p (ed vts / pts p1 p2)
+  (setq pts (lg:dim-pts ed))
+  (and (= (length pts) 2)
+       (setq p1 (car pts) p2 (cadr pts))
+       (lg:pt-belongs-p p1 vts)
+       (lg:pt-belongs-p p2 vts)
+       (not (lg:same-edge-partial-p p1 p2 vts))
+       (or (lg:full-span-p p1 p2 vts)
+           (lg:vertex-to-vertex-p p1 p2 vts))))
 
 ;;; -------------------- styles and tallies ------------------------------
 
@@ -891,7 +988,7 @@
           (cond
             ((lg:stylep sty lg:*anystyles*)
              (if keepcross
-               " - not inside or connected to the perimeter"
+               " - not a full span or a full perimeter edge"
                " - \"Keep CROSS DIMENSIONS?\" answered No"))
             ((lg:stylep sty lg:*perimstyles*) " - not on the perimeter")
             (t " - style not kept"))))
@@ -1075,7 +1172,8 @@
       (if keepcross
         (princ (strcat "\nLINGUTTER: keeping " (itoa nany) " dimension"
                        (lg:s nany) " in " (lg:names lg:*anystyles*)
-                       " inside the perimeter or connected to it."))
+                       " as a full-span or full-edge cross measurement"
+                       " of the pool."))
         (princ (strcat "\nLINGUTTER: \"Keep CROSS DIMENSIONS?\" answered"
                        " No - dimensions in " (lg:names lg:*anystyles*)
                        " get no exemption.")))
