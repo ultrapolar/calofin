@@ -683,7 +683,8 @@ python3 tests/test_linfincheck.py     # the liner rules over a real staircase
                                       # side view, LITELINFINSCAN, the
                                       # guided review incl. Skip
 python3 tests/test_covercheck.py      # the cover rules over an L-pool, the
-                                      # pad suggestion, LITECOVERSCAN
+                                      # pad suggestion, LITECOVERSCAN, and a
+                                      # perimeter that hands over to CABLE
 python3 tests/test_lazform.py         # LAZFORM - the chart drawn and checked,
                                       # and the pool it draws vs the prompts
 python3 tests/test_lazpanel.py        # LAZPANEL - roster pinned to lisp/,
