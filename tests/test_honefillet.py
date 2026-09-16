@@ -130,12 +130,56 @@ def watcher(into):
     return look
 
 
+def labelclicker(text):
+    """The same, on the R-number lettered beside an arc: a label is on
+    the list a click is looked up in too, so this is the same answer as
+    clicking the hairline it belongs to -- and on the honed fan, where
+    the arcs sit half an inch apart, it is much the bigger target."""
+    def pick(vm):
+        for e, d in alive(vm, 'TEXT', PREVIEW_LAYER):
+            if d.get(1) == text:
+                return [e, list(d[11])]
+        raise AssertionError(f"no preview label reading {text!r} to click")
+    return pick
+
+
 def corner(vm, size=100):
     return (line(vm, (0, 0), (size, 0)), line(vm, (0, 0), (0, size)))
 
 
 def picks(e1, e2):
     return [[e1, [50.0, 0.0, 0.0]], [e2, [0.0, 50.0, 0.0]]]
+
+
+GAP = 60.0
+
+
+def gapped(vm):
+    """Two lines that stop GAP short of the corner they would make --
+    the case FILLET handles by extending them, and the one where every
+    preview is drawn round a point that lies on neither line."""
+    return (line(vm, (GAP, 0), (GAP + 100, 0)),
+            line(vm, (0, GAP), (0, GAP + 100)))
+
+
+def gapped_picks(e1, e2):
+    return [[e1, [100.0, 0.0, 0.0]], [e2, [0.0, 100.0, 0.0]]]
+
+
+def guides(vm):
+    """The dashed runs out to the corner.  Nothing else this tool draws
+    is a LINE, and the drawing's own lines are not on the preview
+    layer."""
+    return [d for _e, d in alive(vm, 'LINE', PREVIEW_LAYER)]
+
+
+def guidewatcher(into, key):
+    """A scripted answer that photographs the guides on screen under KEY
+    and then answers Enter, which every pick prompt re-asks on."""
+    def look(vm):
+        into[key] = guides(vm)
+        return None
+    return look
 
 
 # ------------------------------------------------------------ the range
@@ -253,6 +297,122 @@ def test_the_honed_fan_is_drawn_like_the_coarse_one():
     assert off == sorted(off), off
     assert min(b - a for a, b in zip(off, off[1:])) >= h, off
     print("ok   the honed fan: shaded, transparent, laddered, halves dashed")
+
+
+def test_a_label_is_the_same_answer_as_its_arc():
+    """Every pick in the run takes the arc or the R-number beside it --
+    the two bracket picks and the cut alike.  Bracketing by label and
+    cutting by label gets the same R13.5 corner that clicking three
+    hairlines would have."""
+    vm = newvm()
+    e1, e2 = corner(vm)
+    run(vm, picks(e1, e2) + [labelclicker('R12'), labelclicker('R18'),
+                             labelclicker('R13.5'), 'No'], 'label picks')
+
+    assert len(cmds(vm, '_.FILLET')) == 1, vm.commands
+    arcs = [d for _e, d in alive(vm, 'ARC') if d.get(8) != PREVIEW_LAYER]
+    assert len(arcs) == 1 and abs(arcs[0][40] - 13.5) < 1e-9, arcs
+    assert abs(alive(vm, 'DIMENSION')[0][1][42] - 13.5) < 1e-9, \
+        "and it is dimensioned at the size the label read"
+    assert '13 corners between R12 and R18' in said(vm), said(vm)
+    assert '1 corner filleted at R13.5' in said(vm), said(vm)
+    assert 'Click an arc or the R-number beside it' in said(vm), said(vm)
+    print("ok   a preview's label answers for its arc, bracket and cut")
+
+
+def test_guides_come_back_with_the_honed_fan():
+    """Two lines that stop yards short of where they meet put both fans
+    round a point on neither of them.  The coarse fan is taken down
+    whole before the honed one goes up, so the dashed runs out to that
+    corner have to be drawn again with it -- and the sentence that says
+    what they are is a fact about the two LINES, so it is said once."""
+    vm = newvm()
+    e1, e2 = gapped(vm)
+    seen = {}
+    run(vm, gapped_picks(e1, e2) + [
+        guidewatcher(seen, 'coarse'),
+        clicker(12.0), clicker(18.0),
+        guidewatcher(seen, 'fine'),
+        clicker(13.5),
+        'No'], 'guides')
+
+    for when in ('coarse', 'fine'):
+        g = seen[when]
+        assert len(g) == 2, f"{when}: one run per leg that falls short: {g}"
+        ends = sorted((tuple(round(v, 6) for v in d[10][:2]),
+                       tuple(round(v, 6) for v in d[11][:2])) for d in g)
+        assert ends == [((0.0, GAP), (0.0, 0.0)),
+                        ((GAP, 0.0), (0.0, 0.0))], (when, ends)
+        for d in g:
+            assert d[6] == 'DASHED', (when, d[6])
+            assert d[62] == 3 and d.get(440) == 0x02000000 + 153, (when, d)
+            assert 420 not in d, \
+                "the light-to-dark grading says WHICH radius, and a" \
+                " guide stands for none of them"
+    assert said(vm).count('guide, not drawn work') == 1, \
+        "the gap is a fact about the two lines and does not change when" \
+        " the sizes on offer do"
+    assert 'they stop 60" and 60" short of it' in said(vm), said(vm)
+    assert not alive(vm, layer=PREVIEW_LAYER), \
+        "the guides go out with the fan, like every other preview"
+    assert len(cmds(vm, '_.FILLET')) == 1, "and the corner is still cut"
+    print("ok   the dashed runs are redrawn with the honed fan, said once")
+
+
+def test_no_guide_where_none_is_wanted():
+    """A corner the lines already reach has nothing to bridge, and a leg
+    that misses by less than hn:*gapmin* gets no run either: shorter
+    than one dash, it comes out as a tick on the end of a line, which
+    reads as drawn work.  One leg short of the corner is one guide, and
+    is said in the singular."""
+    seen = {}
+    tail = [clicker(12.0), clicker(18.0), clicker(13.5), 'No']
+
+    vm = newvm()
+    e1, e2 = corner(vm)
+    run(vm, picks(e1, e2) + [guidewatcher(seen, 'g')] + tail, 'meeting')
+    assert seen['g'] == [], seen['g']
+    assert 'guide, not drawn work' not in said(vm), said(vm)
+
+    vm = newvm()
+    e1 = line(vm, (3, 0), (103, 0))
+    e2 = line(vm, (0, 3), (0, 103))
+    run(vm, picks(e1, e2) + [guidewatcher(seen, 'g')] + tail, 'near miss')
+    assert seen['g'] == [], \
+        "3 inches is under hn:*gapmin*, and a 3-inch dash is a tick"
+    assert 'guide, not drawn work' not in said(vm), said(vm)
+
+    vm = newvm()
+    e1 = line(vm, (GAP, 0), (GAP + 100, 0))
+    e2 = line(vm, (0, 0), (0, 100))
+    run(vm, [[e1, [100.0, 0.0, 0.0]], [e2, [0.0, 50.0, 0.0]],
+             guidewatcher(seen, 'g')] + tail, 'one leg')
+    assert len(seen['g']) == 1, seen['g']
+    assert 'One line stops 60" short of that corner' in said(vm), said(vm)
+    print("ok   no guide where the lines meet, or where the gap is a tick")
+
+
+def test_a_guide_is_not_an_answer():
+    """A guide stands for no radius, so a click on one is a miss like a
+    click on empty paper: it says so and asks again rather than
+    bracketing whatever happened to be nearest."""
+    vm = newvm()
+    e1, e2 = gapped(vm)
+
+    def hit_guide(vm_):
+        g = [e for e, _d in alive(vm_, 'LINE', PREVIEW_LAYER)]
+        assert g, "no guide drawn to click"
+        return [g[0], [0.0, 0.0, 0.0]]
+
+    run(vm, gapped_picks(e1, e2) + [
+        hit_guide,
+        clicker(12.0), clicker(18.0),
+        clicker(13.5),
+        'No'], 'guide click')
+    assert 'that is not one of the previews' in said(vm), said(vm)
+    assert len(cmds(vm, '_.FILLET')) == 1, \
+        "the miss costs a click, not the fan"
+    print("ok   clicking a guide is a miss, not a size")
 
 
 def test_either_order():
@@ -560,7 +720,11 @@ def test_version_banner():
 
 
 TESTS = [test_fine_steps, test_whole_inches_and_halves, test_full_run,
-         test_the_honed_fan_is_drawn_like_the_coarse_one, test_either_order,
+         test_the_honed_fan_is_drawn_like_the_coarse_one,
+         test_a_label_is_the_same_answer_as_its_arc,
+         test_guides_come_back_with_the_honed_fan,
+         test_no_guide_where_none_is_wanted,
+         test_a_guide_is_not_an_answer, test_either_order,
          test_both_ends_are_still_on_offer,
          test_the_same_corner_twice_is_reasked, test_too_far_apart_is_reasked,
          test_cancel_at_the_bracket, test_repeat_at_the_honed_radius,
