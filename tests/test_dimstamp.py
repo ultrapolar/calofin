@@ -106,7 +106,7 @@ def test_parse_and_format_round_trip():
         ('34"', 272, None),
         ("3'-4\"", 320, 't'),
         ('34 1/2"', 276, None),
-        ("3'- 4 1/2\"", 324, 't'),
+        ("3'-4 1/2\"", 324, 't'),
     ]
     for s, eighths, hasfeet in cases:
         esc_s = s.replace('"', '\\"')
@@ -125,7 +125,7 @@ def test_reads_the_lazy_spellings():
     back out."""
     vm = newvm()
     same = {
-        "4'- 4 1/2\"": ["4'4.5", "4'-4 1/2\"", "4' 4-1/2", "4'4 1/2",
+        "4'-4 1/2\"": ["4'4.5", "4'-4 1/2\"", "4' 4-1/2", "4'4 1/2",
                         "4'-4.5\"", "  4'4.5  ", "4'4.50"],
         "4'-4\"":      ["4'4", "4'-4\"", "4'4''"],
         "4'-0\"":      ["4'"],
@@ -142,6 +142,37 @@ def test_reads_the_lazy_spellings():
     assert vm.loads("(ds:read \"4.5'\")") == "4'-6\""
     print("ok  lazy input   -> 4'4.5, 4' 4-1/2, 44.5 and the rest all"
           " read, canonically")
+
+
+def test_two_spellings_plain_and_stacked():
+    """One value, two spellings.  The PLAIN one spaces its fraction off
+    the inches, for a command line that cannot stack.  The DRAWN one
+    stacks it through AutoCAD's \\S code with NO space in front -- the
+    stack is the separation -- and that is the only one that reaches an
+    MTEXT."""
+    vm = newvm()
+    for eighths, hasfeet, plain, drawn in [
+            (272, 'nil', '34"', '34"'),                 # no fraction: same
+            (276, 'nil', '34 1/2"', '34\\S1/2;"'),
+            (320, 't', "3'-4\"", "3'-4\""),             # no fraction: same
+            (396, 't', "4'-1 1/2\"", "4'-1\\S1/2;\""),
+            (398, 't', "4'-1 3/4\"", "4'-1\\S3/4;\"")]:
+        assert vm.loads(f'(ds:format {eighths} {hasfeet})') == plain
+        assert vm.loads(f'(ds:stacked {eighths} {hasfeet})') == drawn
+    # and ds:drawn is the door between them, taking the plain spelling
+    assert vm.loads('(ds:drawn "4\'-1 1/2\\"")') == "4'-1\\S1/2;\""
+    # no space survives anywhere in a drawn fraction
+    assert ' ' not in vm.loads('(ds:stacked 396 t)')
+    print("ok  stacked      -> the drawn fraction is \\S-stacked and"
+          " space-free; the echoed one stays readable")
+
+
+def test_the_stack_separator_is_a_knob():
+    vm = newvm()
+    vm.loads('(setq ds:*stack* "#")')     # the diagonal form
+    assert vm.loads('(ds:stacked 396 t)') == "4'-1\\S1#2;\""
+    print("ok  stack knob   -> ds:*stack* picks bar, diagonal or"
+          " tolerance stacking")
 
 
 def test_rounds_to_the_nearest_eighth():
@@ -198,10 +229,10 @@ def test_suggestions_feet_combine_quarter_and_eighth():
     sugg = vm.loads("(ds:suggestions 320 t)")
     assert len(sugg) == 20, sugg
     rendered = {vm.loads(f'(ds:format {v} t)'): t for v, t in sugg}
-    assert rendered['3\'- 4 1/4"'] == 'quarter', rendered
-    assert rendered['3\'- 4 1/8"'] == 'eighth', rendered
-    assert rendered['3\'- 4 1/2"'] == 'half', rendered
-    assert rendered['3\'- 3 1/8"'] == 'eighth', rendered   # the inch below
+    assert rendered['3\'-4 1/4"'] == 'quarter', rendered
+    assert rendered['3\'-4 1/8"'] == 'eighth', rendered
+    assert rendered['3\'-4 1/2"'] == 'half', rendered
+    assert rendered['3\'-3 1/8"'] == 'eighth', rendered   # the inch below
     assert rendered['3\'-5"'] == 'jump' and rendered['3\'-3"'] == 'jump', \
         rendered
     assert rendered['3\'-7"'] == 'jump', rendered          # +3"
@@ -285,11 +316,47 @@ def test_draw_ruler_geometry():
                       if d.get(0) == 'MTEXT'})
     assert len(heights) == 4, heights          # four tiers, four sizes
     assert heights[0] < heights[-1], heights
-    # every row label is on the scratch layer, in the ruler's colour
-    assert all(d.get(8) == 'DIMSTAMP RULER' and d.get(62) == 3
-               for d in live_entities(vm)), live_entities(vm)
-    print("ok  ruler        -> spine + graded ticks/labels + one circled"
-          " current row, all on its own scratch layer")
+    print("ok  ruler        -> spine + graded ticks/labels + one ringed"
+          " current row")
+
+
+def test_the_current_row_is_drawn_as_a_stamp_not_as_a_ruler():
+    """Every row you can PICK is the ruler's: its scratch layer, its
+    colour.  The row you are ON is not an option, so tick, label and
+    ring alike go on the STAMP's layer at the stamp's colour --
+    ByLayer -- which is what makes it stand out from the pickable
+    rows and read as the thing it would stamp."""
+    vm = newvm()
+    vm.loads('(ds:draw-ruler 352 nil)')            # 44", 17 rows
+    ruler = [d for d in live_entities(vm) if d.get(8) == 'DIMSTAMP RULER']
+    mine = [d for d in live_entities(vm) if d.get(8) == 'TEXT']
+    # 16 option ticks + the spine, 16 option labels, all in the ruler's
+    # colour
+    assert len(ruler) == 33, len(ruler)
+    assert all(d.get(62) == 3 for d in ruler), ruler
+    # the current row: its tick, its label and its ring, all ByLayer
+    assert sorted(d.get(0) for d in mine) == ['CIRCLE', 'LINE', 'MTEXT'], mine
+    assert all(62 not in d for d in mine), mine
+    assert [d[1] for d in mine if d.get(0) == 'MTEXT'] == ['44"'], mine
+    print("ok  current row  -> drawn as a stamp (stamp layer, ByLayer),"
+          " not as one of the ruler's options")
+
+
+def test_the_ring_is_bigger_than_it_was_and_is_a_knob():
+    vm = newvm()
+    _, _, rows = vm.loads('(ds:draw-ruler 352 nil)')
+    gap = rows[1][1] - rows[0][1]
+    ring = [d.get(40) for d in live_entities(vm) if d.get(0) == 'CIRCLE'][0]
+    assert abs(ring / gap - 0.26) < 1e-9, (ring, gap)   # was 0.18
+    # ...and it is the knob that says so
+    vm = newvm()
+    vm.loads('(setq ds:*ring-frac* 0.4)')
+    _, _, rows = vm.loads('(ds:draw-ruler 352 nil)')
+    gap = rows[1][1] - rows[0][1]
+    ring = [d.get(40) for d in live_entities(vm) if d.get(0) == 'CIRCLE'][0]
+    assert abs(ring / gap - 0.4) < 1e-9, (ring, gap)
+    print("ok  ring         -> bigger than a tick's reach, and"
+          " ds:*ring-frac* sets it")
 
 
 def test_ruler_is_pinned_to_the_view_and_scales_with_it():
@@ -389,10 +456,10 @@ def test_a_lazy_answer_is_stamped_canonically_and_echoed():
              FAR,
              None], 'lazy')
     t = stamps(vm)
-    assert [x[1] for x in t] == ["4'- 4 1/2\"", '52 1/2"'], t
+    assert [x[1] for x in t] == ["4'-4\\S1/2;\"", '52\\S1/2;"'], t
     said = [p for p in vm.printed if 'read as' in p]
     assert len(said) == 2, said
-    assert "4'- 4 1/2\"" in said[0] and '52 1/2"' in said[1], said
+    assert "4'-4 1/2\"" in said[0] and '52 1/2"' in said[1], said
     # and a spelling that was ALREADY canonical says nothing extra
     vm = newvm()
     run(vm, [(0.0, 0.0), '34"', None], 'canonical already')
@@ -525,6 +592,8 @@ def test_no_local_shadows_a_function():
 if __name__ == '__main__':
     test_parse_and_format_round_trip()
     test_reads_the_lazy_spellings()
+    test_two_spellings_plain_and_stacked()
+    test_the_stack_separator_is_a_knob()
     test_rounds_to_the_nearest_eighth()
     test_rejects_what_is_not_a_measurement()
     test_tier_grading()
@@ -535,6 +604,8 @@ if __name__ == '__main__':
     test_missing_text_style_is_made_and_reported()
     test_existing_text_style_is_left_alone()
     test_draw_ruler_geometry()
+    test_the_current_row_is_drawn_as_a_stamp_not_as_a_ruler()
+    test_the_ring_is_bigger_than_it_was_and_is_a_knob()
     test_ruler_is_pinned_to_the_view_and_scales_with_it()
     test_first_placement_has_no_ruler_yet()
     test_ruler_is_cleaned_up_at_the_end()

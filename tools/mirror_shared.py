@@ -1342,6 +1342,42 @@ TOOLS = {
         },
         'drop_globals': [],
     },
+    # UPADOVER lays PADDLE's pads end to end along a named stretch of
+    # wall, so it carries PADDLE's block kit AND PERPMARK's segment
+    # walk -- and the same generic helpers come out here that come out
+    # of both of them.  What does NOT come out is upad:askpoint: the
+    # library's question is about a survey POINT and re-asks a click
+    # that lands on nothing, where this one takes a place on the wall
+    # as readily as a numbered shot.  Swapping it would quietly refuse
+    # every end nobody happened to survey.
+    'UPADOVER': {
+        'src': 'lisp/upadover/UPADOVER.lsp',
+        'swap': {
+            'upad:2d': 'cal:2d', 'upad:v-': 'cal:v-', 'upad:v+': 'cal:v+',
+            'upad:v*': 'cal:v*', 'upad:dot': 'cal:dot',
+            'upad:vlen': 'cal:vlen', 'upad:unit': 'cal:unit',
+            'upad:angnorm': 'cal:angnorm', 'upad:tan': 'cal:tan',
+            'upad:ensure-layer': 'cal:ensure-layer',
+            'upad:as-number': 'cal:as-number', 'upad:canon': 'cal:canon',
+            'upad:matches': 'cal:cand-matches',
+            'upad:syssave': 'cal:syssave',
+            'upad:sysrestore': 'cal:sysrestore',
+            'upad:undobegin': 'cal:undobegin',
+            'upad:undoend': 'cal:undoend',
+        },
+        'drop_globals': ['upad:*sysold*'],
+        # cal:syssave takes the sysvars as an argument where upad:syssave
+        # baked them in, so the list travels with the call and
+        # upad:sysvars stays behind to supply it
+        'expand': {
+            '(cal:syssave)': ['(cal:syssave (upad:sysvars))'],
+        },
+        # ...and these two read a knob the library takes as an argument
+        'collapse': {
+            'upad:nearest': ('cal:cand-nearest', 'upad:*snap*'),
+            'upad:block-number': ('cal:block-number', 'upad:*pt-tag*'),
+        },
+    },
     # CORNERSTP's one generic helper is the layer gate.  REAL DRIFT in
     # the hand twin: it dropped cs-layerok but renamed only three of
     # the four call sites -- cs-dimv still calls cs-layerok, which

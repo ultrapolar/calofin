@@ -17,8 +17,15 @@
 ;;; the near eighth-inch steps are the smallest text and the shortest
 ;;; ticks, quarters and halves step up from there, and the whole-inch
 ;;; jumps (1", 2", 3" either way) are the tallest and boldest, exactly
-;;; where the deepest mark on a tape measure would be.  A small CIRCLE
-;;; rides the row that is the CURRENT value.
+;;; where the deepest mark on a tape measure would be.
+;;;
+;;; The CURRENT row is not one of the options -- it is where you
+;;; already are -- so it is drawn as a stamp rather than as a ruler:
+;;; tick, label and a RING round the spine all go on the stamp's own
+;;; layer at the stamp's own colour, while every row you can pick
+;;; stays the ruler's.  That is what makes the row you are on read
+;;; differently from the rows you can click, and read as the thing it
+;;; would stamp.
 ;;;
 ;;; The ruler is pinned to the SCREEN, not to the drawing: it is drawn
 ;;; down a strip near the left of whatever the current view is showing
@@ -42,11 +49,23 @@
 ;;; ends or is cancelled -- only the MTEXT it actually stamped is left
 ;;; behind.
 ;;;
-;;; What it WRITES is one of four forms, always:
-;;;   34"                     whole inches
-;;;   3'-4"                   feet and whole inches
-;;;   34 1/2"                 inches and a fraction
-;;;   3'- 4 1/2"              feet, inches and a fraction
+;;; What it WRITES is one of four forms, always -- and a fraction in a
+;;; drawn one is STACKED, through AutoCAD's \S code, with no space in
+;;; front of it: the stack is the separation, and a space there only
+;;; pushes the inch mark off the number.
+;;;
+;;;   drawn (MTEXT)      reads on the sheet as   the plain spelling
+;;;   -----------------  ---------------------   -----------------
+;;;   34"                34"                     34"
+;;;   3'-4"              3'-4"                   3'-4"
+;;;   34\S1/2;"          34 over-a-half "        34 1/2"
+;;;   4'-1\S1/2;"        4'-1 over-a-half "      4'-1 1/2"
+;;;
+;;; The plain spelling on the right is what a prompt offers, what the
+;;; command line echoes and what ds:parse reads back -- nothing stacks
+;;; on a command line, and 4'-11/2" there would read as eleven halves.
+;;; The stacked one reaches an MTEXT and nothing else; ds:drawn is the
+;;; one door between them, so no call site can forget it.
 ;;;
 ;;; What it READS is far looser, because nobody types a dimension
 ;;; carefully twice.  The inch mark is optional and may be two
@@ -55,13 +74,13 @@
 ;;;
 ;;;   4'4.5    4'-4 1/2"    4' 4-1/2    4'4 1/2    52.5    52 1/2
 ;;;
-;;; all read, and the first four all mean 4'- 4 1/2".  Anything not a
+;;; all read, and the first four all mean 4'-4 1/2".  Anything not a
 ;;; whole eighth is rounded to the nearest one.  What is STAMPED is
 ;;; always the canonical spelling above, never the keystrokes: type
-;;; 4'4.5 and the line back reads "read as 4'- 4 1/2"", which is
+;;; 4'4.5 and the line back reads "read as 4'-4 1/2"", which is
 ;;; where a mis-typed value is caught by eye rather than in the
 ;;; drawing.  Feet spelled means feet written, so 52.5 stays 52 1/2"
-;;; rather than becoming 4'- 4 1/2".
+;;; rather than becoming 4'-4 1/2".
 ;;;
 ;;; The ruler offers, around whatever the current value is, every
 ;;; eighth of an inch for a WHOLE INCH EITHER SIDE -- 44" offers 43"
@@ -79,7 +98,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.1")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.3")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -107,6 +126,12 @@
                                     ; break across two lines
 (setq ds:*line-space* 1.0)         ; line space factor, at the "at
                                     ; least" spacing style
+(setq ds:*stack* "/")              ; what separates a STACKED fraction's
+                                    ; numerator from its denominator in
+                                    ; the drawn MTEXT: "/" is the one
+                                    ; over the other with a bar between,
+                                    ; "#" the diagonal form, "^" the
+                                    ; tolerance stack with no bar
 
 ;; -- the ruler.  Scratch geometry, and pinned to the SCREEN: every
 ;;    size below is a fraction of the current view, so the ruler looks
@@ -130,6 +155,17 @@
 (setq ds:*ruler-txt-frac* 0.5)     ; the biggest row label's height,
                                     ; as a fraction of the row spacing
 (setq ds:*ruler-tick-frac* 0.6)    ; the longest tick, same measure
+(setq ds:*ring-frac* 0.26)         ; the ring round the CURRENT row, as
+                                    ; a fraction of the row spacing.
+                                    ; Bigger than a tick is long on
+                                    ; purpose: the row you are on should
+                                    ; be the first thing the eye finds
+(setq ds:*current-color* nil)      ; ACI colour of that current row --
+                                    ; nil is ByLayer, and since the row
+                                    ; is drawn on the STAMP's layer that
+                                    ; means it reads in exactly the
+                                    ; colour the stamp will.  A number
+                                    ; here overrides that
 (setq ds:*ruler-reach* 6.0)        ; how far right of the spine, in row
                                     ; spacings, a click still counts as
                                     ; picking a row rather than as an
@@ -231,38 +267,69 @@
       (setq eighths (fix (+ 0.5 (* 8.0 (+ (* feet 12.0) inch)))))
       (if (> eighths 0) (list eighths hasfeet)))))
 
-;; Render TOTAL-EIGHTHS (an integer count of 1/8" units) back to text,
+;; Spell TOTAL-EIGHTHS (an integer count of 1/8" units) out as text,
 ;; in the HASFEET family the source text used -- feet notation, or
 ;; plain inches regardless of magnitude.  The fraction is simplified
 ;; and shown only when the remainder is not a whole inch.
-(defun ds:format (total-eighths hasfeet / feet remeighths whole f8 g num den)
+;;
+;; STACKED picks which of the two spellings comes out, and they differ
+;; in exactly one thing: how the fraction is written.
+;;   nil -- PLAIN: " 1/2", spaced off the inches.  Nothing stacks on a
+;;          command line, and 4'-11/2" there would read as eleven
+;;          halves, so the space earns its keep.  This is the spelling
+;;          ds:parse reads back, and the only one ever compared,
+;;          prompted with, or printed.
+;;   T   -- DRAWN: "\S1/2;", AutoCAD's stacking code, and NO space in
+;;          front of it.  The stack IS the separation; a space there
+;;          only pushes the inch mark away from the number.  This is
+;;          the spelling that reaches an MTEXT, and nothing else.
+;; NOTE: the leftover eighths are "remain", not "rem" -- rem IS an
+;; AutoLISP function, and a local of that name shadows it for every
+;; call this one makes.
+(defun ds:spell (total-eighths hasfeet stacked / feet remain whole f8 g
+                     num den fr)
   (if hasfeet
-    (setq feet (/ total-eighths 96)
-          remeighths (- total-eighths (* feet 96)))
-    (setq feet 0 remeighths total-eighths))
-  (setq whole (/ remeighths 8)
-        f8    (- remeighths (* whole 8))
+    (setq feet   (/ total-eighths 96)
+          remain (- total-eighths (* feet 96)))
+    (setq feet 0 remain total-eighths))
+  (setq whole (/ remain 8)
+        f8    (- remain (* whole 8))
         num   0
         den   1)
   (if (/= f8 0)
     (progn
       (setq g (gcd f8 8))
       (setq num (/ f8 g) den (/ 8 g))))
-  (cond
-    ((and hasfeet (/= num 0))
-     (strcat (itoa feet) "'- " (itoa whole) " " (itoa num) "/" (itoa den)
-             "\""))
-    ((and hasfeet (= num 0))
-     (strcat (itoa feet) "'-" (itoa whole) "\""))
-    ((/= num 0)
-     (strcat (itoa whole) " " (itoa num) "/" (itoa den) "\""))
-    (T
-     (strcat (itoa whole) "\""))))
+  (setq fr (cond
+             ((= num 0) "")
+             ((null stacked) (strcat " " (itoa num) "/" (itoa den)))
+             (T (strcat "\\S" (itoa num) ds:*stack* (itoa den) ";"))))
+  (strcat (if hasfeet (strcat (itoa feet) "'-") "")
+          (itoa whole) fr "\""))
 
-;; What S MEANS, in the canonical spelling -- the round trip through
-;; ds:parse and ds:format that turns 4'4.5 into 4'- 4 1/2".  nil when
-;; S is not a measurement.  Every typed answer goes through this, so
-;; nothing but a canonical spelling is ever stamped or remembered.
+;; The PLAIN spelling: what a prompt offers, what the command line
+;; says, and what ds:parse reads back.
+(defun ds:format (total-eighths hasfeet)
+  (ds:spell total-eighths hasfeet nil))
+
+;; The DRAWN spelling: the same value with its fraction stacked, for
+;; an MTEXT and nowhere else.
+(defun ds:stacked (total-eighths hasfeet)
+  (ds:spell total-eighths hasfeet T))
+
+;; STR -- a plain canonical spelling -- as the string that DRAWS it.
+;; Every stamp goes through here, so a stacked fraction is not
+;; something a call site can forget.  Text that does not parse is
+;; drawn as it stands rather than dropped.
+(defun ds:drawn (str / p)
+  (if (setq p (ds:parse str))
+    (ds:stacked (car p) (cadr p))
+    str))
+
+;; What S MEANS, in the plain canonical spelling -- the round trip
+;; through ds:parse and ds:format that turns 4'4.5 into 4'-4 1/2".
+;; nil when S is not a measurement.  Every typed answer goes through
+;; this, so nothing but a canonical spelling is ever remembered.
 (defun ds:read (s / p)
   (if (setq p (ds:parse s)) (ds:format (car p) (cadr p))))
 
@@ -412,24 +479,53 @@
                   (cons 44 ds:*line-space*)))))
 
 ;; Stamp STR at PT -- the drawing content this whole tool exists for.
+;; STR arrives in the plain spelling and is drawn in the stacked one.
 (defun ds:stamp (pt str)
-  (ds:mtext pt ds:*text-hgt* str ds:*layer* nil))
+  (ds:mtext pt ds:*text-hgt* (ds:drawn str) ds:*layer* nil))
 
 ;; Erase every entity in ENTS -- how the scratch ruler is swept away,
 ;; before a redraw and for good when the run ends.
 (defun ds:erase-ents (ents / e)
   (foreach e ents (if (and e (entget e)) (entdel e))))
 
+;; A ruler stroke from (X1 Y1) to (X2 Y2) on LAY, in COL -- or ByLayer
+;; when COL is nil, which is how the current row takes the stamp
+;; layer's own colour.
+(defun ds:ruler-line (x1 y1 x2 y2 lay col)
+  (entmakex (append (list '(0 . "LINE") '(100 . "AcDbEntity")
+                          (cons 8 lay))
+                    (if col (list (cons 62 col)))
+                    (list '(100 . "AcDbLine")
+                          (cons 10 (list x1 y1 0.0))
+                          (cons 11 (list x2 y2 0.0))))))
+
+;; The ring that marks the current row, same layer and colour rule.
+(defun ds:ruler-ring (x y r lay col)
+  (entmakex (append (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
+                          (cons 8 lay))
+                    (if col (list (cons 62 col)))
+                    (list '(100 . "AcDbCircle")
+                          (cons 10 (list x y 0.0))
+                          (cons 40 r)))))
+
 ;; Draw the ruler down its strip of the CURRENT VIEW for the current
 ;; value (TOTAL-EIGHTHS, HASFEET), one row per suggestion plus a
-;; circled CURRENT row among them, the whole thing centred vertically
+;; ringed CURRENT row among them, the whole thing centred vertically
 ;; in the view.  Returns (ENTS BOX ROWS): the entities drawn (for
 ;; ds:erase-ents), BOX as (XMIN XMAX YTOL) for a click's hit test, and
 ;; ROWS as a list of (VALUE ROW-Y) pairs.
+;;
+;; Every row but one is an OPTION, and they are drawn alike: the
+;; ruler's own layer, the ruler's own colour.  The CURRENT row is not
+;; an option -- it is where you already are -- so tick, label and ring
+;; alike go on the STAMP's layer at the stamp's colour, which is what
+;; makes the row you are on read differently from the rows you can
+;; pick, and makes it read as what it would stamp.
 (defun ds:draw-ruler (total-eighths hasfeet / rows n i row val tier y
                           hgt tl spx ents lbl result view vx vy vw vh
-                          gap base)
+                          gap base rlay rcol)
   (ds:ensure-layer ds:*ruler-layer* ds:*ruler-color*)
+  (ds:ensure-layer ds:*layer* ds:*layer-color*)   ; the current row's
   (ds:ensure-style ds:*style*)
   (setq rows (cons (list total-eighths 'current)
                    (ds:suggestions total-eighths hasfeet)))
@@ -450,41 +546,30 @@
     (setq y (+ base (* i gap)))
     (setq hgt (ds:ruler-hgt tier gap))
     (setq tl  (ds:ruler-tick tier gap))
-    (setq ents (cons
-                (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
-                                (cons 8 ds:*ruler-layer*)
-                                (cons 62 ds:*ruler-color*)
-                                '(100 . "AcDbLine")
-                                (cons 10 (list spx y 0.0))
-                                (cons 11 (list (+ spx tl) y 0.0))))
-                ents))
-    (setq lbl (ds:format val hasfeet))
+    ;; where you ARE is drawn as the stamp; what you can PICK is drawn
+    ;; as the ruler
+    (if (eq tier 'current)
+      (setq rlay ds:*layer*       rcol ds:*current-color*)
+      (setq rlay ds:*ruler-layer* rcol ds:*ruler-color*))
+    (setq ents (cons (ds:ruler-line spx y (+ spx tl) y rlay rcol) ents))
+    ;; the ruler is drawn text too, so its rows stack the way a stamp
+    ;; off that row will -- the label IS the preview
+    (setq lbl (ds:stacked val hasfeet))
     ;; top-left attachment, so half a label's height above the tick
     ;; puts the label astride its own row
     (setq ents (cons (ds:mtext (list (+ spx tl (* gap 0.35))
                                      (+ y (/ hgt 2.0)))
-                               hgt lbl ds:*ruler-layer* ds:*ruler-color*)
+                               hgt lbl rlay rcol)
                      ents))
     (if (eq tier 'current)
-      (setq ents (cons
-                  (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
-                                  (cons 8 ds:*ruler-layer*)
-                                  (cons 62 ds:*ruler-color*)
-                                  '(100 . "AcDbCircle")
-                                  (cons 10 (list spx y 0.0))
-                                  (cons 40 (* gap 0.18))))
-                  ents)))
+      (setq ents (cons (ds:ruler-ring spx y (* gap ds:*ring-frac*)
+                                      rlay rcol)
+                       ents)))
     (setq result (cons (list val y) result))
     (setq i (1+ i)))
-  (setq ents (cons
-              (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity")
-                              (cons 8 ds:*ruler-layer*)
-                              (cons 62 ds:*ruler-color*)
-                              '(100 . "AcDbLine")
-                              (cons 10 (list spx base 0.0))
-                              (cons 11 (list spx (+ base (* (- n 1) gap))
-                                             0.0))))
-              ents))
+  (setq ents (cons (ds:ruler-line spx base spx (+ base (* (- n 1) gap))
+                                  ds:*ruler-layer* ds:*ruler-color*)
+                   ents))
   (list ents
         (list (- spx (/ gap 2.0)) (+ spx (* gap ds:*ruler-reach*))
               (/ gap 2.0))

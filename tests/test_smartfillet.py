@@ -122,6 +122,36 @@ def clicker(radius):
     return pick
 
 
+def labelclicker(text):
+    """The same, on the R-number lettered beside an arc: a label is on
+    the list a click is looked up in too, so this is the same answer as
+    clicking the hairline it belongs to."""
+    def pick(vm):
+        for e, d in alive(vm, 'TEXT', PREVIEW_LAYER):
+            if d.get(1) == text:
+                return [e, list(d[11])]
+        raise AssertionError(f"no preview label reading {text!r} to click")
+    return pick
+
+
+GAP = 60.0
+
+
+def gapped(vm):
+    """Two lines that stop GAP short of the corner they would make --
+    the case FILLET handles by extending them, and the one where every
+    preview is drawn round a point that lies on neither line."""
+    return (line(vm, (GAP, 0), (GAP + 100, 0)),
+            line(vm, (0, GAP), (0, GAP + 100)))
+
+
+def guides(vm):
+    """The dashed runs out to the corner.  Nothing else this tool draws
+    is a LINE, and the drawing's own lines are not on the preview
+    layer."""
+    return [d for _e, d in alive(vm, 'LINE', PREVIEW_LAYER)]
+
+
 # ------------------------------------------------------------- geometry
 
 def test_corner_geometry():
@@ -132,12 +162,15 @@ def test_corner_geometry():
     e2 = line(vm, (0, 0), (0, 100))
     geo = call(vm, 'sf:corner', [e1, [50.0, 0.0], e2, [0.0, 50.0]])
     assert geo, "a right-angle corner has to come back as a corner"
-    x, u1, av1, u2, av2, half = geo
+    x, u1, av1, u2, av2, half, gap1, gap2 = geo
     assert abs(x[0]) < 1e-9 and abs(x[1]) < 1e-9, x
     assert abs(u1[0] - 1.0) < 1e-9 and abs(u1[1]) < 1e-9, u1
     assert abs(u2[1] - 1.0) < 1e-9 and abs(u2[0]) < 1e-9, u2
     assert abs(av1 - 100.0) < 1e-9 and abs(av2 - 100.0) < 1e-9, (av1, av2)
     assert abs(half - math.pi / 4) < 1e-9, half
+    assert gap1 == 0.0 and gap2 == 0.0, \
+        "both lines start AT the corner, so there is nothing to bridge"
+
     # tangent length is r/tan(45) = r, so the fillet reaches 98 with
     # sf:*fit* holding it clear of the far end
     assert abs(call(vm, 'sf:rmax', [geo]) - 98.0) < 1e-9
@@ -363,6 +396,136 @@ def test_labels_never_overlap():
     assert off == sorted(off), off
     assert min(b - a for a, b in zip(off, off[1:])) >= h, off
     print("ok   the label ladder: ten labels, no two touching")
+
+
+def test_a_label_is_the_same_answer_as_its_arc():
+    """An arc is a hairline and the R-number beside it is not, so both
+    are on the list a click is looked up in.  Clicking R24 cuts the R24
+    corner, exactly as clicking its arc would have -- and the run says
+    so, because nothing on screen suggests a piece of text is
+    clickable."""
+    vm = newvm()
+    e1 = line(vm, (0, 0), (100, 0))
+    e2 = line(vm, (0, 0), (0, 100))
+    run(vm, [[e1, [50.0, 0.0, 0.0]],
+             [e2, [0.0, 50.0, 0.0]],
+             labelclicker('R24'),
+             'No'], 'label click')
+
+    assert len(cmds(vm, '_.FILLET')) == 1, vm.commands
+    arcs = [d for _e, d in alive(vm, 'ARC') if d.get(8) != PREVIEW_LAYER]
+    assert len(arcs) == 1 and abs(arcs[0][40] - 24.0) < 1e-9, arcs
+    assert abs(alive(vm, 'DIMENSION')[0][1][42] - 24.0) < 1e-9, \
+        "and it is dimensioned at the size the label read"
+    assert 'R24 corner cut' in said(vm), said(vm)
+    assert 'Click an arc or the R-number beside it' in said(vm), said(vm)
+    print("ok   a preview's label answers for its arc")
+
+
+def test_guides_run_out_to_a_corner_the_lines_miss():
+    """Two lines that stop yards short of where they meet put the whole
+    fan round a point on neither of them.  Each leg gets a dashed run
+    out to it -- the line FILLET is going to make, drawn before it
+    exists -- and it is a preview like the arcs: erased on the way
+    out, and no answer to a click."""
+    vm = newvm()
+    e1, e2 = gapped(vm)
+    seen = {}
+
+    def look(vm_):
+        seen['guides'] = guides(vm_)
+        return None                  # Enter = re-ask, then the click
+
+    run(vm, [[e1, [100.0, 0.0, 0.0]],
+             [e2, [0.0, 100.0, 0.0]],
+             look,
+             clicker(24.0),
+             'No'], 'guides')
+
+    g = seen['guides']
+    assert len(g) == 2, f"one run per leg that falls short: {g}"
+    # each one bridges its own line's near end to the corner, and the
+    # corner is where they both end
+    ends = sorted((tuple(round(v, 6) for v in d[10][:2]),
+                   tuple(round(v, 6) for v in d[11][:2])) for d in g)
+    assert ends == [((0.0, GAP), (0.0, 0.0)),
+                    ((GAP, 0.0), (0.0, 0.0))], ends
+    for d in g:
+        assert d[6] == 'DASHED', (d[6], "a guide is never solid -- solid"
+                                        " is what drawn work looks like")
+        assert d[62] == 3 and d.get(440) == 0x02000000 + 153, d
+        assert 420 not in d, \
+            "the light-to-dark grading says WHICH radius, and a guide" \
+            " stands for none of them"
+    assert 'Neither line reaches that corner' in said(vm), said(vm)
+    assert 'they stop 60" and 60" short of it' in said(vm), said(vm)
+    assert 'guide, not drawn work' in said(vm), said(vm)
+    assert not alive(vm, layer=PREVIEW_LAYER), \
+        "the guides go out with the fan, like every other preview"
+    assert len(cmds(vm, '_.FILLET')) == 1, "and the corner is still cut"
+    print("ok   a dashed run out to a corner neither line reaches")
+
+
+def test_no_guide_where_none_is_wanted():
+    """A corner the lines already reach has nothing to bridge, and a leg
+    that misses by less than sf:*gapmin* gets no run either: shorter
+    than one dash, it comes out as a tick on the end of a line, which
+    reads as drawn work.  One leg short of the corner is one guide, and
+    is said in the singular."""
+    seen = {}
+
+    def look(vm_):
+        seen['guides'] = guides(vm_)
+        return None
+
+    vm = newvm()
+    e1 = line(vm, (0, 0), (100, 0))
+    e2 = line(vm, (0, 0), (0, 100))
+    run(vm, [[e1, [50.0, 0.0, 0.0]], [e2, [0.0, 50.0, 0.0]],
+             look, clicker(24.0), 'No'], 'meeting')
+    assert seen['guides'] == [], seen['guides']
+    assert 'guide, not drawn work' not in said(vm), said(vm)
+
+    vm = newvm()
+    e1 = line(vm, (3, 0), (103, 0))
+    e2 = line(vm, (0, 3), (0, 103))
+    run(vm, [[e1, [50.0, 0.0, 0.0]], [e2, [0.0, 50.0, 0.0]],
+             look, clicker(24.0), 'No'], 'near miss')
+    assert seen['guides'] == [], \
+        "3 inches is under sf:*gapmin*, and a 3-inch dash is a tick"
+    assert 'guide, not drawn work' not in said(vm), said(vm)
+
+    vm = newvm()
+    e1 = line(vm, (GAP, 0), (GAP + 100, 0))
+    e2 = line(vm, (0, 0), (0, 100))
+    run(vm, [[e1, [100.0, 0.0, 0.0]], [e2, [0.0, 50.0, 0.0]],
+             look, clicker(24.0), 'No'], 'one leg')
+    assert len(seen['guides']) == 1, seen['guides']
+    assert 'One line stops 60" short of that corner' in said(vm), said(vm)
+    print("ok   no guide where the lines meet, or where the gap is a tick")
+
+
+def test_a_guide_is_not_an_answer():
+    """A guide stands for no radius, so a click on one is a miss like a
+    click on empty paper: it says so and asks again rather than cutting
+    whatever happened to be nearest."""
+    vm = newvm()
+    e1, e2 = gapped(vm)
+
+    def hit_guide(vm_):
+        g = [e for e, _d in alive(vm_, 'LINE', PREVIEW_LAYER)]
+        assert g, "no guide drawn to click"
+        return [g[0], [0.0, 0.0, 0.0]]
+
+    run(vm, [[e1, [100.0, 0.0, 0.0]],
+             [e2, [0.0, 100.0, 0.0]],
+             hit_guide,
+             clicker(24.0),
+             'No'], 'guide click')
+    assert 'that is not one of the previews' in said(vm), said(vm)
+    assert len(cmds(vm, '_.FILLET')) == 1, \
+        "the miss costs a click, not the fan"
+    print("ok   clicking a guide is a miss, not a size")
 
 
 def test_repeat_at_the_same_radius():
@@ -645,6 +808,10 @@ TESTS = [test_corner_geometry, test_short_leg_caps_the_radius,
          test_candidates_and_arc, test_full_run,
          test_previews_drawn_and_capped, test_the_odd_sizes_are_dashed,
          test_shades_and_transparency, test_labels_never_overlap,
+         test_a_label_is_the_same_answer_as_its_arc,
+         test_guides_run_out_to_a_corner_the_lines_miss,
+         test_no_guide_where_none_is_wanted,
+         test_a_guide_is_not_an_answer,
          test_repeat_at_the_same_radius,
          test_cancel_leaves_the_drawing_alone, test_bad_picks_reask,
          test_no_corner_and_no_room, test_first_prompt_can_be_cancelled,
