@@ -6,6 +6,67 @@ which set of them shipped together. The release name lives in
 `RELEASE` at the top of `tools/build_shared_bundle.py`, so
 `shared/LAZPASS.lsp` announces it on load and cannot drift from it.
 
+## v3.18 -- 2026-09-16
+
+**The pool perimeter may hand over to the CABLE layer.**  COVERCHECK
+v1.20.
+
+A perimeter does not always stay on one layer.  Where the cable run
+carries a stretch of it, the drafter draws that stretch on `CABLE` --
+and COVERCHECK read `POOL` and nothing else.  So the outline came back
+with a gap in it: no area, nothing for the Cover Details block's
+Overlap and Spacing to be graded against, and no pads suggested, on a
+drawing whose perimeter is closed and always was.  The report said
+AMBIGUOUS and named an open chain, which is true of the pool layer and
+not of the pool.
+
+`*cchk-perim-layers*` (`'("CABLE")`) names the layers that may carry a
+stretch of the SAME closed perimeter.  Their ByLayer geometry is
+chained in alongside the pool layer's, so the outline closes and is
+measured, and the pads and the grading read the whole of it.  The
+report says what it borrowed -- `outline runs 2 segment(s) along layer
+'CABLE' - chained into the perimeter` -- and the summary line carries
+the same count beside the straight/arc split.  Emptying the knob reads
+the pool layer alone, exactly as before.
+
+Only what joins the loop is used, and that takes two rules.  Pool
+segments go into the walk FIRST, so where both layers leave a point
+the walk stays on the pool layer: a borrowed layer can only ever fill
+a gap.  And borrowed geometry hanging by a loose end is CUT before the
+walk -- the branch off to an anchor, the tail of a run carrying on
+past the corner, a run that never touches the pool at all -- because
+what the outline borrows is joined at both ends, which is what makes
+it a stretch rather than a branch.  Without the cut, a branch leaving
+an outline vertex is followed out of it and the loop never closes
+behind it; which of the two the walk met first was decided by the
+order they were drawn in.  A chain with no pool segment in it is that
+layer's own business: neither the outline nor a gap in it, so it is
+counted as neither.  Pool segments are never cut -- one hanging loose
+is the gap the drafter is being told about.
+
+The cut walks INWARD from each loose end rather than sweeping the
+segment list once per segment: cutting one frees the end it held, and
+that end is where the next cut starts, so a cable run several hundred
+segments long costs one walk down it.  A 200-segment run went from 67
+seconds to 4 in the VM, against 2 for the same geometry drawn on
+`POOL` and not borrowed at all -- in line with the chaining the tool
+has always done rather than a new kind of cost.  With nothing borrowed
+the walk is the one it always was, and costs what it always did.
+
+A borrowed layer is read for ByLayer properties like the pool layer
+is, but its skipped items only get a line when the outline came up
+short: otherwise a cable layer full of explicitly-coloured geometry
+would fill the report with red SKIPPED lines about a layer that is not
+the pool's business.
+
+`cchk:pv-chain` hands back its chains as segments now rather than
+vertex lists, which is what lets the caller tell the two layers apart
+after the walk has mixed them.  `tests/test_covercheck.py` drives the
+L-pool exploded with one side on `CABLE`, drawn back-to-front so the
+walk has to turn it round, a two-segment branch drawn BEFORE it so
+entity order is not what decides whether the outline closes, and a
+cable loop of its own parked elsewhere.
+
 ## v3.17 -- 2026-09-16
 
 **WCALST cuts its darts at the bends, not at the rungs.**  WCALST v2.0.
