@@ -700,6 +700,11 @@ python3 tests/test_cornerstp_geometry.py
 python3 tests/test_cornerstp_bench.py   # CORNERSTP's bench, run in lispvm
 python3 tests/test_cornerstp_profile.py # the side profile all three draw
 python3 tests/test_normiestep_corner.py # NORMIESTEP corner mode, run in lispvm
+python3 tests/test_step_corner_mark.py  # the step corners' own MARK: the
+                                      # circled 90 and the boxed "?" with
+                                      # its Not Given note, in the smaller
+                                      # of the sample sheet's two sizes,
+                                      # and drawn only where 90 is true
 python3 tests/test_steps_settings.py  # the step routines' tunables - every
                                       # knob wired up and moving the drawing,
                                       # each reader falling back to the value

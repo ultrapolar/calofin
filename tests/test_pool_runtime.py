@@ -53,6 +53,42 @@ def dimcalls(vm, name=('_.DIMALIGNED', '_.DIMLINEAR')):
     return [c for c in vm.commands if c and c[0] in names]
 
 
+def override(c):
+    """The text a dimension command was given after "_T", or None."""
+    for i, x in enumerate(c[:-1]):
+        if isinstance(x, str) and x.upper() == '_T' \
+                and isinstance(c[i + 1], str):
+            return c[i + 1]
+    return None
+
+
+def marks(vm):
+    """The corner MARKS, in the order they were drawn.
+
+    A mark is a radius dim on the little circle sitting on the corner
+    point, its measurement replaced by what the mark says ("90%%d",
+    "?", either with a " Typ." suffix) -- so it is a DIMRADIUS like a
+    real radius callout, told apart by that text.
+    """
+    return [override(c) for c in vm.commands
+            if c and c[0] == '_.DIMRADIUS'
+            and str(override(c)).startswith(('90%%d', '?'))]
+
+
+def raddims(vm):
+    """Radius dims that MEASURE something -- the corner marks left out."""
+    return [c for c in vm.commands
+            if c and c[0] == '_.DIMRADIUS'
+            and not str(override(c)).startswith(('90%%d', '?'))]
+
+
+def notes(vm, text='Not Given'):
+    """Leader notes reading TEXT -- the note is the leader's own
+    annotation, which is the last thing but one the command is given."""
+    return [c for c in vm.commands
+            if c and c[0] == '_.LEADER' and c[-2] == text]
+
+
 def dimloc(c):
     """Dimension-line placement point: the last point in the command
     (DIMLINEAR carries an _H/_V/_R keyword between the ext-line
@@ -435,7 +471,7 @@ assert drawn(vm, 'ARC', 'POOL')
 # plus the two end-radius dims; the bottom side is not dimensioned
 _dc = dimcalls(vm)
 assert len(_dc) == 8, len(_dc)
-assert len(dimcalls(vm, '_.DIMRADIUS')) == 2
+assert len(raddims(vm)) == 2
 _ls = sorted(round(_m.dist(c[1][:2], c[2][:2]), 1) for c in _dc)
 assert _ls.count(45.0) == 2, _ls       # S twice
 assert _ls.count(50.0) == 2, _ls       # S1 twice
@@ -469,7 +505,7 @@ assert _r == [87.5, 93.61], _r
 # in-square 8 dims become 11
 _dc = dimcalls(vm)
 assert len(_dc) == 11, len(_dc)
-assert len(dimcalls(vm, '_.DIMRADIUS')) == 2
+assert len(raddims(vm)) == 2
 _ls = sorted(round(_m.dist(c[1][:2], c[2][:2]), 1) for c in _dc)
 assert _ls == [35.0, 45.0, 50.0, 50.0, 60.0, 60.0,
                140.0, 160.0, 260.0, 320.0, 400.0], _ls
@@ -1686,7 +1722,7 @@ vm = run(["Insquare", "Grecian"] + BASE +
 _arcs = drawn(vm, 'ARC', 'POOL')
 assert len(_arcs) == 8, len(_arcs)
 # both families identical -> ONE Typ. radius callout, not eight dims
-assert len(dimcalls(vm, '_.DIMRADIUS')) == 1, dimcalls(vm, '_.DIMRADIUS')
+assert len(raddims(vm)) == 1, raddims(vm)
 # the walls shortened by the treatment: no full-length top side left,
 # but its dim still reads the TRUE corners (T = 360 among the dims)
 assert not any(abs(_m.dist(*(tuple(d[10][:2]), tuple(d[11][:2]))) - 360.0) < 0.01
@@ -1727,7 +1763,7 @@ _cp = [p for p, a in vm.prompts
        if "How should Corner " in p and "[Square/Radius/Cut/NotGiven" in p]
 assert len(_cp) == 8, _cp
 assert len(drawn(vm, 'ARC', 'POOL')) == 8
-assert len(dimcalls(vm, '_.DIMRADIUS')) == 1
+assert len(raddims(vm)) == 1
 assert reportrow(vm, "CORNER A RAD") and reportrow(vm, "CORNER LB RAD")
 
 print("   grecian: body/tip families in square, all 8 independent out")
@@ -1746,7 +1782,7 @@ vm = run(["Insquare", "RO"] + BASE +
          "R29")
 _arcs = drawn(vm, 'ARC', 'POOL')
 assert len(_arcs) == 6, len(_arcs)
-assert len(dimcalls(vm, '_.DIMRADIUS')) == 3     # R1, R2, one corner Typ.
+assert len(raddims(vm)) == 3     # R1, R2, one corner Typ.
 assert reportrow(vm, "CORNER RAD"), "corner row missing"
 # stubs shortened: the full 50" S1 stub is gone, its 38" remainder is
 # there (the fillet eats 12 down the end line at a square corner)
@@ -1774,7 +1810,7 @@ _arcs = drawn(vm, 'ARC', 'POOL')
 assert len(_arcs) == 4, len(_arcs)               # 2 ends + fillets at A, B
 segs = [(tuple(d[10][:2]), tuple(d[11][:2])) for d in drawn(vm, 'LINE', 'POOL')]
 assert any(abs(_m.dist(*s) - 18.0) < 0.05 for s in segs), "chamfer face at C"
-assert len(dimcalls(vm, '_.DIMRADIUS')) == 4     # R1, R2, corners A and B
+assert len(raddims(vm)) == 4     # R1, R2, corners A and B
 assert hasrow(vm, "CORNER A RAD") and hasrow(vm, "CORNER B RAD")
 assert hasrow(vm, "CORNER C FACE")
 assert not hasrow(vm, "CORNER D RAD") and not hasrow(vm, "CORNER D FACE")
@@ -1793,18 +1829,35 @@ assert _q[0] == "\nHow should all four corners be treated? " \
 assert not any("Radius for" in p or "Cut face length for" in p
                for p, a in vm.prompts), vm.prompts[-4:]
 # ... and the sheet flags it rather than claiming a 90
-assert [c[-2] for c in vm.commands if c and c[0] == '_.LEADER'] == ['? Typ.']
-assert any(d.get(1) == "Not Given" for d in drawn(vm, 'TEXT', 'DIMENSION')), \
-    "a NotGiven corner needs its Not Given note"
+assert marks(vm) == ['? Typ.'], marks(vm)
+assert len(notes(vm)) == 1, "a NotGiven corner needs its Not Given note"
+# the ? comes out in a BOX -- a negative DIMGAP is how AutoCAD draws
+# one -- and the drawing's own gap is handed straight back afterwards
+_boxed = [d for d in drawn(vm, 'DIMENSION', 'DIMENSION') if d.get(70) == 4]
+assert len(_boxed) == 1 and _boxed[0].get(147, 0) < 0, _boxed
+assert vm.sysvars['DIMGAP'] > 0, vm.sysvars['DIMGAP']
 assert hasrow(vm, "CORNERS NotGiven")
 # the row carries no numbers: N/A target AND N/A actual, no delta
 _row = reportrow(vm, "CORNERS NotGiven")
 assert _row.count("N/A") == 2 and "-" in _row, _row
 
-# a plain square corner gets the circled 90 mark (was a bare leader)
+# a plain square corner gets the circled 90 mark: the circle on the
+# corner point, and a radius dim on it saying 90 instead of measuring
 vm = run(["Insquare", "Rectangle"] + BASE + [480.0, 240.0, "Square", "No"], "R30b")
-assert [c[-2] for c in vm.commands if c and c[0] == '_.LEADER'] == ['90%%d Typ.']
+assert marks(vm) == ['90%%d Typ.'], marks(vm)
 assert len(drawn(vm, 'CIRCLE', 'DIMENSION')) == 1
+assert not notes(vm), "a square corner has nothing to note"
+# only the NotGiven "?" is boxed; a 90 mark reads as it is
+_md = [d for d in drawn(vm, 'DIMENSION', 'DIMENSION') if d.get(70) == 4]
+assert len(_md) == 1 and _md[0].get(147, 0) > 0, _md
+# the mark hangs off the circle it is drawn on, not off thin air
+_mk = [c for c in vm.commands if c and c[0] == '_.DIMRADIUS'][0]
+_sel = [x for x in _mk if isinstance(x, list) and len(x) == 2
+        and not isinstance(x[0], (int, float))]
+assert _sel, _mk
+_cir = drawn(vm, 'CIRCLE', 'DIMENSION')[0]
+assert abs(_m.dist(_sel[0][1][:2], _cir[10][:2])
+           - _cir[40]) < 1e-6, "the pick point sits ON the mark circle"
 
 # the legacy words still work, typed in full, and normalise on the way in
 for _old, _new, _sizeprompt in [("ROUNDED", "Radius", "Radius for"),
@@ -1822,7 +1875,7 @@ for _old, _new, _sizeprompt in [("ROUNDED", "Radius", "Radius for"),
                        for p, a in vm.prompts), _old
         # and they really did normalise, not just skip the size question:
         # 90 -> Square draws the circled 90, NG -> NotGiven the "?" + note
-        _ld = [c[-2] for c in vm.commands if c and c[0] == '_.LEADER']
+        _ld = marks(vm)
         if _new == "Square":
             assert _ld == ['90%%d Typ.'], (_old, _ld)
             assert not hasrow(vm, "CORNERS NotGiven"), _old
@@ -1861,7 +1914,7 @@ vm = run(["Outofsquare", "Rectangle"] + BASE +
          [240.0, 236.0, 120.0, 118.0,
           "Radius", 20.0, "NotGiven", "Square", "Cut", 18.0,
           "Corner", 266.0, 264.0, "No"], "R32")
-_lead = sorted(c[-2] for c in vm.commands if c and c[0] == '_.LEADER')
+_lead = sorted(marks(vm))
 assert _lead == ['90%%d', '?'], _lead        # mixed -> no Typ. on either
 assert len(drawn(vm, 'CIRCLE', 'DIMENSION')) == 2
 assert hasrow(vm, "COR B NotGiven") and hasrow(vm, "COR A Radius")
@@ -1875,13 +1928,13 @@ vm = run(["Outofsquare", "Rectangle"] + BASE +
           266.0, 264.0, "No"], "R32b")
 assert not any("cross dims measured from" in p for p, a in vm.prompts), \
     "NotGiven is built square -- there is no cut to measure from"
-assert [c[-2] for c in vm.commands if c and c[0] == '_.LEADER'] == ['? Typ.']
+assert marks(vm) == ['? Typ.'], marks(vm)
 print("   built square, gates say no cut, but the sheet still records it")
 
 
 print("== R33. the 90 mark is drawn where -- and only where -- 90 is true ==")
 def _marks(vm):
-    return ([c[-2] for c in vm.commands if c and c[0] == '_.LEADER'],
+    return (marks(vm),
             [tuple(round(x, 1) for x in d[10][:2])
              for d in drawn(vm, 'CIRCLE', 'DIMENSION')])
 
@@ -1931,7 +1984,7 @@ vm = run(["Insquare", "RO"] + BASE +
 _q = [p for p, a in vm.prompts if "be treated?" in p]
 assert len(_q) == 1 and "[Square/NotGiven/Back]" in _q[0], _q
 assert "Radius" not in _q[0] and "Cut" not in _q[0], _q[0]
-assert [c[-2] for c in vm.commands if c and c[0] == '_.LEADER'] == ['? Typ.']
+assert marks(vm) == ['? Typ.'], marks(vm)
 assert hasrow(vm, "CORNER NotGiven")
 # and it can still be answered Square, as before
 vm = run(["Insquare", "RO"] + BASE +
@@ -1941,20 +1994,27 @@ assert not hasrow(vm, "CORNER NotGiven")
 print("   the geometry limits the answer set, not what the sheet records")
 
 print("== R35. the Not Given note reads outward, never back over the pool ==")
-# TEXT runs left-to-right from its insertion point, so a note on a
-# LEFT-hand corner has to be pulled back by its own width
+# the note hangs off the END of its own leader, and that leader runs
+# out along the corner's diagonal -- so it lands OUTSIDE the pool
+# whichever corner it speaks for, and AutoCAD, not this routine, puts
+# the text on the side the leader points
 vm = run(["Outofsquare", "Rectangle"] + BASE +
          [480.0, 480.0, 240.0, 240.0,
           "NotGiven", "Square", "Square", "Square", 536.7, 536.7, "No"], "R35")
-_note = [d for d in drawn(vm, 'TEXT', 'DIMENSION') if d.get(1) == "Not Given"]
+_note = notes(vm)
 assert len(_note) == 1, _note
-_x = _note[0][10][0]
-_pool_x = [p[0] for d in drawn(vm, 'LINE', 'POOL')
-           for p in (d[10], d[11])]
-# corner A sits at the pool's left extreme; the note must start left of
-# it by more than its own rendered width, so it reads away from the pool
-assert _x < min(_pool_x) - 20.0, (_x, min(_pool_x))
-print("   left-hand corners pull the note back by its width")
+_from, _to = _note[0][1], _note[0][2]
+_pool = [p for d in drawn(vm, 'LINE', 'POOL') for p in (d[10], d[11])]
+_cen = [sum(p[i] for p in _pool) / len(_pool) for i in (0, 1)]
+# it leaves the mark heading AWAY from the pool ...
+assert _m.dist(_to[:2], _cen) > _m.dist(_from[:2], _cen), (_from, _to)
+# ... and the note itself ends up clear of the pool, on both axes
+assert not (min(p[0] for p in _pool) <= _to[0] <= max(p[0] for p in _pool)
+            and min(p[1] for p in _pool) <= _to[1]
+            <= max(p[1] for p in _pool)), (_to, _cen)
+# corner A is the pool's left-hand extreme, so this one reads leftward
+assert _to[0] < min(p[0] for p in _pool), (_to, min(p[0] for p in _pool))
+print("   the leader carries the note out of the pool, whichever corner")
 
 # ----------------------------------------------------------------------
 # the undo group is the command's own

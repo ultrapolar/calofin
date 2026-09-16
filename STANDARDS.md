@@ -117,24 +117,49 @@ How should <subject> be treated? [Square/Radius/Cut/NotGiven] <previous>:
 
 ### How square corners are drawn
 
-The mark for a square corner is a small circle on the corner point
-with a leader out along the corner's outward diagonal -- the
-`spa:dim90` idiom (`lisp/spa/SPA.LSP`; `pool:dim90` is its port),
-which is the reference implementation. What the leader says depends on how many corners
-share the treatment (per the approved sample drawing
-`square_and_not_given.dxf`):
+The mark for a square corner is a small circle on the corner point,
+**dimensioned**: a RADIUS dimension on that circle with its
+measurement replaced by what the mark says, dragged out along the
+corner's outward diagonal. The dimension is the point of it -- the
+arrow lands on the circle, the leader and the text arrive in the
+sheet's own dimension style instead of at a size the routine picked,
+and `CLEARDIM` can slide the text along its own radial line like any
+other dimension's. The `spa:dim90` idiom (`lisp/spa/SPA.LSP`;
+`pool:dim90` is its port) is the reference implementation.
 
-| Case                              | Marks drawn                          | Leader text  |
+What the mark says depends on how many corners share the treatment
+(per the approved sample drawing `cornerdimmingrightway.dxf`):
+
+| Case                              | Marks drawn                          | Mark text    |
 | --------------------------------- | ------------------------------------ | ------------ |
 | every corner Square (or all same) | one, at the reference corner         | `90%%d Typ.` |
 | some corners Square               | one per Square corner                | `90%%d`      |
-| corner NotGiven                   | one per NotGiven corner              | `?`          |
+| corner NotGiven                   | one per NotGiven corner              | `?`, boxed   |
 
-A `NotGiven` corner's geometry is drawn square, and next to its `?`
-mark a second leader note reads `Not Given` -- the sheet must show the
-treatment was never recorded, not silently claim a 90. The `Typ.`
-logic applies to NotGiven the same way: if every corner is NotGiven,
-one `?` mark with the `Not Given` note carries the `Typ.` suffix.
+A `NotGiven` corner's geometry is drawn square; its `?` goes in a
+**box** -- which is what a negative `DIMGAP` draws -- and a second
+note on a leader off that box reads `Not Given`. The sheet must show
+the treatment was never recorded, not silently claim a 90, and a bare
+`?` out on a leader reads as a stray character rather than as a
+callout. The `Typ.` logic applies to NotGiven the same way: if every
+corner is NotGiven, one boxed `?` with its `Not Given` note carries
+the `Typ.` suffix.
+
+The three distances are the sample's, and each is read off the mark
+circle rather than set in drawing units, so the mark keeps its shape
+at any size: the mark's own text at 6.7 r, the note's leader leaving
+the box at 8.4 r, the note itself at 11.4 r.
+
+**Two sizes.** The mark is drawn in whatever style the sheet is
+already in -- `STANDARD` -- which is what a pool's or a spa's corners
+take. The smaller one is `STANDARD INCHES`, and it is for a mark on a
+**step's** corners (`ns-mark`, `lisp/cornerstp/NORMIESTEP.lsp`): a
+step's corners are a detail inside somebody else's plan, not the
+plan's own corners. What never picks the style is the mark's own
+measurement: the mark is an ANGLE, and the circle under it is a couple
+of inches across, so the under-24-inch switch to inches
+(`pool:dimsbegin`) is deliberately kept off it -- left to read the
+circle, it would shrink every mark on every sheet.
 
 ## 3. Canonical keyword sets and shared wordings
 
@@ -1071,7 +1096,7 @@ the commit this file landed on.
 | --- | --- |
 | ~~`lisp/spa/SPA.LSP`~~ | **DONE** — `spa:askcorner` asks the canonical Treatment, stores the canonical words (`spa:cutp` carries the is-there-a-cut question), grew the `NotGiven` branch (`spa:dimng`) and the all-same `Typ.` policy; old words and the palette's old wire values normalised at the ask site |
 | ~~`lisp/pool/POOL.LSP`~~ | **DONE** — `pool:asktreat`: canonical set + `NotGiven`, legacy words hidden, size asks "Radius for" / "Cut face length for" |
-| ~~`lisp/cornerstp/NORMIESTEP.lsp`~~ | **DONE** — `ns-asktreat`, canonical set, legacy hidden.  A step layout carries no corner callouts, so no `?`-mark branch applies |
+| ~~`lisp/cornerstp/NORMIESTEP.lsp`~~ | **DONE** — `ns-asktreat`, canonical set, legacy hidden; `ns-mark` / `ns-markng` draw the section-2 mark on the step's own corners, in the smaller of its two sizes (it used to carry a plain `CORNERS NOT GIVEN - DRAWN SQUARE` note and nothing at all for a square corner) |
 | ~~`lisp/spa/TUTORIALSPA.LSP`~~ | **DONE** — teaches the canonical question, demo corners speak the new words |
 | ~~`lisp/pool/TUTORIALPOOL.LSP`~~ | **DONE** — moved with POOL, and its topic-4 pane now demonstrates all four treatments |
 | `lisp/lincheck/lincheck.lsp` | reviewed and KEPT: `"Straight Radius"` is a different axis (step face straight vs curved), not a corner treatment |
@@ -1084,6 +1109,15 @@ the `NotGiven` mark, and `pool:cutp` / `spa:cutp` keep "is there a cut
 here" apart from "is there something to record here".  SPA's old
 no-notes-when-all-square policy is gone: all square now gets one
 `90%%d Typ.` mark, per the section-2 table.
+
+The mark itself moved with the sample sheet: `cornerdimmingrightway.dxf`
+draws it as a radius dim on the mark circle rather than as a bare
+leader, boxes the `NotGiven` `?` and hangs its `Not Given` note off
+that box on a leader of its own. POOL and SPA changed together, so the
+two tools' sheets still match. The sample's SMALLER mark (section 2,
+"Two sizes") went in at the same time: NORMIESTEP marks its step
+corners with it, which is the one place a corner mark belongs to a
+step rather than to the plan around it.
 
 The downstream moved in the same commit as SPA:
 `ui/calofin_net/SpaFormView.vb` and the shapes field map offer
