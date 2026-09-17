@@ -30,6 +30,14 @@ BOARD = "How far is the diving board base from water's edge?"
 ANCHORS = "Some anchors are not visible in the drone photo provided."
 SLIDE = ("Please provide a detailed sketch to locate slide base for"
         " proper cover treatment.")
+HEADER = "*All listed issues must be resolved to proceed with design*"
+
+
+def written(note, header=HEADER, bullet="- "):
+    """What the drafter's drawing reads: the standing header, then the
+    note bulleted on the line under it.  \\P is MTEXT's paragraph
+    break."""
+    return (header + "\\P" + bullet + note) if header else bullet + note
 
 
 # ---- drawing scaffolding ---------------------------------------------
@@ -91,19 +99,20 @@ def test_board_note():
     run(vm, ["Board", (12.0, 34.0), None], 'board')
     texts = made(vm, 'MTEXT')
     assert len(texts) == 1, texts
-    assert texts[0][1] == BOARD, texts
-    assert texts[0][8] == 'NOTES' and texts[0][40] == 6.0, texts
+    assert texts[0][1] == written(BOARD), texts
+    assert texts[0][8] == 'TEXT' and texts[0][40] == 9.5, texts
     assert texts[0][10][:2] == [12.0, 34.0], texts
-    assert any('1 note placed on layer NOTES' in p for p in vm.printed), \
+    assert any('1 note placed on layer TEXT' in p for p in vm.printed), \
         vm.printed
-    print("ok  Board       -> the diving-board note placed on NOTES")
+    print("ok  Board       -> the diving-board note under the header, on"
+          " TEXT")
 
 
 def test_anchors_note():
     vm = newvm()
     run(vm, ["Anchors", (0.0, 0.0), None], 'anchors')
     texts = made(vm, 'MTEXT')
-    assert texts[0][1] == ANCHORS, texts
+    assert texts[0][1] == written(ANCHORS), texts
     print("ok  Anchors     -> the hidden-anchors note")
 
 
@@ -111,9 +120,74 @@ def test_slide_note():
     vm = newvm()
     run(vm, ["Slide", (0.0, 0.0), None], 'slide')
     texts = made(vm, 'MTEXT')
-    assert texts[0][1] == SLIDE, texts
+    assert texts[0][1] == written(SLIDE), texts
     print("ok  Slide       -> the slide-sketch note, joined back into one"
           " string")
+
+
+def test_header_and_text_properties():
+    """The note reads as the shop's own: the standing header on the
+    first line, the note bulleted under it, and the MTEXT carrying the
+    properties their note blocks carry -- the Attributes style at 9.5
+    on layer TEXT, attached TOP LEFT at the picked point, ByLayer,
+    upright, wrapped at the block width, lines spaced "at least"."""
+    vm = newvm()
+    run(vm, ["Anchors", (984.1963270657014, 497.8080130614497), None],
+        'properties')
+    t = made(vm, 'MTEXT')[0]
+    assert t[1] == HEADER + "\\P" + "- " + ANCHORS, t
+    assert t[1].split("\\P") == [HEADER, "- " + ANCHORS], t
+    assert t[8] == 'TEXT', t                    # layer
+    assert 62 not in t, t                       # colour: ByLayer
+    assert t[7] == 'Attributes', t              # text style
+    assert t[40] == 9.5, t                      # height
+    assert t[41] == 440.1875, t                 # wrap width
+    assert t[71] == 1, t                        # attachment: top left
+    assert t[72] == 5, t                        # direction: by style
+    assert t[73] == 1, t                        # line spacing: at least
+    assert t[44] == 1.0, t                      # ... factor
+    assert t[50] == 0.0, t                      # rotation
+    assert t[10][:2] == [984.1963270657014, 497.8080130614497], t
+    print("ok  properties  -> header, Attributes 9.5 on TEXT, top left at"
+          " the picked point")
+
+
+def test_style_made_when_the_drawing_lacks_it():
+    """A drawing without the Attributes style gets a plain one of that
+    name made from dn:*style-font*, and is told so; a drawing that has
+    one keeps it untouched -- the note asks for nothing but the name."""
+    vm = newvm()
+    run(vm, ["Board", (0.0, 0.0), None], 'style made')
+    assert 'ATTRIBUTES' in {s.upper() for s in vm.tables['STYLE']}, \
+        vm.tables['STYLE']
+    assert any('text style Attributes was not in this drawing' in p
+               for p in vm.printed), vm.printed
+    vm = newvm()
+    vm.loads('(entmake (list \'(0 . "STYLE")'
+             ' \'(100 . "AcDbSymbolTableRecord")'
+             ' \'(100 . "AcDbTextStyleTableRecord") \'(2 . "Attributes")'
+             ' \'(70 . 0) \'(40 . 9.5) \'(3 . "arialbd.ttf")))')
+    run(vm, ["Board", (0.0, 0.0), None], 'style kept')
+    assert not any('text style' in p for p in vm.printed), vm.printed
+    assert made(vm, 'MTEXT')[0][7] == 'Attributes'
+    print("ok  style       -> Attributes made when missing, left alone when"
+          " the drawing has it")
+
+
+def test_header_can_be_emptied():
+    """A shop whose notes read differently empties dn:*header*: the
+    bullet line is then the whole note, and nothing else moves."""
+    vm = newvm()
+    vm.loads('(setq dn:*header* "")')
+    run(vm, ["Board", (0.0, 0.0), None], 'no header')
+    t = made(vm, 'MTEXT')[0]
+    assert t[1] == "- " + BOARD, t
+    vm = newvm()
+    vm.loads('(setq dn:*header* "RFI" dn:*bullet* "* ")')
+    run(vm, ["Board", (0.0, 0.0), None], 'own header')
+    assert made(vm, 'MTEXT')[0][1] == "RFI\\P* " + BOARD, made(vm, 'MTEXT')
+    print("ok  header knob -> emptied leaves the bullet alone, and both are"
+          " read at run time")
 
 
 def test_multiple_placements():
@@ -122,8 +196,8 @@ def test_multiple_placements():
         'multiple')
     texts = made(vm, 'MTEXT')
     assert len(texts) == 3, texts
-    assert all(t[1] == BOARD for t in texts), texts
-    assert any('3 notes placed on layer NOTES' in p for p in vm.printed), \
+    assert all(t[1] == written(BOARD) for t in texts), texts
+    assert any('3 notes placed on layer TEXT' in p for p in vm.printed), \
         vm.printed
     print("ok  repeat      -> the same note dropped at three points, one"
           " run")
@@ -136,7 +210,7 @@ def test_back_removes_last_placement():
     assert len(texts) == 1, texts
     assert texts[0][10][:2] == [0.0, 0.0], texts
     assert any('Last note removed' in p for p in vm.printed), vm.printed
-    assert any('1 note placed on layer NOTES' in p for p in vm.printed), \
+    assert any('1 note placed on layer TEXT' in p for p in vm.printed), \
         vm.printed
     print("ok  Back        -> un-places the last note, keeps the first")
 
@@ -149,7 +223,7 @@ def test_back_before_any_placement_reopens_note_choice():
     run(vm, ["Board", "Back", "Slide", (5.0, 5.0), None], 're-choose')
     texts = made(vm, 'MTEXT')
     assert len(texts) == 1, texts
-    assert texts[0][1] == SLIDE, texts
+    assert texts[0][1] == written(SLIDE), texts
     assert any('Back to the note choice' in p for p in vm.printed), \
         vm.printed
     print("ok  Back/choice -> Back with nothing placed re-asks which note")
@@ -157,36 +231,40 @@ def test_back_before_any_placement_reopens_note_choice():
 
 def test_knobs_reach_the_output():
     vm = newvm()
-    vm.loads('(setq dn:*layer* "RFI" dn:*text-hgt* 4.0 dn:*text-width* 48.0)')
+    vm.loads('(setq dn:*layer* "RFI" dn:*text-hgt* 4.0 dn:*text-width* 48.0'
+             ' dn:*style* "ROMANS" dn:*line-space* 1.5)')
     run(vm, ["Board", (0.0, 0.0), None], 'knobs')
     t = made(vm, 'MTEXT')[0]
     assert t[8] == 'RFI' and t[40] == 4.0 and t[41] == 48.0, t
-    print("ok  knobs       -> layer, text height and wrap width all read at"
-          " run time")
+    assert t[7] == 'ROMANS' and t[44] == 1.5, t
+    assert any('1 note placed on layer RFI' in p for p in vm.printed), \
+        vm.printed
+    print("ok  knobs       -> layer, style, height, width and line spacing"
+          " all read at run time")
 
 
 def test_layer_repaired_and_coloured():
-    """NOTES frozen, locked and off is thawed, unlocked and switched on
-    before the first note, and the run says so; a missing NOTES is
+    """TEXT frozen, locked and off is thawed, unlocked and switched on
+    before the first note, and the run says so; a missing TEXT is
     created in dn:*layer-color*."""
     vm = newvm()
     vm.loads('(entmake (list \'(0 . "LAYER") \'(100 . "AcDbSymbolTableRecord")'
-             ' \'(100 . "AcDbLayerTableRecord") \'(2 . "NOTES")'
+             ' \'(100 . "AcDbLayerTableRecord") \'(2 . "TEXT")'
              ' \'(70 . 5) \'(62 . -3) \'(6 . "Continuous")))')
     run(vm, ["Board", (0.0, 0.0), None], 'repair')
-    rec = layer_rec(vm, 'NOTES')
+    rec = layer_rec(vm, 'TEXT')
     assert rec[70] == 0 and rec[62] == 3, rec
     assert len(made(vm, 'MTEXT')) == 1
     assert any('was off, frozen or locked' in p for p in vm.printed), \
         vm.printed
     vm = newvm()
     run(vm, ["Board", (0.0, 0.0), None], 'default colour')
-    assert layer_rec(vm, 'NOTES')[62] == 2, layer_rec(vm, 'NOTES')
+    assert layer_rec(vm, 'TEXT')[62] == 4, layer_rec(vm, 'TEXT')
     vm = newvm()
-    vm.loads('(setq dn:*layer-color* 4)')
+    vm.loads('(setq dn:*layer-color* 2)')
     run(vm, ["Board", (0.0, 0.0), None], 'colour knob')
-    assert layer_rec(vm, 'NOTES')[62] == 4, layer_rec(vm, 'NOTES')
-    print("ok  layer       -> NOTES repaired when unusable, created in the"
+    assert layer_rec(vm, 'TEXT')[62] == 2, layer_rec(vm, 'TEXT')
+    print("ok  layer       -> TEXT repaired when unusable, created in the"
           " knob's colour")
 
 
@@ -194,7 +272,7 @@ def test_no_placements():
     vm = newvm()
     run(vm, ["Board", None], 'no placements')
     assert made(vm, 'MTEXT') == []
-    assert any('0 notes placed on layer NOTES' in p for p in vm.printed), \
+    assert any('0 notes placed on layer TEXT' in p for p in vm.printed), \
         vm.printed
     print("ok  no picks    -> nothing drawn")
 
@@ -263,6 +341,9 @@ if __name__ == '__main__':
     test_board_note()
     test_anchors_note()
     test_slide_note()
+    test_header_and_text_properties()
+    test_style_made_when_the_drawing_lacks_it()
+    test_header_can_be_emptied()
     test_multiple_placements()
     test_back_removes_last_placement()
     test_back_before_any_placement_reopens_note_choice()

@@ -16,15 +16,24 @@
 ;;;   Slide    Please provide a detailed sketch to locate slide base
 ;;;            for proper cover treatment.
 ;;;
-;;; Each note is an MTEXT dropped at the picked point, on the
-;;; dn:*layer* layer.  Back at the point prompt un-places the last one
-;;; instead of ending the run, so a bad click costs one Back rather
-;;; than a manual erase; Back with nothing placed yet steps back to the
-;;; note choice instead.  Run the command again to place a different
-;;; note.
+;;; Each note is one MTEXT, dropped with its TOP LEFT CORNER at the
+;;; picked point and written the way the shop's own review notes are --
+;;; the standing header first, the note bulleted under it:
 ;;;
-;;; Every knob -- layer and its colour, text height and wrap width -- is
-;;; in the configuration block right below.
+;;;   *All listed issues must be resolved to proceed with design*
+;;;   - Some anchors are not visible in the drone photo provided.
+;;;
+;;; -- on the TEXT layer, in the Attributes style at 9.5, wrapped at the
+;;; width those note blocks carry.
+;;;
+;;; Back at the point prompt un-places the last one instead of ending
+;;; the run, so a bad click costs one Back rather than a manual erase;
+;;; Back with nothing placed yet steps back to the note choice instead.
+;;; Run the command again to place a different note.
+;;;
+;;; Every knob -- the header and the bullet, the layer and its colour,
+;;; the text style and its font, text height, wrap width and line
+;;; spacing -- is in the configuration block right below.
 ;;;
 ;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
 ;;; *dronote-version* below and stamps a dated, REV-numbered twin of
@@ -32,7 +41,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dronote-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *dronote-version* "v1.1")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -42,17 +51,44 @@
 ;;; it after loading from a startup file.  Distances are DRAWING UNITS -
 ;;; inches in this shop's architectural drawings.
 
-(setq dn:*layer* "NOTES")           ; layer every note lands on - created
-                                    ; when the drawing lacks it; thawed,
-                                    ; unlocked and switched on when it
-                                    ; is there but unusable
-(setq dn:*layer-color* 2)           ; ACI colour that layer is CREATED
-                                    ; with (2 = yellow).  A layer already
-                                    ; in the drawing keeps its own
-(setq dn:*text-hgt* 6.0)            ; MTEXT height of a placed note
-(setq dn:*text-width* 96.0)         ; MTEXT reference width (8'), so a
-                                    ; long note wraps instead of running
-                                    ; clear across the sheet
+(setq dn:*layer* "TEXT")            ; layer every note lands on - the
+                                    ; shop's own text layer, the one its
+                                    ; note blocks and DIMSTAMP's stamps
+                                    ; are already on.  Created when the
+                                    ; drawing lacks it; thawed, unlocked
+                                    ; and switched on when it is there
+                                    ; but unusable
+(setq dn:*layer-color* 4)           ; ACI colour that layer is CREATED
+                                    ; with (4 = cyan, what the office
+                                    ; template carries).  A layer already
+                                    ; in the drawing keeps its own, and
+                                    ; the note itself is ByLayer either
+                                    ; way
+(setq dn:*style* "Attributes")      ; text style a note is written in -
+                                    ; the shop's own.  A drawing without
+                                    ; it gets a variable-height style of
+                                    ; that name made from the font below
+                                    ; and is told so; one that has it
+                                    ; keeps its own font and height
+(setq dn:*style-font* "arialbd.ttf")
+                                    ; font a style MADE here is
+                                    ; built on; one already in the
+                                    ; drawing keeps its own
+(setq dn:*text-hgt* 9.5)            ; MTEXT height of a placed note
+(setq dn:*text-width* 440.1875)     ; MTEXT reference width, so a long
+                                    ; note wraps instead of running clear
+                                    ; across the sheet - the width the
+                                    ; shop's own note blocks carry
+(setq dn:*line-space* 1.0)          ; line space factor, at the "at
+                                    ; least" spacing style: what sets the
+                                    ; note under its header
+(setq dn:*header* "*All listed issues must be resolved to proceed with design*")
+                                    ; the standing first line of every
+                                    ; note, the shop's own wording.  ""
+                                    ; writes the note with no header over
+                                    ; it
+(setq dn:*bullet* "- ")             ; what the note itself is prefixed
+                                    ; with under that header
 
 ;;; -------------------- the three notes ---------------------------------
 ;;; dn:*kws* is BOTH the initget keyword list and the bracket text
@@ -97,19 +133,59 @@
                          " was off, frozen or locked - restored so the"
                          " result is visible.")))))))
 
-;; entmake an MTEXT at INS reading STR, splitting into 250-char DXF
-;; chunks - MTEXT carries at most 250 characters in group 1, so a note
-;; lengthened past that would otherwise lose everything past the first
+;; Make sure the style a note is written in is there to carry.  A
+;; drawing that has it keeps its own font and height - the note asks
+;; for nothing but the name; one that has not gets a plain
+;; variable-height style of that name, built on FONT, so the note is
+;; not silently written in whatever STANDARD happens to be.
+(defun dn:ensure-style (name font)
+  (if (not (tblsearch "STYLE" name))
+    (progn
+      (entmakex (list '(0 . "STYLE") '(100 . "AcDbSymbolTableRecord")
+                      '(100 . "AcDbTextStyleTableRecord")
+                      (cons 2 name) '(70 . 0)
+                      '(40 . 0.0)            ; variable height: the
+                                             ; entity's own governs
+                      '(41 . 1.0) '(50 . 0.0) '(71 . 0) '(42 . 2.5)
+                      (cons 3 font) '(4 . "")))
+      (princ (strcat "\nDRONOTE: text style " name
+                     " was not in this drawing - a plain one was made"
+                     " so the notes have a style to carry."))))
+  name)
+
+;; What one note READS as: the standing header, then the note itself
+;; bulleted on the line under it.  \P is MTEXT's paragraph break, and
+;; dn:*line-space* is what sets the second line under the first.  A
+;; dn:*header* emptied to "" leaves the bullet line on its own.
+(defun dn:written (txt)
+  (if (and dn:*header* (> (strlen dn:*header*) 0))
+    (strcat dn:*header* "\\P" dn:*bullet* txt)
+    (strcat dn:*bullet* txt)))
+
+;; entmake an MTEXT at INS reading STR, in the properties the shop's own
+;; review notes carry: attached TOP LEFT at the point, dn:*style* at
+;; dn:*text-hgt*, wrapped at dn:*text-width*, upright, its lines spaced
+;; the "at least" way, and ByLayer on dn:*layer*.  STR is split into
+;; 250-char DXF chunks - MTEXT carries at most 250 characters in group
+;; 1, and the header takes a fixed bite out of that, so a note
+;; lengthened past it would otherwise lose everything past the first
 ;; chunk.  Returns the new ename.
 (defun dn:mtext (ins str / dxf)
   (setq dxf (list '(0 . "MTEXT") '(100 . "AcDbEntity")
                   (cons 8 dn:*layer*) '(100 . "AcDbMText")
                   (cons 10 ins) (cons 40 dn:*text-hgt*)
-                  (cons 41 dn:*text-width*) '(71 . 1)))   ; top-left
+                  (cons 41 dn:*text-width*)
+                  '(71 . 1)                  ; attachment: top left
+                  '(72 . 5)))                ; direction: by style
   (while (> (strlen str) 250)
     (setq dxf (append dxf (list (cons 3 (substr str 1 250))))
           str (substr str 251)))
-  (entmakex (append dxf (list (cons 1 str)))))
+  (entmakex (append dxf
+                    (list (cons 1 str)
+                          (cons 7 dn:*style*)
+                          '(50 . 0.0)        ; rotation
+                          '(73 . 1)          ; line spacing: at least
+                          (cons 44 dn:*line-space*)))))
 
 ;;; -------------------- the command --------------------------------------
 ;; NOTE: no local here may be named after a function this routine
@@ -165,8 +241,9 @@
               (setq stage 'NOTE))))
          (T
           (dn:ensure-layer dn:*layer* dn:*layer-color*)
+          (dn:ensure-style dn:*style* dn:*style-font*)
           (setq placed (cons (cons (dn:mtext (list (car pt) (cadr pt) 0.0)
-                                             txt)
+                                             (dn:written txt))
                                    txt)
                              placed)
                 count  (1+ count))
