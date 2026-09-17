@@ -50446,17 +50446,30 @@
 ;;; front of it: the stack is the separation, and a space there only
 ;;; pushes the inch mark off the number.
 ;;;
-;;;   drawn (MTEXT)      reads on the sheet as   the plain spelling
-;;;   -----------------  ---------------------   -----------------
-;;;   34"                34"                     34"
-;;;   3'-4"              3'-4"                   3'-4"
-;;;   34\S1/2;"          34 over-a-half "        34 1/2"
-;;;   4'-1\S1/2;"        4'-1 over-a-half "      4'-1 1/2"
+;;; The stack carries its own HEIGHT and ALIGNMENT codes, and they are
+;;; what the shop's own dimension text carries: an MTEXT out of one of
+;;; these drawings reads \A1;33'-2{\H1x;\S1/2;}", not a bare stack.
+;;; Both matter, and for the same reason -- left alone, AutoCAD draws
+;;; a stack SMALLER than the text it sits in (70% of it, the
+;;; TSTACKSIZE default), so the half in 34 1/2" came out a size down
+;;; from the 34 it belongs to, and a stack sized back up has to sit on
+;;; the line rather than tower over it.  So ds:*stack-hgt* is 1.0, the
+;;; size of the number beside it, and ds:*stack-align* is 1, centred.
+;;; The braces close the height change at the end of the stack, so the
+;;; inch mark after it is back at the stamp's own height rather than
+;;; inheriting the fraction's.
 ;;;
-;;; The plain spelling on the right is what a prompt offers, what the
+;;;   the plain spelling  reads as           drawn (MTEXT)
+;;;   ------------------  -----------------  --------------------------
+;;;   34"                 34"                34"
+;;;   3'-4"               3'-4"              3'-4"
+;;;   34 1/2"             34 over-a-half "   \A1;34{\H1.0000x;\S1/2;}"
+;;;   4'-1 1/2"           4'-1 over-a-half " \A1;4'-1{\H1.0000x;\S1/2;}"
+;;;
+;;; The plain spelling on the left is what a prompt offers, what the
 ;;; command line echoes and what ds:parse reads back -- nothing stacks
 ;;; on a command line, and 4'-11/2" there would read as eleven halves.
-;;; The stacked one reaches an MTEXT and nothing else; ds:drawn is the
+;;; The drawn one reaches an MTEXT and nothing else; ds:drawn is the
 ;;; one door between them, so no call site can forget it.
 ;;;
 ;;; What it READS is far looser, because nobody types a dimension
@@ -50490,7 +50503,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.3")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.4")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -50524,6 +50537,29 @@
                                     ; over the other with a bar between,
                                     ; "#" the diagonal form, "^" the
                                     ; tolerance stack with no bar
+(setq ds:*stack-hgt* 1.0)          ; how tall that stacked fraction is
+                                    ; drawn, as a factor of the text
+                                    ; around it.  1.0 is the size of
+                                    ; the whole inches beside it, which
+                                    ; is how this shop's dimension text
+                                    ; reads; AutoCAD left to itself
+                                    ; draws a stack at 0.7 (its
+                                    ; TSTACKSIZE default), a size down
+                                    ; from the number it belongs to.
+                                    ; nil writes no height code at all
+                                    ; and leaves that default alone
+(setq ds:*stack-align* 1)          ; where that fraction sits against
+                                    ; the line it is on: 0 bottom, 1
+                                    ; centred, 2 top, and 1 is what the
+                                    ; shop's own dimension text carries
+                                    ; (\A1;33'-2{\H1x;\S1/2;}" out of
+                                    ; one of these drawings).  It is
+                                    ; the other half of drawing a
+                                    ; full-height stack: sized back up
+                                    ; and left to sit on the baseline,
+                                    ; a fraction towers over the number
+                                    ; it belongs to.  nil writes no
+                                    ; alignment code at all
 
 ;; -- the ruler.  Scratch geometry, and pinned to the SCREEN: every
 ;;    size below is a fraction of the current view, so the ruler looks
@@ -50659,6 +50695,35 @@
       (setq eighths (fix (+ 0.5 (* 8.0 (+ (* feet 12.0) inch)))))
       (if (> eighths 0) (list eighths hasfeet)))))
 
+;; STR -- a stacked fraction, \S code and all -- wrapped in the height
+;; code that draws it at ds:*stack-hgt* times the text around it.  A
+;; stack AutoCAD is left to size itself comes out at 70% of that text
+;; (TSTACKSIZE), a size down from the whole inches it belongs to, and
+;; a dimension reads as one number or it does not read: the fraction
+;; is part of the measurement, not a footnote to it.
+;;
+;; The BRACES are the other half of the job.  \H runs to the end of
+;; its enclosing group, so without them the height would carry on past
+;; the stack and take the inch mark with it; inside them it ends where
+;; the fraction does and the " after it is back at the stamp's own
+;; size.  A nil knob writes no code at all, which is the bare \S
+;; spelling and AutoCAD's own default height.
+(defun ds:stack-sized (str)
+  (if ds:*stack-hgt*
+    (strcat "{\\H" (rtos ds:*stack-hgt* 2 4) "x;" str "}")
+    str))
+
+;; The alignment code a line carrying a stack opens with, or "" when
+;; the knob is nil.  It goes at the FRONT of the whole string, ahead of
+;; the whole inches, which is where the shop's own dimension text
+;; carries it -- \A applies from where it stands, and what is being
+;; aligned is the line the stack sits on, not the stack alone.  A line
+;; with no fraction in it has nothing to align and gets no code.
+(defun ds:stack-aligned ()
+  (if ds:*stack-align*
+    (strcat "\\A" (itoa ds:*stack-align*) ";")
+    ""))
+
 ;; Spell TOTAL-EIGHTHS (an integer count of 1/8" units) out as text,
 ;; in the HASFEET family the source text used -- feet notation, or
 ;; plain inches regardless of magnitude.  The fraction is simplified
@@ -50671,10 +50736,12 @@
 ;;          halves, so the space earns its keep.  This is the spelling
 ;;          ds:parse reads back, and the only one ever compared,
 ;;          prompted with, or printed.
-;;   T   -- DRAWN: "\S1/2;", AutoCAD's stacking code, and NO space in
-;;          front of it.  The stack IS the separation; a space there
-;;          only pushes the inch mark away from the number.  This is
-;;          the spelling that reaches an MTEXT, and nothing else.
+;;   T   -- DRAWN: "\A1;34{\H1.0000x;\S1/2;}"", AutoCAD's stacking
+;;          code at the height ds:stack-sized gives it, on a line
+;;          ds:stack-aligned centres, and NO space in front of it.
+;;          The stack IS the separation; a space there only pushes the
+;;          inch mark away from the number.  This is the spelling that
+;;          reaches an MTEXT, and nothing else.
 ;; NOTE: the leftover eighths are "remain", not "rem" -- rem IS an
 ;; AutoLISP function, and a local of that name shadows it for every
 ;; call this one makes.
@@ -50695,8 +50762,10 @@
   (setq fr (cond
              ((= num 0) "")
              ((null stacked) (strcat " " (itoa num) "/" (itoa den)))
-             (T (strcat "\\S" (itoa num) ds:*stack* (itoa den) ";"))))
-  (strcat (if hasfeet (strcat (itoa feet) "'-") "")
+             (T (ds:stack-sized
+                  (strcat "\\S" (itoa num) ds:*stack* (itoa den) ";")))))
+  (strcat (if (and stacked (/= num 0)) (ds:stack-aligned) "")
+          (if hasfeet (strcat (itoa feet) "'-") "")
           (itoa whole) fr "\""))
 
 ;; The PLAIN spelling: what a prompt offers, what the command line
@@ -121081,6 +121150,8 @@
      ("ds:*text-width*" "0.0" "its defined (wrap) width; 0 is no wrap at all, so a value can never break across two lines in. A drawing wi...")
      ("ds:*line-space*" "1.0" "line space factor, at the \"at least\" spacing style wrap at all, so a value can never break across two lines")
      ("ds:*stack*" "\"/\"" "what separates a STACKED fraction's numerator from its denominator in the drawn MTEXT: \"/\" is the one over...")
+     ("ds:*stack-hgt*" "1.0" "how tall that stacked fraction is drawn, as a factor of the text around it. 1.0 is the size of the whole in...")
+     ("ds:*stack-align*" "1" "where that fraction sits against the line it is on: 0 bottom, 1 centred, 2 top, and 1 is what the shop's ow...")
      ("ds:*ruler-layer*" "\"DIMSTAMP RULER\"" "layer the scratch ruler is drawn on -- its own, so the TEXT layer never carries scratch -- the ruler. Scrat...")
      ("ds:*ruler-color*" "3" "ACI colour of the ruler, on the entities themselves so it reads the same whatever its layer says drawn on -...")
      ("ds:*ruler-screen-x*" "0.12" "where the spine sits across the view: a fraction of the view's WIDTH in from its left edge. Raise it to mov...")

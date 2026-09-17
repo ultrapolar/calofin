@@ -34,6 +34,14 @@ LSP = os.path.join(os.path.dirname(__file__), '..',
 #: click that must not be read as a row pick
 FAR = (300.0, 300.0)
 
+#: the height code every drawn fraction is wrapped in at the default
+#: knob -- 1.0000x, the size of the text around it
+FULL = '{\\H1.0000x;'
+
+#: and the alignment code the line carrying it opens with, centred --
+#: the pair the shop's own dimension text carries
+MID = '\\A1;'
+
 
 def newvm():
     vm = VM()
@@ -153,24 +161,78 @@ def test_two_spellings_plain_and_stacked():
     vm = newvm()
     for eighths, hasfeet, plain, drawn in [
             (272, 'nil', '34"', '34"'),                 # no fraction: same
-            (276, 'nil', '34 1/2"', '34\\S1/2;"'),
+            (276, 'nil', '34 1/2"', f'{MID}34{FULL}\\S1/2;}}"'),
             (320, 't', "3'-4\"", "3'-4\""),             # no fraction: same
-            (396, 't', "4'-1 1/2\"", "4'-1\\S1/2;\""),
-            (398, 't', "4'-1 3/4\"", "4'-1\\S3/4;\"")]:
+            (396, 't', "4'-1 1/2\"", f"{MID}4'-1{FULL}\\S1/2;}}\""),
+            (398, 't', "4'-1 3/4\"", f"{MID}4'-1{FULL}\\S3/4;}}\"")]:
         assert vm.loads(f'(ds:format {eighths} {hasfeet})') == plain
         assert vm.loads(f'(ds:stacked {eighths} {hasfeet})') == drawn
     # and ds:drawn is the door between them, taking the plain spelling
-    assert vm.loads('(ds:drawn "4\'-1 1/2\\"")') == "4'-1\\S1/2;\""
+    assert (vm.loads('(ds:drawn "4\'-1 1/2\\"")')
+            == f"{MID}4'-1{FULL}\\S1/2;}}\"")
     # no space survives anywhere in a drawn fraction
     assert ' ' not in vm.loads('(ds:stacked 396 t)')
     print("ok  stacked      -> the drawn fraction is \\S-stacked and"
           " space-free; the echoed one stays readable")
 
 
+def test_the_stacked_fraction_is_the_size_of_the_text_around_it():
+    """A stack AutoCAD sizes itself comes out at 70% of the text it sits
+    in, which drew the half in 34 1/2" a size down from the 34.  So the
+    drawn spelling carries its own \\H height code, at ds:*stack-hgt*
+    -- 1.0, the size of the number beside it -- and the BRACES close
+    that height at the end of the stack, so the inch mark after it is
+    back at the stamp's own size."""
+    vm = newvm()
+    assert vm.loads('ds:*stack-hgt*') == 1.0, 'full size by default'
+    assert (vm.loads('(ds:stacked 276 nil)')
+            == '\\A1;34{\\H1.0000x;\\S1/2;}"')
+    # the height code opens INSIDE the group and the group closes
+    # before the inch mark -- the " is not part of the fraction
+    assert vm.loads('(ds:stacked 276 nil)').endswith(';}"')
+    # a value with no fraction has no height code to carry
+    assert '\\H' not in vm.loads('(ds:stacked 272 nil)')
+    # the knob is the factor, and it reaches the drawing
+    vm.loads('(setq ds:*stack-hgt* 0.75)')
+    assert (vm.loads('(ds:stacked 276 nil)')
+            == '\\A1;34{\\H0.7500x;\\S1/2;}"')
+    # and nil hands the sizing back to AutoCAD: the bare \\S spelling
+    vm.loads('(setq ds:*stack-hgt* nil)')
+    assert vm.loads('(ds:stacked 276 nil)') == '\\A1;34\\S1/2;"'
+    print("ok  stack height -> the fraction is drawn the size of the"
+          " text around it, and the \" after it is not")
+
+
+def test_the_stacked_fraction_sits_on_its_line():
+    """The other half of drawing a full-height stack: sized back up and
+    left on the baseline, a fraction towers over the number it belongs
+    to.  So a line with a stack on it opens with an \\A alignment code,
+    at ds:*stack-align* -- 1, centred, which is what the shop's own
+    dimension text carries (\\A1;33'-2{\\H1x;\\S1/2;}" out of one of
+    these drawings)."""
+    vm = newvm()
+    assert vm.loads('ds:*stack-align*') == 1, 'centred by default'
+    # the code opens the WHOLE line, ahead of the whole inches -- \A
+    # applies from where it stands, and it is the line being aligned
+    assert vm.loads('(ds:stacked 396 t)').startswith('\\A1;4\'-1{')
+    # a line with no fraction on it has nothing to align
+    assert vm.loads('(ds:stacked 320 t)') == "3'-4\""
+    # the knob is the value: 0 bottom, 1 centred, 2 top
+    vm.loads('(setq ds:*stack-align* 2)')
+    assert vm.loads('(ds:stacked 276 nil)').startswith('\\A2;34{')
+    # and nil writes no alignment code at all
+    vm.loads('(setq ds:*stack-align* nil)')
+    assert vm.loads('(ds:stacked 276 nil)') == '34{\\H1.0000x;\\S1/2;}"'
+    # the plain spelling carries neither code, whatever the knobs say
+    assert vm.loads('(ds:format 276 nil)') == '34 1/2"'
+    print("ok  stack line   -> a line with a stack on it is centred on"
+          " itself, the way the shop's own text is")
+
+
 def test_the_stack_separator_is_a_knob():
     vm = newvm()
     vm.loads('(setq ds:*stack* "#")')     # the diagonal form
-    assert vm.loads('(ds:stacked 396 t)') == "4'-1\\S1#2;\""
+    assert vm.loads('(ds:stacked 396 t)') == f"{MID}4'-1{FULL}\\S1#2;}}\""
     print("ok  stack knob   -> ds:*stack* picks bar, diagonal or"
           " tolerance stacking")
 
@@ -456,7 +518,8 @@ def test_a_lazy_answer_is_stamped_canonically_and_echoed():
              FAR,
              None], 'lazy')
     t = stamps(vm)
-    assert [x[1] for x in t] == ["4'-4\\S1/2;\"", '52\\S1/2;"'], t
+    assert [x[1] for x in t] == [f"{MID}4'-4{FULL}\\S1/2;}}\"",
+                                 f'{MID}52{FULL}\\S1/2;}}"'], t
     said = [p for p in vm.printed if 'read as' in p]
     assert len(said) == 2, said
     assert "4'-4 1/2\"" in said[0] and '52 1/2"' in said[1], said
@@ -593,6 +656,8 @@ if __name__ == '__main__':
     test_parse_and_format_round_trip()
     test_reads_the_lazy_spellings()
     test_two_spellings_plain_and_stacked()
+    test_the_stacked_fraction_is_the_size_of_the_text_around_it()
+    test_the_stacked_fraction_sits_on_its_line()
     test_the_stack_separator_is_a_knob()
     test_rounds_to_the_nearest_eighth()
     test_rejects_what_is_not_a_measurement()

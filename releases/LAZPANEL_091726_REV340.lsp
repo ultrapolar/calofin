@@ -4482,6 +4482,8 @@
      ("ds:*text-width*" "0.0" "its defined (wrap) width; 0 is no wrap at all, so a value can never break across two lines in. A drawing wi...")
      ("ds:*line-space*" "1.0" "line space factor, at the \"at least\" spacing style wrap at all, so a value can never break across two lines")
      ("ds:*stack*" "\"/\"" "what separates a STACKED fraction's numerator from its denominator in the drawn MTEXT: \"/\" is the one over...")
+     ("ds:*stack-hgt*" "1.0" "how tall that stacked fraction is drawn, as a factor of the text around it. 1.0 is the size of the whole in...")
+     ("ds:*stack-align*" "1" "where that fraction sits against the line it is on: 0 bottom, 1 centred, 2 top, and 1 is what the shop's ow...")
      ("ds:*ruler-layer*" "\"DIMSTAMP RULER\"" "layer the scratch ruler is drawn on -- its own, so the TEXT layer never carries scratch -- the ruler. Scrat...")
      ("ds:*ruler-color*" "3" "ACI colour of the ruler, on the entities themselves so it reads the same whatever its layer says drawn on -...")
      ("ds:*ruler-screen-x*" "0.12" "where the spine sits across the view: a fraction of the view's WIDTH in from its left edge. Raise it to mov...")
