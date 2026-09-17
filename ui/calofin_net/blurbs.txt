@@ -44,6 +44,7 @@ DIMCONTEND        Chains a seed dimension out to every feature point
 DIMSCAN           Scan drawing for dimensions
 DIMSTAMP          Click a point, type 4'4.5 or 44.5; stamps it canonically, an on-screen ruler picks the next
 DRONE             Drone cleanup routine
+DRONOTE           Places a canned drone-photo review note - diving board, hidden anchors or slide sketch - at a picked point
 FITABHD           Fits a typed pool template through surveyed points
 FITABHDCOVER      FITABHD for a cover sheet - skips the bottom question
 FLOORDIM          Floor dimensioning

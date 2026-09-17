@@ -131,7 +131,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.40")
+(setq *lazpanel-version* "v3.41")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -360,6 +360,7 @@
     ("DIMSCAN"          "Dimension scan")
     ("DIMSTAMP"         "Stamp dimension text")
     ("DRONE"            "Drone cleanup")
+    ("DRONOTE"          "Drone photo review note")
     ("FITABHD"          "Typed template fit")
     ("FITABHDCOVER"     "Typed template fit, no bottom")
     ("FLOORDIM"         "Floor dims")
@@ -479,6 +480,7 @@
     ("DIMSCAN" "Scan drawing for dimensions")
     ("DIMSTAMP" "Click a point, type 4'4.5 or 44.5; stamps it canonically, an on-screen ruler picks the next")
     ("DRONE" "Drone cleanup routine")
+    ("DRONOTE" "Places a canned drone-photo review note - diving board, hidden anchors or slide sketch - at a picked point")
     ("FITABHD" "Fits a typed pool template through surveyed points")
     ("FITABHDCOVER" "FITABHD for a cover sheet - skips the bottom question")
     ("FLOORDIM" "Floor dimensioning")
@@ -591,6 +593,7 @@
     ("DIMSCAN" "dimension placement arc attachment overlapping lines scan style report")
     ("DIMSTAMP" "dimension text stamp label mtext ruler measurement tape")
     ("DRONE" "cleanup text style height points perimeter pool spa")
+    ("DRONOTE" "note RFI question diving board water edge anchors hidden slide sketch review mtext")
     ("FITABHD" "pool template shape survey points rectangle oval roman oasis hopper")
     ("FITABHDCOVER" "pool template shape survey points cover sheet rectangle oval oasis")
     ("FLOORDIM" "floor dimensions plan alternative pads standard typical")
@@ -862,6 +865,7 @@
       "CLEARDIMSCAN"
       "UPADOVER"
       "SQUAREUP"
+      "DRONOTE"
       )
     )
      ("Layout"
@@ -935,6 +939,7 @@
       "CDCALLOUT"
       "BPCALLOUT"
       "DIMSTAMP"
+      "DRONOTE"
       "CLEARDIM"
       "CLEARDIMSCAN"
       )
@@ -4480,6 +4485,11 @@
      ("ds:*ring-frac*" "0.26" "the ring round the CURRENT row, as a fraction of the row spacing. Bigger than a tick is long on purpose: th...")
      ("ds:*current-color*" "nil" "ACI colour of that current row -- nil is ByLayer, and since the row is drawn on the STAMP's layer that mean...")
      ("ds:*ruler-reach*" "6.0" "how far right of the spine, in row spacings, a click still counts as picking a row rather than as an empty-..."))
+    ("DRONOTE" "lisp/dronote/DRONOTE.lsp"
+     ("dn:*layer*" "\"NOTES\"" "layer every note lands on - created when the drawing lacks it; thawed, unlocked and switched on when it is...")
+     ("dn:*layer-color*" "2" "ACI colour that layer is CREATED with (2 = yellow). A layer already in the drawing keeps its own when the d...")
+     ("dn:*text-hgt*" "6.0" "MTEXT height of a placed note with (2 = yellow). A layer already in the drawing keeps its own")
+     ("dn:*text-width*" "96.0" "MTEXT reference width (8'), so a long note wraps instead of running clear across the sheet with (2 = yellow..."))
     ("FITABHD" "lisp/fitabhd/FITABHD.lsp"
      ("fit:*pool-layer*" "\"POOL\"" "layer the kept fit and bottom go on ---- configuration ---------------------------------------------------")
      ("fit:*point-layer*" "\"POINTS\"" "layer holding plain survey POINTs ---- configuration ---------------------------------------------------")

@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 72 files, 210 commands:
+;;; 73 files, 212 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABLOBF
@@ -23,28 +23,29 @@
 ;;;   DDELEV  DDFIX  DDFIXVER  DDGPS  DDGPSVER  DDINFO
 ;;;   DDSET  DDTEST  DIMARCCHECK  DIMCHECK  DIMCHECKRESCUE  DIMCHECKVER
 ;;;   DIMCONTEND  DIMCONTENDVER  DIMSCAN  DIMSTAMP  DIMSTAMPVER  DRONE
-;;;   DRONEVER  FITABHD  FITABHDCOVER  FITABHDVER  FLOORDIM  G2MCONV
-;;;   G2MCONVVER  G2MRECONV  HEMISTEP  HEMISTEPVER  HONEFILLET  HONEFILLETVER
-;;;   LAZASCII  LAZBACKUP  LAZBUTTON  LAZDIAG  LAZDIAGVER  LAZFORM
-;;;   LAZFORMCOVER  LAZFORMVER  LAZHIDE  LAZICON  LAZLOG  LAZNAME
-;;;   LAZPANEL  LAZPANELVER  LAZPIN  LAZSET  LAZSIDE  LAZSIDEVER
-;;;   LAZSPA  LAZSPAVER  LAZSTEP  LAZSTEPVER  LAZTUNE  LAZTXT
-;;;   LHD  LHDVER  LINCHECK  LINCHECKVER  LINFINCHECK  LINFINCHECKRESCUE
-;;;   LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK
-;;;   LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN  LOBF  LOBFVER
-;;;   MOHAMADDLE  MOHAMADDLEVER  NORMIESTEP  NORMIESTEPVER  OASIS  OASISVER
-;;;   OLAUTO  OLAUTOVER  PADDLE  PADDLEVER  PERPMARK  PERPMARKVER
-;;;   PERPPTS  PERPPTSVER  POINTRENAMER  POINTRENAMERVER  POOL  POOLCOVER
-;;;   POOLDEMO  POOLDEMOVER  POOLSIDE  POOLSIDEVER  POOLVER  SIMPABHD
-;;;   SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER  SORECONV  SPA
-;;;   SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER
-;;;   SPAVER  SQUAREUP  SQUAREUPVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG
-;;;   STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP
-;;;   TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP
-;;;   TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL
-;;;   TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE  UPADOVER
-;;;   UPADOVERVER  VSCONV  VSCONVVER  VSRECONV  WCALST  WCALSTVER
-;;;   XFTCONV  XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
+;;;   DRONEVER  DRONOTE  DRONOTEVER  FITABHD  FITABHDCOVER  FITABHDVER
+;;;   FLOORDIM  G2MCONV  G2MCONVVER  G2MRECONV  HEMISTEP  HEMISTEPVER
+;;;   HONEFILLET  HONEFILLETVER  LAZASCII  LAZBACKUP  LAZBUTTON  LAZDIAG
+;;;   LAZDIAGVER  LAZFORM  LAZFORMCOVER  LAZFORMVER  LAZHIDE  LAZICON
+;;;   LAZLOG  LAZNAME  LAZPANEL  LAZPANELVER  LAZPIN  LAZSET
+;;;   LAZSIDE  LAZSIDEVER  LAZSPA  LAZSPAVER  LAZSTEP  LAZSTEPVER
+;;;   LAZTUNE  LAZTXT  LHD  LHDVER  LINCHECK  LINCHECKVER
+;;;   LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN
+;;;   LINGUTTERVER  LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN
+;;;   LOBF  LOBFVER  MOHAMADDLE  MOHAMADDLEVER  NORMIESTEP  NORMIESTEPVER
+;;;   OASIS  OASISVER  OLAUTO  OLAUTOVER  PADDLE  PADDLEVER
+;;;   PERPMARK  PERPMARKVER  PERPPTS  PERPPTSVER  POINTRENAMER  POINTRENAMERVER
+;;;   POOL  POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE  POOLSIDEVER
+;;;   POOLVER  SIMPABHD  SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER
+;;;   SORECONV  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER
+;;;   SPACOVCREATE  SPACOVCREATEVER  SPAVER  SQUAREUP  SQUAREUPVER  STAIRDIM
+;;;   STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB
+;;;   TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK
+;;;   TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE
+;;;   TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER
+;;;   TYLERDRONESUITE  UPADOVER  UPADOVERVER  VSCONV  VSCONVVER  VSRECONV
+;;;   WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP  XFTCONVVER  XFTRECONV
+;;;   XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -50380,6 +50381,188 @@
   (princ (strcat "\nBPCALLOUT " *bpcallout-version*
                  " loaded. Command: BPCALLOUT (ring bad points and write"
                  " the callout).")))
+(princ)
+
+
+;;; ======================================================================
+;;; >>> DRONOTE.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; DRONOTE.lsp  --  place a canned drone-photo review note
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  DRONOTE       place one of three canned review notes
+;;;            DRONOTEVER    print the loaded version
+;;; ----------------------------------------------------------------------
+;;; DRONOTE asks which of three notes you want -- the ones that come up
+;;; over and over reviewing a job built off a drone photo -- then lets
+;;; you click as many spots as you like to drop that same note, Enter
+;;; when done:
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;;   Board    How far is the diving board base from water's edge?
+;;;   Anchors  Some anchors are not visible in the drone photo provided.
+;;;   Slide    Please provide a detailed sketch to locate slide base
+;;;            for proper cover treatment.
+;;;
+;;; Each note is an MTEXT dropped at the picked point, on the
+;;; dn:*layer* layer.  Back at the point prompt un-places the last one
+;;; instead of ending the run, so a bad click costs one Back rather
+;;; than a manual erase; Back with nothing placed yet steps back to the
+;;; note choice instead.  Run the command again to place a different
+;;; note.
+;;;
+;;; Every knob -- layer and its colour, text height and wrap width -- is
+;;; in the configuration block right below.
+;;;
+;;; Versioning: see tools/release_lisp.py at the repo root.  It reads
+;;; *dronote-version* below and stamps a dated, REV-numbered twin of
+;;; this file into releases/.
+;;; ======================================================================
+
+;;; -------------------- version ---------------------------------------
+(setq *dronote-version* "v1.0")   ; announced on load; release_lisp.py
+                                  ; reads this banner and stamps the
+                                  ; dated twin in releases/ from it
+
+;;; -------------------- tunables --------------------------------------
+;;; Every knob the routine has, in one place, so nothing below this
+;;; block needs touching to adapt it.  Change a value here, or (setq ...)
+;;; it after loading from a startup file.  Distances are DRAWING UNITS -
+;;; inches in this shop's architectural drawings.
+
+(setq dn:*layer* "NOTES")           ; layer every note lands on - created
+                                    ; when the drawing lacks it; thawed,
+                                    ; unlocked and switched on when it
+                                    ; is there but unusable
+(setq dn:*layer-color* 2)           ; ACI colour that layer is CREATED
+                                    ; with (2 = yellow).  A layer already
+                                    ; in the drawing keeps its own
+(setq dn:*text-hgt* 6.0)            ; MTEXT height of a placed note
+(setq dn:*text-width* 96.0)         ; MTEXT reference width (8'), so a
+                                    ; long note wraps instead of running
+                                    ; clear across the sheet
+
+;;; -------------------- the three notes ---------------------------------
+;;; dn:*kws* is BOTH the initget keyword list and the bracket text
+;;; (STANDARDS section 1 rule 1) - keep it in step with dn:*notes*'s keys.
+(setq dn:*kws* "Board Anchors Slide")
+(setq dn:*notes*
+  (list
+    (cons "Board"
+          "How far is the diving board base from water's edge?")
+    (cons "Anchors"
+          "Some anchors are not visible in the drone photo provided.")
+    (cons "Slide"
+          (strcat "Please provide a detailed sketch to locate slide"
+                  " base for proper cover treatment."))))
+
+;;; -------------------- helpers -----------------------------------------
+
+;; entmake an MTEXT at INS reading STR, splitting into 250-char DXF
+;; chunks - MTEXT carries at most 250 characters in group 1, so a note
+;; lengthened past that would otherwise lose everything past the first
+;; chunk.  Returns the new ename.
+(defun dn:mtext (ins str / dxf)
+  (setq dxf (list '(0 . "MTEXT") '(100 . "AcDbEntity")
+                  (cons 8 dn:*layer*) '(100 . "AcDbMText")
+                  (cons 10 ins) (cons 40 dn:*text-hgt*)
+                  (cons 41 dn:*text-width*) '(71 . 1)))   ; top-left
+  (while (> (strlen str) 250)
+    (setq dxf (append dxf (list (cons 3 (substr str 1 250))))
+          str (substr str 251)))
+  (entmakex (append dxf (list (cons 1 str)))))
+
+;;; -------------------- the command --------------------------------------
+;; NOTE: no local here may be named after a function this routine
+;; calls - an AutoLISP local SHADOWS the function of the same name for
+;; the whole call (the BPCALLOUT v1.0 lesson).
+(defun c:DRONOTE ( / *error* undo-open stage note txt pt placed count)
+  (defun *error* (msg)
+    (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
+    (setq undo-open nil)
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nDRONOTE error: " msg)))
+    (if lzd:report (lzd:report "DRONOTE" *dronote-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "DRONOTE" *dronote-version*))
+  ;; only when undo is recording - _Begin in a drawing with UNDO off
+  ;; (bit 1 of UNDOCTL clear) errors out of the command
+  (if (= 1 (logand 1 (getvar "UNDOCTL")))
+    (progn
+      (command "_.UNDO" "_Begin")
+      (setq undo-open T)))
+
+  (princ (strcat "\nDRONOTE " *dronote-version*))
+  (setq stage 'NOTE placed nil count 0)
+  (while (not (eq stage 'DONE))
+    (cond
+      ((eq stage 'NOTE)
+       (initget 1 dn:*kws*)
+       (setq note (getkword (strcat "\nWhich note? ["
+                                    (vl-string-translate " " "/" dn:*kws*)
+                                    "]: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") note) note)
+       (setq txt (cdr (assoc note dn:*notes*)))
+       (princ (strcat "\n  \"" txt "\""))
+       (setq stage 'PLACE))
+      (T                                   ; stage = PLACE
+       (initget 128)
+       (setq pt (getpoint (strcat "\nPick a point for the note (Enter"
+                                  " when done) [Back]: ")))
+       (if lzd:ask (lzd:ask (getvar "LASTPROMPT") pt) pt)
+       (cond
+         ((null pt) (setq stage 'DONE))
+         ((and (= (type pt) 'STR)
+               (member (strcase pt) '("B" "BACK" "U" "UNDO")))
+          (if placed
+            (progn
+              (if (and (caar placed) (entget (caar placed)))
+                (entdel (caar placed)))
+              (setq placed (cdr placed)
+                    count  (1- count))
+              (princ "\n  Last note removed."))
+            (progn
+              (princ "\n  Back to the note choice.")
+              (setq stage 'NOTE))))
+         (T
+          (cal:ensure-layer dn:*layer* dn:*layer-color*)
+          (setq placed (cons (cons (dn:mtext (list (car pt) (cadr pt) 0.0)
+                                             txt)
+                                   txt)
+                             placed)
+                count  (1+ count))
+          (princ "\n  Note placed."))))))
+
+  (if undo-open
+    (progn
+      (command "_.UNDO" "_End")
+      (setq undo-open nil)))
+  (princ (strcat "\nDRONOTE: " (itoa count) " note"
+                 (if (= count 1) "" "s")
+                 " placed on layer " dn:*layer* "."))
+  (if lzd:end (lzd:end "DRONOTE"))
+  (princ))
+
+(defun c:DRONOTEVER ()
+  (princ (strcat "\nDRONOTE " *dronote-version*))
+  (princ))
+
+;; Quiet inside the whole build: LAZPASS.lsp and
+;; CALOFIN-LOADER.lsp set the flag while they load their members,
+;; because one file's greeting is a greeting and sixty-three of
+;; them is a wall the drafter scrolls past in every drawing they
+;; open.  APPLOADed alone the flag is nil and this prints, which
+;; is the one time somebody wants to be told.  CALVER reports the
+;; whole roster whenever it is asked.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nDRONOTE " *dronote-version*
+                 " loaded. Command: DRONOTE (place a canned drone-photo"
+                 " review note).")))
 (princ)
 
 
@@ -116812,7 +116995,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.40")
+(setq *lazpanel-version* "v3.41")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -117041,6 +117224,7 @@
     ("DIMSCAN"          "Dimension scan")
     ("DIMSTAMP"         "Stamp dimension text")
     ("DRONE"            "Drone cleanup")
+    ("DRONOTE"          "Drone photo review note")
     ("FITABHD"          "Typed template fit")
     ("FITABHDCOVER"     "Typed template fit, no bottom")
     ("FLOORDIM"         "Floor dims")
@@ -117160,6 +117344,7 @@
     ("DIMSCAN" "Scan drawing for dimensions")
     ("DIMSTAMP" "Click a point, type 4'4.5 or 44.5; stamps it canonically, an on-screen ruler picks the next")
     ("DRONE" "Drone cleanup routine")
+    ("DRONOTE" "Places a canned drone-photo review note - diving board, hidden anchors or slide sketch - at a picked point")
     ("FITABHD" "Fits a typed pool template through surveyed points")
     ("FITABHDCOVER" "FITABHD for a cover sheet - skips the bottom question")
     ("FLOORDIM" "Floor dimensioning")
@@ -117272,6 +117457,7 @@
     ("DIMSCAN" "dimension placement arc attachment overlapping lines scan style report")
     ("DIMSTAMP" "dimension text stamp label mtext ruler measurement tape")
     ("DRONE" "cleanup text style height points perimeter pool spa")
+    ("DRONOTE" "note RFI question diving board water edge anchors hidden slide sketch review mtext")
     ("FITABHD" "pool template shape survey points rectangle oval roman oasis hopper")
     ("FITABHDCOVER" "pool template shape survey points cover sheet rectangle oval oasis")
     ("FLOORDIM" "floor dimensions plan alternative pads standard typical")
@@ -117543,6 +117729,7 @@
       "CLEARDIMSCAN"
       "UPADOVER"
       "SQUAREUP"
+      "DRONOTE"
       )
     )
      ("Layout"
@@ -117616,6 +117803,7 @@
       "CDCALLOUT"
       "BPCALLOUT"
       "DIMSTAMP"
+      "DRONOTE"
       "CLEARDIM"
       "CLEARDIMSCAN"
       )
@@ -121161,6 +121349,11 @@
      ("ds:*ring-frac*" "0.26" "the ring round the CURRENT row, as a fraction of the row spacing. Bigger than a tick is long on purpose: th...")
      ("ds:*current-color*" "nil" "ACI colour of that current row -- nil is ByLayer, and since the row is drawn on the STAMP's layer that mean...")
      ("ds:*ruler-reach*" "6.0" "how far right of the spine, in row spacings, a click still counts as picking a row rather than as an empty-..."))
+    ("DRONOTE" "lisp/dronote/DRONOTE.lsp"
+     ("dn:*layer*" "\"NOTES\"" "layer every note lands on - created when the drawing lacks it; thawed, unlocked and switched on when it is...")
+     ("dn:*layer-color*" "2" "ACI colour that layer is CREATED with (2 = yellow). A layer already in the drawing keeps its own when the d...")
+     ("dn:*text-hgt*" "6.0" "MTEXT height of a placed note with (2 = yellow). A layer already in the drawing keeps its own")
+     ("dn:*text-width*" "96.0" "MTEXT reference width (8'), so a long note wraps instead of running clear across the sheet with (2 = yellow..."))
     ("FITABHD" "lisp/fitabhd/FITABHD.lsp"
      ("fit:*pool-layer*" "\"POOL\"" "layer the kept fit and bottom go on ---- configuration ---------------------------------------------------")
      ("fit:*point-layer*" "\"POINTS\"" "layer holding plain survey POINTs ---- configuration ---------------------------------------------------")
@@ -122755,31 +122948,32 @@
   "OLAUTOVER" "SQUAREUP" "SQUAREUPVER" "CABHDVER" "CABHD" "POINTRENAMER"
   "POINTRENAMERVER" "LOBF" "LOBFVER" "ABLOBF" "ABLOBFVER" "AUTOBEAD"
   "AUTOBEADVER" "TUTORIALAUTOBEAD" "AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV"
-  "AUTODIMVER" "BPCALLOUT" "BPCALLOUTVER" "DIMSTAMP" "DIMSTAMPVER" "CCPRECHECK"
-  "CCPRECHECKVER" "CDCALLOUT" "CDCALLOUTVER" "CDCREATE" "CDCREATEVER" "CHECK"
-  "DIMARCCHECK" "CHECKVER" "CORNERSTP" "TUTORIALCORNERSTP" "CORNERSTPVER" "HEMISTEP"
-  "TUTORIALHEMISTEP" "HEMISTEPVER" "NORMIESTEP" "TUTORIALNORMIESTEP" "NORMIESTEPVER" "LAZSTEP"
-  "LAZSTEPVER" "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN" "LITECOVERSCAN" "TUTORIALCOVERCHECK"
-  "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVER" "COVERCHECKVERSION" "CUSTBLOCK" "CUSTBLOCKVER" "CLEARDIM"
-  "CLEARDIMSCAN" "CLEARDIMVER" "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN"
-  "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE" "DIMCONTENDVER" "DDFIX"
-  "DDSET" "DDCAL" "DDINFO" "DDALT" "DDFIXVER" "DDGPS"
-  "DDELEV" "DDTEST" "DDGPSVER" "FITABHDVER" "FITABHD" "FITABHDCOVER"
-  "LHD" "LHDVER" "LINCHECK" "LINCHECKVER" "LINFINCHECKVER" "LINFINCHECKRESCUE"
-  "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK"
-  "LINTXTCHKVER" "PADDLE" "TUTORIALPADDLE" "PADDLEVER" "MOHAMADDLE" "MOHAMADDLEVER"
-  "UPADOVERVER" "UPADOVER" "LINGUTTER" "LINGUTTERSCAN" "LINGUTTERVER" "PERPPTSVER"
-  "PERPPTS" "CPERPPTSVER" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "PERPMARKVER"
-  "PERPMARK" "SMARTFILLET" "SMARTFILLETVER" "HONEFILLET" "HONEFILLETVER" "SPACHECKVER"
-  "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "SPACOVCREATE"
-  "SPACOVCREATEVER" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER" "DRONE"
-  "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SORECONV"
-  "SOCONVVER" "VSCONV" "VSRECONV" "VSCONVVER" "G2MCONV" "G2MRECONV"
-  "G2MCONVVER" "WCALST" "WCALSTVER" "XFTCONV" "XFTRECONV" "XFTCONV-SETUP"
-  "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA"
-  "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER"
-  "LAZPANEL" "LAZPIN" "LAZHIDE" "LAZBUTTON" "LAZICON" "CALHELP"
-  "CALSET" "LAZSET" "LAZNAME" "LAZBACKUP" "LAZTUNE" "LAZPANELVER"
+  "AUTODIMVER" "BPCALLOUT" "BPCALLOUTVER" "DRONOTE" "DRONOTEVER" "DIMSTAMP"
+  "DIMSTAMPVER" "CCPRECHECK" "CCPRECHECKVER" "CDCALLOUT" "CDCALLOUTVER" "CDCREATE"
+  "CDCREATEVER" "CHECK" "DIMARCCHECK" "CHECKVER" "CORNERSTP" "TUTORIALCORNERSTP"
+  "CORNERSTPVER" "HEMISTEP" "TUTORIALHEMISTEP" "HEMISTEPVER" "NORMIESTEP" "TUTORIALNORMIESTEP"
+  "NORMIESTEPVER" "LAZSTEP" "LAZSTEPVER" "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN"
+  "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVER" "COVERCHECKVERSION" "CUSTBLOCK"
+  "CUSTBLOCKVER" "CLEARDIM" "CLEARDIMSCAN" "CLEARDIMVER" "DIMCHECKVER" "DIMCHECKRESCUE"
+  "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE"
+  "DIMCONTENDVER" "DDFIX" "DDSET" "DDCAL" "DDINFO" "DDALT"
+  "DDFIXVER" "DDGPS" "DDELEV" "DDTEST" "DDGPSVER" "FITABHDVER"
+  "FITABHD" "FITABHDCOVER" "LHD" "LHDVER" "LINCHECK" "LINCHECKVER"
+  "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK"
+  "TUTORIALLINFINSCAN" "LINTXTCHK" "LINTXTCHKVER" "PADDLE" "TUTORIALPADDLE" "PADDLEVER"
+  "MOHAMADDLE" "MOHAMADDLEVER" "UPADOVERVER" "UPADOVER" "LINGUTTER" "LINGUTTERSCAN"
+  "LINGUTTERVER" "PERPPTSVER" "PERPPTS" "CPERPPTSVER" "CPERPPTS" "TUTORIALPERPPTS"
+  "TUTORIALCPERPPTS" "PERPMARKVER" "PERPMARK" "SMARTFILLET" "SMARTFILLETVER" "HONEFILLET"
+  "HONEFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE"
+  "TUTORIALSPACHECK" "SPACOVCREATE" "SPACOVCREATEVER" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER"
+  "STOCKCOVERVER" "DRONE" "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER"
+  "SOCONV" "SORECONV" "SOCONVVER" "VSCONV" "VSRECONV" "VSCONVVER"
+  "G2MCONV" "G2MRECONV" "G2MCONVVER" "WCALST" "WCALSTVER" "XFTCONV"
+  "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION"
+  "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM"
+  "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZHIDE" "LAZBUTTON"
+  "LAZICON" "CALHELP" "CALSET" "LAZSET" "LAZNAME" "LAZBACKUP"
+  "LAZTUNE" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)

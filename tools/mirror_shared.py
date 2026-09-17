@@ -1731,6 +1731,17 @@ TOOLS = {
                 ['(cal:block-number en bp:*pt-tag*)'],
         },
     },
+    # dn:mtext stays local: the library's cal:mtext takes hgt/wid/lay as
+    # arguments where dn:mtext bakes them in from the tunables block, so
+    # the two do not reproduce the same behaviour at the same arity.
+    # Only the layer creator swaps.
+    'DRONOTE': {
+        'src': 'lisp/dronote/DRONOTE.lsp',
+        'swap': {
+            'dn:ensure-layer': 'cal:ensure-layer',
+        },
+        'drop_globals': [],
+    },
     # Written against the library from the start, so the swap is a
     # straight rename: the 2-D vector set, the two angle helpers the
     # dimension arc is walked with, cal:plural (whose number-first shape
