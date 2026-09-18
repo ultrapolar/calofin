@@ -29,6 +29,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import build_shared_bundle
 import check_registry
 import gen_knobs
+import gen_ribbon_icons
 import gen_ui_charts
 import gen_ui_data
 import mirror_shared
@@ -334,13 +335,21 @@ def check_generated(problems):
     proxy: a hand-edited generated twin, a stale dated release, a
     bundle whose markers survive while its bodies drift, and the
     palette's catalog or chart geometry left behind by a change to the
-    tables they come from all fail here and nowhere else."""
+    tables they come from all fail here and nowhere else.
+
+    The ribbon's panel icons are in this list for the same reason as
+    everything else in it, and they are the only entry that is not
+    text: a PNG whose glyph or palette no longer matches what
+    gen_ribbon_icons.py would draw is as stale as a twin two revisions
+    back, and `zlib` over a fixed input is deterministic, so the
+    comparison is bytes either way."""
     problems.extend(mirror_shared.check())
     problems.extend(release_lisp.check())
     problems.extend(build_shared_bundle.check())
     problems.extend(gen_ui_data.check())
     problems.extend(gen_ui_charts.check())
     problems.extend(gen_knobs.check())
+    problems.extend(gen_ribbon_icons.check())
 
 
 def check_registrations(problems):

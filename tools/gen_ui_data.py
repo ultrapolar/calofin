@@ -63,6 +63,126 @@ OUT_CS = ROOT / "ui" / "calofin_ribbon" / "Generated" / "CommandCatalog.g.cs"
 GROUPS = CATEGORIES
 
 
+# ------------------------------------------------------- variant families
+#
+# A ribbon panel is not a DCL page: it is one row of buttons on a strip
+# shared with every other tab AutoCAD has, and Layout's 37 buttons do
+# not fit on one.  What makes that shrinkable without hiding anything is
+# that a good many of those 37 are the SAME tool with one thing changed
+# -- POOL and "POOL with the bottom question pre-answered No", XFTCONV
+# and "XFTCONV undone", COVERCHECK and "COVERCHECK without marking the
+# drawing".  Those belong on one split button, primary on the face and
+# the rest one click down, which is what AutoCAD's own flyouts are.
+#
+# Which is which is NOT typed out.  It is derived from the roster by the
+# rules below, each of which fires only when the base it names is itself
+# a real command IN THE SAME CATEGORY -- the same shape of reasoning
+# callib.satellites() already uses to decide which commands carry no
+# panel button.  The same-category guard is the one that matters: LOBF
+# is on Points and ABLOBF on Layout, so nothing folds one into the
+# other, and a family can never straddle two panels.
+
+#: (kind, affix) -> a command wearing this affix is a variant of the
+#: command underneath it.  Each is written for a case that really
+#: exists; none fires unless it lands on a real sibling.
+VARIANT_AFFIXES = (
+    ("suffix", "COVER"),   # POOLCOVER -> POOL, ABHDCOVER -> ABHD
+    ("suffix", "SCAN"),    # ABCURCHECKSCAN -> ABCURCHECK
+    ("prefix", "LITE"),    # LITECOVERSCAN -> COVERSCAN
+    ("prefix", "ALT"),     # ALTABCDEF -> ABCDEF
+    ("prefix", "SIMP"),    # SIMPABHD -> ABHD
+    ("prefix", "C"),       # CPERPPTS -> PERPPTS, CABHD -> ABHD
+)
+
+#: The families no affix rule describes, because the variant is not
+#: spelled off its primary's name.  Editorial, and short on purpose: an
+#: entry here is a claim that two tools are one tool with something
+#: changed, and a wrong one hides a tool a drafter would go looking for.
+#:
+#: What is deliberately NOT here: CORNERSTP / HEMISTEP / NORMIESTEP.
+#: Three step SHAPES are three tools that do parallel things, not three
+#: versions of one, and picking which of them wears the face of a
+#: flyout would be an invention rather than a reading.
+NAMED_VARIANTS = {
+    "POOLDEMO": "POOL",            # POOL, run on a worked example
+    "LAZTXT": "LAZFORM",           # LAZFORM's chart, drawn in tiles
+    "MOHAMADDLE": "PADDLE",        # PADDLE, with a size pick first
+    "HONEFILLET": "SMARTFILLET",   # SMARTFILLET, honed between two radii
+    "AUTODIMSIDEPOV": "AUTODIM",   # AUTODIM, for a side-view flight
+}
+
+
+def variant_of(cmd, roster):
+    """The command CMD is a variant OF, or None.
+
+    ROSTER is the set of commands in CMD's own category: every rule is
+    guarded by it, so a rule can neither invent a base nor reach into
+    another panel to find one."""
+    base = NAMED_VARIANTS.get(cmd)
+    if base:
+        return base if base in roster else None
+
+    for kind, affix in VARIANT_AFFIXES:
+        if kind == "suffix" and cmd.endswith(affix):
+            base = cmd[:-len(affix)]
+        elif kind == "prefix" and cmd.startswith(affix):
+            base = cmd[len(affix):]
+        else:
+            continue
+        if base and base in roster:
+            return base
+
+    # The undo half of a converter: XFTRECONV is XFTCONV run backwards,
+    # and neither is spelled off the other by an affix on the whole name.
+    if cmd.endswith("RECONV"):
+        base = cmd[:-len("RECONV")] + "CONV"
+        if base in roster:
+            return base
+
+    # A scan is the check with nothing marked: COVERSCAN reports what
+    # COVERCHECK walks you through.  The stem is shared rather than one
+    # name sitting inside the other, so the affix rules cannot see it.
+    if cmd.endswith("SCAN"):
+        base = cmd[:-len("SCAN")] + "CHECK"
+        if base in roster:
+            return base
+
+    return None
+
+
+def families(cmds):
+    """CMDS, an ordered category roster, as [(primary, [variant, ...])].
+
+    A family keeps its PRIMARY's position in the panel, and its variants
+    keep theirs relative to each other, so the ribbon reads in the order
+    LAZPANEL already lists the category in.  Every command comes back
+    exactly once -- as a face or as a dropdown row -- which is the
+    property tests/test_ribbon_catalog.py holds: a tool that fell into
+    the wrong family is a nuisance, and a tool that fell out of all of
+    them is unreachable."""
+    roster = set(cmds)
+
+    def root(cmd):
+        seen = {cmd}
+        while True:
+            base = variant_of(cmd, roster)
+            if base is None or base in seen:
+                return cmd
+            cmd = base
+            seen.add(cmd)
+
+    out = []
+    index = {}
+    for cmd in cmds:
+        primary = root(cmd)
+        if primary not in index:
+            index[primary] = len(out)
+            out.append((primary, []))
+        if cmd != primary:
+            out[index[primary]][1].append(cmd)
+    return out
+
+
 def blurbs(path=BLURBS):
     """{COMMAND: tooltip} out of the hand-edited blurb file."""
     out = {}
@@ -256,9 +376,12 @@ def csstr(s):
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def entry_cs(cmd, caption, blurb, indent):
-    return "%snew Entry(%s, %s, %s)," % (
-        indent, csstr(cmd), csstr(caption), csstr(blurb))
+def entry_cs(cmd, caption, blurb):
+    """One ``new Entry(...)``, with no indent and no trailing comma: it
+    is a list element in one place and a constructor argument in
+    another, and only the caller knows which."""
+    return "new Entry(%s, %s, %s)" % (
+        csstr(cmd), csstr(caption), csstr(blurb))
 
 
 def build_cs(src=None, blurb=None):
@@ -299,6 +422,13 @@ def build_cs(src=None, blurb=None):
     add("// file carries only the category table, which is all the ribbon")
     add("// needs.  To add a tool: put it on LAZPANEL, write its blurb in")
     add("// blurbs.txt, and re-run the generator.")
+    add("//")
+    add("// Variants ride in their primary's dropdown rather than taking a")
+    add("// button of their own -- POOLCOVER under POOL, XFTRECONV under")
+    add("// XFTCONV -- which is what fits 94 commands onto five ribbon")
+    add("// panels without hiding any of them.  Which is a variant of what")
+    add("// is derived from the roster by gen_ui_data.variant_of; see the")
+    add("// rules there.")
     add("")
     add("using System.Collections.Generic;")
     add("")
@@ -330,17 +460,44 @@ def build_cs(src=None, blurb=None):
     add("            }")
     add("        }")
     add("")
-    add("        /// <summary>The category pages, keyed by LAZPANEL's own")
-    add("        /// names.</summary>")
-    add("        public static readonly Dictionary<string, Entry[]> Groups =")
-    add("            new Dictionary<string, Entry[]>")
+    add("        /// <summary>One button on a panel: the routine on its face,")
+    add("        /// and the variants of that routine behind its dropdown.")
+    add("        /// No variants means a plain button, not a split one.")
+    add("        /// </summary>")
+    add("        public readonly struct Item")
     add("        {")
-    for gi, group in enumerate(GROUPS):
+    add("            public readonly Entry Primary;")
+    add("            public readonly Entry[] Variants;")
+    add("")
+    add("            public Item(Entry primary, Entry[] variants)")
+    add("            {")
+    add("                Primary = primary;")
+    add("                Variants = variants;")
+    add("            }")
+    add("        }")
+    add("")
+    add("        /// <summary>The category panels, keyed by LAZPANEL's own")
+    add("        /// names.  Every command in a category appears exactly once")
+    add("        /// across its Items -- on a face or in a dropdown.</summary>")
+    add("        public static readonly Dictionary<string, Item[]> Panels =")
+    add("            new Dictionary<string, Item[]>")
+    add("        {")
+    for group in GROUPS:
         cmds = [c for names_ in pg.get(group, {}).values() for c in names_]
         add('            { %s, new[]' % csstr(group))
         add("            {")
-        for cmd in cmds:
-            add(entry_cs(cmd, caps.get(cmd, ""), blurb_of(cmd), "                "))
+        for primary, variants in families(cmds):
+            face = entry_cs(primary, caps.get(primary, ""),
+                            blurb_of(primary))
+            if not variants:
+                add("                new Item(%s, new Entry[0])," % face)
+                continue
+            add("                new Item(%s, new[]" % face)
+            add("                {")
+            for v in variants:
+                add("                    %s,"
+                    % entry_cs(v, caps.get(v, ""), blurb_of(v)))
+            add("                }),")
         add("            } },")
     add("        };")
     add("    }")

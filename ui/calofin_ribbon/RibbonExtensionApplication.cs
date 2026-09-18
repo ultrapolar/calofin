@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The Calofin ribbon: one tab, one panel per LAZPANEL category, one
-// button per routine filed into it.  Nothing here draws anything --
-// exactly like CalofinPalette.vb's Commands tab, a button sends the
-// command name it always had and lets the .lsp routine do the work.
+// The Calofin ribbon: one tab, one panel per LAZPANEL category, and a
+// button per routine -- with a routine's VARIANTS (POOLCOVER under
+// POOL, XFTRECONV under XFTCONV) on that routine's dropdown rather
+// than beside it.  Nothing here draws anything: exactly like
+// CalofinPalette.vb's Commands tab, a button sends the command name it
+// always had and lets the .lsp routine do the work.
 // See ui/calofin_ribbon/README.md.
 
 using System;
@@ -27,7 +29,7 @@ namespace Calofin.Ribbon
     /// </summary>
     public class RibbonExtensionApplication : IExtensionApplication
     {
-        // Fixed, rather than read off CommandCatalog.Groups.Keys: a
+        // Fixed, rather than read off CommandCatalog.Panels.Keys: a
         // Dictionary's enumeration order is an implementation detail,
         // not a promise, and this is the order LAZPANEL's own tab strip
         // lists the categories in (tools/check_registry.py's
@@ -101,12 +103,12 @@ namespace Calofin.Ribbon
 
             foreach (string category in CategoryOrder)
             {
-                if (!CommandCatalog.Groups.TryGetValue(
-                        category, out CommandCatalog.Entry[] entries))
+                if (!CommandCatalog.Panels.TryGetValue(
+                        category, out CommandCatalog.Item[] items))
                 {
                     continue;
                 }
-                tab.Panels.Add(BuildPanel(category, entries));
+                tab.Panels.Add(BuildPanel(category, items));
             }
 
             tab.IsActive = true;
@@ -125,12 +127,11 @@ namespace Calofin.Ribbon
         }
 
         /// <summary>One panel: the category's icon on the header, and
-        /// every one of its commands stacked in a column below it --
-        /// RibbonRowBreak is what turns the flat item list into rows,
-        /// the way a WPF WrapPanel would if the ribbon framework
-        /// exposed one.</summary>
+        /// its buttons stacked in a column below it -- RibbonRowBreak is
+        /// what turns the flat item list into rows, the way a WPF
+        /// WrapPanel would if the ribbon framework exposed one.</summary>
         private static RibbonPanel BuildPanel(
-            string category, CommandCatalog.Entry[] entries)
+            string category, CommandCatalog.Item[] items)
         {
             BitmapImage icon = LoadIcon(category);
             var source = new RibbonPanelSource
@@ -140,14 +141,58 @@ namespace Calofin.Ribbon
             };
 
             var flow = new RibbonRowPanel();
-            foreach (CommandCatalog.Entry entry in entries)
+            foreach (CommandCatalog.Item item in items)
             {
-                flow.Items.Add(BuildButton(entry, icon));
+                flow.Items.Add(item.Variants.Length == 0
+                    ? (RibbonItem)BuildButton(item.Primary, icon)
+                    : BuildSplitButton(item, icon));
                 flow.Items.Add(new RibbonRowBreak());
             }
             source.Items.Add(flow);
 
             return new RibbonPanel { Source = source };
+        }
+
+        /// <summary>
+        /// A family on one button: the primary on the face, its variants
+        /// one click down. POOL carries POOLCOVER and POOLDEMO, XFTCONV
+        /// carries XFTRECONV -- the same tool with one thing changed,
+        /// which is what a flyout is for and what keeps Layout's 37
+        /// commands down to 26 buttons without putting any of them out
+        /// of reach.
+        /// </summary>
+        private static RibbonSplitButton BuildSplitButton(
+            CommandCatalog.Item item, BitmapImage icon)
+        {
+            RibbonButton primary = BuildButton(item.Primary, icon);
+
+            var split = new RibbonSplitButton
+            {
+                Text = item.Primary.Caption,
+                ShowText = true,
+                ShowImage = icon != null,
+                Size = RibbonItemSize.Standard,
+                Orientation = Orientation.Horizontal,
+                IsSplit = true,
+                // The face follows the last pick, the way AutoCAD's own
+                // flyouts do: a drafter who works in cover sheets all
+                // afternoon reaches for POOLCOVER once and then it is
+                // the button.
+                IsSynchronizedWithCurrentItem = true,
+            };
+            if (icon != null)
+            {
+                split.Image = icon;
+                split.LargeImage = icon;
+            }
+
+            split.Items.Add(primary);
+            foreach (CommandCatalog.Entry variant in item.Variants)
+            {
+                split.Items.Add(BuildButton(variant, icon));
+            }
+            split.Current = primary;
+            return split;
         }
 
         private static RibbonButton BuildButton(

@@ -14,25 +14,31 @@ whole reason this script exists in a repo with no .NET in it:
     already one self-contained file, so the bundle carries it and the
     glue and is finished -- no build, no NuGet, no network.  This runs on
     the machine you are reading this on.
-  * **the palette**, which is a .NET assembly and needs Windows, the
-    AutoCAD reference assemblies and ``dotnet build``.  The bundle
-    carries the SOURCES and a one-line Windows script that builds them
-    into the slot left for the DLL.
+  * **the two .NET surfaces**, the palette and the ribbon, which need
+    Windows, the AutoCAD reference assemblies and ``dotnet build``.  The
+    bundle carries their SOURCES and one Windows script that builds both
+    into the slots left for them.
 
-The manifest names both either way, and that is deliberate rather than
-sloppy.  The palette entry is ``LoadOnCommandInvocation``: AutoCAD does
-not touch the assembly until somebody types CALOFIN, so a bundle with
-the DLL slot still empty starts up exactly as fast and every Lisp tool
-in it works.  Type CALOFIN before building and AutoCAD says it cannot
-find the module, which is the truth and is what INSTALL.md says will
-happen.
+The manifest names all of it either way, and that is deliberate rather
+than sloppy: writing a different manifest depending on whether a DLL
+happened to be lying around would mean the thing you tested is not the
+thing you shipped.  Type CALOFIN before building and AutoCAD says it
+cannot find the module, which is the truth and is what INSTALL.md says
+will happen.
 
-The alternative -- writing a different manifest depending on whether a
-DLL happened to be lying around -- would mean the thing you tested is
-not the thing you shipped.
+**The two .NET entries load differently, and that is the point.**  The
+palette is ``LoadOnCommandInvocation``: AutoCAD does not open the
+assembly until somebody types CALOFIN, so an unbuilt bundle starts up
+exactly as fast.  The ribbon is ``LoadOnAutoCADStartup``, because a
+ribbon tab whose whole job is to be on the strip before anybody types
+anything cannot wait to be asked for -- a tab you have to summon by
+name is a palette with extra steps.  The cost is one logged missing
+module per startup until the DLL is built, which INSTALL.md says out
+loud; the Lisp tools are unaffected either way.
 
-Run:  python3 tools/package.py            # Lisp lane + palette sources
+Run:  python3 tools/package.py            # Lisp lane + .NET sources
       python3 tools/package.py --with-dll path/to/Calofin.dll
+      python3 tools/package.py --with-ribbon-dll path/to/CalofinRibbon.dll
       python3 tools/package.py --check    # is the tree packageable?
 """
 
@@ -54,6 +60,7 @@ import build_shared_bundle  # noqa: E402
 DIST = ROOT / "dist"
 BUNDLE_NAME = "Calofin.bundle"
 UI = ROOT / "ui" / "calofin_net"
+RIBBON = ROOT / "ui" / "calofin_ribbon"
 GLUE = ROOT / "ui" / "calofin_ui" / "calofin.lsp"
 
 #: The version the whole build answers to -- read off the bundle builder
@@ -102,7 +109,29 @@ def palette_payload():
     return out
 
 
-def manifest(with_dll):
+def ribbon_payload():
+    """The ribbon's own files: sources to build, and its panel icons.
+
+    The icons are DATA the assembly reads at run time -- LoadIcon
+    resolves them relative to the loaded DLL -- so they go beside the
+    DLL SLOT rather than beside the sources, exactly as the palette's
+    bottom sections do.  The sources sit under ``src/ribbon/`` because
+    ``src/`` is already the palette's project root and two .csproj/
+    .vbproj files in one folder is a build nobody can explain.
+    """
+    out = [(RIBBON / "RibbonExtensionApplication.cs",
+            "src/ribbon/RibbonExtensionApplication.cs"),
+           (RIBBON / "Generated" / "CommandCatalog.g.cs",
+            "src/ribbon/Generated/CommandCatalog.g.cs"),
+           (RIBBON / "CalofinRibbon.csproj", "src/ribbon/CalofinRibbon.csproj"),
+           (RIBBON / "README.md", "src/ribbon/README.md")]
+    for p in sorted((RIBBON / "icons").iterdir()):
+        if p.is_file():
+            out.append((p, "Contents/net/icons/" + p.name))
+    return out
+
+
+def manifest(dlls_present):
     """PackageContents.xml, the file AutoCAD actually reads.
 
     SeriesMin R23.0 is AutoCAD 2019, which is what the .lsp headers say
@@ -116,7 +145,7 @@ def manifest(with_dll):
        built yet: AutoCAD does not open the assembly until somebody
        types CALOFIN, so startup is identical either way and every Lisp
        tool in the bundle above works regardless.  Build it with
-       build-palette.cmd; see INSTALL.md. -->
+       build-net.cmd; see INSTALL.md. -->
   <Components Description="The Calofin palette (.NET, built separately)">
     <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R23.0" />
     <ComponentEntry AppName="CalofinPalette"
@@ -130,12 +159,39 @@ def manifest(with_dll):
       </Commands>
     </ComponentEntry>
   </Components>
+
+  <!-- THE RIBBON.  LoadOnAutoCADStartup, which is the one place this
+       manifest differs from the palette above and is a difference in
+       kind rather than an oversight: a palette is summoned by name, so
+       waiting to be asked for costs it nothing, while a ribbon tab
+       whose whole job is to be on the strip before anybody types
+       anything cannot wait.  A tab you have to summon is a palette
+       with extra steps.
+
+       CALOFINRIBBON is registered as well, so the tab can still be
+       built by hand in a session where APPAUTOLOAD stopped the startup
+       load.  Until build-net.cmd has been run there is no assembly in
+       the slot and AutoCAD logs the missing module once per startup -
+       INSTALL.md says so.  Every AutoLISP tool is unaffected. -->
+  <Components Description="The Calofin ribbon (.NET, built separately)">
+    <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R23.0" />
+    <ComponentEntry AppName="CalofinRibbon"
+                    Version="%(version)s"
+                    ModuleName="./Contents/net/CalofinRibbon.dll"
+                    AppDescription="Every tool on a ribbon tab, by category"
+                    LoadOnCommandInvocation="True"
+                    LoadOnAutoCADStartup="True">
+      <Commands GroupName="CALOFIN_RIBBON">
+        <Command Global="CALOFINRIBBON" Local="CALOFINRIBBON" />
+      </Commands>
+    </ComponentEntry>
+  </Components>
 """ % {"version": VERSION.lstrip("v")}
 
-    built = ("" if with_dll else
-             "\n     The palette's DLL is NOT in this package yet - run\n"
-             "     build-palette.cmd on a Windows machine with the .NET SDK.\n"
-             "     Every AutoLISP tool below works without it.\n")
+    built = ("" if dlls_present else
+             "\n     The .NET DLLs are NOT in this package yet - run\n"
+             "     build-net.cmd on a Windows machine with the .NET SDK.\n"
+             "     Every AutoLISP tool below works without them.\n")
 
     return """<?xml version="1.0" encoding="utf-8"?>
 <!-- GENERATED by tools/package.py - do not edit in the bundle.
@@ -181,7 +237,8 @@ def manifest(with_dll):
 
 BUILD_CMD = r"""@echo off
 rem ---------------------------------------------------------------------
-rem  Build the Calofin palette and drop it into this bundle.
+rem  Build the Calofin .NET surfaces - the palette and the ribbon - and
+rem  drop both into this bundle.
 rem
 rem  Needs: Windows, and the .NET SDK (dotnet --version should answer).
 rem  The AutoCAD reference assemblies come from NuGet on the first run,
@@ -193,27 +250,34 @@ rem  assemblies for .NETFramework,Version=v4.8 were not found"), install
 rem  the .NET Framework 4.8 Developer Pack from Microsoft - or Visual
 rem  Studio with the desktop workload, which brings it.
 rem
-rem  The bottom-section PNGs are NOT copied by this build: they are
-rem  already in Contents\net\assets\bottoms, which is where the DLL
-rem  lands and therefore where BottomCatalog looks for them.  The
-rem  project's own copy step finds nothing to do here, which is right.
+rem  Neither the palette's bottom-section PNGs nor the ribbon's panel
+rem  icons are copied by this build: both are already in Contents\net,
+rem  which is where the DLLs land and therefore where BottomCatalog and
+rem  LoadIcon look for them.  Each project's own copy step finds nothing
+rem  to do here, which is right.
 rem
 rem  AutoCAD 2025 and later moved to .NET 8.  Edit TargetFramework in
-rem  src\Calofin.vbproj to net8.0-windows and the AutoCAD.NET version to
-rem  25.x before building for those; src\README.md has the table.
+rem  src\Calofin.vbproj AND src\ribbon\CalofinRibbon.csproj to
+rem  net8.0-windows and the AutoCAD.NET version to 25.x before building
+rem  for those; src\README.md has the table.
 rem ---------------------------------------------------------------------
 setlocal
 cd /d "%~dp0"
 
-echo Building the Calofin palette...
-dotnet build "src\Calofin.vbproj" -c Release -o "build" || goto :failed
-
 if not exist "Contents\net" mkdir "Contents\net"
-copy /y "build\Calofin.dll" "Contents\net\Calofin.dll" >nul || goto :failed
+
+echo Building the Calofin palette...
+dotnet build "src\Calofin.vbproj" -c Release -o "build\palette" || goto :failed
+copy /y "build\palette\Calofin.dll" "Contents\net\Calofin.dll" >nul || goto :failed
+
+echo Building the Calofin ribbon...
+dotnet build "src\ribbon\CalofinRibbon.csproj" -c Release -o "build\ribbon" || goto :failed
+copy /y "build\ribbon\CalofinRibbon.dll" "Contents\net\CalofinRibbon.dll" >nul || goto :failed
 
 echo.
-echo   Calofin.dll is in Contents\net - the palette is ready.
-echo   Restart AutoCAD, or NETLOAD it, then type CALOFIN.
+echo   Both DLLs are in Contents\net.
+echo   Restart AutoCAD: the Calofin ribbon tab appears by itself, and
+echo   CALOFIN opens the palette.
 echo.
 goto :eof
 
@@ -221,18 +285,19 @@ goto :eof
 echo.
 echo   BUILD FAILED.  The AutoLISP tools in this bundle do not need it:
 echo   they load on their own and every command works.  Only the CALOFIN
-echo   palette needs this DLL.
+echo   palette and the ribbon tab need these DLLs.
 echo.
 exit /b 1
 """
 
 
-def install_doc(with_dll, commands):
+def install_doc(dlls_present, commands):
     return """# Installing Calofin %(version)s
 
-%(commands)d commands, and a palette.  Two lanes: the AutoLISP half needs
-nothing installed and works the moment you copy the folder, and the
-palette needs one build on a Windows machine with the .NET SDK.
+%(commands)d commands, a ribbon tab and a palette.  Two lanes: the
+AutoLISP half needs nothing installed and works the moment you copy the
+folder, and the two .NET surfaces need one build on a Windows machine
+with the .NET SDK.
 
 ## 1. The tools (no build, ~2 minutes)
 
@@ -265,29 +330,41 @@ nothing else has to be found beside it.
   folder if your site has `SECURELOAD` set to 1 or 2.
 * `APPAUTOLOAD` must not be 0.
 
-## 2. The palette (one build)
+## 2. The ribbon and the palette (one build)
 
-The palette is a .NET assembly, so it has to be compiled on Windows
-against the AutoCAD reference assemblies.  The sources are in `src\\`.
+Both are .NET assemblies, so they have to be compiled on Windows
+against the AutoCAD reference assemblies.  The sources are in `src\\`
+(the palette) and `src\\ribbon\\` (the ribbon).
 
 ```
-build-palette.cmd
+build-net.cmd
 ```
 
-It runs `dotnet build` and copies `Calofin.dll` into `Contents\\net\\`,
-which is the slot the manifest already points at.  Restart AutoCAD and
-type `CALOFIN`.
+It runs `dotnet build` twice and copies `Calofin.dll` and
+`CalofinRibbon.dll` into `Contents\\net\\`, which are the slots the
+manifest already points at.  Restart AutoCAD: the **Calofin** ribbon tab
+is there by itself, and `CALOFIN` opens the palette.
 
-**Until you do that, typing `CALOFIN` reports a missing module** -- the
-manifest names the palette either way, on purpose, so that what you test
-is what you ship.  Nothing else is affected: the palette entry is
-`LoadOnCommandInvocation`, so AutoCAD never opens the assembly until the
-command is typed, and every AutoLISP tool above works without it.
-`APPLOAD > Loaded Applications` may list the palette component as not
-loaded before you build it, which is the same fact said another way.
+**Until you do that**, typing `CALOFIN` reports a missing module and
+there is no ribbon tab -- the manifest names both either way, on
+purpose, so that what you test is what you ship.  Every AutoLISP tool
+above works without either of them.
 
-For AutoCAD 2025 and later, edit `src\\Calofin.vbproj` first --
-`net8.0-windows` and AutoCAD.NET `25.x`.  `src\\README.md` has the table.
+The two load differently, and it is worth knowing which:
+
+| | When AutoCAD opens it | If it is not built yet |
+| --- | --- | --- |
+| Palette | when you type `CALOFIN` | nothing happens until you type it, then a missing-module message |
+| Ribbon | at startup, so the tab is simply there | one missing-module line in the log, once per startup |
+
+The ribbon loads at startup because a tab you have to summon by name is
+a palette with extra steps.  `APPLOAD > Loaded Applications` may list
+either component as not loaded before you build, which is the same fact
+said another way.
+
+For AutoCAD 2025 and later, edit `src\\Calofin.vbproj` and
+`src\\ribbon\\CalofinRibbon.csproj` first -- `net8.0-windows` and
+AutoCAD.NET `25.x`.  `src\\README.md` has the table.
 
 ### If the build stops
 
@@ -301,6 +378,27 @@ For AutoCAD 2025 and later, edit `src\\Calofin.vbproj` first --
 
 Neither stops the AutoLISP half.  It is already installed and working
 from step 1.
+
+## What is on the ribbon
+
+Five panels, one per category, and every command in the toolset on one
+of them:
+
+| Panel | What it holds |
+| --- | --- |
+| Layout | the pool, spa, step and pad routines - everything that draws the shape |
+| Points | plots, ties, best fits and the drone tidy-ups |
+| Dimensions | the dimensioning routines and the callouts |
+| Converters | the four survey imports, and each one's undo |
+| Checking | the reviews and the scans |
+
+**A routine's variants sit on its own dropdown**, not beside it:
+`POOL` carries *Pool layout, no bottom* and *Worked pool example*,
+`XFTCONV` carries *Import cleanup, undone*, `COVERCHECK` carries its
+scan and the no-dims scan.  Click the face to run what is on it, or
+the arrow to pick a variant - which then stays on the face, the way
+AutoCAD's own flyouts work.  Nothing is hidden: all %(commands)d
+commands are reachable, on 67 buttons instead of 94.
 
 ## What is in the palette
 
@@ -328,21 +426,25 @@ Packaged %(date)s from calofin %(version)s.
 %(dll)s"""  % {
         "version": VERSION, "bundle": BUNDLE_NAME, "commands": commands,
         "date": datetime.date.today().isoformat(),
-        "dll": ("The palette DLL is included in this package.\n"
-                if with_dll else
-                "The palette DLL is not included - see step 2.\n")}
+        "dll": ("The palette and ribbon DLLs are included in this "
+                "package.\n" if dlls_present else
+                "The palette and ribbon DLLs are not included - see "
+                "step 2.\n")}
 
 
-def build(with_dll=None):
+def build(with_dll=None, with_ribbon_dll=None):
     """Assemble dist/Calofin.bundle and zip it.  Returns (folder, zip)."""
     if DIST.exists():
         shutil.rmtree(DIST)
     root = DIST / BUNDLE_NAME
     root.mkdir(parents=True)
 
-    payload = lisp_payload() + palette_payload()
+    payload = lisp_payload() + palette_payload() + ribbon_payload()
     if with_dll:
         payload.append((pathlib.Path(with_dll), "Contents/net/Calofin.dll"))
+    if with_ribbon_dll:
+        payload.append((pathlib.Path(with_ribbon_dll),
+                        "Contents/net/CalofinRibbon.dll"))
 
     for src, rel in payload:
         if not src.is_file():
@@ -356,9 +458,10 @@ def build(with_dll=None):
     (root / "Contents" / "net").mkdir(parents=True, exist_ok=True)
 
     commands = len(headline_commands())
-    (root / "PackageContents.xml").write_text(manifest(bool(with_dll)))
-    (root / "build-palette.cmd").write_text(BUILD_CMD)
-    (root / "INSTALL.md").write_text(install_doc(bool(with_dll), commands))
+    built = bool(with_dll) and bool(with_ribbon_dll)
+    (root / "PackageContents.xml").write_text(manifest(built))
+    (root / "build-net.cmd").write_text(BUILD_CMD)
+    (root / "INSTALL.md").write_text(install_doc(built, commands))
 
     zpath = DIST / ("Calofin-%s-%s.zip"
                     % (VERSION, datetime.date.today().strftime("%Y%m%d")))
@@ -373,33 +476,37 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--with-dll", metavar="PATH",
                     help="a Calofin.dll built elsewhere, to ship inside")
+    ap.add_argument("--with-ribbon-dll", metavar="PATH",
+                    help="a CalofinRibbon.dll built elsewhere, likewise")
     ap.add_argument("--check", action="store_true",
                     help="report what would be packaged, and write nothing")
     args = ap.parse_args(argv)
 
+    everything = lisp_payload() + palette_payload() + ribbon_payload()
+
     if args.check:
-        missing = [str(s.relative_to(ROOT))
-                   for s, _r in lisp_payload() + palette_payload()
+        missing = [str(s.relative_to(ROOT)) for s, _r in everything
                    if not s.is_file()]
         for m in missing:
             print("package: missing %s" % m)
         if missing:
             return 1
         print("package: %d file(s) ready, calofin %s, %d commands"
-              % (len(lisp_payload()) + len(palette_payload()), VERSION,
-                 len(headline_commands())))
+              % (len(everything), VERSION, len(headline_commands())))
         return 0
 
-    root, zpath = build(args.with_dll)
+    root, zpath = build(args.with_dll, args.with_ribbon_dll)
     n = sum(1 for p in root.rglob("*") if p.is_file())
     print("package: %s" % zpath.relative_to(ROOT))
     print("         %d file(s), %.1f MB, calofin %s"
           % (n, zpath.stat().st_size / 1048576.0, VERSION))
     print("         sha256 %s"
           % hashlib.sha256(zpath.read_bytes()).hexdigest()[:16])
-    print("         palette DLL: %s"
-          % ("included" if args.with_dll else
-             "not built - run build-palette.cmd on Windows"))
+    for label, given in (("palette", args.with_dll),
+                         ("ribbon ", args.with_ribbon_dll)):
+        print("         %s DLL: %s"
+              % (label, "included" if given else
+                 "not built - run build-net.cmd on Windows"))
     return 0
 
 

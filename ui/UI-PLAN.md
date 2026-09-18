@@ -698,6 +698,85 @@ phase's own:
 5. Pin a tool on `LAZPANEL` and confirm it is pinned on the palette --
    one registry key, both surfaces.
 
+## Phase 6 -- the third surface: a ribbon tab *(done 2026-09-18)*
+
+The palette and the DCL panel are both things you **summon**: type
+`CALOFIN`, or type `LAZPANEL`, and a window appears over the drawing.
+For a drafter who works in the ribbon UI all day that is one step more
+than the rest of AutoCAD asks for, and the toolset had nothing on the
+strip everything else lives on.
+
+`ui/calofin_ribbon/` is that, in C#: five panels, one per category,
+each with its own icon, on a tab called Calofin. It is a **second
+surface, not a replacement** -- its own assembly (`CalofinRibbon.dll`),
+its own namespace (`Calofin.Ribbon`), its own command
+(`CALOFINRIBBON`), and no reference in either direction.
+
+**The catalog is the same generator's second output.** Referencing the
+VB palette from C# would work, but it would make a ribbon whose only
+job is five panels of buttons carry the whole palette assembly at run
+time to read one table. So `tools/gen_ui_data.py` writes the roster
+twice, in two languages, from the one source -- and `--check` covers
+both, which means `check_standards.py` already did too, with no wiring
+needed.
+
+**Variants ride on their primary's dropdown**, which is the one thing
+this surface has to decide that the palette does not. A ribbon panel is
+a row on a shared strip; Layout's 37 buttons do not fit on it, and a
+good many of the 37 are the same tool with one thing changed. POOL
+carries POOLCOVER and POOLDEMO, XFTCONV carries XFTRECONV, COVERCHECK
+carries its two scans: 94 commands on 67 buttons, all 94 reachable.
+
+Which is a variant of which is **derived, not typed** -- affix rules
+over the roster (`<X>COVER`, `<X>SCAN` under `<X>` or `<X>CHECK`,
+`LITE<X>`, `<X>RECONV` under `<X>CONV`, and the `ALT`/`SIMP`/`C`
+prefixes), each guarded twice: the base must be a real command, and it
+must be in the **same category**. That second guard is what keeps
+`ABLOBF` (Layout) out of `LOBF` (Points) and makes a family incapable
+of straddling two panels. The handful no affix describes are a five-row
+editorial table, and what is deliberately absent from it is the part
+worth remembering: CORNERSTP / HEMISTEP / NORMIESTEP stay three
+buttons, because three step shapes are parallel tools rather than three
+versions of one, and choosing which wears the face would be an
+invention.
+
+`tests/test_ribbon_catalog.py` holds the fold in the direction that
+bites: a tool in the wrong dropdown is a nuisance, a tool in **no**
+item is unreachable with nothing looking broken. So every command in a
+category must appear exactly once across its buttons, and each family
+is pinned as the editorial claim it is rather than by asking the rules
+again. It was verified to bite by adding an over-reaching affix, which
+swallowed SPACOVCREATE into SPA and failed.
+
+**The icons are generated too**, by `tools/gen_ribbon_icons.py`, with
+`zlib` and `struct` and no imaging library: five 32x32 glyphs -- a
+floor plan, scattered points, a dimension line, two chasing arrows, a
+checkmark. `--check` compares bytes, which works because a deflate
+stream over fixed input is deterministic.
+
+**And it installs.** `tools/package.py` carries the ribbon's sources
+and icons, names it in the manifest, and `build-net.cmd` (was
+`build-palette.cmd`) builds both .NET surfaces into the slots the
+manifest points at. The ribbon's entry is the **one asymmetry** in that
+manifest and it is deliberate: the palette is
+`LoadOnCommandInvocation`, the ribbon is `LoadOnAutoCADStartup`,
+because a tab you have to summon by name is a palette with extra steps.
+The cost is one logged missing module per startup until the DLL is
+built, which `INSTALL.md` says out loud.
+
+**What this environment cannot prove**, and it is more than for the
+palette: nothing here compiles C#, and unlike `ui/calofin_net/` there
+is no `check_vb.py` equivalent reading it structurally. The generated
+catalog is held to the panel as text and the icons to a regeneration;
+`RibbonExtensionApplication.cs` is held by a human reader. The API
+surface most worth a real build is `RibbonSplitButton` --
+`IsSplit`, `Current`, `IsSynchronizedWithCurrentItem` -- and
+`ui/calofin_ribbon/README.md` ends with the list of what to click.
+
+A `check_cs.py`, or teaching `check_vb.py` to read both, is the
+obvious next thing and is named here rather than left to be discovered
+as a silent gap the way the palette's own drift once was.
+
 ## After the plan: what nothing was checking
 
 The five phases added roughly 1,240 `action_tile` callbacks across 37

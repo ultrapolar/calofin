@@ -67,18 +67,24 @@ FILES = {p.relative_to(root).as_posix()
 
 print("== 1. every module named is a module shipped ==")
 
+# The two .NET assemblies are the deliberate absences: this package is
+# cut on a machine with no compiler, so they have to be named before
+# they exist or the manifest would change shape depending on what was
+# lying around.
+UNBUILT = {"Contents/net/Calofin.dll", "Contents/net/CalofinRibbon.dll"}
+
 modules = re.findall(r'ModuleName="\./([^"]+)"', XML)
-check("the manifest names %d module(s)" % len(modules), len(modules) == 3,
+check("the manifest names %d module(s)" % len(modules), len(modules) == 4,
       repr(modules))
 for m in modules:
-    if m == "Contents/net/Calofin.dll":
-        check("%s is the one deliberate absence" % m, m not in FILES,
+    if m in UNBUILT:
+        check("%s is a deliberate absence" % m, m not in FILES,
               "a DLL got into a source-only package")
         continue
     check("%s travelled" % m, m in FILES, repr(sorted(FILES)[:4]))
 
 
-print("== 2. the absent one cannot be reached at startup ==")
+print("== 2. the two .NET entries load the way each of them should ==")
 
 # This is what makes naming an unbuilt module honest rather than
 # broken: AutoCAD does not open the assembly until CALOFIN is typed, so
@@ -92,6 +98,18 @@ check("...and explicitly not at startup",
       'LoadOnAutoCADStartup="False"' in palette)
 check("...and the command it waits for is CALOFIN",
       'Global="CALOFIN"' in palette)
+
+# The ribbon is the deliberate opposite, and the one asymmetry in this
+# manifest: a tab whose whole job is to be on the strip before anybody
+# types anything cannot be demand-loaded on a command, or it is a
+# palette with extra steps.  It keeps the command too, for a session
+# where APPAUTOLOAD stopped the startup load.
+ribbon = XML[XML.index('AppName="CalofinRibbon"'):]
+ribbon = ribbon[:ribbon.index("</ComponentEntry>")]
+check("the ribbon loads at startup, unlike the palette",
+      'LoadOnAutoCADStartup="True"' in ribbon)
+check("...and can still be built by hand with CALOFINRIBBON",
+      'Global="CALOFINRIBBON"' in ribbon)
 
 # the Lisp half is the opposite: a drafter expects the commands to be
 # there without typing anything
@@ -107,7 +125,7 @@ bare = package.VERSION.lstrip("v")
 check("AppVersion is the build's own version",
       ('AppVersion="%s"' % bare) in XML, bare)
 check("every ComponentEntry carries it",
-      XML.count('Version="%s"' % bare) == 4,
+      XML.count('Version="%s"' % bare) == 5,
       "%d occurrence(s)" % XML.count('Version="%s"' % bare))
 check("the ProductCode is the fixed one, not a fresh GUID",
       ('ProductCode="%s"' % package.PRODUCT_CODE) in XML)
@@ -162,6 +180,29 @@ for view in sorted(set(mounted)):
     check("%s is in the package" % view, ("src/%s.vb" % view) in FILES)
 
 
+print("== 5b. the ribbon: sources to build, icons where LoadIcon looks ==")
+
+want_cs = sorted(p.relative_to(ROOT / "ui" / "calofin_ribbon").as_posix()
+                 for p in (ROOT / "ui" / "calofin_ribbon").rglob("*.cs"))
+got_cs = sorted(f[len("src/ribbon/"):] for f in FILES
+                if f.startswith("src/ribbon/") and f.endswith(".cs"))
+check("all %d .cs file(s), the generated catalog included" % len(want_cs),
+      got_cs == want_cs, repr([w for w in want_cs if w not in got_cs]))
+check("the ribbon project file travelled",
+      "src/ribbon/CalofinRibbon.csproj" in FILES)
+
+# The icons are read at run time and resolved relative to the loaded
+# DLL, so they belong beside the DLL SLOT and not beside the sources --
+# the same rule the palette's bottom sections follow, and the same
+# failure if it is broken: panels with no picture on them.
+icons = [f for f in FILES if f.startswith("Contents/net/icons/")]
+on_disk = [p.name for p in (ROOT / "ui" / "calofin_ribbon"
+                            / "icons").iterdir() if p.is_file()]
+check("all %d panel icon(s) sit beside the DLL slot" % len(on_disk),
+      len(icons) == len(on_disk),
+      "%d shipped, %d in the tree" % (len(icons), len(on_disk)))
+
+
 print("== 6. the zip is what was assembled ==")
 
 with zipfile.ZipFile(zpath) as z:
@@ -177,7 +218,7 @@ check("it unpacks into one .bundle folder",
 check("the install notes travelled",
       "%s/INSTALL.md" % package.BUNDLE_NAME in names)
 check("...and the Windows build script",
-      "%s/build-palette.cmd" % package.BUNDLE_NAME in names)
+      "%s/build-net.cmd" % package.BUNDLE_NAME in names)
 
 
 print()
