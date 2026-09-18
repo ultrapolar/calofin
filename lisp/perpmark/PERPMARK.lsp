@@ -47,6 +47,9 @@
 ;;;          has one distance at a point, so the second answer is a
 ;;;          correction rather than a second mark;
 ;;;        - Back takes the last mark away again;
+;;;        - from the second distance on, a RULER of nearby distances
+;;;          stands beside the prompt: click a row and that is the
+;;;          distance (see "The ruler beside the distance" below);
 ;;;        - Enter ends the round.
 ;;;   4. Draw a polyline through the marks?  No leaves every circle and
 ;;;      every line exactly where they are, for you to do as you see fit.
@@ -144,6 +147,19 @@
 ;;;   still dimensioned.  A measurement is the one thing that may never
 ;;;   go quietly missing.
 ;;;
+;;; The ruler beside the distance
+;;;   From the second distance on, DIMSTAMP's ruler stands near the
+;;;   right edge of the view: the eighths of an inch for a whole inch
+;;;   either side of the last distance, graded like a tape with the
+;;;   last one ringed.  Click a row and that is the distance; type one
+;;;   and it reads as DIMSTAMP reads (44, 44.5, 44 1/2, 3'8, 4'-4 1/2"
+;;;   - kept exactly as typed, only the ruler rounds to the eighth);
+;;;   click empty space and it is the first of two points to measure
+;;;   between, as getdist always offered.  Back means what it always
+;;;   did.  The ruler is scratch on the marks layer, down when the
+;;;   round ends or backs out of itself, and swept on every way out,
+;;;   Esc included.  Its knobs are the pm:*ruler-* tunables.
+;;;
 ;;; Properties
 ;;;   * Circles and lines land on layer "PERPMARK" (created if missing).
 ;;;     They are the run's working marks: keep them, turn the layer off,
@@ -157,8 +173,8 @@
 ;;; Robustness
 ;;;   * The whole run is one UNDO group: a single U reverses all of it.
 ;;;   * Esc or an error at any prompt restores every system variable the
-;;;     command changed (OSMODE, CMDECHO, CLAYER and the dimension style)
-;;;     and closes the UNDO group.
+;;;     command changed (OSMODE, CMDECHO, CLAYER and the dimension style),
+;;;     takes the ruler down and closes the UNDO group.
 ;;;   * A number nothing carries, a number two points share, a click on
 ;;;     nothing, a point the perimeter cannot be read under, and a centre
 ;;;     click that leaves the direction ambiguous all re-prompt where
@@ -173,7 +189,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.5")
+(setq *perpmark-version* "v1.6")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -236,6 +252,37 @@
 ;; more, in the direction neither neighbour agrees with, is a digit.
 ;; Raising it hides typos, lowering it starts naming real steps.
 (setq pm:*spike-tol* 2.0)
+
+;; The LENGTH RULER beside the distance prompt: from the second distance
+;; on, DIMSTAMP's ruler stands near the right edge of the view -- the
+;; eighths for an inch either side of the last distance, graded like a
+;; tape, the last one ringed -- and a click on a row is the distance.
+;; Scratch on the marks layer, taken down when the round ends and on
+;; every way out.  Every size is a fraction of the current view, so the
+;; ruler reads the same at any zoom.
+(setq pm:*ruler-color* 3)          ; ACI colour of the rows you can PICK,
+                                   ; carried on the entities themselves
+(setq pm:*ruler-current-color* 7)  ; ACI colour of the ringed CURRENT
+                                   ; row -- the last distance -- so it
+                                   ; reads apart from the options; 7 is
+                                   ; AutoCAD's black/white swap
+(setq pm:*ruler-screen-x* 0.88)    ; where the spine sits across the
+                                   ; view, as a fraction of its width in
+                                   ; from the left; past 0.5 the rows
+                                   ; reach left, short of it they reach
+                                   ; right, so the ruler is always inside
+                                   ; the view
+(setq pm:*ruler-row-frac* 0.042)   ; one row's share of the view's
+                                   ; height -- the ruler's size knob
+(setq pm:*ruler-txt-frac* 0.5)     ; the biggest row label's height, as
+                                   ; a fraction of the row spacing
+(setq pm:*ruler-tick-frac* 0.6)    ; the longest tick, same measure
+(setq pm:*ruler-ring-frac* 0.26)   ; the ring round the current row, as
+                                   ; a fraction of the row spacing
+(setq pm:*ruler-reach* 6.0)        ; how far inboard of the spine, in
+                                   ; row spacings, a click still counts
+                                   ; as picking a row rather than as the
+                                   ; first point of a measured distance
 
 ;;; ----------------------------------------------------------------------
 ;;;  Vectors and angles
@@ -733,6 +780,421 @@
     (if (= (pm:canon (pm:cd-nm c)) want) (setq out (cons c out))))
   (reverse out))
 
+;;; -------------------- the length ruler --------------------------------
+;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
+;;;  Once a first length has been given, the prompt draws the eighths
+;;;  of an inch for a whole inch either side of the last one down a
+;;;  strip near the right edge of the view, graded like a tape with the
+;;;  last length ringed in the middle -- and one prompt then takes a
+;;;  click on a row (that row's value), a typed measurement in any
+;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  or a click on empty space as the first of two points to measure
+;;;  between, which is what getdist always offered.  A run of
+;;;  near-equal lengths is clicked rather than typed over and over.
+;;;
+;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
+;;;  ask their lengths through it.  Each carries this block under its
+;;;  own prefix so the standalone file loads alone, the grouped build
+;;;  swaps the copy for the library's, and tests/test_ruler_copies.py
+;;;  holds every copy to this one text.  DIMSTAMP keeps its own ruler:
+;;;  its current row is drawn as the stamp it would make, on the
+;;;  stamp's layer in the stamp's style, which is a different thing
+;;;  from a row of nearby lengths.
+;;;
+;;;  Nothing in here reads a knob.  A tool hands its knobs in as one
+;;;  STYLE list and keeps the ruler between prompts as one STATE list:
+;;;    STYLE  (COLOR CURRENT-COLOR SCREEN-X ROW-FRAC TXT-FRAC TICK-FRAC
+;;;            RING-FRAC REACH) -- a caller's tunables block says what
+;;;            each one moves
+;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID) -- the length the
+;;;            ruler stands round (nil = none up), the family it is
+;;;            labelled in (T = feet), what is drawn, its layer, the
+;;;            style, and whether the one-line hint has been said
+;;;  Values are INCHES, the unit this shop draws in, and the ruler
+;;;  steps in eighths of one, which is what a tape reads in.
+
+;; T when C is 0-9.
+(defun pm:len-digit-p (c)
+  (and (>= (ascii c) 48) (<= (ascii c) 57)))
+
+;; T when S reads as a plain decimal number: digits, at most one dot,
+;; at least one digit, nothing else.
+(defun pm:len-num-p (s / i n c dots digits ok)
+  (setq n (strlen s) i 1 dots 0 digits 0 ok T)
+  (while (and ok (<= i n))
+    (setq c (substr s i 1))
+    (cond
+      ((pm:len-digit-p c) (setq digits (1+ digits)))
+      ((= c ".") (setq dots (1+ dots)))
+      (T (setq ok nil)))
+    (setq i (1+ i)))
+  (and ok (> digits 0) (< dots 2)))
+
+;; S cut on spaces, tabs and dashes, empty pieces dropped -- the
+;; separators an inches part is written with, so "4 1/2" and "4-1/2"
+;; come apart the same way.  It cuts a keyword list the same way.
+(defun pm:len-split (s / i n c buf out)
+  (setq n (strlen s) i 1 buf "" out nil)
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (if (or (= c " ") (= c "\t") (= c "-"))
+      (progn
+        (if (/= buf "") (setq out (cons buf out)))
+        (setq buf ""))
+      (setq buf (strcat buf c)))
+    (setq i (1+ i)))
+  (if (/= buf "") (setq out (cons buf out)))
+  (reverse out))
+
+;; One token of an inches part -- a decimal number, or a fraction N/D
+;; -- as a number of inches.  nil when it is neither.
+(defun pm:len-token (tok / slash n d)
+  (if (setq slash (vl-string-search "/" tok))
+    (progn
+      (setq n (substr tok 1 slash)
+            d (substr tok (+ slash 2)))
+      (if (and (pm:len-num-p n) (pm:len-num-p d) (/= (atof d) 0.0))
+        (/ (atof n) (atof d))))
+    (if (pm:len-num-p tok) (atof tok))))
+
+;; The inches part of a measurement as a number of inches: every token
+;; added up, so "4", "4.5", "4 1/2", "4-1/2" and "1/2" all read.  An
+;; empty part is 0, which is how 4' reads as 4'-0".  nil when any
+;; token is neither a number nor a fraction.
+(defun pm:len-inches (s / toks total v tk)
+  (setq toks (pm:len-split s) total 0.0)
+  (foreach tk toks
+    (if (and total (setq v (pm:len-token tk)))
+      (setq total (+ total v))
+      (setq total nil)))
+  total)
+
+;; Read a typed measurement as (INCHES HASFEET): the length in inches,
+;; exactly as typed and NOT rounded, and T when feet were spelled --
+;; carried through so the ruler is labelled in the family the length
+;; was typed in.  Lenient, the way DIMSTAMP reads: the inch mark is
+;; optional and may be two apostrophes, the dash after the feet mark is
+;; optional, inches may be decimal, and a fraction may be spaced or
+;; dashed -- 44, 44.5, 44 1/2, 4'4.5 and 4'-4 1/2" all read.  nil when
+;; the text is not a measurement at all.
+(defun pm:parse-len (s / n apos feetstr rest hasfeet feet inch)
+  (setq s (vl-string-trim " \t" s)
+        n (strlen s))
+  (cond
+    ((and (>= n 2) (= (substr s (1- n) 2) "''"))
+     (setq s (substr s 1 (- n 2))))
+    ((and (>= n 1) (= (substr s n 1) "\""))
+     (setq s (substr s 1 (1- n)))))
+  (setq s (vl-string-trim " \t" s) hasfeet nil feet 0.0)
+  (if (setq apos (vl-string-search "'" s))
+    (progn
+      (setq feetstr (vl-string-trim " \t" (substr s 1 apos))
+            rest    (vl-string-trim " \t-" (substr s (+ apos 2))))
+      (if (pm:len-num-p feetstr)
+        (setq feet (atof feetstr) hasfeet T)
+        (setq rest nil)))
+    (setq rest (vl-string-trim " \t" s)))
+  (setq inch (if rest (pm:len-inches rest)))
+  (if (and inch (or hasfeet (/= rest "")))
+    (list (+ (* feet 12.0) inch) hasfeet)))
+
+;; INCHES to the nearest eighth, as an integer count of eighths -- the
+;; unit the ruler is built in.
+(defun pm:len-eighths (inches)
+  (fix (+ 0.5 (* 8.0 inches))))
+
+;; Spell TOTAL-EIGHTHS out as text, in the HASFEET family.  STACKED nil
+;; is the PLAIN spelling ("44 1/2\"", what the command line says);
+;; STACKED T is the DRAWN one, the fraction stacked through AutoCAD's
+;; \S code at the size of the text around it, for a ruler label and
+;; nothing else.
+(defun pm:spell-len (total-eighths hasfeet stacked / feet remain whole f8
+                         g num den fr)
+  (if hasfeet
+    (setq feet   (/ total-eighths 96)
+          remain (- total-eighths (* feet 96)))
+    (setq feet 0 remain total-eighths))
+  (setq whole (/ remain 8)
+        f8    (- remain (* whole 8))
+        num   0
+        den   1)
+  (if (/= f8 0)
+    (progn
+      (setq g (gcd f8 8))
+      (setq num (/ f8 g) den (/ 8 g))))
+  (setq fr (cond
+             ((= num 0) "")
+             ((null stacked) (strcat " " (itoa num) "/" (itoa den)))
+             (T (strcat "{\\H1.0000x;\\S" (itoa num) "/" (itoa den) ";}"))))
+  (strcat (if (and stacked (/= num 0)) "\\A1;" "")
+          (if hasfeet (strcat (itoa feet) "'-") "")
+          (itoa whole) fr "\""))
+
+;; What to say when something typed is not a length at all.  The
+;; examples are the lazy spellings on purpose: the ones worth showing
+;; are the ones that save keystrokes.
+(defun pm:len-unread (v)
+  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44 1/2,"
+                 " 4'4.5 or 4'-4 1/2\".")))
+
+;; The RULER TIER an offset of OFFSET eighths from the current value
+;; falls in -- 'jump for a whole inch, 'half/'quarter/'eighth for the
+;; finer steps, biggest to smallest; a row's tick length and text
+;; height read off it.
+(defun pm:ruler-tier (offset / a m)
+  (setq a (abs offset) m (rem a 8))
+  (cond
+    ((= m 0) 'jump)
+    ((= m 4) 'half)
+    ((member m '(2 6)) 'quarter)
+    (T 'eighth)))
+
+;; The nearby values to offer, as (EIGHTHS TIER) pairs: every eighth
+;; for a whole inch either side, and with feet in play the 2" and 3"
+;; jumps beyond that as well.  A row at or below zero is dropped.
+;; Unsorted -- the ruler sorts once it also has the current row.
+(defun pm:ruler-rows (total-eighths hasfeet / out i off)
+  (setq out nil i 1)
+  (while (<= i 8)
+    (setq out (cons (list (- total-eighths i) (pm:ruler-tier i)) out))
+    (setq out (cons (list (+ total-eighths i) (pm:ruler-tier i)) out))
+    (setq i (1+ i)))
+  (if hasfeet
+    (progn
+      (setq i 2)
+      (while (<= i 3)
+        (setq off (* i 8))
+        (setq out (cons (list (- total-eighths off) 'jump) out))
+        (setq out (cons (list (+ total-eighths off) 'jump) out))
+        (setq i (1+ i)))))
+  (vl-remove-if '(lambda (pr) (<= (car pr) 0)) out))
+
+;; Ascending by value -- the comparator the ruler sorts rows with.
+(defun pm:ruler-val-lt (a b) (< (car a) (car b)))
+
+;; What the screen is showing, as (LEFT BOTTOM WIDTH HEIGHT) in drawing
+;; units: VIEWSIZE is the view's height and SCREENSIZE its aspect.
+;; This is what pins the ruler to the same strip of screen at any zoom.
+(defun pm:ruler-view ( / ctr vh ss aspect vw)
+  (setq ctr (getvar "VIEWCTR")
+        vh  (getvar "VIEWSIZE")
+        ss  (getvar "SCREENSIZE"))
+  (setq aspect (if (and ss (listp ss) (numberp (car ss))
+                        (numberp (cadr ss)) (> (cadr ss) 0))
+                 (/ (float (car ss)) (float (cadr ss)))
+                 1.6))                    ; no viewport to measure
+  (setq vw (* vh aspect))
+  (list (- (car ctr) (/ vw 2.0)) (- (cadr ctr) (/ vh 2.0)) vw vh))
+
+;; Which way a row reaches from a spine pinned SCREEN-X of the way
+;; across the view: always toward the middle, so a ruler pinned near an
+;; edge is never drawn past it.  1.0 toward higher x, -1.0 lower.
+(defun pm:ruler-dir (screen-x)
+  (if (> screen-x 0.5) -1.0 1.0))
+
+;; Label height for a row of this TIER, against a row spacing of GAP,
+;; the biggest label being FRAC of the spacing.
+(defun pm:ruler-hgt (tier gap frac / base)
+  (setq base (* gap frac))
+  (cond
+    ((eq tier 'half) (* base 0.8))
+    ((eq tier 'quarter) (* base 0.65))
+    ((eq tier 'eighth) (* base 0.5))
+    (T base)))                     ; 'current and 'jump
+
+;; Tick length for a row of this TIER, same measure.
+(defun pm:ruler-tick (tier gap frac / base)
+  (setq base (* gap frac))
+  (cond
+    ((eq tier 'half) (* base 0.75))
+    ((eq tier 'quarter) (* base 0.55))
+    ((eq tier 'eighth) (* base 0.35))
+    (T base)))                     ; 'current and 'jump
+
+;; A ruler stroke from (X1 Y1) to (X2 Y2) on LAY in ACI colour COL.
+(defun pm:ruler-line (x1 y1 x2 y2 lay col)
+  (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity") (cons 8 lay)
+                  (cons 62 col) '(100 . "AcDbLine")
+                  (cons 10 (list x1 y1 0.0))
+                  (cons 11 (list x2 y2 0.0)))))
+
+;; The ring that marks the current row.
+(defun pm:ruler-ring (x y r lay col)
+  (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity") (cons 8 lay)
+                  (cons 62 col) '(100 . "AcDbCircle")
+                  (cons 10 (list x y 0.0)) (cons 40 r))))
+
+;; A ruler label: one unwrapped MTEXT of height HGT at PT in the
+;; current text style, attached top left (ATT 1) or top right (3) so
+;; it grows away from the spine.
+(defun pm:ruler-label (pt hgt str lay col att)
+  (entmakex (list '(0 . "MTEXT") '(100 . "AcDbEntity") (cons 8 lay)
+                  (cons 62 col) '(100 . "AcDbMText")
+                  (cons 10 (list (car pt) (cadr pt) 0.0))
+                  (cons 40 hgt) '(41 . 0.0) (cons 71 att) '(72 . 5)
+                  (cons 1 str) '(50 . 0.0) '(73 . 1) '(44 . 1.0))))
+
+;; Draw the ruler down its strip of the current view round
+;; TOTAL-EIGHTHS, in the HASFEET family, on layer LAY, sized and
+;; coloured by STYLE: one row per suggestion plus the ringed current
+;; row among them, the whole thing centred vertically in the view.
+;; Returns (ENTS BOX ROWS): the entities drawn, BOX as (XMIN XMAX YTOL)
+;; for the hit test, and ROWS as (EIGHTHS ROW-Y) pairs.
+(defun pm:draw-ruler (total-eighths hasfeet lay style / rows n i row val
+                          tier y hgt tl spx ents result view vx vy vw vh
+                          gap base rcol dir far near)
+  (setq rows (cons (list total-eighths 'current)
+                   (pm:ruler-rows total-eighths hasfeet)))
+  (setq rows (vl-sort rows 'pm:ruler-val-lt))
+  (setq view (pm:ruler-view)
+        vx   (car view)  vy (cadr view)
+        vw   (caddr view) vh (cadddr view))
+  (setq n    (length rows)
+        gap  (* vh (nth 3 style))
+        spx  (+ vx (* vw (nth 2 style)))
+        dir  (pm:ruler-dir (nth 2 style))   ; rows run inward
+        base (- (+ vy (/ vh 2.0)) (* gap (/ (- n 1) 2.0)))
+        i    0
+        ents nil
+        result nil)
+  (foreach row rows
+    (setq val  (car row) tier (cadr row))
+    (setq y    (+ base (* i gap))
+          hgt  (pm:ruler-hgt tier gap (nth 4 style))
+          tl   (pm:ruler-tick tier gap (nth 5 style))
+          rcol (if (eq tier 'current) (nth 1 style) (nth 0 style)))
+    (setq ents (cons (pm:ruler-line spx y (+ spx (* dir tl)) y lay rcol)
+                     ents))
+    ;; half a label's height above the tick puts it astride its own
+    ;; row, and the attachment turns with the row: a label on a row
+    ;; that reaches left is hung by its RIGHT edge, so it grows away
+    ;; from the spine rather than back across it
+    (setq ents (cons (pm:ruler-label (list (+ spx (* dir (+ tl (* gap 0.35))))
+                                            (+ y (/ hgt 2.0)))
+                                      hgt (pm:spell-len val hasfeet T)
+                                      lay rcol (if (< dir 0.0) 3 1))
+                     ents))
+    (if (eq tier 'current)
+      (setq ents (cons (pm:ruler-ring spx y (* gap (nth 6 style)) lay rcol)
+                       ents)))
+    (setq result (cons (list val y) result))
+    (setq i (1+ i)))
+  (setq ents (cons (pm:ruler-line spx base spx (+ base (* (- n 1) gap))
+                                   lay (nth 0 style))
+                   ents))
+  ;; the strip a click counts as a pick in: the reach on the side the
+  ;; rows run, half a spacing on the other -- the tick's own side
+  (setq near (+ spx (* dir gap (nth 7 style)))
+        far  (- spx (* dir (/ gap 2.0))))
+  (list ents
+        (list (min near far) (max near far) (/ gap 2.0))
+        (reverse result)))
+
+;; The row (if any) that PT lands on: inside the ruler's strip in X and
+;; close enough in Y to one of ROWS.  Returns the row's EIGHTHS, or nil
+;; when PT is empty space.
+(defun pm:ruler-hit (pt box rows / r best bd d)
+  (setq best nil bd nil)
+  (if (and box (>= (car pt) (car box)) (<= (car pt) (cadr box)))
+    (foreach r rows
+      (setq d (abs (- (cadr pt) (cadr r))))
+      (if (and (<= d (caddr box)) (or (null bd) (< d bd)))
+        (setq best (car r) bd d))))
+  best)
+
+;; A ruler that is not up yet, to draw on LAY in STYLE.
+(defun pm:ruler-new (lay style)
+  (list nil nil nil nil nil lay style nil))
+
+;; The ruler taken down: its entities erased and forgotten.  The family
+;; and the hint flag are kept, since neither is about what is drawn.
+(defun pm:ruler-off (state / e)
+  (foreach e (nth 2 state) (if (and e (entget e)) (entdel e)))
+  (list nil (nth 1 state) nil nil nil (nth 5 state) (nth 6 state)
+        (nth 7 state)))
+
+;; The ruler standing round LEN: drawn fresh when it is not up, or is
+;; up round some other length; left alone when it already is; taken
+;; down when LEN is nil, since there is nothing to build one round.
+;; The one-line hint is said the first time a run draws one.
+(defun pm:ruler-show (state len / rr)
+  (cond
+    ((null len) (pm:ruler-off state))
+    ((and (nth 0 state) (equal (nth 0 state) len)) state)
+    (T
+     (setq state (pm:ruler-off state))
+     (setq rr (pm:draw-ruler (pm:len-eighths len) (nth 1 state)
+                              (nth 5 state) (nth 6 state)))
+     (if (not (nth 7 state))
+       (princ (strcat "\n  A ruler of nearby lengths is beside the"
+                      " drawing: click a row to take it, or type a"
+                      " length (44, 44 1/2, 3'8).")))
+     (list len (nth 1 state) (car rr) (cadr rr) (caddr rr)
+           (nth 5 state) (nth 6 state) T))))
+
+;; One length prompt beside the ruler in STATE, and every way of
+;; answering it: Enter (nil back, for the caller to read as it always
+;; did), a keyword out of KWS (handed back as the keyword), a typed
+;; measurement in any spelling pm:parse-len reads, a click on a ruler
+;; row (that row's value), or a click on empty space, which is the
+;; first of two points to measure the length between.  Zero, a
+;; negative and text that is not a length are refused and asked again,
+;; as initget 6 used to refuse them.  Returns (VALUE STATE): the
+;; answer, and the ruler as it now stands.
+;;
+;; The caller SHOWS the ruler first -- (setq rl (pm:ruler-show rl
+;; last) rr (pm:ask-len prompt kws rl) v (car rr) rl (cadr rr)) --
+;; and that order is not a nicety: an Esc inside this prompt runs the
+;; caller's *error*, and what that handler can take down is the ruler
+;; the CALLER's state names.  A ruler drawn in here, in a state only
+;; this function held, would outlive the Esc.  The caller keeps the
+;; state between prompts and takes the ruler down with pm:ruler-off
+;; before a prompt that does not take it and on every way out.
+(defun pm:ask-len (prompt kws state / pk v out done)
+  (setq done nil out nil)
+  (while (not done)
+    (if kws (initget 128 kws) (initget 128))
+    (setq pk (getpoint prompt))
+    (if lzd:ask (lzd:ask prompt pk) pk)
+    (cond
+      ((null pk) (setq done T))
+      ((= (type pk) 'STR)
+       (cond
+         ((member pk (pm:len-split (if kws kws ""))) (setq out pk done T))
+         ;; a leading minus is refused here, since the reader treats a
+         ;; dash as the separator in 4-1/2 and would read -5 as 5
+         ((= (substr (vl-string-trim " \t" pk) 1 1) "-")
+          (princ "\nA length must be more than zero."))
+         ((setq v (pm:parse-len pk))
+          (if (> (car v) 0.0)
+            (progn
+              (setq out (car v) done T)
+              ;; a typed spelling picks the ruler's family -- feet typed
+              ;; means feet on the ruler -- and a change redraws it, so
+              ;; the length it stands round is forgotten here
+              (if (not (eq (cadr v) (nth 1 state)))
+                (setq state (list nil (cadr v) (nth 2 state) (nth 3 state)
+                                  (nth 4 state) (nth 5 state) (nth 6 state)
+                                  (nth 7 state)))))
+            (princ "\nA length must be more than zero.")))
+         (T (pm:len-unread pk))))
+      ((setq v (pm:ruler-hit pk (nth 3 state) (nth 4 state)))
+       (setq out (/ v 8.0) done T))
+      (T
+       (setq v (getdist pk "\nSecond point of the length: "))
+       (if lzd:ask (lzd:ask "\nSecond point of the length: " v) v)
+       (if (and (numberp v) (> v 0.0))
+         (setq out v done T)
+         (princ "\nA length must be more than zero.")))))
+  (list out state))
+;;; -------------------- end of the length ruler -------------------------
+
+;; This file's knobs, in the order the ruler reads them.
+(defun pm:ruler-style ()
+  (list pm:*ruler-color* pm:*ruler-current-color* pm:*ruler-screen-x*
+        pm:*ruler-row-frac* pm:*ruler-txt-frac* pm:*ruler-tick-frac*
+        pm:*ruler-ring-frac* pm:*ruler-reach*))
+
 ;;; ----------------------------------------------------------------------
 ;;;  Ask helpers
 ;;;  Copied from CALOFIN-LIB.lsp under this file's own prefix, so the
@@ -759,36 +1221,6 @@
 (defun pm:askyn (msg dflt back / v)
   (setq v (pm:askkw msg "Yes No" "Yes/No" dflt back))
   (if (eq v 'PM-BACK) v (= v "Yes")))
-
-;; Distance entry with the kind system of STANDARDS.md section 3.
-;; Returns the number, nil for NA, or PM-BACK.
-(defun pm:askdist (kind msg dflt back / v kw)
-  ;; Undo is accepted everywhere Back is, as a hidden synonym
-  (setq kw (cond ((eq kind 'REQ) (if back "Back Undo" nil))
-                 (back "NA Back Undo")
-                 (t "NA")))
-  ;; REQ always rejects zero - offering Back must not loosen what
-  ;; counts as a valid measurement; ZER alone admits 0
-  (if kw
-      (initget (cond ((eq kind 'ZER) 5)
-                     ((and (eq kind 'SUG) dflt) 6)
-                     (t 7))
-               kw)
-      (initget 7))
-  (setq v (getdist
-            (strcat "\n" msg
-                    (cond ((eq kind 'REQ) "")
-                          ((eq kind 'SUG)
-                           (if dflt (strcat " <" (rtos dflt) "> (or NA)")
-                               " (or NA)"))
-                          (t " (or NA if not measured)"))
-                    (if back " [Back]" "")
-                    ": ")))
-  (if lzd:ask (lzd:ask msg v) v)
-  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'PM-BACK)
-        ((= (type v) 'STR) nil)               ; NA
-        ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
-        (t v)))
 
 ;; A PLACE, in the current UCS -- the centre click, and nothing else in
 ;; this command.  Always required: Enter re-asks.  Returns the point or
@@ -1289,11 +1721,12 @@
                      sel en ed segs tot closed ctr pick cand cands loc
                      base tg nrm d ans marks stage done pts run s0 s1
                      m0 m1 way wayasked miss sty lay odim ndims npts m
-                     poly sgn)
+                     poly sgn rl rr lastd)
 
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (pm:sysrestore)
+    (if rl (setq rl (pm:ruler-off rl)))
     ;; DIMSTYLE cannot be setvar'd back
     (if (and odim (tblsearch "DIMSTYLE" odim))
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" odim)))
@@ -1316,7 +1749,11 @@
         odim      (getvar "DIMSTYLE")
         marks     '()
         stage     1
-        done      nil)
+        done      nil
+        lastd     nil
+        ;; the length ruler, not up yet: it stands beside the distance
+        ;; prompt from the second distance on, on the marks layer
+        rl        (pm:ruler-new pm:*marklayer* (pm:ruler-style)))
 
   (while (not done)
     (cond
@@ -1397,6 +1834,7 @@
          ((eq cand 'PM-BACK)
           (cond
             ((null marks)
+             (setq rl (pm:ruler-off rl))
              (princ "\nStepping back one question.")
              ;; the side question is only there on a wall that needed it
              (setq stage (if sgn 1 2)))
@@ -1405,6 +1843,7 @@
                             (pm:ptname (pm:m-name (car marks))) " undone."))
              (setq marks (pm:unmark marks (pm:m-ent (car marks)))))))
          ((null cand)
+          (setq rl (pm:ruler-off rl))
           (if (null marks)
             (progn (princ "\nNothing marked.") (setq done T))
             (progn (pm:review marks poly) (setq stage 4))))
@@ -1428,15 +1867,23 @@
                               " question before this one."))
                (setq stage 31)))))))
 
-      ;; --- 3b. and the distance taped off it --------------------------
+      ;; --- 3b. and the distance taped off it.  From the second one on
+      ;;        the length ruler stands beside the prompt, round the
+      ;;        last distance given: a click on a row IS the distance ---
       ((= stage 31)
-       (setq d (pm:askdist 'REQ
-                 (strcat "Distance from the perimeter at "
-                         (pm:ptname (pm:cd-nm cand)))
-                 nil T))
+       (setq rl (pm:ruler-show rl lastd)
+             rr (pm:ask-len (strcat "\nDistance from the perimeter at "
+                                    (pm:ptname (pm:cd-nm cand))
+                                    " [Back]: ")
+                            "Back Undo" rl)
+             d  (car rr)
+             rl (cadr rr))
        (cond
-         ((or (eq d 'PM-BACK) (null d)) (setq stage 3))
+         ((= (type d) 'STR) (setq stage 3))          ; Back, or Undo
+         ((null d)
+          (princ "\nA distance is required - type it, or click a ruler row."))
          (t
+          (setq lastd d)
           (if (null lay)
             (setq lay (pm:ensure-layer pm:*marklayer* pm:*markcolor*)))
           ;; a point picked twice is the sheet being corrected, not two
@@ -1580,6 +2027,7 @@
   (if (and odim (/= odim (getvar "DIMSTYLE")) (tblsearch "DIMSTYLE" odim))
     (command "_.-DIMSTYLE" "_Restore" odim))
   (if undo-open (setq undo-open (pm:undoend)))
+  (if rl (setq rl (pm:ruler-off rl)))
   (pm:sysrestore)
   (if lzd:end (lzd:end "PERPMARK"))
   (princ))

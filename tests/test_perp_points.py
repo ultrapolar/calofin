@@ -1435,7 +1435,7 @@ def test_cperppts_boundary_is_optional_and_wired_through():
         assert "[Limit/Meet/Back] <Limit>: " in code, "Enter must mean Limit"
         loop = code[code.index("(setq newPts '()"):]
         cap = loop.index("(%s:capdist bnd base" % prefix)
-        ask2 = loop.index("(setq len (%s:ask-len" % prefix)
+        ask2 = loop.index("(%s:ask-len" % prefix)
         draw = loop[ask2:].index("(setq np (list") + ask2
         assert cap < ask2 < draw, (cap, ask2, draw)
         assert '(if cap "Back Undo Max" "Back Undo")' in loop, \
@@ -2516,8 +2516,12 @@ def ruler_rows(path, prefix, eighths, hasfeet=False):
     vm = VM()
     vm.load(path)
     vm.tables['LAYER'].add('PERPPTS-TEMP')
-    _, box, rows = vm.loads('(%s:draw-ruler %d %s "PERPPTS-TEMP")'
-                            % (prefix, eighths, 't' if hasfeet else 'nil'))
+    # the copy under the tool's prefix at the standalone tier; the
+    # library's at the grouped one, where the mirror has swapped it
+    draw = 'cal:draw-ruler' if os.environ.get('CALOFIN_LISP_ROOT') \
+        else prefix + ':draw-ruler'
+    _, box, rows = vm.loads('(%s %d %s "PERPPTS-TEMP" (%s:ruler-style))'
+                            % (draw, eighths, 't' if hasfeet else 'nil', prefix))
     return box, rows
 
 

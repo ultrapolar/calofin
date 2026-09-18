@@ -55,6 +55,16 @@ can still be clicked, it just cannot be typed.
    - naming a point already marked REPLACES its mark. The sheet has one
      distance at a point, so the second answer is a correction;
    - `Back` takes the last mark away again, naming it;
+   - from the second distance on, `DIMSTAMP`'s **ruler** stands beside
+     the distance prompt -- the eighths of an inch for a whole inch
+     either side of the last distance, graded like a tape with the
+     last one ringed -- and a click on a row IS the distance. A typed
+     one reads the way `DIMSTAMP` reads (`44`, `44 1/2`, `3'8`,
+     `4'-4 1/2"`, kept exactly as typed), and a click on empty space
+     is the first of two points to measure between. It is scratch on
+     the marks layer, down when the round ends or backs out, and swept
+     on every way out, Esc included; its `pm:*ruler-*` knobs are in
+     the table below;
    - `Enter` ends the round.
 4. **`Draw a polyline through the marks? [Yes/No/Back] <Yes>`** -- `No`
    leaves every circle and every line exactly where they are, to do with
@@ -213,6 +223,14 @@ At the top of the file, between the version banner and the first
 | `pm:*snap*` | `12.0` | How close a CLICK has to land to a survey point to pick it. A typed number never uses it -- a name is exact. `12.0` is what `BPCALLOUT` and `ABFIND` snap at, so a drafter's aim carries between the three |
 | `pm:*fuzz*` | `1e-6` | What counts as the same point: it keeps a zero-length segment out of the joined polyline and a zero-length normal out of the direction test |
 | `pm:*spike-tol*` | `2.0` | How far a distance has to sit **against both** its neighbours along the wall before the round names it, and names the number they put there. Raising it hides typos; lowering it starts naming real steps |
+| `pm:*ruler-color*` | `3` | ACI colour of the length ruler's rows -- the ones you can pick |
+| `pm:*ruler-current-color*` | `7` | ACI colour of its ringed current row, the last distance, so it reads apart from the options; 7 is AutoCAD's black/white swap |
+| `pm:*ruler-screen-x*` | `0.88` | Where the ruler's spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach left, short of it right, so the ruler stays inside the view |
+| `pm:*ruler-row-frac*` | `0.042` | One row's share of the view's height -- the ruler's size knob |
+| `pm:*ruler-txt-frac*` | `0.5` | The biggest row label's height, as a fraction of the row spacing |
+| `pm:*ruler-tick-frac*` | `0.6` | The longest tick, same measure |
+| `pm:*ruler-ring-frac*` | `0.26` | The ring round the current row, same measure |
+| `pm:*ruler-reach*` | `6.0` | How far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the first point of a measured distance |
 
 ## Notes & limitations
 

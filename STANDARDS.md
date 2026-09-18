@@ -472,6 +472,44 @@ whatever was nearest. The rules it carries:
   out)
 ```
 
+**A LENGTH is asked beside the ruler.** A tread, a riser, an offset, a
+distance taped off the wall: the numbers a drafter types at one prompt
+after another are near-equal, and `DIMSTAMP`'s ruler is how the tree
+stops making them retype. `tool:ask-len` (`cal:ask-len` in the
+library) is one length prompt that, from the second answer on, draws
+the eighths of an inch for a whole inch either side of the last
+length down a strip near the right edge of the view, graded like a
+tape with the last length ringed, and then takes any of: a click on a
+row (that row's value), a typed measurement in any spelling
+`tool:parse-len` reads (`44`, `44.5`, `44 1/2`, `4'4.5`,
+`4'-4 1/2"` -- kept exactly as typed, only the ruler rounds to the
+eighth), Enter (nil back, meaning what it always meant at that
+prompt), a keyword out of the list handed in, or a click on empty
+space as the first of two points to measure between. Zero, a leading
+minus and text that is not a length are refused where they stand. The
+prompt's WORDING does not change when a tool moves to it -- the form
+suites hold that -- only what it takes.
+
+It is one block, not a set of helpers to pick from: the reader, the
+speller, the row geometry and the prompt live once in
+`shared/parts/CALOFIN-LIB.lsp` between the two rule lines that fence
+`the length ruler`, and a standalone file carries that whole block
+under its own prefix (`perp:`, `pm:`, `cs-`...), plus one local
+`tool:ruler-style` that lists its own knobs in the order the ruler
+reads them. `tests/test_ruler_copies.py` holds every copy to the
+library's text byte for byte, so a change is made in the library and
+copied out, never edited in one file. What a tool keeps between
+prompts is the STATE the prompt hands back -- `(setq rr (tool:ask-len
+prompt kws rl last) v (car rr) rl (cadr rr))` -- made once with
+`tool:ruler-new`, and taken down with `tool:ruler-off` before any
+prompt that does not take the ruler and on every way out, the
+`*error*` handler included. The eight knobs are the same in every
+file that has them (`*ruler-color*`, `*ruler-current-color*`,
+`*ruler-screen-x*`, `*ruler-row-frac*`, `*ruler-txt-frac*`,
+`*ruler-tick-frac*`, `*ruler-ring-frac*`, `*ruler-reach*`) and
+`DIMSTAMP` keeps its own ruler, whose current row is the stamp it
+would make rather than a length.
+
 ## 5. Code structure
 
 **File.** One tool per `lisp/<tool>/` folder; the file is named after

@@ -1015,6 +1015,112 @@ def test_no_local_shadows_a_function_it_calls():
     print("ok  no shadow   -> no local hides a function the file calls")
 
 
+# ---- the length ruler beside the distance prompt ------------------------
+# From the second distance on, DIMSTAMP's ruler stands beside the prompt
+# round the last distance given, and a click on a row IS the distance.
+
+def ruler_rows(eighths, hasfeet=False):
+    """Where the ruler for this value lands, read off the routine itself
+    in a throwaway VM with the same view as a run's: (box, rows)."""
+    vm = newvm()
+    vm.tables['LAYER'].add('PERPMARK')
+    # the copy under pm: at the standalone tier; the library's at the
+    # grouped one, where the mirror has swapped it
+    draw = 'cal:draw-ruler' if os.environ.get('CALOFIN_LISP_ROOT') \
+        else 'pm:draw-ruler'
+    _, box, rows = vm.loads('(%s %d %s "PERPMARK" (pm:ruler-style))'
+                            % (draw, eighths, 't' if hasfeet else 'nil'))
+    return box, rows
+
+
+def row_click(eighths, want, hasfeet=False):
+    box, rows = ruler_rows(eighths, hasfeet)
+    y = dict((int(v), yy) for v, yy in rows)[want]
+    return [(box[0] + box[1]) / 2.0, y, 0.0]
+
+
+def ruler_scratch(vm, live_only):
+    """The ruler's entities: its own colour on the marks layer."""
+    return [e for e in vm.entities
+            if (not live_only or e not in vm.deleted)
+            and groups(vm, e).get(62) == 3
+            and groups(vm, e).get(8) == 'PERPMARK']
+
+
+def test_a_ruler_row_is_the_distance():
+    """Pt.1 is taped 12; at Pt.2 the ruler stands round 12 and the
+    12 1/2 row is clicked; Pt.3 is typed 3' and reads as 36.  When the
+    round ends nothing of the ruler is left."""
+    vm = newvm()
+    rect(vm)
+    bottom_wall_points(vm, 20, 60, 100)
+    run(vm, [vm.entities[0],
+             "1", 12.0,
+             "2", row_click(96, 100),          # 12" -> the 12 1/2" row
+             "3", "3'",
+             None, "No"])
+    radii = sorted(round(c[40], 6) for c in live(vm, 'CIRCLE'))
+    assert radii == [12.0, 12.5, 36.0], radii
+    assert ruler_scratch(vm, False), "no ruler was ever drawn"
+    assert not ruler_scratch(vm, True), "the ruler must be down at the end"
+    assert said(vm, "A ruler of nearby lengths is beside the drawing")
+    assert any("\nDistance from the perimeter at Pt.2 [Back]: " == p[0]
+               for p in vm.prompts), vm.prompts
+    print("ok  ruler       -> a row clicked is the distance, 3' reads as 36")
+
+
+def test_enter_at_the_distance_is_refused():
+    vm = newvm()
+    rect(vm)
+    ab_pt(vm, 40, 0, 17)
+    run(vm, [vm.entities[0], "17", None, "abc", 9.0, None, "No"])
+    assert said(vm, "A distance is required"), vm.printed
+    assert said(vm, '"abc" is not a length'), vm.printed
+    assert len(live(vm, 'CIRCLE')) == 1
+    print("ok  no distance -> Enter and text are refused, asked again")
+
+
+def test_the_ruler_comes_down_when_the_round_backs_out():
+    """Back through both marks and out to the selection: the ruler that
+    stood at the second distance is down by the time the perimeter is
+    asked for again, not only when the command ends."""
+    seen = {}
+
+    def reselect(vm):
+        seen['ruler'] = len(ruler_scratch(vm, True))
+        return vm.entities[0]
+
+    vm = newvm()
+    rect(vm)
+    bottom_wall_points(vm, 20, 80)
+    run(vm, [vm.entities[0],
+             "1", 6.0,
+             "2", 8.0,
+             "Back", "Back", "Back",           # Pt.2, Pt.1, the question before
+             reselect,
+             "1", 5.0, None, "No"])
+    assert seen == {'ruler': 0}, seen
+    circ = live(vm, 'CIRCLE')
+    assert len(circ) == 1 and abs(circ[0][40] - 5.0) < 1e-9, circ
+    print("ok  ruler back  -> backing out of the round takes it down")
+
+
+def test_esc_with_the_ruler_up_takes_it_down():
+    vm = newvm()
+    rect(vm)
+    bottom_wall_points(vm, 20, 80)
+    vm.handle_errors = True
+
+    def esc(vm):
+        assert ruler_scratch(vm, True), "the ruler should be up here"
+        raise LispError('Function cancelled', vm)
+
+    vm.run('c:PERPMARK', [vm.entities[0], "1", 6.0, "2", esc])
+    assert vm.handled_errors == ['Function cancelled'], vm.handled_errors
+    assert not ruler_scratch(vm, True), "Esc left the ruler standing"
+    print("ok  ruler esc   -> Esc at the distance takes the ruler down")
+
+
 if __name__ == '__main__':
     test_the_whole_run()
     test_a_mark_is_a_circle_and_a_line_of_the_same_size()
@@ -1072,5 +1178,9 @@ if __name__ == '__main__':
     test_esc_mid_round()
     test_nothing_leaks_out_of_the_command()
     test_no_local_shadows_a_function_it_calls()
+    test_a_ruler_row_is_the_distance()
+    test_enter_at_the_distance_is_refused()
+    test_the_ruler_comes_down_when_the_round_backs_out()
+    test_esc_with_the_ruler_up_takes_it_down()
     tier = os.environ.get('CALOFIN_LISP_ROOT') or 'lisp/ (standalone)'
     print(f"all PERPMARK tests passed  [{tier}]")

@@ -568,6 +568,8 @@ def test_hemistep_reads_a_curve_it_was_handed():
     assert "fitted to the curve" in out, out[:600]
     chords = []
     for e in vm.entities[len(arc):]:
+        if e in vm.deleted:            # the length ruler's scratch, swept
+            continue
         data = vm.entdata.get(e, [])
         if any(isinstance(g, Dot) and g.a == 0 and g.b == 'LINE'
                for g in data):
