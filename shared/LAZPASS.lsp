@@ -117027,6 +117027,16 @@
 ;;; silently omits what you searched for reads as the tool not
 ;;; existing.
 ;;;
+;;; Find also carries two buttons over whatever is highlighted: HOW IT
+;;; WORKS prints the fuller step-by-step explanation behind the
+;;; one-sentence blurb (lzp:*howto*, an OK-only alert so the dialog
+;;; stays open), and TUTORIAL launches the command's interactive
+;;; TUTORIAL* walkthrough where one exists (lzp:*tutorials* -- most
+;;; commands have none, and the button says so instead of failing
+;;; silently).  A walkthrough launched this way is quiet: it must not
+;;; land in Recent the way running the tool itself would, since it is a
+;;; satellite and not a drafting command on its own.
+;;;
 ;;; DCL dialogs are modal, so the panel cannot stay open while a tool
 ;;; runs the way a docked palette can -- but it no longer has to be
 ;;; reopened by hand: click, the panel closes, the tool runs to its own
@@ -117072,7 +117082,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.41")
+(setq *lazpanel-version* "v3.42")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -117490,6 +117500,139 @@
 (defun lzp:blurb (name / p)
   (cond ((setq p (assoc name lzp:*blurbs*)) (cadr p))
         (t (lzp:caption name))))
+
+;; The fuller explanation behind the one-sentence blurb: what a command
+;; actually asks, in the order it asks it, for the "How it works"
+;; button on the Find page.  Copied in from the palette's own
+;; ui/calofin_net/howto.txt rather than written a second time, the same
+;; contract lzp:*blurbs* already keeps against blurbs.txt --
+;; tests/test_lazpanel.py holds this table to that file word for word.
+;; The numbered steps for most commands were drawn from that command's
+;; own prompts in lisp/ rather than invented, then hand-checked; a
+;; handful with no interactive prompts of their own (scan companions,
+;; the DCL-form tools, cover-sheet wrappers) are a couple of sentences
+;; instead.
+(setq lzp:*howto*
+  '(
+    ("ABCDEF" "Plot rectangle points.\nWhat it asks, in order:\n 1. Dimension A-B (width across the top)\n 2. Dimension A-C (height down the side)\n 3. How should each point be placed?\n 4. Insertion point for corner A\n 5. Fit a pool perimeter through these points now?")
+    ("ABCURCHECK" "Grades how continuous a drawn perimeter is.\nWhat it asks, in order:\n 1. Declared discontinuities\n 2. Pick a discontinuity (Enter = done)\n 3. Pick the declaration to drop (Enter = done)\n 4. Draw the curvature comb?")
+    ("ABCURCHECKSCAN" "ABCURCHECK without marking the drawing.\nWhat it asks, in order:\n 1. Declared discontinuities\n 2. Pick a discontinuity (Enter = done)\n 3. Pick the declaration to drop (Enter = done)\n 4. Draw the curvature comb?")
+    ("ABFIND" "Ties Pt.## back to the A and B survey stakes.\nWhat it asks, in order:\n 1. Pick the stake (Enter to cancel)\n 2. Pick the point, or type its number (Enter to cancel)\n 3. Pt. - click a marker or its label, or type a tag\n 4. Which one?\n 5. Click roughly where Pt. belongs\n 6. Number for the new point\n 7. Place the note for Pt")
+    ("ABHD" "Fits a pool perimeter and bottom through surveyed points.\nWhat it asks, in order:\n 1. Select objects\n 2. Maximum distance from a point\n 3. Percent of points allowed off\n 4. Maximum curves\n 5. Any straight lines?\n 6. First end of the straight wall - pick it or type its number\n 7. Another straight line?\n 8. Any sharp corners?\n 9. Corner point - pick it or type its number\n 10. Any held points?\n 11. Point to hold exactly - pick it or type its number\n 12. Keep which fit - click one, or\n 13. Pick the outline to keep (or Enter for )\n 14. Add the bottom of the pool (breaks and hopper)?\n 15. First shallow break point\n 16. Enter = no bottom\n 17. First deep break point\n 18. Slope line from the offset at Pt\n 19. ...and more, depending on what you pick along the way")
+    ("ABHDCOVER" "ABHD for a cover sheet: the same window-selection of POOL and POINTS geometry, the same automatic GUIDED-vs-POINTS-ONLY fit through the survey points, but the bottom (hopper) question is skipped -- a cover sheet stops at the perimeter.")
+    ("ABLOBF" "Fits an OPEN run of arcs and lines through points, between two ends you pick.\nWhat it asks, in order:\n 1. Select objects\n 2. Maximum distance from a point\n 3. Percent of points allowed off\n 4. Maximum curves\n 5. Declare a stretch, corner or held point - or Done to fit?\n 6. Point to hold exactly - pick it or type its number\n 7. First end of the straight stretch - pick it or type its number\n 8. Corner point - pick it or type its number\n 9. Point the run STARTS at\n 10. Point the run ENDS at\n 11. Keep which fit - click one, or\n 12. Pick the outline to keep (or Enter for 2)\n 13. Point to omit, or a ringed one to restore - pick it or type its number\n 14. Straight stretches ( declared)\n 15. Pick near the straight stretch to remove\n 16. Sharp corners ( declared)\n 17. The declared corner to remove - pick it or type its number\n 18. Held points ( declared)\n 19. ...and more, depending on what you pick along the way")
+    ("ABMOVE" "Moves a point, offering every mis-read tape it could be.\nWhat it asks, in order:\n 1. Pick the stake (Enter to cancel)\n 2. Pick the point, or type its number (Enter to cancel)\n 3. Pt. - click a marker or its label, or type a tag\n 4. Which one?\n 5. Click roughly where Pt. belongs\n 6. Number for the new point\n 7. Place the note for Pt")
+    ("ABPCHECK" "ABHD's measuring half as a checker - how far each point is off the line.\nWhat it asks, in order:\n 1. Select objects\n 2. How far off the line is too far?")
+    ("ABPCREATE" "Plots a point that is not there yet from the two readings it was taped at.\nWhat it asks, in order:\n 1. Pick the stake (Enter to cancel)\n 2. Pick the point, or type its number (Enter to cancel)\n 3. Pt. - click a marker or its label, or type a tag\n 4. Which one?\n 5. Click roughly where Pt. belongs\n 6. Number for the new point\n 7. Place the note for Pt")
+    ("ADAB" "Freeform perimeter through surveyed points.\nWhat it asks, in order:\n 1. Select objects\n 2. Add the bottom of the pool (breaks and hopper)?\n 3. First shallow break point\n 4. Enter = no bottom\n 5. First deep break point\n 6. Slope line from the offset at Pt\n 7. Enter = done")
+    ("ALTABCDEF" "ABCDEF with the clockwise corner order.\nWhat it asks, in order:\n 1. Dimension A-B (width across the top)\n 2. Dimension A-D (height down the side)\n 3. Insertion point for corner A")
+    ("AUTOBEAD" "Offsets selected pool lines toward a clicked side.\nWhat it asks, in order:\n 1. Select objects\n 2. Click the side to bead toward\n 3. Which steps have beaded side walls?\n 4. Click a step")
+    ("AUTODIM" "Automatic dimensioning.\nWhat it asks, in order:\n 1. Select objects\n 2. Would you like floor dims?\n 3. Floor dims 1 of 2\n 4. Floor dims 2 of 2\n 5. Would you like pads?")
+    ("AUTODIMSIDEPOV" "Dimensions a side-view flight of steps.\nWhat it asks, in order:\n 1. Select objects")
+    ("BPCALLOUT" "Rings clicked bad points and writes the callout.\nWhat it asks, in order:\n 1. Click a bad point (a ringed one un-rings it, Enter when done)\n 2. Place the callout text")
+    ("CABHD" "ABHD's perimeter half, for a survey that runs past the pool.\nWhat it asks, in order:\n 1. Select objects\n 2. Maximum distance from a point\n 3. Percent of points allowed off\n 4. Maximum curves\n 5. Any straight lines?\n 6. First end of the straight wall - pick it or type its number\n 7. Another straight line?\n 8. Any sharp corners?\n 9. Corner point - pick it or type its number\n 10. Any held points?\n 11. Point to hold exactly - pick it or type its number\n 12. Include points up to\n 13. The LAST point that belongs to the pool edge - pick it or type its number\n 14. Keep which fit - click one, or\n 15. Pick the outline to keep (or Enter for )\n 16. Point to omit, or a ringed one to restore - pick it or type its number\n 17. Straight walls ( declared)\n 18. Pick near the straight wall to remove\n 19. ...and more, depending on what you pick along the way")
+    ("CCPRECHECK" "Walks the Tech Flow Chart decision tree.\nWhat it asks, in order:\n 1. Product type\n 2. Liner for\n 3. Depth / Wall Height\n 4. Steps?\n 5. Step type\n 6. the step face is either straight or radius\n 7. the size of the step (especially for radius steps)\n 8. sum of Step Risers equals Wall Height\n 9. the corners\n 10. Spillway?\n 11. Spillway Dimensions and location\n 12. Pool shape\n 13. Overlap and Spacing\n 14. Are there obstacles?\n 15. Proximity to water's edge\n 16. Can the cover be secured to the obstruction?\n 17. Is the obstruction larger than 36\"?\n 18. Able to go over the obstruction?\n 19. ...and more, depending on what you pick along the way")
+    ("CDCALLOUT" "Cross-dimensions from Pt.## to Pt.## by typed number.\nWhat it asks, in order:\n 1. From point number (Enter when done)\n 2. Which Pt. is meant - click it, or type its label\n 3. To point number (from Pt.)")
+    ("CDCREATE" "Turns every highlighted line into a cross dimension.\nWhat it asks, in order:\n 1. Select objects")
+    ("CHECK" "General drawing check.\nWhat it asks, in order:\n 1. Select objects")
+    ("CLEARDIM" "Select the dimensions to clear (or Enter for the whole drawing). Each one's text is slid along its own track -- the dimension line, the angular arc, the radial line, the leader -- until it clears the geometry it measures; text that already reads clearly is left exactly where it is. Text only ever slides along its track, never off it.")
+    ("CLEARDIMSCAN" "CLEARDIM's identical read, reporting which dimension text would move without moving anything.")
+    ("CONSTELLATION" "Places points from the distances between them, inside a known box.\nWhat it asks, in order:\n 1. Space width (X)\n 2. Space height (Y)\n 3. How many points?\n 4. Insertion base point\n 5. Pair to dimension (B = back, D = done)\n 6. Points on the arc <Enter = done> (B = back)\n 7. Draw the outline through the points in order?\n 8. Does the drawing look right?\n 9. What needs changing?")
+    ("CORNERSTP" "Corner step layout.\nWhat it asks, in order:\n 1. Select objects\n 2. Pick the FIRST wall of the corner\n 3. Pick the SECOND wall of the corner\n 4. Draw steps from the inside out, or the outside in?\n 5. Measure step treads from the middle of the diagonal, or the true corner?\n 6. Steps parallel to the diagonal, or equidistant from the true corner?\n 7. Treads parallel to the diagonal, or at the true angle?\n 8. Dimension the steps?\n 9. Add a bench along a wall?\n 10. Pick the wall the bench sits against\n 11. Bench offset off the wall (its depth)\n 12. Which step is the bench attached to (it ends on that tread)\n 13. Width of the furthest (outermost) step\n 14. Step - step tread (going in)\n 15. Step - step width\n 16. Step - step tread\n 17. Add a side profile?\n 18. Step 1 - step depth (the drop)\n 19. ...and more, depending on what you pick along the way")
+    ("COVERCHECK" "Cover check.\nWhat it asks, in order:\n 1. Select objects\n 2. dimension point 1\n 3. dimension point 2\n 4. Is this dimension correct?\n 5. arc start point\n 6. arc end point\n 7. Merge into one line, Flag to fix, or Leave as is?\n 8. Flag to fix, or Leave as is?\n 9. Pick the block")
+    ("COVERSCAN" "Scan drawing for covers.\nWhat it asks, in order:\n 1. Select objects\n 2. Pick the block")
+    ("CPERPPTS" "PERPPTS for a curved run.\nWhat it asks, in order:\n 1. Select a curve (polyline, arc, spline...)\n 2. Click to pick direction / offset side\n 3. Overall width\n 4. Select a boundary for the offsets\n 5. Do the offsets stop at the boundary, or run out to meet it?\n 6. Round - how many values (points) are required?\n 7. points means dimensions. Continue?\n 8. Length for point of , boundary at\n 9. Overall width of the new curve\n 10. Repeat on the new polyline?\n 11. Dimension style - STANDARD INCHES or SIDE STANDARD?")
+    ("CUSTBLOCK" "Custom block in pictorial view from three typed sizes.\nWhat it asks, in order:\n 1. Block length\n 2. Block width\n 3. Block height\n 4. Insertion base point\n 5. Place another block?")
+    ("DIMARCCHECK" "Alias of CHECK. Select what to audit; it checks that every dimension's definition points land on real geometry or on a shared ANCHOR -- a point two or more dimensions measure to, which counts as an object in its own right. A dimension with a stray point gets a construction line drawn through its two points, the stray point snapped onto the nearest object or anchor, and its color changed so the fix is visible.")
+    ("DIMCHECK" "Guided, one-at-a-time dimension review.\nWhat it asks, in order:\n 1. Select objects\n 2. dimension point 1\n 3. dimension point 2\n 4. Is this dimension correct?\n 5. arc start point\n 6. arc end point\n 7. Merge into one line, Flag to fix, or Leave as is?\n 8. Flag to fix, or Leave as is?")
+    ("DIMCONTEND" "Chains a seed dimension out to every feature point.\nWhat it asks, in order:\n 1. Select the dimension to continue\n 2. Select objects\n 3. Continue from another dimension?")
+    ("DIMSCAN" "Scan drawing for dimensions.\nWhat it asks, in order:\n 1. Select objects")
+    ("DIMSTAMP" "Click a point, type 4'4.5 or 44.5; stamps it canonically, an on-screen ruler picks the next.\nWhat it asks, in order:\n 1. Click a point to place text (Enter when done)\n 2. Text - 4'-4 1/2\", or just 4'4.5\n 3. Click to place text, click the ruler to change it, or type new text (Enter when done)")
+    ("DRONE" "Drone cleanup routine.\nWhat it asks, in order:\n 1. Select objects")
+    ("DRONOTE" "Places a canned drone-photo review note - diving board, hidden anchors or slide sketch - at a picked point.\nWhat it asks, in order:\n 1. Which note?\n 2. Pick a point for the note (Enter when done)")
+    ("FITABHD" "Fits a typed pool template through surveyed points.\nWhat it asks, in order:\n 1. Select objects\n 2. Rectangle/Grecian/ROman/Oval/L/LAzyl/ROUnd\n 3. the pool corners\n 4. the cut corners\n 5. Oasis shape\n 6. Maximum distance from a point\n 7. Percent of points allowed beyond\n 8. Is the pool in-square or out-of-square?\n 9. Any bowed walls?\n 10. Keep this fit, or Redo it?\n 11. Point to leave out, or a ringed one to restore - pick it or type its number\n 12. Hopper offset in from the wall\n 13. Pick a point at the DEEP end of the pool\n 14. Deep break - how far from the deep end wall?\n 15. Shallow break - how far from the deep end wall?\n 16. Hopper offset in from each side wall\n 17. Hopper offset in from the deep end wall")
+    ("FITABHDCOVER" "FITABHD's typed-template fit for a cover sheet: pick the pool's shape family (Rectangle, Grecian, Roman, Oval, L, Lazy L or Round), and that template is fitted through the surveyed points same as FITABHD -- but the standard-hopper bottom question is skipped.")
+    ("FLOORDIM" "Floor dimensioning.\nWhat it asks, in order:\n 1. Floor dims")
+    ("G2MCONV" "Highlight the imported G2M architectural export, or press Enter to take every G2M layer in the drawing. It remaps the architect's AIA layer names, text style and dimension style onto calofin's own POOL / TEXT / DIMENSION layers and styles in one pass, off the before/after sample the shop keeps.")
+    ("G2MRECONV" "Undoes a G2MCONV run: every object, layer, style, linetype and annotative override goes back exactly onto the G2M export's own names, as if G2MCONV had never touched the drawing.")
+    ("HEMISTEP" "Hemi step layout.\nWhat it asks, in order:\n 1. Select objects\n 2. Pick a point on the side the steps go\n 3. Pick the point on the curve to measure from\n 4. Dimension the steps?\n 5. Width of the step at the wall\n 6. Step - step tread\n 7. Step - step width\n 8. Distance from the last step to the back of the curve\n 9. Draw the reconstructed boundary through the step ends?\n 10. Add a side profile?\n 11. Depth at - the drop onto the first tread\n 12. Pick the top of for the side profile\n 13. Bead the steps?\n 14. Which steps have beaded side walls?\n 15. Step numbers with beaded sides (B = back)\n 16. Click the side to bead toward")
+    ("HONEFILLET" "Bracket two of SMARTFILLET's radii and hone between them at half inches.\nWhat it asks, in order:\n 1. Select the first line of the corner\n 2. Select the second line of the corner\n 3. Click one of the two corners to hone between\n 4. Click the one next to it\n 5. Click the rounded corner you want, or its label\n 6. Select the first line of the next corner\n 7. Select the second line of that corner")
+    ("LAZDIAG" "Write the last failure out as a DXF to send in - and, with nothing to report, prove that path works.\nWhat it asks, in order:\n 1. Place the error report, far from the drawing")
+    ("LAZFORM" "Opens a DCL chart of the pool outline, hopper and dimension chain -- the same picture as the paper order sheet, each box labelled with the letter the sheet uses. Type a number against a letter to fill it in, leave what you do not know blank, and press Insert: POOL runs from the completed sheet, asking only for whatever letter is still empty.")
+    ("LAZFORMCOVER" "The same chart as LAZFORM, for a cover sheet: fill in the labelled boxes and press Insert to run POOLCOVER from them.")
+    ("LAZLOG" "No prompts. Type LAZLOG to reprint the last failure's report; with nothing to report, it writes a test report to the same folder a real one would land in, proving that path still works.")
+    ("LAZSIDE" "Opens the DCL side-view chart, one tab per bottom type (Normal, Sport, Wedge, SLope, MOdflat, SHallow). The longitudinal section stands on the left; fill in the labelled dimension boxes beside it and press Insert, and POOLSIDE draws it, asking for nothing but the base point.")
+    ("LAZSPA" "The same lettered-chart pattern as LAZFORM, for SPA: fill in the spa order sheet's boxes (NA means \"not measured\"; blank means SPA should ask), press Insert, and SPA runs from the completed sheet, asking only for whatever is still blank.")
+    ("LAZSTEP" "Pick which step routine this is -- CORNERSTP, HEMISTEP or NORMIESTEP -- and type the step count. The chart grows a labelled box for every dimension that count implies (five steps makes five tread boxes, five widths, six depths); fill them in and press Insert to run the step routine.")
+    ("LAZTXT" "LAZFORM's identical chart, drawn from DCL tiles instead of vector geometry -- for checking whether the same form could be built in plain text tiles. Fill in the same lettered fields and press Insert.")
+    ("LHD" "Laser-point outline fit, open or closed.\nWhat it asks, in order:\n 1. Select objects\n 2. Maximum distance from a point\n 3. Percent of points allowed off\n 4. Maximum curves\n 5. Closed outline or Open polyline?\n 6. Declare a stretch, corner or held point - or Done to fit?\n 7. Point to hold exactly - pick it or type its number\n 8. First end of the straight stretch - pick it or type its number\n 9. Corner point - pick it or type its number\n 10. Draw the outline at which height\n 11. Keep which fit - click one, or\n 12. Pick the outline to keep (or Enter for 2)\n 13. Point to omit, or a ringed one to restore - pick it or type its number\n 14. Straight stretches ( declared)\n 15. Pick near the straight stretch to remove\n 16. Sharp corners ( declared)\n 17. The declared corner to remove - pick it or type its number\n 18. Held points ( declared)\n 19. ...and more, depending on what you pick along the way")
+    ("LINCHECK" "Runs the liner tech checklist one item at a time, prompting for each answer in turn. Every item after the first offers Back (B, BACK, U or UNDO, any case), which re-asks the previous item and drops what it logged. Ends with a report of everything checked, answered and noted along the way.")
+    ("LINFINCHECK" "Full liner-finish drawing QA, guided.\nWhat it asks, in order:\n 1. Select objects\n 2. dimension point 1\n 3. dimension point 2\n 4. Is this dimension correct?\n 5. arc start point\n 6. arc end point\n 7. Merge into one line, Flag to fix, or Leave as is?\n 8. Flag to fix, or Leave as is?\n 9. Are these lines steps?\n 10. Is a side view of the steps drawn somewhere?\n 11. Type the overall step height or pick two points")
+    ("LINFINSCAN" "Highlight the drawing (any selection); runs LINFINCHECK's full audit -- dimensions grouped by style and reviewed one at a time, arcs, overlapping lines, steps and their side views, wall height, the liner pattern, the title block border -- but read-only: nothing is moved or changed, only reported.")
+    ("LINGUTTER" "Guts a highlighted area back to the pool, walking the outer face.\nWhat it asks, in order:\n 1. Keep CROSS DIMENSIONS?")
+    ("LINGUTTERSCAN" "LINGUTTER's report only - reads the drawing, changes nothing.\nWhat it asks, in order:\n 1. Keep CROSS DIMENSIONS?")
+    ("LINTXTCHK" "Places the vinyl-liner QA checklist as drawing text.\nWhat it asks, in order:\n 1. Pick top-left point for LINTXTCHK checklist")
+    ("LITECOVERSCAN" "Cover rules only - skips the dimension audit.\nWhat it asks, in order:\n 1. Select objects\n 2. Pick the block")
+    ("LITELINFINSCAN" "The same read-only scan as LINFINSCAN, minus the dimension audit -- liner and drawing rules only.")
+    ("LITESPACHECKSCAN" "The same scan as SPACHECKSCAN, minus the dimension audit -- spa rules only.")
+    ("LOBF" "Fits a construction line through points that should be on one line.\nWhat it asks, in order:\n 1. Select objects\n 2. Keep which fit - click one, or\n 3. Pick the line to keep (or Enter for )")
+    ("MOHAMADDLE" "PADDLE's perimeter pads with a size pick first - 24in or 36in.\nWhat it asks, in order:\n 1. Pad size (inches)?\n 2. Select objects\n 3. Close the gap the arrow points at with a zero fillet?")
+    ("NORMIESTEP" "Normie step layout.\nWhat it asks, in order:\n 1. Select objects\n 2. Pick a point on the side the steps go\n 3. Pick the line the steps run OFF OF\n 4. Step width (the same for every step)\n 5. Radius for\n 6. Is the cut given as its\n 7. Cut face length for\n 8. Offset back along each line\n 9. Dimension the steps?\n 10. Step - step tread\n 11. Add a side profile?\n 12. Step 1 - step depth (the drop)\n 13. Depth after the last tread\n 14. Pick the top of the first tread for the side profile\n 15. Bead the steps?\n 16. Which steps have beaded side walls?\n 17. Step numbers with beaded sides (B = back)\n 18. Click the side to bead toward")
+    ("OASIS" "Continuous-tangent pool drawn live from envelope and radii.\nWhat it asks, in order:\n 1. Which shape is it?\n 2. Kidney type?\n 3. Cloud bottom?\n 4. Simple or complex?\n 5. Insertion base point\n 6. X - overall left-to-right bounds\n 7. Y - overall front-to-back bounds\n 8. center\n 9. right\n 10. Top-right centre to right bulge centre\n 11. Add the bottom of the pool (breaks and hopper)?\n 12. Hopper offset in from the wall")
+    ("OLAUTO" "Best-fit overlay of a new perimeter on the original, worst error dimensioned.\nWhat it asks, in order:\n 1. Which perimeter should move onto the other?")
+    ("PADDLE" "Paddle perimeter pads.\nWhat it asks, in order:\n 1. Select objects\n 2. Close the gap the arrow points at with a zero fillet?")
+    ("PERPMARK" "Name a survey point, type what it measured: circle, perpendicular, dimension.\nWhat it asks, in order:\n 1. Select the pool perimeter\n 2. Click a spot inside the pool\n 3. Pick a survey point, or type its number\n 4. Draw a polyline through the marks?\n 5. The point the run starts at, or type its number\n 6. The point the run ends at, or type its number\n 7. Click a spot the run passes through")
+    ("PERPPTS" "Perpendicular offset points along a line or curve.\nWhat it asks, in order:\n 1. Select a line or polyline\n 2. Click to pick direction / offset side\n 3. Overall width\n 4. Select a boundary for the offsets\n 5. Do the offsets stop at the boundary, or run out to meet it?\n 6. Round - how many values (points) are required?\n 7. points means dimensions. Continue?\n 8. Length for point of , boundary at\n 9. Round - how should the points be joined?\n 10. Which segments are arcs (1 to , e.g. 1 3-5)? (B = back)\n 11. Overall width of the new polyline\n 12. Repeat on the new polyline?\n 13. Dimension style - STANDARD INCHES or SIDE STANDARD?")
+    ("POINTRENAMER" "Hands the survey point numbers back out in perimeter order.\nWhat it asks, in order:\n 1. Select objects\n 2. Select the perimeter (Enter = the highlighted closed polyline on )\n 3. Pick the start point on the perimeter\n 4. Number the points which way around?\n 5. How far off the perimeter still counts as on it?\n 6. Start the numbering at")
+    ("POOL" "Full pool layout tool.\nWhat it asks, in order:\n 1. Is the pool in-square or out-of-square\n 2. Pool shape\n 3. Insertion base point\n 4. Anything to record about the corners (radius / cut / not given)?\n 5. the outer corners\n 6. the inner corner E\n 7. Add pool bottom (hopper) detail?\n 8. Mirror the pool (flips the wing; deep end stays left)\n 9. Mark the dimension(s) that could not be held at their original value as \"Given\"\n 10. Select a Given dimension to switch ft-in/in (Enter when done)\n 11. the body corners A, B, C and D\n 12. the end-tip corners LT, LB, RT and RB\n 13. Bottom type\n 14. Hopper type (SIX = six-sided)\n 15. SIX-sided corners measured by\n 16. C - wall height (shallow depth)\n 17. D - deep end depth\n 18. C2 - depth where the shallow floor meets the break\n 19. ...and more, depending on what you pick along the way")
+    ("POOLCOVER" "The same interview as POOL -- in-square or out-of-square, shape, per-corner treatment, cross dims -- for a cover sheet: the pool-bottom question is pre-answered No, so the hopper is never asked about.")
+    ("POOLDEMO" "No prompts. Draws one hardcoded example of every shape and every bottom POOL can produce, side by side and captioned, as an install check and a reference sheet. Safe to run any time in a scratch drawing -- run it in a new drawing, not over live work.")
+    ("POOLSIDE" "POOL's longitudinal section on its own, from the floor run chain.\nWhat it asks, in order:\n 1. Bottom type\n 2. Insertion base point (top left of the section)\n 3. B - overall length, wall to wall\n 4. D - deep end depth\n 5. C2 - depth where the shallow floor meets the break\n 6. Put the deep end on the RIGHT?")
+    ("SIMPABHD" "ABHD with nothing to decide: five ready-made perimeters, keep one.\nWhat it asks, in order:\n 1. Select objects\n 2. Maximum distance from a point\n 3. Percent of points allowed off\n 4. Maximum curves\n 5. Any straight lines?\n 6. First end of the straight wall - pick it or type its number\n 7. Another straight line?\n 8. Any sharp corners?\n 9. Corner point - pick it or type its number\n 10. Any held points?\n 11. Point to hold exactly - pick it or type its number\n 12. Keep which fit - click one, or\n 13. Pick the outline to keep (or Enter for )\n 14. Add the bottom of the pool (breaks and hopper)?\n 15. First shallow break point\n 16. Enter = no bottom\n 17. First deep break point\n 18. Slope line from the offset at Pt\n 19. ...and more, depending on what you pick along the way")
+    ("SMARTFILLET" "Fillet a corner after previewing every radius that fits.\nWhat it asks, in order:\n 1. Select the first line of the corner\n 2. Select the second line of the corner\n 3. Select the first line of the next corner\n 4. Select the second line of that corner")
+    ("SOCONV" "Puts an SO site-survey export onto the shop's layers in one pass.\nWhat it asks, in order:\n 1. Select objects")
+    ("SORECONV" "Undoes a SOCONV run - every object back on the export's own layers.\nWhat it asks, in order:\n 1. Select objects")
+    ("SPA" "Spa / hot-tub template layout.\nWhat it asks, in order:\n 1. Select the Spa Cover Details block\n 2. Is this drawing at the water's edge or the cover size\n 3. Spa shape\n 4. Insertion base point\n 5. Auto-hinge the cover\n 6. Is there a spillaway\n 7. Spillaway location (a wall one is centred on it)\n 8. Which corner\n 9. On which wall\n 10. Take it from\n 11. How far does the cover lap the water's edge\n 12. Taper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8)\n 13. Overall diameter\n 14. Are all four corners the same?\n 15. Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL")
+    ("SPACHECK" "Audits a spa sheet against what SPA draws.\nWhat it asks, in order:\n 1. Select objects")
+    ("SPACHECKSCAN" "Highlight the spa drawing together with its \"Spa Cover Details\" block; runs SPACHECK's full set of audits -- built from what SPA itself draws, so a SPA-produced drawing passes and a hand-edited one shows exactly where it drifted -- but read-only, as one scan instead of a guided walk.")
+    ("SPACOVCREATE" "Offsets a selected spa outline into its cover and hinges it to the taper.\nWhat it asks, in order:\n 1. Select objects\n 2. Cover offset past the spa\n 3. Select the block that gives the taper\n 4. Taper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8)")
+    ("SQUAREUP" "Turns a highlighted drawing until its perimeter's longest wall (or span) is horizontal.\nWhat it asks, in order:\n 1. Select objects\n 2. What should end up horizontal?\n 3. Turn the highlighted objects anyway?")
+    ("STAIRDIM" "Stair dimensioning.\nWhat it asks, in order:\n 1. Select objects")
+    ("STOCKCOVER" "Replaces a highlighted perimeter with a stock cover drawing.\nWhat it asks, in order:\n 1. Select objects\n 2. Stock drawing name\n 3. Which one?")
+    ("TYDRN" "Text, pool-point and anchor cleanup in one pass.\nWhat it asks, in order:\n 1. Select objects")
+    ("TYLERDRONESUITE" "The whole drone trace in one - TYDRN, then PADDLE, then CDIM.\nWhat it asks, in order:\n 1. Select objects")
+    ("UPADOVER" "Pads a stretch of wall between two points, or the whole of a line or polyline - no overlap, no gap.\nWhat it asks, in order:\n 1. Select the perimeter, or the line or polyline to pad\n 2. Where the pads start - click it, or type a point number\n 3. Where the pads end - click it, or type a point number\n 4. Click a spot the run passes through")
+    ("VSCONV" "Remaps a VS survey export's numbered layers onto the shop's.\nWhat it asks, in order:\n 1. Select objects")
+    ("VSRECONV" "Undoes a VSCONV run - layers, properties and the dimension overrides.\nWhat it asks, in order:\n 1. Select objects")
+    ("WCALST" "Unrolls a curved constant-width band flat, with darts.\nWhat it asks, in order:\n 1. Select objects\n 2. Click the long side to STRAIGHTEN\n 3. Maximum darts + inserts\n 4. Tile height along the straightened edge\n 5. Window a STAIR section - first corner [Back] (Enter = done)\n 6. Opposite corner")
+    ("XFTCONV" "Cleans up a Leica XFT/DXF import or a site trace.\nWhat it asks, in order:\n 1. Select objects")
+    ("XFTRECONV" "Undoes an XFTCONV run - the markers and text back, and the scale with them.\nWhat it asks, in order:\n 1. Select objects")
+    ("XYPLOT" "Plot an X/Y sheet, twice: points, and dimensioned.\nWhat it asks, in order:\n 1. Insertion point for the origin (X=0, Y=0)\n 2. Fit a pool perimeter through graph 1's points now?")
+   ))
+
+;; No per-drafter override, the same as lzp:blurb: a command with
+;; somehow no row (there is always one; the test above is what keeps
+;; that true) falls back to its blurb rather than showing blank.
+(defun lzp:howto (name / p)
+  (cond ((setq p (assoc name lzp:*howto*)) (cadr p))
+        (t (lzp:blurb name))))
+
+;; The handful of commands with a full interactive TUTORIAL* walkthrough
+;; -- a paced, captioned command of its own that draws example geometry
+;; rather than a block of text -- keyed by the headline command Find
+;; shows it under.  Most tools have none, which is normal: TUTORIAL*
+;; stays a satellite (off the panel, off every group, see the roster
+;; comment above) whether or not this table names it.
+(setq lzp:*tutorials*
+  '(
+    ("CPERPPTS" "TUTORIALCPERPPTS")
+    ("PERPPTS"  "TUTORIALPERPPTS")
+    ("POOL"     "TUTORIALPOOL")
+    ("SPA"      "TUTORIALSPA")
+   ))
+
+(defun lzp:tutorial-of (name / p)
+  (cond ((setq p (assoc name lzp:*tutorials*)) (cadr p))))
 
 ;; Search-only synonyms a one-sentence blurb has no room for: the words
 ;; a drafter might type who does not know calofin's name or caption for
@@ -117944,6 +118087,10 @@
 ;;  (lzp:*findname* itself is set in the TUNABLES block at the top of the file.)
 
 (setq lzp:*pick* nil)             ; the button clicked on the last run
+;; set alongside lzp:*pick* only by the Tutorial button: a TUTORIAL*
+;; satellite launched from Find must not land in Recent the way a real
+;; pick does, so lzp:launch is told to skip lzp:remember for this one
+(setq lzp:*pick-quiet* nil)
 (setq lzp:*iconerr* nil)          ; why the last icon write failed
 (setq lzp:*pos* nil)              ; where the panel was last standing
 (setq lzp:*go* nil)               ; the group a tab click asked for
@@ -118195,6 +118342,45 @@
     (t
      (setq lzp:*pick* lzp:*sel*
            lzp:*pos*  (done_dialog 1)))))
+
+;; Show the fuller explanation for what is highlighted -- an OK-only
+;; message box, the same text CALHELP prints to the command line, but
+;; reached without leaving the dialog or typing the name again.  A
+;; tutorial mapping, when there is one, is mentioned rather than run:
+;; the Tutorial button beside this one is what launches it.
+(defun lzp:find-howto ( )
+  (cond
+    ((not lzp:*sel*)
+     (set_tile "msg" "nothing highlighted - pick a tool first"))
+    (t
+     (alert (strcat lzp:*sel* "  -  " (lzp:caption lzp:*sel*)
+                    "\n\n" (lzp:howto lzp:*sel*)
+                    (if (lzp:tutorial-of lzp:*sel*)
+                      (strcat "\n\nAn interactive walkthrough is also"
+                              " available - click Tutorial, or type "
+                              (lzp:tutorial-of lzp:*sel*) ".")
+                      ""))))))
+
+;; Launch the highlighted tool's TUTORIAL* walkthrough instead of the
+;; tool itself.  Same refusal shape as lzp:findrun -- nothing
+;; highlighted, no walkthrough for this tool, or the walkthrough itself
+;; not loaded each say so on the message line rather than erroring --
+;; plus lzp:*pick-quiet*, set alongside the pick: a TUTORIAL* command is
+;; a satellite (see the roster comment above) and must never land in
+;; Recent the way a real launch would.
+(defun lzp:find-tutorial ( / tut)
+  (cond
+    ((not lzp:*sel*)
+     (set_tile "msg" "nothing highlighted to run"))
+    ((not (setq tut (lzp:tutorial-of lzp:*sel*)))
+     (set_tile "msg" (strcat lzp:*sel*
+                             " has no interactive tutorial - see How it works")))
+    ((not (lzp:has tut))
+     (set_tile "msg" (strcat tut " is not loaded in this session")))
+    (t
+     (setq lzp:*pick*       tut
+           lzp:*pick-quiet* t
+           lzp:*pos*        (done_dialog 1)))))
 
 ;;; -------------------- the dialog --------------------------------------
 ;;  The DCL is built here as a list of lines and written to a temp file
@@ -118671,6 +118857,10 @@
           "    alignment = centered;"
           (strcat "    : button { label = \"Run\"; key = \"run\"; "
                   "is_default = true; fixed_width = true; }")
+          (strcat "    : button { label = \"How it works\"; "
+                  "key = \"howto_btn\"; fixed_width = true; }")
+          (strcat "    : button { label = \"Tutorial\"; "
+                  "key = \"tutorial_btn\"; fixed_width = true; }")
           (strcat "    : button { label = \"Close\"; key = \"cancel\"; "
                   "is_cancel = true; fixed_width = true; }")
           (strcat "    : button { label = \"Options...\"; "
@@ -118816,7 +119006,11 @@
      (if (= rc 1) (lzp:hidden-write) (lzp:hidden-read))
      t)))
 
-(defun lzp:launch (name / fn)
+;; quiet: true for a TUTORIAL* satellite launched off the Tutorial
+;; button (lzp:find-tutorial) -- it still runs, but must not land in
+;; Recent the way a real pick does.  Omitted (nil) by every other
+;; caller, which is the ordinary remembered launch.
+(defun lzp:launch (name quiet / fn)
   (setq fn (read (strcat "C:" name)))
   (cond
     ((eval fn)
@@ -118824,7 +119018,7 @@
                     " -- LAZPANEL reopens the panel."))
      ;; remembered BEFORE it runs: a tool that errors out, or that is
      ;; cancelled with Escape, was still the one you reached for
-     (lzp:remember name)
+     (if (not quiet) (lzp:remember name))
      ;; ...and the drafter's own defaults re-applied right before, so a
      ;; tool reloaded since the panel opened still runs with them
      (lzp:knobs-apply)
@@ -119436,7 +119630,7 @@
     (if (and dcl (>= dcl 0)) (unload_dialog dcl))
     (setq dcl nil)
     (if f (vl-file-delete f))
-    (setq f nil lzp:*pick* nil)
+    (setq f nil lzp:*pick* nil lzp:*pick-quiet* nil)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZPANEL error: " msg)))
@@ -119484,7 +119678,9 @@
              (lzp:fill lzp:*filter*)
              (action_tile "filter" "(lzp:fill $value)")
              (action_tile "hits" "(lzp:hitpick $value $reason)")
-             (action_tile "run" "(lzp:findrun)"))
+             (action_tile "run" "(lzp:findrun)")
+             (action_tile "howto_btn" "(lzp:find-howto)")
+             (action_tile "tutorial_btn" "(lzp:find-tutorial)"))
             (t
              (foreach n (lzp:group-commands g)
                (action_tile n
@@ -119539,7 +119735,7 @@
   (if (and dcl (>= dcl 0)) (unload_dialog dcl))
   (setq dcl nil)
   (if f (vl-file-delete f))
-  (setq f nil lzp:*pick* nil)
+  (setq f nil lzp:*pick* nil lzp:*pick-quiet* nil)
   out)
 
 ;; WHERE THE PANEL COMES BACK UP.  done_dialog reports the position it
@@ -119627,7 +119823,8 @@
     (cond
       ((= pick "*pins*"))            ; already handled inside lzp:show
       ((= pick "*options*") (c:LAZSET))  ; settings, never a roster launch
-      (t (lzp:launch pick))))
+      (t (lzp:launch pick lzp:*pick-quiet*)
+         (setq lzp:*pick-quiet* nil))))
   (princ))
 
 ;; Open the pin editor on its own, without going through the panel.

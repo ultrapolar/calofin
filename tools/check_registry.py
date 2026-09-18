@@ -73,7 +73,15 @@ GLUE = ROOT / "ui" / "calofin_ui" / "calofin.lsp"
 
 #: One {"Layout", { ... }} block of CommandCatalog.Groups.
 VB_GROUP = re.compile(r'\{"(\w+)", \{(.*?)\n        \}\}', re.S)
-VB_ENTRY = re.compile(r'New Entry\("([^"]+)", "([^"]*)", "([^"]*)"\)')
+#: Command, caption and blurb -- all three are always a single plain
+#: "..." literal in that fixed order, so this reads them the same way
+#: regardless of what follows.  Deliberately NOT anchored to the
+#: entry's closing paren: New Entry(...) grew a HowTo field whose own
+#: text can contain ")" characters and is written as a " & vbLf & "
+#: join rather than one literal, so anchoring past it would mean
+#: understanding that join here too.  Nothing that reads this table
+#: needs a field past Blurb.
+VB_ENTRY = re.compile(r'New Entry\("([^"]+)", "([^"]*)", "([^"]*)"')
 
 #: Captions are one per line, the text aligned to a fixed column so the
 #: table reads as two columns rather than a ragged list.
@@ -111,6 +119,19 @@ def captions(src):
     span = _table_span(src, "captions")
     if span is None:
         return None
+    return dict(CAPTION_ROW.findall(src[span[0]:span[1]]))
+
+
+#: lzp:*tutorials* rows are two plain command names, never anything
+#: with a quote in it, so CAPTION_ROW's shape is exactly right.
+def tutorials(src):
+    """{COMMAND: TUTORIAL-COMMAND} out of lzp:*tutorials* -- the
+    handful of commands with a full interactive TUTORIAL* walkthrough.
+    {} (not None) when the table is missing, since most builds of this
+    function's caller have nothing to report either way."""
+    span = _table_span(src, "tutorials")
+    if span is None:
+        return {}
     return dict(CAPTION_ROW.findall(src[span[0]:span[1]]))
 
 

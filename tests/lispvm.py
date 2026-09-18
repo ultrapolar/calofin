@@ -1152,6 +1152,21 @@ def _princ(vm, a):
 
 
 BUILTINS[Sym('princ')] = _princ
+
+
+def _alert(vm, a):
+    """(alert msg) -- an OK-only message box.  The VM has no UI to pop
+    one on, so this records what would have been shown, the same way
+    princ's own output is kept, and returns nil -- what alert itself
+    returns once the box is dismissed."""
+    if a and a[0] is not NIL:
+        vm.printed.append(a[0] if isinstance(a[0], str) else str(a[0]))
+    return NIL
+
+
+BUILTINS[Sym('alert')] = _alert
+
+
 def _to_string(v):
     """(vl-princ-to-string x) -- what princ would have shown, as a
     string.  The one way to get a symbol or an ename into a message

@@ -792,8 +792,13 @@ all_rows = [l for l in section("All", "Public Shared ReadOnly").splitlines()
 check("the generated palette catalog lists it once", len(all_rows) == 1,
       str(all_rows))
 if all_rows:
+    # Caption and Blurb specifically -- not "no empty string anywhere
+    # in the row", now that New Entry(...) also carries a HowTo and a
+    # TutorialCommand field, and the latter is legitimately "" for
+    # every command (this one included) with no TUTORIAL* walkthrough.
+    m = re.search(r'New Entry\("[^"]+", "([^"]*)", "([^"]*)"', all_rows[0])
     check("  with its caption and its tooltip, neither left empty",
-          '""' not in all_rows[0]
+          bool(m) and bool(m.group(1)) and bool(m.group(2))
           and "Spa cover from the spa" in all_rows[0], all_rows[0].strip())
 groups = section("Groups", "Public Shared ReadOnly")
 layout = groups.split('{"Layout", {')[1].split("}}")[0]

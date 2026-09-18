@@ -21,9 +21,13 @@ blend is code that can't blend wrong.
     python3 tools/gen_ribbon_icons.py           # write the five PNGs
     python3 tools/gen_ribbon_icons.py --check   # is the tree current?
 
-``--check`` is not yet wired into ``check_standards.py`` alongside the
-mirror/releases/bundle/catalog/chart checks -- see
-``ui/calofin_ribbon/README.md`` for why -- but ``make verify`` runs it.
+``check_standards.py`` runs ``--check`` alongside the mirror, the
+releases, the bundle and the two catalogs, so ``make check`` fails on a
+stale icon exactly as it does on a stale twin.  These are the only
+files in that list that are not text, and they belong in it for the
+same reason as the rest: a deflate stream over a fixed input is
+deterministic, so "is this what a fresh render would write" is a byte
+comparison either way.
 """
 
 import argparse
