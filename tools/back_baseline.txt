@@ -93,10 +93,14 @@ lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nDraw a live demonstration in this draw
 lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nErase the demonstration? [Yes/No] <No>:|demo / tutorial
 lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nPick a clear spot for the demo <0,0>:|demo / tutorial
 lisp/paddle/PADDLE.lsp|paddle--pause|\n [ press ENTER to continue ]|pause
+lisp/perp_points/cperp_points.lsp|c:CPERPPTS||the length prompt, via cperp:ask-len: its keyword list is a runtime argument and DOES carry Back (and Max where a boundary is ahead)
 lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nRepeat on the new polyline? [Yes/No] <No>:|past committed geometry
 lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nRound - how many values (points) are required? < >|first question of each round; the round in front of it is drawn
+lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/perp_points/perp_points.lsp|c:PERPPTS||the length prompt, via perp:ask-len: its keyword list is a runtime argument and DOES carry Back (and Max where a boundary is ahead)
 lisp/perp_points/perp_points.lsp|c:PERPPTS|\nRepeat on the new polyline? [Yes/No] <No>:|past committed geometry
 lisp/perp_points/perp_points.lsp|c:PERPPTS|\nRound - how many values (points) are required? < >|first question of each round; the round in front of it is drawn
+lisp/perp_points/perp_points.lsp|c:PERPPTS|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
 lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\n --- press Enter to continue ---|demo / tutorial
 lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\nA point is required - insertion point:|demo / tutorial
 lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\nDemo size <100>:|demo / tutorial

@@ -39,7 +39,9 @@ each.
    previous length; `B` (Back) steps back to the last length typed and
    re-enters it (`U`/`UNDO` accepted), or to the count when nothing
    was typed yet. Under `Meet`, points with the boundary ahead of them
-   are placed on it without a prompt.
+   are placed on it without a prompt. From the second length on the
+   **length ruler** stands beside the drawing (below): click a row and
+   that is the length.
 7. `How should the points be joined? [Straight/Arcs/Mixed]` -- every
    segment a line, every segment an arc, or `Mixed`, which asks which
    segment numbers are arcs (`1 3-5`) and leaves the rest straight.
@@ -163,6 +165,48 @@ Two things neither mode is:
   second-guessed, but a correction that carries points past a Limit
   boundary, or off a Meet one, reports how many.
 
+## The length ruler
+
+Offsets off one wall are rarely all the same number and rarely far
+apart -- 44, 44 1/2, 44 1/4, 45, for twenty points -- and typing each
+one over again is what `DIMSTAMP` stopped doing for stamped text. Its
+ruler does the same job here, in both commands. Once a first length
+has been given, every later length prompt draws a column of nearby
+values down a strip near the right edge of the view: every eighth of
+an inch for a whole inch either side of the last length, graded like a
+tape (whole inches boldest, eighths smallest), the last length ringed
+in the middle. The prompt's words do not change; what it takes does:
+
+| At the length prompt | What happens |
+| --- | --- |
+| click a ruler row | that value is the length for this point, and the ruler re-grades round it for the next |
+| type a length | read as `DIMSTAMP` reads -- `44`, `44.5`, `44 1/2`, `4'4.5`, `4'-4 1/2"` -- and kept exactly as typed (`44.3` stays `44.3`; only the ruler rounds to the eighth). Feet typed put the ruler in the feet family until plain inches are typed |
+| Enter | the last length again, as it always was |
+| click empty space | the first of two points to measure the length between -- what `getdist` always offered here |
+| `B`, `U`, `M` | unchanged: Back, its synonym, and Max where a boundary is ahead |
+| `0`, `-5`, `abc` | refused and asked again, with a line saying why |
+
+The ruler is pinned to the screen, not the drawing, so it reads the
+same at any zoom. It is scratch on the guide layer: taken down between
+rounds, swept with the other guides on every way out, Esc included.
+The hint line saying it is there is printed once a run.
+
+## Tunables
+
+All at the top of each file, one `setq` a line, in the `perp:` /
+`cperp:` namespace (the two blocks are the same knobs):
+
+| Knob | Default | What moves when you change it |
+| --- | --- | --- |
+| `*ruler-color*` | `3` | ACI colour of the rows you can pick |
+| `*ruler-current-color*` | `7` | ACI colour of the ringed current row -- the last length -- so it reads apart from the options; 7 is AutoCAD's black/white swap |
+| `*ruler-screen-x*` | `0.88` | where the spine sits across the view, as a fraction of its width from the left; past 0.5 the rows reach left, short of it right, so the ruler stays inside the view |
+| `*ruler-row-frac*` | `0.042` | one row's share of the view's height -- the ruler's size knob |
+| `*ruler-txt-frac*` | `0.5` | the biggest row label's height, as a fraction of the row spacing |
+| `*ruler-tick-frac*` | `0.6` | the longest tick, same measure |
+| `*ruler-ring-frac*` | `0.26` | the ring round the current row, same measure |
+| `*ruler-reach*` | `6.0` | how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the first point of a measured length |
+
 ## Assumptions
 
 * Dimensions go on the `DIMENSIONS` layer (created if missing) in the
@@ -176,8 +220,8 @@ Two things neither mode is:
 * A boundary is only read, never moved or changed, and the ray cast at
   it lives and dies inside the probe -- nothing is left in the drawing.
   The object being offset from cannot be its own boundary.
-* There are no tunable globals; the 2"-style constants of other tools
-  have no counterpart here because every length is typed per point.
+* Every length is typed (or clicked) per point; the only tunables are
+  the ruler's, in the table below.
 
 ## Notes & limitations
 

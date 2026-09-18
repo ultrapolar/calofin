@@ -52,6 +52,10 @@
 ;;;      (U, the old keyword, is still accepted).  With a Limit boundary
 ;;;      the prompt names the distance to it and takes M (Max) to go
 ;;;      exactly that far; a longer length is brought back to it.
+;;;      From the second length on, DIMSTAMP's RULER stands beside the
+;;;      drawing: the eighths for an inch either side of the last
+;;;      length, and a click on a row IS the length for this point --
+;;;      see "The length ruler" below.
 ;;;   7. Say whether the overall width of the curve just drawn has
 ;;;      changed -- step 3's question, asked of the course this round
 ;;;      built.  It is resized the same way, split the same way, before
@@ -185,6 +189,37 @@
 ;;;     has it; otherwise the current style is used and a note is
 ;;;     printed.
 ;;;
+;;; The length ruler
+;;;   Offsets off one wall are rarely all the same number and rarely
+;;;   far apart: 44, 44 1/2, 44 1/4, 45, and the run reads like that
+;;;   for twenty points.  Typing each one over again is what DIMSTAMP
+;;;   stopped doing for stamped text, and its ruler does the same job
+;;;   here.  Once a first length has been given, every later length
+;;;   prompt draws a column of nearby values down a strip near the
+;;;   right edge of the view -- every eighth of an inch for a whole
+;;;   inch either side of the last length, graded like a tape (the
+;;;   whole inches boldest, the eighths smallest), the last length
+;;;   ringed in the middle -- and one prompt takes four answers:
+;;;     * click a ROW            -- that value is the length for this
+;;;                                 point, and the ruler re-grades
+;;;                                 round it for the next;
+;;;     * type a length          -- read the way DIMSTAMP reads: 44,
+;;;                                 44.5, 44 1/2, 4'4.5 and 4'-4 1/2"
+;;;                                 all mean what they say, kept
+;;;                                 exactly as typed (44.3 stays 44.3;
+;;;                                 the ruler rounds to the eighth);
+;;;     * Enter                  -- the last length again, as before;
+;;;     * click EMPTY SPACE      -- the first of two points to measure
+;;;                                 the length between, which is what
+;;;                                 getdist always offered here.
+;;;   Feet typed put the ruler in the feet family (3'-8", 3'-8 1/8" ...)
+;;;   until a plain-inches length is typed.  B, U and M ride through
+;;;   unchanged.  The ruler is pinned to the screen, not the drawing,
+;;;   so it reads the same at any zoom; it is scratch on the guide
+;;;   layer, taken down between rounds and swept with the rest of the
+;;;   guides on every way out, Esc included.  Its sizes and colours
+;;;   are the knobs in the tunables block.
+;;;
 ;;; Robustness
 ;;;   * The whole run is one UNDO group: a single U reverses everything.
 ;;;   * Esc or an error at any prompt restores every system variable it
@@ -210,7 +245,324 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.16")
+(setq *cperp-version* "v0.17")
+
+;;; -------------------- tunables --------------------------------------
+;; The LENGTH RULER.  Once a length has been given, every later length
+;; prompt draws a column of nearby values beside the drawing -- the
+;; DIMSTAMP ruler, borrowed whole: eighths for a whole inch either side
+;; of the last length, graded like a tape measure, with the last length
+;; ringed in the middle.  Clicking a row hands that value in as the
+;; length, so a run of near-equal offsets is clicked rather than typed
+;; over and over.  Scratch geometry on the guide layer, swept away with
+;; the rest of the guides.  Every size is a fraction of the current
+;; view, so the ruler reads the same at any zoom.
+(setq cperp:*ruler-color* 3)          ; ACI colour of the rows you can PICK,
+                                    ; carried on the entities themselves
+(setq cperp:*ruler-current-color* 7)  ; ACI colour of the ringed CURRENT
+                                    ; row -- the last length -- so it
+                                    ; reads apart from the options; 7 is
+                                    ; AutoCAD's black/white swap
+(setq cperp:*ruler-screen-x* 0.88)    ; where the spine sits across the
+                                    ; view, as a fraction of its width
+                                    ; in from the left; past 0.5 the rows
+                                    ; reach left, short of it they reach
+                                    ; right, so the ruler is always inside
+                                    ; the view
+(setq cperp:*ruler-row-frac* 0.042)   ; one row's share of the view's
+                                    ; height -- the ruler's size knob
+(setq cperp:*ruler-txt-frac* 0.5)     ; the biggest row label's height, as
+                                    ; a fraction of the row spacing
+(setq cperp:*ruler-tick-frac* 0.6)    ; the longest tick, same measure
+(setq cperp:*ruler-ring-frac* 0.26)   ; the ring round the current row, as
+                                    ; a fraction of the row spacing
+(setq cperp:*ruler-reach* 6.0)        ; how far inboard of the spine, in
+                                    ; row spacings, a click still counts
+                                    ; as picking a row rather than as the
+                                    ; first point of a measured length
+
+;; --- the length ruler --------------------------------------------------
+;; DIMSTAMP's ruler, carried over: the reading of a typed measurement,
+;; the spelling of one, the graded rows and the hit test.  Values are
+;; INCHES -- the drawing unit this shop draws in -- and the ruler steps
+;; in eighths of one, which is what a tape reads in.
+
+;; T when C is 0-9.
+(defun cperp:digit-p (c)
+  (and (>= (ascii c) 48) (<= (ascii c) 57)))
+
+;; T when S reads as a plain decimal number: digits, at most one dot,
+;; at least one digit, nothing else.
+(defun cperp:num-p (s / i n c dots digits ok)
+  (setq n (strlen s) i 1 dots 0 digits 0 ok T)
+  (while (and ok (<= i n))
+    (setq c (substr s i 1))
+    (cond
+      ((cperp:digit-p c) (setq digits (1+ digits)))
+      ((= c ".") (setq dots (1+ dots)))
+      (T (setq ok nil)))
+    (setq i (1+ i)))
+  (and ok (> digits 0) (< dots 2)))
+
+;; S cut on spaces, tabs and dashes, empty pieces dropped -- the
+;; separators an inches part is written with, so "4 1/2" and "4-1/2"
+;; come apart the same way.
+(defun cperp:split (s / i n c buf out)
+  (setq n (strlen s) i 1 buf "" out nil)
+  (while (<= i n)
+    (setq c (substr s i 1))
+    (if (or (= c " ") (= c "\t") (= c "-"))
+      (progn
+        (if (/= buf "") (setq out (cons buf out)))
+        (setq buf ""))
+      (setq buf (strcat buf c)))
+    (setq i (1+ i)))
+  (if (/= buf "") (setq out (cons buf out)))
+  (reverse out))
+
+;; One token of an inches part -- a decimal number, or a fraction N/D
+;; -- as a number of inches.  nil when it is neither.
+(defun cperp:token-val (tok / slash n d)
+  (if (setq slash (vl-string-search "/" tok))
+    (progn
+      (setq n (substr tok 1 slash)
+            d (substr tok (+ slash 2)))
+      (if (and (cperp:num-p n) (cperp:num-p d) (/= (atof d) 0.0))
+        (/ (atof n) (atof d))))
+    (if (cperp:num-p tok) (atof tok))))
+
+;; The inches part of a measurement as a number of inches: every token
+;; added up, so "4", "4.5", "4 1/2", "4-1/2" and "1/2" all read.  An
+;; empty part is 0, which is how 4' reads as 4'-0".  nil when any
+;; token is neither a number nor a fraction.
+(defun cperp:inches (s / toks total v tk)
+  (setq toks (cperp:split s) total 0.0)
+  (foreach tk toks
+    (if (and total (setq v (cperp:token-val tk)))
+      (setq total (+ total v))
+      (setq total nil)))
+  total)
+
+;; Read a typed measurement as (INCHES HASFEET): the length in inches,
+;; exactly as typed and NOT rounded, and T when feet were spelled --
+;; carried through so the ruler is labelled in the family the length
+;; was typed in.  Lenient, the way DIMSTAMP reads: the inch mark is
+;; optional and may be two apostrophes, the dash after the feet mark is
+;; optional, inches may be decimal, and a fraction may be spaced or
+;; dashed -- 44, 44.5, 44 1/2, 4'4.5 and 4'-4 1/2" all read.  nil when
+;; the text is not a measurement at all.
+(defun cperp:parse-len (s / n apos feetstr rest hasfeet feet inch)
+  (setq s (vl-string-trim " \t" s)
+        n (strlen s))
+  (cond
+    ((and (>= n 2) (= (substr s (1- n) 2) "''"))
+     (setq s (substr s 1 (- n 2))))
+    ((and (>= n 1) (= (substr s n 1) "\""))
+     (setq s (substr s 1 (1- n)))))
+  (setq s (vl-string-trim " \t" s) hasfeet nil feet 0.0)
+  (if (setq apos (vl-string-search "'" s))
+    (progn
+      (setq feetstr (vl-string-trim " \t" (substr s 1 apos))
+            rest    (vl-string-trim " \t-" (substr s (+ apos 2))))
+      (if (cperp:num-p feetstr)
+        (setq feet (atof feetstr) hasfeet T)
+        (setq rest nil)))
+    (setq rest (vl-string-trim " \t" s)))
+  (setq inch (if rest (cperp:inches rest)))
+  (if (and inch (or hasfeet (/= rest "")))
+    (list (+ (* feet 12.0) inch) hasfeet)))
+
+;; INCHES to the nearest eighth, as an integer count of eighths -- the
+;; unit the ruler is built in.
+(defun cperp:eighths (inches)
+  (fix (+ 0.5 (* 8.0 inches))))
+
+;; Spell TOTAL-EIGHTHS out as text, in the HASFEET family.  STACKED nil
+;; is the PLAIN spelling ("44 1/2\"", what the command line says);
+;; STACKED T is the DRAWN one, the fraction stacked through AutoCAD's
+;; \S code at the size of the text around it, for a ruler label and
+;; nothing else.
+(defun cperp:spell (total-eighths hasfeet stacked / feet remain whole f8 g
+                     num den fr)
+  (if hasfeet
+    (setq feet   (/ total-eighths 96)
+          remain (- total-eighths (* feet 96)))
+    (setq feet 0 remain total-eighths))
+  (setq whole (/ remain 8)
+        f8    (- remain (* whole 8))
+        num   0
+        den   1)
+  (if (/= f8 0)
+    (progn
+      (setq g (gcd f8 8))
+      (setq num (/ f8 g) den (/ 8 g))))
+  (setq fr (cond
+             ((= num 0) "")
+             ((null stacked) (strcat " " (itoa num) "/" (itoa den)))
+             (T (strcat "{\\H1.0000x;\\S" (itoa num) "/" (itoa den) ";}"))))
+  (strcat (if (and stacked (/= num 0)) "\\A1;" "")
+          (if hasfeet (strcat (itoa feet) "'-") "")
+          (itoa whole) fr "\""))
+
+;; The RULER TIER an offset of OFFSET eighths from the current value
+;; falls in -- 'jump for a whole inch, 'half/'quarter/'eighth for the
+;; finer steps, biggest to smallest; a row's tick length and text
+;; height read off it.
+(defun cperp:tier (offset / a m)
+  (setq a (abs offset) m (rem a 8))
+  (cond
+    ((= m 0) 'jump)
+    ((= m 4) 'half)
+    ((member m '(2 6)) 'quarter)
+    (T 'eighth)))
+
+;; The nearby values to offer, as (EIGHTHS TIER) pairs: every eighth
+;; for a whole inch either side, and with feet in play the 2" and 3"
+;; jumps beyond that as well.  A row at or below zero is dropped.
+(defun cperp:suggestions (total-eighths hasfeet / out i off)
+  (setq out nil i 1)
+  (while (<= i 8)
+    (setq out (cons (list (- total-eighths i) (cperp:tier i)) out))
+    (setq out (cons (list (+ total-eighths i) (cperp:tier i)) out))
+    (setq i (1+ i)))
+  (if hasfeet
+    (progn
+      (setq i 2)
+      (while (<= i 3)
+        (setq off (* i 8))
+        (setq out (cons (list (- total-eighths off) 'jump) out))
+        (setq out (cons (list (+ total-eighths off) 'jump) out))
+        (setq i (1+ i)))))
+  (vl-remove-if '(lambda (pr) (<= (car pr) 0)) out))
+
+;; Ascending by value -- the comparator the ruler sorts rows with.
+(defun cperp:val-lt (a b) (< (car a) (car b)))
+
+;; What the screen is showing, as (LEFT BOTTOM WIDTH HEIGHT) in drawing
+;; units: VIEWSIZE is the view's height and SCREENSIZE its aspect.
+(defun cperp:view ( / ctr vh ss aspect vw)
+  (setq ctr (getvar "VIEWCTR")
+        vh  (getvar "VIEWSIZE")
+        ss  (getvar "SCREENSIZE"))
+  (setq aspect (if (and ss (listp ss) (numberp (car ss))
+                        (numberp (cadr ss)) (> (cadr ss) 0))
+                 (/ (float (car ss)) (float (cadr ss)))
+                 1.6))
+  (setq vw (* vh aspect))
+  (list (- (car ctr) (/ vw 2.0)) (- (cadr ctr) (/ vh 2.0)) vw vh))
+
+;; Which way a row reaches from the spine: always toward the middle of
+;; the view, so a ruler pinned near an edge is never drawn past it.
+(defun cperp:ruler-dir ()
+  (if (> cperp:*ruler-screen-x* 0.5) -1.0 1.0))
+
+;; Label height for a row of this TIER, against a row spacing of GAP.
+(defun cperp:ruler-hgt (tier gap / base)
+  (setq base (* gap cperp:*ruler-txt-frac*))
+  (cond
+    ((eq tier 'half) (* base 0.8))
+    ((eq tier 'quarter) (* base 0.65))
+    ((eq tier 'eighth) (* base 0.5))
+    (T base)))
+
+;; Tick length for a row of this TIER, same measure.
+(defun cperp:ruler-tick (tier gap / base)
+  (setq base (* gap cperp:*ruler-tick-frac*))
+  (cond
+    ((eq tier 'half) (* base 0.75))
+    ((eq tier 'quarter) (* base 0.55))
+    ((eq tier 'eighth) (* base 0.35))
+    (T base)))
+
+;; A ruler stroke from (X1 Y1) to (X2 Y2) on LAY in COL.
+(defun cperp:ruler-line (x1 y1 x2 y2 lay col)
+  (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity") (cons 8 lay)
+                  (cons 62 col) '(100 . "AcDbLine")
+                  (cons 10 (list x1 y1 0.0))
+                  (cons 11 (list x2 y2 0.0)))))
+
+;; The ring that marks the current row.
+(defun cperp:ruler-ring (x y r lay col)
+  (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity") (cons 8 lay)
+                  (cons 62 col) '(100 . "AcDbCircle")
+                  (cons 10 (list x y 0.0)) (cons 40 r))))
+
+;; A ruler label: one unwrapped MTEXT of height HGT at PT, attached top
+;; left (ATT 1) or top right (3) so it grows away from the spine.
+(defun cperp:ruler-label (pt hgt str lay col att)
+  (entmakex (list '(0 . "MTEXT") '(100 . "AcDbEntity") (cons 8 lay)
+                  (cons 62 col) '(100 . "AcDbMText")
+                  (cons 10 (list (car pt) (cadr pt) 0.0))
+                  (cons 40 hgt) '(41 . 0.0) (cons 71 att) '(72 . 5)
+                  (cons 1 str) '(50 . 0.0) '(73 . 1) '(44 . 1.0))))
+
+;; Draw the ruler down its strip of the current view around the last
+;; length -- TOTAL-EIGHTHS, in the HASFEET family -- on layer LAY, one
+;; row per suggestion plus the ringed current row among them, centred
+;; vertically in the view.  Returns (ENTS BOX ROWS): the entities drawn,
+;; BOX as (XMIN XMAX YTOL) for the hit test, and ROWS as (EIGHTHS ROW-Y)
+;; pairs.
+(defun cperp:draw-ruler (total-eighths hasfeet lay / rows n i row val tier
+                          y hgt tl spx ents result view vx vy vw vh gap
+                          base rcol dir far near)
+  (setq rows (cons (list total-eighths 'current)
+                   (cperp:suggestions total-eighths hasfeet)))
+  (setq rows (vl-sort rows 'cperp:val-lt))
+  (setq view (cperp:view)
+        vx   (car view)  vy (cadr view)
+        vw   (caddr view) vh (cadddr view))
+  (setq n    (length rows)
+        gap  (* vh cperp:*ruler-row-frac*)
+        spx  (+ vx (* vw cperp:*ruler-screen-x*))
+        dir  (cperp:ruler-dir)
+        base (- (+ vy (/ vh 2.0)) (* gap (/ (- n 1) 2.0)))
+        i    0
+        ents nil
+        result nil)
+  (foreach row rows
+    (setq val (car row) tier (cadr row))
+    (setq y   (+ base (* i gap))
+          hgt (cperp:ruler-hgt tier gap)
+          tl  (cperp:ruler-tick tier gap)
+          rcol (if (eq tier 'current) cperp:*ruler-current-color* cperp:*ruler-color*))
+    (setq ents (cons (cperp:ruler-line spx y (+ spx (* dir tl)) y lay rcol)
+                     ents))
+    (setq ents (cons (cperp:ruler-label (list (+ spx (* dir (+ tl (* gap 0.35))))
+                                            (+ y (/ hgt 2.0)))
+                                      hgt (cperp:spell val hasfeet T) lay rcol
+                                      (if (< dir 0.0) 3 1))
+                     ents))
+    (if (eq tier 'current)
+      (setq ents (cons (cperp:ruler-ring spx y (* gap cperp:*ruler-ring-frac*)
+                                       lay rcol)
+                       ents)))
+    (setq result (cons (list val y) result))
+    (setq i (1+ i)))
+  (setq ents (cons (cperp:ruler-line spx base spx (+ base (* (- n 1) gap))
+                                   lay cperp:*ruler-color*)
+                   ents))
+  (setq near (+ spx (* dir gap cperp:*ruler-reach*))
+        far  (- spx (* dir (/ gap 2.0))))
+  (list ents
+        (list (min near far) (max near far) (/ gap 2.0))
+        (reverse result)))
+
+;; The row (if any) that PT lands on: inside the ruler's strip in X and
+;; close enough in Y to one of ROWS.  Returns the row's EIGHTHS, or nil
+;; when PT is empty space.
+(defun cperp:ruler-hit (pt box rows / r best bd d)
+  (setq best nil bd nil)
+  (if (and box (>= (car pt) (car box)) (<= (car pt) (cadr box)))
+    (foreach r rows
+      (setq d (abs (- (cadr pt) (cadr r))))
+      (if (and (<= d (caddr box)) (or (null bd) (< d bd)))
+        (setq best (car r) bd d))))
+  best)
+
+;; What to say when something typed is not a length at all.
+(defun cperp:say-unread (v)
+  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44 1/2,"
+                 " 4'4.5 or 4'-4 1/2\".")))
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -651,6 +1003,8 @@
   (princ))
 
 (defun c:CPERPPTS (/ *error* cperp:kill cperp:unplace cperp:finish
+                   cperp:ruler-off cperp:ruler-show cperp:ask-len
+                   rlEnts rlBox rlRows rlVal rlFeet rlSaid rr pk v out done kws
                      os ce pd clay cec celt celw celts cdim undoOpen tmpEnts
                      srcData srcLayer srcColor srcLtype srcLw srcLts
                      dimPairs dimStyle pr
@@ -681,6 +1035,72 @@
             tangs     (cdr tangs)
             idxs      (cdr idxs)))
     (setq i tgt))
+
+  ;; take the length ruler down, and forget it
+  (defun cperp:ruler-off ()
+    (foreach e rlEnts (cperp:kill e))
+    (setq rlEnts nil rlBox nil rlRows nil rlVal nil))
+
+  ;; the ruler for the LAST length, drawn fresh whenever that length or
+  ;; the family it was typed in has changed since it was last drawn;
+  ;; nothing until there is a last length, since there is nothing to
+  ;; build one around.  Its entities are guides like the rest, so the
+  ;; cleanup sweeps them on every way out
+  (defun cperp:ruler-show ( / rr)
+    (if (and lastLen (not (equal (list lastLen rlFeet) rlVal)))
+      (progn
+        (cperp:ruler-off)
+        (setq rr (cperp:draw-ruler (cperp:eighths lastLen) rlFeet "PERPPTS-TEMP"))
+        (setq rlEnts  (car rr) rlBox (cadr rr) rlRows (caddr rr)
+              rlVal   (list lastLen rlFeet)
+              tmpEnts (append rlEnts tmpEnts))
+        (if (not rlSaid)
+          (progn
+            (setq rlSaid T)
+            (princ (strcat "\n  A ruler of nearby lengths is beside the"
+                           " drawing: click a row to take it, or type a"
+                           " length (44, 44 1/2, 3'8).")))))))
+
+  ;; One length prompt, and every way of answering it: Enter (nil back,
+  ;; the caller repeats the last length), a keyword out of kws (handed
+  ;; back as the keyword), a typed measurement in any spelling
+  ;; cperp:parse-len reads, a click on a ruler row (that row's value), or
+  ;; a click on empty space, which is the first of two points to
+  ;; measure the length between -- what getdist always offered.  Zero,
+  ;; a negative and text that is not a length are refused and asked
+  ;; again, as initget 6 used to refuse them.  Always a positive number
+  ;; otherwise
+  (defun cperp:ask-len (prompt kws / pk v out done)
+    (cperp:ruler-show)
+    (setq done nil out nil)
+    (while (not done)
+      (initget 128 kws)
+      (setq pk (getpoint prompt))
+      (if lzd:ask (lzd:ask prompt pk) pk)
+      (cond
+        ((null pk) (setq done T))
+        ((= (type pk) 'STR)
+         (cond
+           ((member pk (cperp:split kws)) (setq out pk done T))
+           ;; a leading minus is refused here, since the reader below
+           ;; treats a dash as the separator in 4-1/2 and would read
+           ;; -5 as 5
+           ((= (substr (vl-string-trim " \t" pk) 1 1) "-")
+            (princ "\nA length must be more than zero."))
+           ((setq v (cperp:parse-len pk))
+            (if (> (car v) 0.0)
+              (setq out (car v) rlFeet (cadr v) done T)
+              (princ "\nA length must be more than zero.")))
+           (t (cperp:say-unread pk))))
+        ((setq v (cperp:ruler-hit pk rlBox rlRows))
+         (setq out (/ v 8.0) done T))
+        (t
+         (setq v (getdist pk "\nSecond point of the length: "))
+         (if lzd:ask (lzd:ask "\nSecond point of the length: " v) v)
+         (if (and (numberp v) (> v 0.0))
+           (setq out v done T)
+           (princ "\nA length must be more than zero.")))))
+    out)
 
   ;; single cleanup path shared by normal exit, Esc and errors
   (defun cperp:finish (/ guard)
@@ -994,6 +1414,7 @@
       (cond
         ;; --- how many values / points for this round -------------------
         ((= rstep 1)
+         (cperp:ruler-off)
          (setq n nil)
          (while (null n)
            (initget 6)
@@ -1037,7 +1458,7 @@
         ;; --- length per point + build the new perpendicular points -----
         ((= rstep 2)
          (if (>= i n)
-           (setq rstep 3)
+           (progn (cperp:ruler-off) (setq rstep 3))
            (progn
              (setq base (nth i basePts)
                    tg   (cperp:tangent curCrv base curRev)
@@ -1076,18 +1497,18 @@
                   (t
                    ;; Undo kept as a hidden synonym; Max is offered only
                    ;; where there is a boundary ahead of this point to reach
-                   (initget 6 (if cap "Back Undo Max" "Back Undo"))
-                   (setq len (getdist (strcat "\nLength for point " (itoa (1+ i))
-                                              " of " (itoa n)
-                                              (cond
-                                                (cap (strcat ", boundary at " (rtos cap)))
-                                                ((equal bmode "Meet") " (no boundary ahead)")
-                                                (t ""))
-                                              (if lastLen
-                                                (strcat " <" (rtos lastLen) ">")
-                                                "")
-                                              (if cap " [Back/Max]: " " [Back]: "))))
-                   (if lzd:ask (lzd:ask (getvar "LASTPROMPT") len) len)
+                   (setq len (cperp:ask-len
+                               (strcat "\nLength for point " (itoa (1+ i))
+                                       " of " (itoa n)
+                                       (cond
+                                         (cap (strcat ", boundary at " (rtos cap)))
+                                         ((equal bmode "Meet") " (no boundary ahead)")
+                                         (t ""))
+                                       (if lastLen
+                                         (strcat " <" (rtos lastLen) ">")
+                                         "")
+                                       (if cap " [Back/Max]: " " [Back]: "))
+                               (if cap "Back Undo Max" "Back Undo")))
                    (if (null len) (setq len lastLen))
                    (if (equal len "Max") (setq len cap))
                    ;; The typed number is what Enter repeats, not the capped
