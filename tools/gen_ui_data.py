@@ -15,6 +15,17 @@ tables plus ``ui/calofin_net/blurbs.txt``, and ``--check`` fails when
 what is on disk is not what a fresh run would write -- the same
 contract ``releases/`` and ``shared/LAZPASS.lsp`` are held to.
 
+The ribbon add-in (``ui/calofin_ribbon/``) needs the same category
+table -- Layout/Points/Dimensions/Converters/Checking, with a caption
+and a tooltip per command -- and it is written in C#, not VB, so it
+cannot reference ``CalofinPalette.vb``'s class without dragging the
+whole palette assembly along as a runtime dependency it does not
+otherwise need.  Rather than hand-type a second roster in a second
+language and reopen the exact drift this file exists to close, this
+also writes ``ui/calofin_ribbon/Generated/CommandCatalog.g.cs`` -- the
+category table alone, since the ribbon has no Find page and no job
+pages to carry.  One generator, two languages, the same source tables.
+
 **Why generating VB is allowed here when check_registry --fix refuses.**
 check_registry will not write VB because the decisions it would be
 writing are editorial: a caption is words somebody chose, a category is
@@ -44,6 +55,7 @@ from check_registry import CATEGORIES, PANEL, captions, pages, tutorials  # noqa
 BLURBS = ROOT / "ui" / "calofin_net" / "blurbs.txt"
 HOWTO = ROOT / "ui" / "calofin_net" / "howto.txt"
 OUT = ROOT / "ui" / "calofin_net" / "Generated" / "CommandCatalog.g.vb"
+OUT_CS = ROOT / "ui" / "calofin_ribbon" / "Generated" / "CommandCatalog.g.cs"
 
 #: What the palette's Commands tab shows as its groups.  They ARE the
 #: panel's category pages -- lzp:*groups* files every tool into
@@ -286,19 +298,131 @@ def build(src=None, blurb=None, howto_map=None):
     return "\n".join(L) + "\n"
 
 
+def csstr(s):
+    """S as a C# string literal.  C# escapes a backslash and a quote
+    with a leading backslash -- unlike VB, which doubles the quote and
+    has no backslash escape at all -- so the two emitters cannot share
+    one quoting function."""
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def entry_cs(cmd, caption, blurb, indent):
+    return "%snew Entry(%s, %s, %s)," % (
+        indent, csstr(cmd), csstr(caption), csstr(blurb))
+
+
+def build_cs(src=None, blurb=None):
+    """The generated C# source, as text.
+
+    Only the category table: the ribbon has one panel per
+    Layout/Points/Dimensions/Converters/Checking group and no Find page
+    or job pages to carry, so ``All``, ``Pages`` and ``CaptionOf`` --
+    the VB catalog's other three views -- would be dead code here."""
+    src = read(PANEL) if src is None else src
+    caps = captions(src)
+    pg = pages(src)
+    if caps is None or pg is None:
+        raise SystemExit(
+            "gen_ui_data: cannot read LAZPANEL's roster tables - has "
+            "lzp:*captions* or lzp:*groups* been renamed?")
+    blurb = blurbs() if blurb is None else blurb
+
+    def blurb_of(cmd):
+        return blurb.get(cmd) or caps.get(cmd, cmd)
+
+    L = []
+    add = L.append
+    add("// SPDX-License-Identifier: GPL-3.0-or-later")
+    add("//")
+    add("// GENERATED FILE - DO NOT EDIT.  Your change will vanish.")
+    add("//")
+    add("//   written by : tools/gen_ui_data.py")
+    add("//   from       : lisp/lazpanel/LAZPANEL.lsp  (lzp:*captions*,")
+    add("//                lzp:*groups*) and ui/calofin_net/blurbs.txt")
+    add("//   regenerate : python3 tools/gen_ui_data.py")
+    add("//   checked by : python3 tools/gen_ui_data.py --check, which")
+    add("//                make check runs")
+    add("//")
+    add("// The ribbon and the VB palette's Commands tab offer the same")
+    add("// routines under the same captions and the same categories,")
+    add("// because both are generated from LAZPANEL's own tables -- this")
+    add("// file carries only the category table, which is all the ribbon")
+    add("// needs.  To add a tool: put it on LAZPANEL, write its blurb in")
+    add("// blurbs.txt, and re-run the generator.")
+    add("")
+    add("using System.Collections.Generic;")
+    add("")
+    add("namespace Calofin.Ribbon")
+    add("{")
+    add("    /// <summary>")
+    add("    /// The category panels the ribbon builds, in LAZPANEL's own")
+    add("    /// words.  lzp:*groups* files every tool into exactly one, so")
+    add("    /// this is not a second opinion about where a tool belongs --")
+    add("    /// it is the VB palette's own Groups table, written again in")
+    add("    /// C# by the same generator so the ribbon needs no reference")
+    add("    /// to the VB assembly to read it.")
+    add("    /// </summary>")
+    add("    public static class CommandCatalog")
+    add("    {")
+    add("        /// <summary>One routine: the command, its caption and")
+    add("        /// its tooltip.</summary>")
+    add("        public readonly struct Entry")
+    add("        {")
+    add("            public readonly string Command;")
+    add("            public readonly string Caption;")
+    add("            public readonly string Blurb;")
+    add("")
+    add("            public Entry(string command, string caption, string blurb)")
+    add("            {")
+    add("                Command = command;")
+    add("                Caption = caption;")
+    add("                Blurb = blurb;")
+    add("            }")
+    add("        }")
+    add("")
+    add("        /// <summary>The category pages, keyed by LAZPANEL's own")
+    add("        /// names.</summary>")
+    add("        public static readonly Dictionary<string, Entry[]> Groups =")
+    add("            new Dictionary<string, Entry[]>")
+    add("        {")
+    for gi, group in enumerate(GROUPS):
+        cmds = [c for names_ in pg.get(group, {}).values() for c in names_]
+        add('            { %s, new[]' % csstr(group))
+        add("            {")
+        for cmd in cmds:
+            add(entry_cs(cmd, caps.get(cmd, ""), blurb_of(cmd), "                "))
+        add("            } },")
+    add("        };")
+    add("    }")
+    add("}")
+    return "\n".join(L) + "\n"
+
+
 # --------------------------------------------------------------- driver
 
 def check():
     """Problems as a list of strings, empty when the file is current."""
+    problems = []
     want = build()
     if not OUT.is_file():
-        return ["%s: missing - run python3 tools/gen_ui_data.py"
-                % OUT.relative_to(ROOT)]
-    if read(OUT) != want:
-        return ["%s: stale - it is not what tools/gen_ui_data.py would "
-                "write now.  Regenerate: python3 tools/gen_ui_data.py"
-                % OUT.relative_to(ROOT)]
-    return []
+        problems.append("%s: missing - run python3 tools/gen_ui_data.py"
+                         % OUT.relative_to(ROOT))
+    elif read(OUT) != want:
+        problems.append(
+            "%s: stale - it is not what tools/gen_ui_data.py would "
+            "write now.  Regenerate: python3 tools/gen_ui_data.py"
+            % OUT.relative_to(ROOT))
+
+    want_cs = build_cs()
+    if not OUT_CS.is_file():
+        problems.append("%s: missing - run python3 tools/gen_ui_data.py"
+                         % OUT_CS.relative_to(ROOT))
+    elif read(OUT_CS) != want_cs:
+        problems.append(
+            "%s: stale - it is not what tools/gen_ui_data.py would "
+            "write now.  Regenerate: python3 tools/gen_ui_data.py"
+            % OUT_CS.relative_to(ROOT))
+    return problems
 
 
 def blurb_gaps():
@@ -354,11 +478,20 @@ def main(argv=None):
     OUT.parent.mkdir(parents=True, exist_ok=True)
     changed = not OUT.is_file() or read(OUT) != text
     OUT.write_text(text, encoding="utf-8")
+
+    text_cs = build_cs()
+    OUT_CS.parent.mkdir(parents=True, exist_ok=True)
+    changed_cs = not OUT_CS.is_file() or read(OUT_CS) != text_cs
+    OUT_CS.write_text(text_cs, encoding="utf-8")
+
     for n in notes:
         print(n)
     print("gen_ui_data: %s %s (%d commands, %d pages)"
           % (OUT.relative_to(ROOT), "written" if changed else "unchanged",
              len(captions(read(PANEL))), len(pages(read(PANEL)))))
+    print("gen_ui_data: %s %s (%d commands, %d groups)"
+          % (OUT_CS.relative_to(ROOT), "written" if changed_cs else "unchanged",
+             len(captions(read(PANEL))), len(GROUPS)))
     return 0
 
 

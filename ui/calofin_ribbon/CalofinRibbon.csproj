@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Same split as Calofin.vbproj (ui/calofin_net/): net48 for
+         AutoCAD 2021-2024, net8.0-windows + AutoCAD.NET 25.x for
+         2025+.  See ui/calofin_net/README.md's version table -- this
+         project follows the same one, and for the same reason: AutoCAD
+         loads a plugin in-process against whichever runtime it was
+         built for. -->
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>Calofin.Ribbon</RootNamespace>
+    <AssemblyName>CalofinRibbon</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <!-- AutoCAD owns the process; this assembly is only ever loaded into it -->
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference assemblies only, exactly as Calofin.vbproj.  CopyLocal
+         MUST stay false: shipping acmgd/acdbmgd/adwindows next to the
+         assembly makes AutoCAD load a second copy of its own API and
+         fail in ways that look unrelated to this project. -->
+    <PackageReference Include="AutoCAD.NET" Version="24.3.0" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- tools/gen_ribbon_icons.py writes these; the project copies them
+         next to the DLL the same way Calofin.vbproj copies
+         assets/bottoms, so LoadIcon in RibbonExtensionApplication.cs
+         finds them beside whatever folder CalofinRibbon.dll ends up
+         in. -->
+    <None Include="icons\*.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
