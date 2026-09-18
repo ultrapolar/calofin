@@ -39,9 +39,10 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from callib import ROOT, read  # noqa: E402
-from check_registry import CATEGORIES, PANEL, captions, pages  # noqa: E402
+from check_registry import CATEGORIES, PANEL, captions, pages, tutorials  # noqa: E402
 
 BLURBS = ROOT / "ui" / "calofin_net" / "blurbs.txt"
+HOWTO = ROOT / "ui" / "calofin_net" / "howto.txt"
 OUT = ROOT / "ui" / "calofin_net" / "Generated" / "CommandCatalog.g.vb"
 
 #: What the palette's Commands tab shows as its groups.  They ARE the
@@ -65,21 +66,54 @@ def blurbs(path=BLURBS):
     return out
 
 
+def howto(path=HOWTO):
+    """{COMMAND: fuller explanation} out of the hand-edited howto file --
+    one multi-line block per command, "== COMMAND ==" then its text up
+    to the next such heading or the end of file."""
+    out = {}
+    cmd = None
+    body = []
+
+    def flush():
+        if cmd is not None:
+            text = "\n".join(body).strip("\n")
+            if text:
+                out[cmd] = text
+
+    for line in read(path).splitlines():
+        if line.startswith("== ") and line.endswith(" =="):
+            flush()
+            cmd = line[3:-3].strip()
+            body = []
+        elif cmd is not None:
+            body.append(line)
+    flush()
+    return out
+
+
 # ------------------------------------------------------------- emitting
 
 def vbstr(s):
     """S as a VB string literal.  VB escapes a quote by doubling it and
     has no backslash escape at all, so a path or a 3\" lap needs nothing
-    else done to it."""
-    return '"' + s.replace('"', '""') + '"'
+    else done to it.  A VB string literal cannot itself hold a newline,
+    which the howto text often has, so a multi-line S is written as
+    consecutive literals joined by " & vbLf & " instead -- a plain
+    single-line S (everything but HowTo, today) round-trips through
+    this unchanged."""
+    if "\n" not in s:
+        return '"' + s.replace('"', '""') + '"'
+    return " & vbLf & ".join(
+        '"' + part.replace('"', '""') + '"' for part in s.split("\n"))
 
 
-def entry(cmd, caption, blurb, indent):
-    return "%sNew Entry(%s, %s, %s)" % (
-        indent, vbstr(cmd), vbstr(caption), vbstr(blurb))
+def entry(cmd, caption, blurb, howto_text, tutorial, indent):
+    return "%sNew Entry(%s, %s, %s, %s, %s)" % (
+        indent, vbstr(cmd), vbstr(caption), vbstr(blurb),
+        vbstr(howto_text), vbstr(tutorial))
 
 
-def build(src=None, blurb=None):
+def build(src=None, blurb=None, howto_map=None):
     """The generated VB source, as text."""
     src = read(PANEL) if src is None else src
     caps = captions(src)
@@ -89,12 +123,19 @@ def build(src=None, blurb=None):
             "gen_ui_data: cannot read LAZPANEL's roster tables - has "
             "lzp:*captions* or lzp:*groups* been renamed?")
     blurb = blurbs() if blurb is None else blurb
+    howto_map = howto() if howto_map is None else howto_map
+    tuts = tutorials(src)
 
     def blurb_of(cmd):
         # A caption is never nothing (test_lazpanel.py refuses a blank
         # one), so the fallback is always a sentence rather than an
         # empty tooltip.
         return blurb.get(cmd) or caps.get(cmd, cmd)
+
+    def howto_of(cmd):
+        # lzp:howto's own fallback, mirrored: a command with no howto.txt
+        # block falls back to its blurb rather than showing blank.
+        return howto_map.get(cmd) or blurb_of(cmd)
 
     L = []
     add = L.append
@@ -104,7 +145,8 @@ def build(src=None, blurb=None):
     add("'")
     add("'   written by : tools/gen_ui_data.py")
     add("'   from       : lisp/lazpanel/LAZPANEL.lsp  (lzp:*captions*,")
-    add("'                lzp:*groups*) and ui/calofin_net/blurbs.txt")
+    add("'                lzp:*groups*, lzp:*tutorials*) and")
+    add("'                ui/calofin_net/blurbs.txt, ui/calofin_net/howto.txt")
     add("'   regenerate : python3 tools/gen_ui_data.py")
     add("'   checked by : python3 tools/gen_ui_data.py --check, which")
     add("'                make check runs")
@@ -131,17 +173,24 @@ def build(src=None, blurb=None):
     add("    Private Sub New()")
     add("    End Sub")
     add("")
-    add("    ''' <summary>One routine: the command, its caption and its")
-    add("    ''' tooltip.</summary>")
+    add("    ''' <summary>One routine: the command, its caption, its")
+    add("    ''' tooltip, the fuller step-by-step explanation Find's How")
+    add("    ''' it works shows, and the TUTORIAL* command for Find's")
+    add("    ''' Tutorial button -- \"\" when this command has none.</summary>")
     add("    Public Structure Entry")
     add("        Public ReadOnly Command As String")
     add("        Public ReadOnly Caption As String")
     add("        Public ReadOnly Blurb As String")
+    add("        Public ReadOnly HowTo As String")
+    add("        Public ReadOnly TutorialCommand As String")
     add("")
-    add("        Public Sub New(command As String, caption As String, blurb As String)")
+    add("        Public Sub New(command As String, caption As String, blurb As String,")
+    add("                       howTo As String, tutorialCommand As String)")
     add("            Me.Command = command")
     add("            Me.Caption = caption")
     add("            Me.Blurb = blurb")
+    add("            Me.HowTo = howTo")
+    add("            Me.TutorialCommand = tutorialCommand")
     add("        End Sub")
     add("    End Structure")
     add("")
@@ -179,7 +228,8 @@ def build(src=None, blurb=None):
     add("    Public Shared ReadOnly All As Entry() = {")
     for i, cmd in enumerate(names):
         tail = "," if i < len(names) - 1 else ""
-        add(entry(cmd, caps[cmd], blurb_of(cmd), "        ") + tail)
+        add(entry(cmd, caps[cmd], blurb_of(cmd), howto_of(cmd),
+                  tuts.get(cmd, ""), "        ") + tail)
     add("    }")
     add("")
 
@@ -194,8 +244,8 @@ def build(src=None, blurb=None):
         add('        {"%s", {' % group)
         for i, cmd in enumerate(cmds):
             tail = "," if i < len(cmds) - 1 else ""
-            add(entry(cmd, caps.get(cmd, ""), blurb_of(cmd),
-                      "            ") + tail)
+            add(entry(cmd, caps.get(cmd, ""), blurb_of(cmd), howto_of(cmd),
+                      tuts.get(cmd, ""), "            ") + tail)
         add("        }}" + ("," if gi < len(GROUPS) - 1 else ""))
     add("    }")
     add("")
@@ -258,6 +308,15 @@ def blurb_gaps():
     return sorted(set(caps) - set(have)), sorted(set(have) - set(caps))
 
 
+def howto_gaps():
+    """Commands the panel carries that howto.txt has no block for.  Not
+    an error the way a missing blurb is -- lzp:howto falls back to the
+    blurb -- so main() reports these as notes, same tone as blurb_gaps."""
+    caps = captions(read(PANEL)) or {}
+    have = howto()
+    return sorted(set(caps) - set(have)), sorted(set(have) - set(caps))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--check", action="store_true",
@@ -272,6 +331,13 @@ def main(argv=None):
     for c in extra:
         notes.append("blurbs.txt: %s is not a panel command - remove the "
                      "line" % c)
+    missing, extra = howto_gaps()
+    for c in missing:
+        notes.append("howto.txt: no block for %s - it falls back to its "
+                     "blurb; add a \"== %s ==\" block" % (c, c))
+    for c in extra:
+        notes.append("howto.txt: %s is not a panel command - remove the "
+                     "block" % c)
 
     if args.check:
         problems = check() + notes
