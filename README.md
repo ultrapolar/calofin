@@ -461,6 +461,7 @@ everything else releases one file per source.
 | | Folder | |
 | --- | --- | --- |
 | Calofin palette (VB.NET) | `ui/calofin_net/` | Dockable AutoCAD palette: Find over names and captions, Recent and Pinned rows sharing `LAZPANEL`'s own registry key, the panel's whole tab strip as real tabs, and the `LAZFORM`, `LAZSPA`, `LAZSTEP` and `LAZSIDE` sheets **drawn from their own vectors** - a box on every dimension line, a state line that holds Draw back, and Recall-last sharing the DCL forms' store. Only the pool-bottom tab is still a photograph. Its catalog is no longer typed - `Generated/CommandCatalog.g.vb` is written from `LAZPANEL`'s own tables by `tools/gen_ui_data.py`, so the two surfaces cannot part again the way they had (the palette shipped 60 of 67). The tooltips are the palette's own words and stay hand-written, in `blurbs.txt` |
+| Calofin ribbon (C#) | `ui/calofin_ribbon/` | A native ribbon tab, one panel per LAZPANEL category (Layout/Points/Dimensions/Converters/Checking) with its own generated icon, one button per routine. A second surface, not a replacement - different assembly, different command (`CALOFINRIBBON`), no reference to the VB palette. Its catalog is the same generator's second output, `Generated/CommandCatalog.g.cs`, so the ribbon needs no dependency on `Calofin.dll` to read one table out of it. The icons are drawn by `tools/gen_ribbon_icons.py`, pure stdlib, one glyph per category |
 | Palette LISP glue | `ui/calofin_ui/` | `calofin.lsp` - reports which commands are actually loaded this session, so the palette can grey out the rest, and carries the **form wire**: the palette sends a box's text as typed and this reads it, through the same three-state contract the DCL charts use. Checked too: a palette button with no probe-list name could never grey out, which is how five of them shipped |
 
 `ui/PLAN.md` records how the palette got here and why the wire between
@@ -559,7 +560,8 @@ python3 ariel/anchors.py --from-shot deck.png --score placed.txt
 | `check_standards.py` | Cross-file check: every `lisp/` tool has a `shared/` twin **and that twin carries the same version banner**, only the library owns `cal:`, no grouped-build name collisions, no stale `releases/` twin |
 | `check_lisp.py` | Static check: unbalanced parens, undefined functions/globals, unused defuns, and special forms given the wrong number of arguments (a four-argument `(if ...)` parses fine and dies at the command line) |
 | `check_scope.py` | Static check: local variables used without being declared in a defun's arglist |
-| `gen_ui_data.py` | Writes the palette's `Generated/CommandCatalog.g.vb` from `lzp:*captions*` / `lzp:*groups*` plus `ui/calofin_net/blurbs.txt`. `--check` fails when the file on disk is not what a fresh run would write, the same contract `releases/` is held to |
+| `gen_ui_data.py` | Writes the palette's `Generated/CommandCatalog.g.vb` **and** the ribbon's `Generated/CommandCatalog.g.cs` from `lzp:*captions*` / `lzp:*groups*` plus `ui/calofin_net/blurbs.txt` - one generator, two languages, the same source tables. `--check` fails when either file on disk is not what a fresh run would write, the same contract `releases/` is held to |
+| `gen_ribbon_icons.py` | Writes the ribbon's five panel icons in `ui/calofin_ribbon/icons/`, one per LAZPANEL category, with nothing but `zlib` and `struct` - no imaging library for five blocky 32x32 glyphs. `--check` fails when a file is missing or not what a fresh render would produce; not yet wired into `check_standards.py`, see `ui/calofin_ribbon/README.md` |
 | `gen_ui_charts.py` | Writes the palette's `Generated/ChartCatalog.g.vb` - the vector charts `LAZFORM`, `LAZSPA`, `LAZSTEP` and `LAZSIDE` draw, plus the tables that are not geometry: LAZFORM's cross dims, mode dropdowns, corner rows, bottom types and in-square keywords, and LAZSPA's corner rows, second-outline keys, dropdowns and treatments - out of `lzf:*charts*`, `lzs:*charts*`, `lzt:chart`, `lzv:chart` and the four `lzs:*` tables, read through `tests/lispvm.py`. Arcs are flattened by the Lisp's own helper, so the palette draws the same oval the panel does with no arc arithmetic of its own |
 | `check_vb.py` | Static check over the VB palette, for a tree with no VB compiler: blocks opened and closed by the right closer, quotes and parens balanced per logical line, and every member and constructor arity of the assembly's OWN types resolved - which is what holds the hand-written palette to the generated catalog |
 | `check_dcl.py` | Every generated dialog still fits the screen. DCL does not scroll: one wider or taller than the display does not clip, AutoCAD refuses to open it. Each generator is driven to its tallest reachable state - pins and recents full, every chart, every step count - and measured by `dclsize.py`, whose constants are fitted to the one real AutoCAD report there is; `--list` prints every dialog, tallest first |
@@ -752,6 +754,11 @@ python3 tests/test_ui_data.py         # the palette's generated catalog read
                                       # back and held to LAZPANEL's roster -
                                       # captions, categories, the whole tab
                                       # strip, and the blurbs it must not invent
+python3 tests/test_ribbon_catalog.py  # the ribbon's generated C# catalog, the
+                                      # same generator's second output, held to
+                                      # the same panel and blurbs
+python3 tests/test_ribbon_icons.py    # the ribbon's five panel icons: one per
+                                      # category, well-formed PNGs, current
 python3 tests/test_check_vb.py        # the VB linter itself, driven against VB
                                       # that is wrong on purpose: a checker
                                       # that has stopped checking is worse
