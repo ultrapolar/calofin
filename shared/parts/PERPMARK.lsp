@@ -50,6 +50,9 @@
 ;;;          has one distance at a point, so the second answer is a
 ;;;          correction rather than a second mark;
 ;;;        - Back takes the last mark away again;
+;;;        - from the second distance on, a RULER of nearby distances
+;;;          stands beside the prompt: click a row and that is the
+;;;          distance (see "The ruler beside the distance" below);
 ;;;        - Enter ends the round.
 ;;;   4. Draw a polyline through the marks?  No leaves every circle and
 ;;;      every line exactly where they are, for you to do as you see fit.
@@ -147,6 +150,19 @@
 ;;;   still dimensioned.  A measurement is the one thing that may never
 ;;;   go quietly missing.
 ;;;
+;;; The ruler beside the distance
+;;;   From the second distance on, DIMSTAMP's ruler stands near the
+;;;   right edge of the view: the eighths of an inch for a whole inch
+;;;   either side of the last distance, graded like a tape with the
+;;;   last one ringed.  Click a row and that is the distance; type one
+;;;   and it reads as DIMSTAMP reads (44, 44.5, 44 1/2, 3'8, 4'-4 1/2"
+;;;   - kept exactly as typed, only the ruler rounds to the eighth);
+;;;   click empty space and it is the first of two points to measure
+;;;   between, as getdist always offered.  Back means what it always
+;;;   did.  The ruler is scratch on the marks layer, down when the
+;;;   round ends or backs out of itself, and swept on every way out,
+;;;   Esc included.  Its knobs are the pm:*ruler-* tunables.
+;;;
 ;;; Properties
 ;;;   * Circles and lines land on layer "PERPMARK" (created if missing).
 ;;;     They are the run's working marks: keep them, turn the layer off,
@@ -160,8 +176,8 @@
 ;;; Robustness
 ;;;   * The whole run is one UNDO group: a single U reverses all of it.
 ;;;   * Esc or an error at any prompt restores every system variable the
-;;;     command changed (OSMODE, CMDECHO, CLAYER and the dimension style)
-;;;     and closes the UNDO group.
+;;;     command changed (OSMODE, CMDECHO, CLAYER and the dimension style),
+;;;     takes the ruler down and closes the UNDO group.
 ;;;   * A number nothing carries, a number two points share, a click on
 ;;;     nothing, a point the perimeter cannot be read under, and a centre
 ;;;     click that leaves the direction ambiguous all re-prompt where
@@ -176,7 +192,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.5")
+(setq *perpmark-version* "v1.6")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -239,6 +255,37 @@
 ;; more, in the direction neither neighbour agrees with, is a digit.
 ;; Raising it hides typos, lowering it starts naming real steps.
 (setq pm:*spike-tol* 2.0)
+
+;; The LENGTH RULER beside the distance prompt: from the second distance
+;; on, DIMSTAMP's ruler stands near the right edge of the view -- the
+;; eighths for an inch either side of the last distance, graded like a
+;; tape, the last one ringed -- and a click on a row is the distance.
+;; Scratch on the marks layer, taken down when the round ends and on
+;; every way out.  Every size is a fraction of the current view, so the
+;; ruler reads the same at any zoom.
+(setq pm:*ruler-color* 3)          ; ACI colour of the rows you can PICK,
+                                   ; carried on the entities themselves
+(setq pm:*ruler-current-color* 7)  ; ACI colour of the ringed CURRENT
+                                   ; row -- the last distance -- so it
+                                   ; reads apart from the options; 7 is
+                                   ; AutoCAD's black/white swap
+(setq pm:*ruler-screen-x* 0.88)    ; where the spine sits across the
+                                   ; view, as a fraction of its width in
+                                   ; from the left; past 0.5 the rows
+                                   ; reach left, short of it they reach
+                                   ; right, so the ruler is always inside
+                                   ; the view
+(setq pm:*ruler-row-frac* 0.042)   ; one row's share of the view's
+                                   ; height -- the ruler's size knob
+(setq pm:*ruler-txt-frac* 0.5)     ; the biggest row label's height, as
+                                   ; a fraction of the row spacing
+(setq pm:*ruler-tick-frac* 0.6)    ; the longest tick, same measure
+(setq pm:*ruler-ring-frac* 0.26)   ; the ring round the current row, as
+                                   ; a fraction of the row spacing
+(setq pm:*ruler-reach* 6.0)        ; how far inboard of the spine, in
+                                   ; row spacings, a click still counts
+                                   ; as picking a row rather than as the
+                                   ; first point of a measured distance
 
 ;;; ----------------------------------------------------------------------
 ;;;  Vectors and angles
@@ -655,6 +702,47 @@
   (foreach c cands
     (if (= (pm:canon (pm:cd-nm c)) want) (setq out (cons c out))))
   (reverse out))
+
+;;; -------------------- the length ruler --------------------------------
+;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
+;;;  Once a first length has been given, the prompt draws the eighths
+;;;  of an inch for a whole inch either side of the last one down a
+;;;  strip near the right edge of the view, graded like a tape with the
+;;;  last length ringed in the middle -- and one prompt then takes a
+;;;  click on a row (that row's value), a typed measurement in any
+;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  or a click on empty space as the first of two points to measure
+;;;  between, which is what getdist always offered.  A run of
+;;;  near-equal lengths is clicked rather than typed over and over.
+;;;
+;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
+;;;  ask their lengths through it.  Each carries this block under its
+;;;  own prefix so the standalone file loads alone, the grouped build
+;;;  swaps the copy for the library's, and tests/test_ruler_copies.py
+;;;  holds every copy to this one text.  DIMSTAMP keeps its own ruler:
+;;;  its current row is drawn as the stamp it would make, on the
+;;;  stamp's layer in the stamp's style, which is a different thing
+;;;  from a row of nearby lengths.
+;;;
+;;;  Nothing in here reads a knob.  A tool hands its knobs in as one
+;;;  STYLE list and keeps the ruler between prompts as one STATE list:
+;;;    STYLE  (COLOR CURRENT-COLOR SCREEN-X ROW-FRAC TXT-FRAC TICK-FRAC
+;;;            RING-FRAC REACH) -- a caller's tunables block says what
+;;;            each one moves
+;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID) -- the length the
+;;;            ruler stands round (nil = none up), the family it is
+;;;            labelled in (T = feet), what is drawn, its layer, the
+;;;            style, and whether the one-line hint has been said
+;;;  Values are INCHES, the unit this shop draws in, and the ruler
+;;;  steps in eighths of one, which is what a tape reads in.
+
+;;; -------------------- end of the length ruler -------------------------
+
+;; This file's knobs, in the order the ruler reads them.
+(defun pm:ruler-style ()
+  (list pm:*ruler-color* pm:*ruler-current-color* pm:*ruler-screen-x*
+        pm:*ruler-row-frac* pm:*ruler-txt-frac* pm:*ruler-tick-frac*
+        pm:*ruler-ring-frac* pm:*ruler-reach*))
 
 ;;; ----------------------------------------------------------------------
 ;;;  Ask helpers
@@ -1079,11 +1167,12 @@
                      sel en ed segs tot closed ctr pick cand cands loc
                      base tg nrm d ans marks stage done pts run s0 s1
                      m0 m1 way wayasked miss sty lay odim ndims npts m
-                     poly sgn)
+                     poly sgn rl rr lastd)
 
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
     (cal:sysrestore)
+    (if rl (setq rl (cal:ruler-off rl)))
     ;; DIMSTYLE cannot be setvar'd back
     (if (and odim (tblsearch "DIMSTYLE" odim))
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" odim)))
@@ -1106,7 +1195,11 @@
         odim      (getvar "DIMSTYLE")
         marks     '()
         stage     1
-        done      nil)
+        done      nil
+        lastd     nil
+        ;; the length ruler, not up yet: it stands beside the distance
+        ;; prompt from the second distance on, on the marks layer
+        rl        (cal:ruler-new pm:*marklayer* (pm:ruler-style)))
 
   (while (not done)
     (cond
@@ -1187,6 +1280,7 @@
          ((eq cand 'CAL-BACK)
           (cond
             ((null marks)
+             (setq rl (cal:ruler-off rl))
              (princ "\nStepping back one question.")
              ;; the side question is only there on a wall that needed it
              (setq stage (if sgn 1 2)))
@@ -1195,6 +1289,7 @@
                             (pm:ptname (pm:m-name (car marks))) " undone."))
              (setq marks (pm:unmark marks (pm:m-ent (car marks)))))))
          ((null cand)
+          (setq rl (cal:ruler-off rl))
           (if (null marks)
             (progn (princ "\nNothing marked.") (setq done T))
             (progn (pm:review marks poly) (setq stage 4))))
@@ -1218,15 +1313,23 @@
                               " question before this one."))
                (setq stage 31)))))))
 
-      ;; --- 3b. and the distance taped off it --------------------------
+      ;; --- 3b. and the distance taped off it.  From the second one on
+      ;;        the length ruler stands beside the prompt, round the
+      ;;        last distance given: a click on a row IS the distance ---
       ((= stage 31)
-       (setq d (cal:askdist 'REQ
-                 (strcat "Distance from the perimeter at "
-                         (pm:ptname (pm:cd-nm cand)))
-                 nil T))
+       (setq rl (cal:ruler-show rl lastd)
+             rr (cal:ask-len (strcat "\nDistance from the perimeter at "
+                                    (pm:ptname (pm:cd-nm cand))
+                                    " [Back]: ")
+                            "Back Undo" rl)
+             d  (car rr)
+             rl (cadr rr))
        (cond
-         ((or (eq d 'CAL-BACK) (null d)) (setq stage 3))
+         ((= (type d) 'STR) (setq stage 3))          ; Back, or Undo
+         ((null d)
+          (princ "\nA distance is required - type it, or click a ruler row."))
          (t
+          (setq lastd d)
           (if (null lay)
             (setq lay (cal:ensure-layer pm:*marklayer* pm:*markcolor*)))
           ;; a point picked twice is the sheet being corrected, not two
@@ -1370,6 +1473,7 @@
   (if (and odim (/= odim (getvar "DIMSTYLE")) (tblsearch "DIMSTYLE" odim))
     (command "_.-DIMSTYLE" "_Restore" odim))
   (if undo-open (setq undo-open (cal:undoend)))
+  (if rl (setq rl (cal:ruler-off rl)))
   (cal:sysrestore)
   (if lzd:end (lzd:end "PERPMARK"))
   (princ))

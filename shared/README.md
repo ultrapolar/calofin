@@ -145,7 +145,16 @@ survey-point naming PERPMARK introduced -- `cal:as-number`, `cal:canon`,
 `cal:cand-matches`, `cal:cand-nearest` and `cal:askpoint`, the one
 prompt that takes a click or a typed point number and re-asks a miss
 where it stands, which ABHD, CABHD, LHD, ABLOBF and FITABHD now ask
-every declaration through. Each
+every declaration through, and the LENGTH RULER DIMSTAMP grew --
+`cal:ask-len`, one length prompt that draws the eighths for an inch
+either side of the last length beside the drawing and takes a click on
+a row as the answer, with `cal:parse-len` (44, 44 1/2, 4'4.5 and
+4'-4 1/2" all read), `cal:spell-len`, `cal:draw-ruler`, `cal:ruler-hit`
+and the state helpers `cal:ruler-new` / `cal:ruler-show` /
+`cal:ruler-off` around them; PERPPTS, CPERPPTS, PERPMARK and the three
+step routines ask their lengths through it, and
+`tests/test_ruler_copies.py` holds each file's copy to the library's
+text. Each
 helper's comment names the tool implementation it was lifted from.
 
 **The chart-form kit** is the newest of them, and the largest single

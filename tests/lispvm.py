@@ -2116,6 +2116,14 @@ def _getpoint(vm, a):
     v = vm.pop_script(prompt, 'getpoint')
     if v is None:
         return NIL
+    # a scripted NUMBER at a prompt that allows arbitrary input is the
+    # drafter typing digits, and AutoCAD hands those back as the text
+    # typed, never as a point: "44" is not a coordinate pair.  It is
+    # what lets one script feed the same length to a getdist prompt and
+    # to the getpoint that replaced it (PERPPTS's ruler prompt)
+    if isinstance(v, (int, float)) and not isinstance(v, bool) \
+            and vm.initget_bits & 128:
+        v = repr(float(v)) if isinstance(v, float) else str(v)
     # a scripted string is keyword input -- getpoint honours initget
     # keywords exactly as getdist does ("Back" at a pick prompt)
     if isinstance(v, str):

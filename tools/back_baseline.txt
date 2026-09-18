@@ -27,6 +27,8 @@ lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nPick the FIRST wall of the corner:|fi
 lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nStep - step width [Same] <Enter = fit to walls , Same = >:|part of the step the next tread prompt takes back
 lisp/cornerstp/CORNERSTP.lsp|c:TUTORIALCORNERSTP|\nDraw a demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
 lisp/cornerstp/CORNERSTP.lsp|c:TUTORIALCORNERSTP|\nPick a clear spot (about 250 x 250 needed):|demo / tutorial
+lisp/cornerstp/CORNERSTP.lsp|cs-ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
+lisp/cornerstp/CORNERSTP.lsp|cs-ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
 lisp/cornerstp/CORNERSTP.lsp|cs-tut-pause||demo / tutorial
 lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nAdd a side profile? [Yes/No] <Yes>:|past committed geometry
 lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nBead the steps? [Yes/No] <Yes>:|past committed geometry
@@ -37,6 +39,8 @@ lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nPick the point on the curve to measure 
 lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nStep - step width [Same] <Enter = fit to the curve , Same = >: <Enter = >: :|part of the step the next tread prompt takes back
 lisp/cornerstp/HEMISTEP.lsp|c:TUTORIALHEMISTEP|\nDraw a demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
 lisp/cornerstp/HEMISTEP.lsp|c:TUTORIALHEMISTEP|\nPick a clear spot (about 300 x 150 needed):|demo / tutorial
+lisp/cornerstp/HEMISTEP.lsp|hs-ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
+lisp/cornerstp/HEMISTEP.lsp|hs-ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
 lisp/cornerstp/HEMISTEP.lsp|hs-tut-pause||demo / tutorial
 lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nAdd a side profile? [Yes/No] <Yes>:|past committed geometry
 lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nBead the steps? [Yes/No] <Yes>:|past committed geometry
@@ -46,6 +50,8 @@ lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nPick the line the steps run OFF OF:
 lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nStep width (the same for every step):|part of the step the next tread prompt takes back
 lisp/cornerstp/NORMIESTEP.lsp|c:TUTORIALNORMIESTEP|\nDraw a demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
 lisp/cornerstp/NORMIESTEP.lsp|c:TUTORIALNORMIESTEP|\nPick a clear spot (about 250 x 120 needed):|demo / tutorial
+lisp/cornerstp/NORMIESTEP.lsp|ns-ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
+lisp/cornerstp/NORMIESTEP.lsp|ns-ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
 lisp/cornerstp/NORMIESTEP.lsp|ns-tut-pause||demo / tutorial
 lisp/covercheck/covercheck.lsp|c:TUTORIALCOVERCHECK|\nPick a base point for the demo, clear of your real geometry <0,0>:|demo / tutorial
 lisp/covercheck/covercheck.lsp|cchk:ask-ny|[Yes/No] <No>:|helper: every caller asks it as a first question about one item
@@ -95,8 +101,12 @@ lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nPick a clear spot for the demo <0,0>:|
 lisp/paddle/PADDLE.lsp|paddle--pause|\n [ press ENTER to continue ]|pause
 lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nRepeat on the new polyline? [Yes/No] <No>:|past committed geometry
 lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nRound - how many values (points) are required? < >|first question of each round; the round in front of it is drawn
+lisp/perp_points/cperp_points.lsp|cperp:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
+lisp/perp_points/cperp_points.lsp|cperp:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
 lisp/perp_points/perp_points.lsp|c:PERPPTS|\nRepeat on the new polyline? [Yes/No] <No>:|past committed geometry
 lisp/perp_points/perp_points.lsp|c:PERPPTS|\nRound - how many values (points) are required? < >|first question of each round; the round in front of it is drawn
+lisp/perp_points/perp_points.lsp|perp:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
+lisp/perp_points/perp_points.lsp|perp:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
 lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\n --- press Enter to continue ---|demo / tutorial
 lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\nA point is required - insertion point:|demo / tutorial
 lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\nDemo size <100>:|demo / tutorial
@@ -109,6 +119,8 @@ lisp/perp_points/tutorial_perp_points.lsp|c:TUTORIALPERPPTS|\nDemo size <100>:|d
 lisp/perp_points/tutorial_perp_points.lsp|c:TUTORIALPERPPTS|\nInsertion point for the demo:|demo / tutorial
 lisp/perp_points/tutorial_perp_points.lsp|c:TUTORIALPERPPTS|\nKeep the demo drawing? [Keep/Erase] <Keep>:|demo / tutorial
 lisp/perp_points/tutorial_perp_points.lsp|c:TUTORIALPERPPTS|\nWhat would you like? [Checks/Demo/Both] <Both>:|demo / tutorial
+lisp/perpmark/PERPMARK.lsp|pm:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
+lisp/perpmark/PERPMARK.lsp|pm:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
 lisp/pool/POOL.LSP|pool:ask|\n :|the re-ask after a failed range check - Back would leave the check
 lisp/pool/TUTORIALPOOL.LSP|tutorial:pause|\nPress ENTER for the next topic (X then ENTER to stop here):|demo / tutorial
 lisp/poolside/POOLSIDE.lsp|psd:ask|\n :|the re-ask after a failed range check - Back would leave the check
