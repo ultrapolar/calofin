@@ -138,7 +138,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.42")
+(setq *lazpanel-version* "v3.43")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -485,7 +485,7 @@
     ("DIMCHECK" "Guided, one-at-a-time dimension review")
     ("DIMCONTEND" "Chains a seed dimension out to every feature point")
     ("DIMSCAN" "Scan drawing for dimensions")
-    ("DIMSTAMP" "Click a point, type 4'4.5 or 44.5; stamps it canonically, an on-screen ruler picks the next")
+    ("DIMSTAMP" "Click a point, type 4'4.5, 44.5 or a letter; stamps it canonically, a ruler picks the next")
     ("DRONE" "Drone cleanup routine")
     ("DRONOTE" "Places a canned drone-photo review note - diving board, hidden anchors or slide sketch - at a picked point")
     ("FITABHD" "Fits a typed pool template through surveyed points")
@@ -603,7 +603,7 @@
     ("DIMCHECK" "Guided, one-at-a-time dimension review.\nWhat it asks, in order:\n 1. Select objects\n 2. dimension point 1\n 3. dimension point 2\n 4. Is this dimension correct?\n 5. arc start point\n 6. arc end point\n 7. Merge into one line, Flag to fix, or Leave as is?\n 8. Flag to fix, or Leave as is?")
     ("DIMCONTEND" "Chains a seed dimension out to every feature point.\nWhat it asks, in order:\n 1. Select the dimension to continue\n 2. Select objects\n 3. Continue from another dimension?")
     ("DIMSCAN" "Scan drawing for dimensions.\nWhat it asks, in order:\n 1. Select objects")
-    ("DIMSTAMP" "Click a point, type 4'4.5 or 44.5; stamps it canonically, an on-screen ruler picks the next.\nWhat it asks, in order:\n 1. Click a point to place text (Enter when done)\n 2. Text - 4'-4 1/2\", or just 4'4.5\n 3. Click to place text, click the ruler to change it, or type new text (Enter when done)")
+    ("DIMSTAMP" "Click a point, type 4'4.5, 44.5 or a letter; stamps it canonically, a ruler picks the next.\nA letter labels a point the way the survey names them - A, B, C ... Z, AA - and moves on as it lands, so a run of labels is click, click, click rather than retyping each one.\nWhat it asks, in order:\n 1. Click a point to place text (Enter when done)\n 2. Text - 4'-4 1/2\", just 4'4.5, or a letter like A\n 3. Click to place text, click the ruler to change it, or type new text (Enter when done)")
     ("DRONE" "Drone cleanup routine.\nWhat it asks, in order:\n 1. Select objects")
     ("DRONOTE" "Places a canned drone-photo review note - diving board, hidden anchors or slide sketch - at a picked point.\nWhat it asks, in order:\n 1. Which note?\n 2. Pick a point for the note (Enter when done)")
     ("FITABHD" "Fits a typed pool template through surveyed points.\nWhat it asks, in order:\n 1. Select objects\n 2. Rectangle/Grecian/ROman/Oval/L/LAzyl/ROUnd\n 3. the pool corners\n 4. the cut corners\n 5. Oasis shape\n 6. Maximum distance from a point\n 7. Percent of points allowed beyond\n 8. Is the pool in-square or out-of-square?\n 9. Any bowed walls?\n 10. Keep this fit, or Redo it?\n 11. Point to leave out, or a ringed one to restore - pick it or type its number\n 12. Hopper offset in from the wall\n 13. Pick a point at the DEEP end of the pool\n 14. Deep break - how far from the deep end wall?\n 15. Shallow break - how far from the deep end wall?\n 16. Hopper offset in from each side wall\n 17. Hopper offset in from the deep end wall")
@@ -731,7 +731,7 @@
     ("DIMCHECK" "dimension placement arc attachment overlapping lines review style guided")
     ("DIMCONTEND" "chain continue dimension seed feature points")
     ("DIMSCAN" "dimension placement arc attachment overlapping lines scan style report")
-    ("DIMSTAMP" "dimension text stamp label mtext ruler measurement tape")
+    ("DIMSTAMP" "dimension text stamp label letter letters mtext ruler measurement tape")
     ("DRONE" "cleanup text style height points perimeter pool spa")
     ("DRONOTE" "note RFI question diving board water edge anchors hidden slide sketch review mtext")
     ("FITABHD" "pool template shape survey points rectangle oval roman oasis hopper")
@@ -4694,6 +4694,9 @@
      ("ds:*ruler-tick-frac*" "0.6" "the longest tick, same measure as a fraction of the row spacing")
      ("ds:*ring-frac*" "0.26" "the ring round the CURRENT row, as a fraction of the row spacing. Bigger than a tick is long on purpose: th...")
      ("ds:*current-color*" "nil" "ACI colour of that current row -- nil is ByLayer, and since the row is drawn on the STAMP's layer that mean...")
+     ("ds:*letter-max*" "2" "how many letters a LABEL may be. 2 covers A through ZZ -- 702 labels, more than a drawing has points -- and...")
+     ("ds:*letters-either-side*" "4" "how many letters the ruler offers each way round the current one. A row before A is dropped, the way a meas...")
+     ("ds:*letter-advance*" "T" "a LETTER stamp moves the current value on to the next letter, so a run of labels is click, click, click for...")
      ("ds:*ruler-reach*" "6.0" "how far INBOARD of the spine -- the way the rows run -- in row spacings, a click still counts as picking a..."))
     ("DRONOTE" "lisp/dronote/DRONOTE.lsp"
      ("dn:*layer*" "\"TEXT\"" "layer every note lands on - the shop's own text layer, the one its note blocks and DIMSTAMP's stamps are al...")

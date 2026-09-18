@@ -163,7 +163,7 @@ namespace Calofin.Ribbon
                 new Item(new Entry("CDCREATE", "Lines to cross dims", "Turns every highlighted line into a cross dimension"), new Entry[0]),
                 new Item(new Entry("CDCALLOUT", "Point-to-point cross dims", "Cross-dimensions from Pt.## to Pt.## by typed number"), new Entry[0]),
                 new Item(new Entry("BPCALLOUT", "Bad point callout", "Rings clicked bad points and writes the callout"), new Entry[0]),
-                new Item(new Entry("DIMSTAMP", "Stamp dimension text", "Click a point, type 4'4.5 or 44.5; stamps it canonically, an on-screen ruler picks the next"), new Entry[0]),
+                new Item(new Entry("DIMSTAMP", "Stamp dimension text", "Click a point, type 4'4.5, 44.5 or a letter; stamps it canonically, a ruler picks the next"), new Entry[0]),
                 new Item(new Entry("DRONOTE", "Drone photo review note", "Places a canned drone-photo review note - diving board, hidden anchors or slide sketch - at a picked point"), new Entry[0]),
                 new Item(new Entry("CLEARDIM", "Clear crowded dim text", "Slides dimension text along its own dimension line until it is readable"), new[]
                 {

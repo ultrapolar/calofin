@@ -57,13 +57,16 @@ def run(vm, script, label):
     return vm
 
 
-def probe_ruler(eighths, hasfeet, **sysvars):
+def probe_ruler(value, family, **sysvars):
     """Where the ruler for this value lands, read off the routine
-    itself in a throwaway VM: (spine-x, box, rows)."""
+    itself in a throwaway VM: (spine-x, box, rows).  FAMILY is the tag
+    ds:parse hands back beside the value -- None or True for a
+    measurement in inches or in feet, 'letter' for a label."""
     vm = newvm()
     vm.sysvars.update(sysvars)
-    _, box, rows = vm.loads('(ds:draw-ruler %d %s)'
-                            % (eighths, 't' if hasfeet else 'nil'))
+    fam = ("(quote letter)" if family == 'letter'
+           else ('t' if family else 'nil'))
+    _, box, rows = vm.loads('(ds:draw-ruler %d %s)' % (value, fam))
     return (box[0] + box[1]) / 2.0, box, rows
 
 
@@ -235,6 +238,121 @@ def test_the_stack_separator_is_a_knob():
     assert vm.loads('(ds:stacked 396 t)') == f"{MID}4'-1{FULL}\\S1#2;}}\""
     print("ok  stack knob   -> ds:*stack* picks bar, diagonal or"
           " tolerance stacking")
+
+
+def test_letters_are_a_family_of_their_own():
+    """The survey points are named in letters, so a letter is the other
+    thing this tool stamps.  A is 1, Z is 26, AA is 27 -- a
+    spreadsheet's columns -- and ds:parse tags it 'letter, which is
+    what every other part reads the family off."""
+    vm = newvm()
+    for n, name in [(1, 'A'), (2, 'B'), (26, 'Z'), (27, 'AA'),
+                    (28, 'AB'), (52, 'AZ'), (53, 'BA'), (702, 'ZZ')]:
+        assert vm.loads(f'(ds:letter-name {n})') == name
+        assert vm.loads(f'(ds:letter-index "{name}")') == n
+    # case does not matter going in; what comes out is upper case
+    assert vm.loads('(ds:letter-index "b")') == 2
+    assert vm.loads('(ds:read "b")') == 'B'
+    # the family rides along in the parse, beside the two measurement ones
+    assert vm.loads('(ds:parse "A")') == [1, 'letter']
+    assert vm.loads('(ds:parse "AB")') == [28, 'letter']
+    assert vm.loads('(ds:parse "34 1/2\\"")') == [276, None]
+    # nothing in a label stacks: the drawn spelling IS the plain one
+    assert vm.loads('(ds:drawn "A")') == 'A'
+    assert vm.loads('(ds:stacked 1 (quote letter))') == 'A'
+    print("ok  letters      -> A, B ... Z, AA: a family of their own,"
+          " parsed and spelled as one")
+
+
+def test_a_word_is_not_a_label():
+    """A label is one or two letters.  A longer run of them is a word
+    somebody typed by mistake, and being told beats finding NOPE
+    stamped on a sheet."""
+    vm = newvm()
+    assert vm.loads('(ds:letter-index "nope")') is None
+    assert vm.loads('(ds:parse "nope")') is None
+    assert vm.loads('(ds:letter-index "4A")') is None, 'digits are not a label'
+    assert vm.loads('(ds:letter-index "")') is None
+    # ...and how long is a knob
+    vm.loads('(setq ds:*letter-max* 4)')
+    assert vm.loads('(ds:letter-index "nope")') == 256625
+    print("ok  not a label  -> a word is refused, and the length is"
+          " ds:*letter-max*")
+
+
+def test_the_ruler_offers_letters_when_the_value_is_one():
+    """What is near A is B, not 1/8\": the ruler offers the letters
+    either side instead of the eighths, all one tier because every
+    letter is one whole step, and nothing before A."""
+    vm = newvm()
+    ents, box, rows = vm.loads("(ds:draw-ruler 3 (quote letter))")   # C
+    # four either side, plus the current row
+    assert [v for v, y in rows] == [1, 2, 3, 4, 5, 6, 7], rows
+    labels = sorted(d[1] for d in live_entities(vm) if d.get(0) == 'MTEXT')
+    assert labels == ['A', 'B', 'C', 'D', 'E', 'F', 'G'], labels
+    # no row before A, however near the front of the sequence it starts
+    _, _, rows = vm.loads("(ds:draw-ruler 1 (quote letter))")        # A
+    assert [v for v, y in rows] == [1, 2, 3, 4, 5], rows
+    # every letter row is the same size -- there is no eighth of a letter
+    heights = {d.get(40) for d in live_entities(vm) if d.get(0) == 'MTEXT'}
+    assert len(heights) == 1, heights
+    # and how many is a knob
+    vm.loads('(setq ds:*letters-either-side* 2)')
+    _, _, rows = vm.loads("(ds:draw-ruler 10 (quote letter))")
+    assert len(rows) == 5, rows
+    print("ok  letter ruler -> the letters either side, one tier, none"
+          " before A")
+
+
+def test_a_letter_moves_on_as_it_is_stamped():
+    """The whole of stamping a lot of letters: a run of labels is A, B,
+    C and never A, A, A, so the value steps by one as it lands and the
+    next click stamps the next letter."""
+    vm = newvm()
+    run(vm, [(0.0, 0.0), 'A', (10.0, 0.0), (20.0, 0.0), (30.0, 0.0),
+             None], 'a lot of letters')
+    t = stamps(vm)
+    assert [x[1] for x in t] == ['A', 'B', 'C', 'D'], t
+    assert [tuple(x[10][:2]) for x in t] == [(0.0, 0.0), (10.0, 0.0),
+                                             (20.0, 0.0), (30.0, 0.0)], t
+    # the line back says which one is next, so a run reads off the
+    # command line without looking at the ruler
+    assert [p for p in vm.printed if p.startswith(' Next:')] == \
+        [' Next: B.', ' Next: C.', ' Next: D.', ' Next: E.'], vm.printed
+    # a MEASUREMENT stays put -- stamping 34" in three places is what
+    # dimensioning is
+    vm = newvm()
+    run(vm, [(0.0, 0.0), '34"', (10.0, 0.0), (20.0, 0.0), None], 'measure')
+    assert [x[1] for x in stamps(vm)] == ['34"', '34"', '34"']
+    assert not any(p.startswith(' Next:') for p in vm.printed), vm.printed
+    # ...and the moving on is a knob
+    vm = newvm()
+    vm.loads('(setq ds:*letter-advance* nil)')
+    run(vm, [(0.0, 0.0), 'A', (10.0, 0.0), None], 'no advance')
+    assert [x[1] for x in stamps(vm)] == ['A', 'A']
+    print("ok  letter run   -> A, B, C off three clicks; a measurement"
+          " stays put")
+
+
+def test_a_letter_picked_off_the_ruler_carries_on_from_there():
+    """Adopting a letter works the way adopting a measurement does, and
+    the run carries on from the letter picked.  Note where the ruler
+    is by then: stamping C moved the value on to D, so the ruler has
+    already re-centred on D and it is D's rows a click lands on --
+    the ruler follows the advance rather than the letter just
+    stamped."""
+    vm = newvm()
+    # D, with four either side: nothing before A, so A..H
+    spine, box, rows = probe_ruler(4, 'letter')
+    assert [v for v, y in rows] == [1, 2, 3, 4, 5, 6, 7, 8], rows
+    run(vm, [(0.0, 0.0), 'C',           # stamps C, moves on to D
+             (spine, rows[-1][1]),      # pick the top row, H
+             (10.0, 0.0),               # stamp it
+             (20.0, 0.0),               # and the next letter after it
+             None], 'adopt a letter')
+    assert [x[1] for x in stamps(vm)] == ['C', 'H', 'I'], stamps(vm)
+    print("ok  letter pick  -> adopted off the ruler, and the run"
+          " carries on from there")
 
 
 def test_rounds_to_the_nearest_eighth():
@@ -717,6 +835,11 @@ if __name__ == '__main__':
     test_the_stacked_fraction_is_the_size_of_the_text_around_it()
     test_the_stacked_fraction_sits_on_its_line()
     test_the_stack_separator_is_a_knob()
+    test_letters_are_a_family_of_their_own()
+    test_a_word_is_not_a_label()
+    test_the_ruler_offers_letters_when_the_value_is_one()
+    test_a_letter_moves_on_as_it_is_stamped()
+    test_a_letter_picked_off_the_ruler_carries_on_from_there()
     test_rounds_to_the_nearest_eighth()
     test_rejects_what_is_not_a_measurement()
     test_tier_grading()

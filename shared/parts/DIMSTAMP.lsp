@@ -1,6 +1,6 @@
 ;;; ======================================================================
 ;;; DIMSTAMP.lsp  --  click a point, stamp a feet/inch dimension text
-;;;                    there, and repeat
+;;;                    or a letter label there, and repeat
 ;;; ----------------------------------------------------------------------
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
 ;;;
@@ -94,6 +94,30 @@
 ;;; The drawn one reaches an MTEXT and nothing else; ds:drawn is the
 ;;; one door between them, so no call site can forget it.
 ;;;
+;;; LETTERS are the other thing it stamps, and the reason is that the
+;;; survey points are named in them: type a letter rather than a
+;;; measurement and the whole tool turns over to labelling.  A is 1, Z
+;;; is 26, AA is 27 -- a spreadsheet's columns, which is the sequence
+;;; a shop whose points arrive in Excel already reads -- and the ruler
+;;; offers the letters either side instead of the eighths of an inch,
+;;; because what is near A is B, not 1/8".
+;;;
+;;; The one real difference is what a stamp leaves behind.  A
+;;; measurement STAYS: dimensioning is stamping 34" in three places,
+;;; so the next click stamps it again.  A letter MOVES ON: a run of
+;;; labels is A, B, C and never A, A, A, so the value steps by one as
+;;; it lands and the next click stamps the next letter.  That is what
+;;; makes a lot of them worth stamping -- click, click, click -- and
+;;; ds:*letter-advance* turns it off for the drawing that wants the
+;;; same label twice.  The line back says which letter is next, so a
+;;; run can be read off the command line without looking at the ruler.
+;;;
+;;; A label is one or two letters (ds:*letter-max*), which is A
+;;; through ZZ, 702 of them.  More than that is a word typed by
+;;; mistake, and being told so beats finding NOPE stamped on a sheet.
+;;; Nothing in a label stacks, so its drawn spelling and its plain one
+;;; are the same string.
+;;;
 ;;; What it READS is far looser, because nobody types a dimension
 ;;; carefully twice.  The inch mark is optional and may be two
 ;;; apostrophes, the dash after the feet mark is optional, inches may
@@ -109,8 +133,9 @@
 ;;; drawing.  Feet spelled means feet written, so 52.5 stays 52 1/2"
 ;;; rather than becoming 4'-4 1/2".
 ;;;
-;;; The ruler offers, around whatever the current value is, every
-;;; eighth of an inch for a WHOLE INCH EITHER SIDE -- 44" offers 43"
+;;; The ruler offers, around whatever the current value is, the four
+;;; letters either side when it is a label -- and when it is a
+;;; measurement, every eighth of an inch for a WHOLE INCH EITHER SIDE -- 44" offers 43"
 ;;; through 45", the inch before as well as the inch after, since a
 ;;; measurement is read back off the tape as often downward as up.
 ;;; Quarters and eighths sit on the one ruler, told apart by tier
@@ -125,7 +150,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.5")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.6")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -221,6 +246,28 @@
                                     ; means it reads in exactly the
                                     ; colour the stamp will.  A number
                                     ; here overrides that
+(setq ds:*letter-max* 2)           ; how many letters a LABEL may be.
+                                    ; 2 covers A through ZZ -- 702
+                                    ; labels, more than a drawing has
+                                    ; points -- and anything longer is
+                                    ; a word, not a label: a slip of
+                                    ; the keyboard still gets told it
+                                    ; is not a measurement rather than
+                                    ; being stamped as one
+(setq ds:*letters-either-side* 4)  ; how many letters the ruler offers
+                                    ; each way round the current one.
+                                    ; A row before A is dropped, the
+                                    ; way a measurement at or below
+                                    ; zero is
+(setq ds:*letter-advance* T)       ; a LETTER stamp moves the current
+                                    ; value on to the next letter, so
+                                    ; a run of labels is click, click,
+                                    ; click for A, B, C -- they are
+                                    ; never A, A, A, which is what
+                                    ; makes stamping a lot of them
+                                    ; worth doing.  nil stamps the
+                                    ; same letter until you change it,
+                                    ; the way a measurement does
 (setq ds:*ruler-reach* 6.0)        ; how far INBOARD of the spine -- the
                                     ; way the rows run -- in row
                                     ; spacings, a click still counts as
@@ -287,11 +334,61 @@
       (setq total nil)))
   total)
 
-;; Parse a measurement into (EIGHTHS HASFEET), where EIGHTHS is the
-;; total in eighths of an inch (an integer, rounded to the nearest
-;; eighth) and HASFEET is T when feet were spelled -- carried back
-;; through so a value renders, and is offered further suggestions, in
-;; the family it was typed in.
+;; A LETTER LABEL as its place in the sequence: A is 1, Z is 26, AA
+;; is 27, AB 28 -- the way a spreadsheet's columns run, which is the
+;; progression a shop whose points arrive in Excel already reads.
+;; Case does not matter going in and what comes back out is upper
+;; case, so a typed "b" is stamped "B".
+;;
+;; nil when S is not letters at all, and nil when it is MORE letters
+;; than ds:*letter-max*: a label is one or two letters, so a longer
+;; run of them is a word somebody typed by mistake, and telling them
+;; that beats stamping NOPE on their drawing.
+(defun ds:letter-index (s / n i c out)
+  (setq s (vl-string-trim " \t" s)
+        n (strlen s)
+        i 1
+        out 0)
+  (if (and (> n 0) (<= n ds:*letter-max*))
+    (progn
+      (while (and out (<= i n))
+        (setq c (ascii (strcase (substr s i 1))))
+        (if (and (>= c 65) (<= c 90))
+          (setq out (+ (* out 26) (- c 64)))
+          (setq out nil))
+        (setq i (1+ i)))
+      out)))
+
+;; The other way round: place N in that sequence, spelled.  1 is "A",
+;; 26 "Z", 27 "AA".  NOTE: the remainder is "r", not "rem" -- rem IS
+;; an AutoLISP function, and a local of that name shadows it for every
+;; call this one makes.
+(defun ds:letter-name (n / out r)
+  (setq out "")
+  (while (> n 0)
+    (setq r   (rem (1- n) 26)
+          out (strcat (chr (+ 65 r)) out)
+          n   (/ (- n 1 r) 26)))
+  out)
+
+;; Parse an answer into (VALUE FAMILY) -- the pair every other part of
+;; this tool is handed, and the only place that decides which of the
+;; two things DIMSTAMP stamps an answer is.
+;;
+;;   (EIGHTHS nil)      a MEASUREMENT in plain inches, EIGHTHS being
+;;                      the total in eighths of an inch, an integer
+;;                      rounded to the nearest one
+;;   (EIGHTHS T)        the same, with FEET spelled -- carried back
+;;                      through so a value renders, and is offered
+;;                      further suggestions, in the family it was
+;;                      typed in
+;;   (INDEX 'letter)    a LETTER LABEL, INDEX being its place in the
+;;                      sequence (A is 1).  The survey points are
+;;                      named this way, and a drawing wants a run of
+;;                      them rather than one
+;;
+;; The two cannot collide: a measurement never spells letters and a
+;; label never spells digits.
 ;;
 ;; Deliberately LENIENT, because nobody types a dimension carefully
 ;; twice: the inch mark is optional and may be two apostrophes, the
@@ -300,9 +397,13 @@
 ;; 52.5 all read; what gets STAMPED is always ds:format's canonical
 ;; spelling, never what was typed.  nil when the text is not a
 ;; measurement at all, or reads as nothing at all.
-(defun ds:parse (s / n apos feetstr rest hasfeet feet inch eighths)
-  (setq s (vl-string-trim " \t" s)
-        n (strlen s))
+(defun ds:parse (s / n apos feetstr rest hasfeet feet inch eighths raw
+                     lidx)
+  (setq s   (vl-string-trim " \t" s)
+        raw s                          ; kept for the letter attempt:
+                                       ; the inch mark and the feet
+                                       ; split chew s up below
+        n   (strlen s))
   ;; the inch mark, however it was spelled, or left off entirely
   (cond
     ((and (>= n 2) (= (substr s (1- n) 2) "''"))
@@ -320,10 +421,13 @@
     (setq rest (vl-string-trim " \t" s)))
   (setq inch (if rest (ds:inches rest)))
   ;; an empty inches part is only an answer when feet carried it
-  (if (and inch (or hasfeet (/= rest "")))
-    (progn
-      (setq eighths (fix (+ 0.5 (* 8.0 (+ (* feet 12.0) inch)))))
-      (if (> eighths 0) (list eighths hasfeet)))))
+  (or (if (and inch (or hasfeet (/= rest "")))
+        (progn
+          (setq eighths (fix (+ 0.5 (* 8.0 (+ (* feet 12.0) inch)))))
+          (if (> eighths 0) (list eighths hasfeet))))
+      ;; not a measurement, then a LETTER LABEL -- the other family
+      ;; this tool stamps, and the one the survey points are named in
+      (if (setq lidx (ds:letter-index raw)) (list lidx 'letter))))
 
 ;; STR -- a stacked fraction, \S code and all -- wrapped in the height
 ;; code that draws it at ds:*stack-hgt* times the text around it.  A
@@ -400,13 +504,20 @@
 
 ;; The PLAIN spelling: what a prompt offers, what the command line
 ;; says, and what ds:parse reads back.
-(defun ds:format (total-eighths hasfeet)
-  (ds:spell total-eighths hasfeet nil))
+(defun ds:format (value family)
+  (if (eq family 'letter)
+    (ds:letter-name value)
+    (ds:spell value family nil)))
 
 ;; The DRAWN spelling: the same value with its fraction stacked, for
-;; an MTEXT and nowhere else.
-(defun ds:stacked (total-eighths hasfeet)
-  (ds:spell total-eighths hasfeet T))
+;; an MTEXT and nowhere else.  A LETTER has only the one spelling --
+;; there is nothing in a label to stack, so the drawn one and the
+;; plain one are the same string, and saying so here is what keeps the
+;; stack codes out of a stamped A.
+(defun ds:stacked (value family)
+  (if (eq family 'letter)
+    (ds:letter-name value)
+    (ds:spell value family T)))
 
 ;; STR -- a plain canonical spelling -- as the string that DRAWS it.
 ;; Every stamp goes through here, so a stacked fraction is not
@@ -437,11 +548,32 @@
     ((member m '(2 6)) 'quarter)
     (T 'eighth)))
 
-;; The nearby values to offer, as a list of (EIGHTHS TIER) pairs (see
-;; the header banner for what each family offers); a row that would
-;; come out at or below zero is dropped.  Unsorted -- the ruler sorts
-;; once it also has the current row to place among them.
-(defun ds:suggestions (total-eighths hasfeet / out i off)
+;; The nearby values to offer, as a list of (VALUE TIER) pairs (see the
+;; header banner for what each family offers); a row that would come
+;; out at or below zero -- or before A -- is dropped.  Unsorted -- the
+;; ruler sorts once it also has the current row to place among them.
+;; One door, and it is the family that picks which side of it.
+(defun ds:suggestions (value family)
+  (if (eq family 'letter)
+    (ds:letter-suggestions value)
+    (ds:measure-suggestions value family)))
+
+;; The letters either side of INDEX.  Every row is one whole letter
+;; from the last -- there is no eighth of a letter -- so they are all
+;; the one tier and all drawn alike, and the only row that reads
+;; differently is the CURRENT one, which the ruler already draws as
+;; the stamp it would make.
+(defun ds:letter-suggestions (index / out i)
+  (setq out nil i 1)
+  (while (<= i ds:*letters-either-side*)
+    (setq out (cons (list (- index i) 'jump) out))
+    (setq out (cons (list (+ index i) 'jump) out))
+    (setq i (1+ i)))
+  (vl-remove-if '(lambda (pr) (<= (car pr) 0)) out))
+
+;; The measurements either side, which is the other half of the door
+;; above.
+(defun ds:measure-suggestions (total-eighths hasfeet / out i off)
   (setq out nil)
   ;; every eighth of an inch for a WHOLE INCH either side, whatever
   ;; family the value is in: 44" offers 43" through 45", the inch
@@ -660,6 +792,17 @@
         (list (min near far) (max near far) (/ gap 2.0))
         (reverse result)))
 
+;; What to carry forward after stamping PARSED.  A run of labels is A,
+;; B, C and never A, A, A, so a letter moves on by one as it is
+;; stamped and the next click lands the next letter -- which is the
+;; whole of "stamp a lot of letters": click, click, click.  A
+;; measurement stays put, because stamping the same one in three
+;; places is exactly what dimensioning is.
+(defun ds:advance (parsed)
+  (if (and ds:*letter-advance* (eq (cadr parsed) 'letter))
+    (list (1+ (car parsed)) 'letter)
+    parsed))
+
 ;; Erase OLDENTS and draw a fresh ruler for PARSED -- the
 ;; (EIGHTHS HASFEET) pair ds:parse hands back.
 (defun ds:redraw-ruler (parsed oldents)
@@ -682,8 +825,9 @@
 ;; examples are the lazy spellings on purpose: the ones worth showing
 ;; are the ones that save keystrokes.
 (defun ds:say-unread (v)
-  (princ (strcat "\nDIMSTAMP: \"" v "\" is not a measurement - try 44,"
-                 " 44.5, 44 1/2, 4'4.5 or 4'-4 1/2\".")))
+  (princ (strcat "\nDIMSTAMP: \"" v "\" is not a measurement or a label"
+                 " - try 44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2\", or a"
+                 " letter like A or AB.")))
 
 ;; One free-text answer, read as loosely as ds:parse reads and handed
 ;; back in the CANONICAL spelling.  PROMPT already carries its leading
@@ -704,7 +848,7 @@
 ;; The very first text of a run: no default, no ruler yet -- nothing
 ;; exists to build one around.
 (defun ds:ask-first ()
-  (ds:ask-raw "\nText - 4'-4 1/2\", or just 4'4.5: "))
+  (ds:ask-raw "\nText - 4'-4 1/2\", just 4'4.5, or a letter like A: "))
 
 ;; The second-and-later prompt: one click or one typed line does every
 ;; job.  Returns nil for Enter (done), (adopt TEXT) for a new current
@@ -771,6 +915,11 @@
       (ds:stamp pk lasttext)
       (setq count 1 parsed (ds:parse lasttext))
       (princ (strcat "\n  \"" lasttext "\" placed."))
+      (setq parsed (ds:advance parsed))
+      (if (/= lasttext (ds:format (car parsed) (cadr parsed)))
+        (progn
+          (setq lasttext (ds:format (car parsed) (cadr parsed)))
+          (princ (strcat " Next: " lasttext "."))))
       (setq rr (ds:redraw-ruler parsed rulerents)
             rulerents (car rr) rulerbox (cadr rr) rulerrows (caddr rr))
       (while (setq action (ds:next-action rulerbox rulerrows (cadr parsed)))
@@ -779,7 +928,14 @@
            (cal:ensure-layer ds:*layer* ds:*layer-color*)
            (ds:stamp (cadr action) lasttext)
            (setq count (1+ count))
-           (princ (strcat "\n  \"" lasttext "\" placed.")))
+           (princ (strcat "\n  \"" lasttext "\" placed."))
+           ;; a letter moves on as it is stamped, so the next click
+           ;; lands the next one; a measurement stays where it is
+           (setq parsed (ds:advance parsed))
+           (if (/= lasttext (ds:format (car parsed) (cadr parsed)))
+             (progn
+               (setq lasttext (ds:format (car parsed) (cadr parsed)))
+               (princ (strcat " Next: " lasttext ".")))))
           (T                                    ; 'adopt
            (setq lasttext (cadr action) parsed (ds:parse lasttext))))
         (setq rr (ds:redraw-ruler parsed rulerents)
@@ -803,6 +959,6 @@
 ;; told.  CALVER reports the whole roster whenever it is asked.
 (if (not *calofin-quiet*)
   (princ (strcat "\nDIMSTAMP " *dimstamp-version*
-                 " loaded. Command: DIMSTAMP (stamp dimension text,"
-                 " click after click).")))
+                 " loaded. Command: DIMSTAMP (stamp dimension text or"
+                 " letter labels, click after click).")))
 (princ)
