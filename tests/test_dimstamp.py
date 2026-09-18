@@ -421,6 +421,60 @@ def test_the_ring_is_bigger_than_it_was_and_is_a_knob():
           " ds:*ring-frac* sets it")
 
 
+def test_the_ruler_holds_the_right_edge_of_the_view():
+    """The strip is scratch over somebody's drawing, so it sits where
+    there is least of it: a spine near the RIGHT edge, with every tick
+    and label reaching back INWARD from it.  Hung the other way they
+    would be drawn past the edge of the screen the ruler is pinned
+    to -- unreadable, and a pan away from being pickable."""
+    vm = newvm()
+    _, box, rows = vm.loads('(ds:draw-ruler 352 nil)')
+    vx, vy, vw, vh = vm.loads('(ds:view)')
+    spine = vx + vw * 0.88
+    assert vm.loads('ds:*ruler-screen-x*') == 0.88, 'pinned right'
+    live = live_entities(vm)
+    ticks = [d for d in live if d.get(0) == 'LINE']
+    labels = [d for d in live if d.get(0) == 'MTEXT']
+    # every tick's far end and every label's insertion is inboard of
+    # the spine, and the whole ruler is inside the view
+    assert all(d[11][0] <= spine + 1e-9 for d in ticks), ticks
+    assert all(d[10][0] <= spine + 1e-9 for d in labels), labels
+    assert all(d[10][0] > vx for d in labels), labels
+    assert spine < vx + vw, (spine, vx + vw)
+    # a label on a row that reaches left is hung by its RIGHT edge, so
+    # it grows away from the spine instead of back across it
+    assert {d.get(71) for d in labels} == {3}, labels
+    # and the reserved strip runs inward from the spine too
+    assert box[0] < box[1] <= spine + vh * 0.042, box
+    print("ok  right edge   -> spine at the right of the view, rows"
+          " reaching inward, all of it on screen")
+
+
+def test_the_side_is_a_knob_and_the_rows_turn_round_with_it():
+    """ds:*ruler-screen-x* is still the whole placement knob: put the
+    spine back on the left and the rows reach RIGHT again, labels hung
+    by their left edge, because a ruler always runs toward the middle
+    of the view rather than off its nearest edge."""
+    vm = newvm()
+    vm.loads('(setq ds:*ruler-screen-x* 0.12)')
+    _, box, rows = vm.loads('(ds:draw-ruler 352 nil)')
+    vx, vy, vw, vh = vm.loads('(ds:view)')
+    spine = vx + vw * 0.12
+    live = live_entities(vm)
+    ticks = [d for d in live if d.get(0) == 'LINE']
+    labels = [d for d in live if d.get(0) == 'MTEXT']
+    assert all(d[11][0] >= spine - 1e-9 for d in ticks), ticks
+    assert all(d[10][0] >= spine - 1e-9 for d in labels), labels
+    assert {d.get(71) for d in labels} == {1}, labels
+    assert box[1] > box[0] >= spine - vh * 0.042, box
+    # the direction is derived from the side, not set beside it
+    assert vm.loads('(ds:ruler-dir)') == 1.0
+    vm.loads('(setq ds:*ruler-screen-x* 0.88)')
+    assert vm.loads('(ds:ruler-dir)') == -1.0
+    print("ok  ruler side   -> the knob moves it, and the rows turn"
+          " round to keep reaching inward")
+
+
 def test_ruler_is_pinned_to_the_view_and_scales_with_it():
     """The ruler holds the same strip of SCREEN at any zoom: centred on
     the view, sized as a fraction of it.  Zoom in 5x and every measure
@@ -485,16 +539,20 @@ def test_click_a_ruler_row_adopts_without_stamping():
 
 
 def test_a_click_just_off_the_ruler_stamps_instead():
-    """The strip is reserved, and only the strip: a click past its
-    right-hand reach is a stamp, not a row pick."""
+    """The strip is reserved, and only the strip: a click past the end
+    of its reach is a stamp, not a row pick.  Either end of it -- the
+    inboard one is the side the labels run and the side the drawing
+    is on, the outboard one is the sliver beyond the spine."""
     spine, box, rows = probe_ruler(272, False)
-    vm = newvm()
-    run(vm, [(0.0, 0.0), '34"',
-             (box[1] + 1.0, rows[-1][1]),     # same row, just outside
-             None], 'off the strip')
-    t = stamps(vm)
-    assert [x[1] for x in t] == ['34"', '34"'], t
-    print("ok  off the strip -> a click past the ruler's reach stamps")
+    for x, where in [(box[0] - 1.0, 'inboard'), (box[1] + 1.0, 'outboard')]:
+        vm = newvm()
+        run(vm, [(0.0, 0.0), '34"',
+                 (x, rows[-1][1]),            # same row, just outside
+                 None], 'off the strip ' + where)
+        t = stamps(vm)
+        assert [y[1] for y in t] == ['34"', '34"'], (where, t)
+    print("ok  off the strip -> a click past either end of the ruler's"
+          " reach stamps")
 
 
 def test_typed_text_at_the_unified_prompt_is_adopted():
@@ -671,6 +729,8 @@ if __name__ == '__main__':
     test_draw_ruler_geometry()
     test_the_current_row_is_drawn_as_a_stamp_not_as_a_ruler()
     test_the_ring_is_bigger_than_it_was_and_is_a_knob()
+    test_the_ruler_holds_the_right_edge_of_the_view()
+    test_the_side_is_a_knob_and_the_rows_turn_round_with_it()
     test_ruler_is_pinned_to_the_view_and_scales_with_it()
     test_first_placement_has_no_ruler_yet()
     test_ruler_is_cleaned_up_at_the_end()

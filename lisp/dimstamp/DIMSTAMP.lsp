@@ -28,12 +28,23 @@
 ;;; would stamp.
 ;;;
 ;;; The ruler is pinned to the SCREEN, not to the drawing: it is drawn
-;;; down a strip near the left of whatever the current view is showing
-;;; and sized as a fraction of that view, so it stays the same size and
-;;; in the same place whether the drawing is zoomed to a whole pool or
-;;; to one step.  It re-pins every time it redraws.  That strip is
-;;; reserved -- a click inside it picks a row, so stamps land outside
-;;; it; ds:*ruler-screen-x* moves it if it is ever in the way.
+;;; down a strip near the RIGHT edge of whatever the current view is
+;;; showing and sized as a fraction of that view, so it stays the same
+;;; size and in the same place whether the drawing is zoomed to a whole
+;;; pool or to one step.  It re-pins every time it redraws.  The right
+;;; edge is where it sits over the least drawing: a pool is drawn from
+;;; the middle out and dimensioned along its sides, and the ruler is
+;;; scratch -- it should be the thing at the edge of the eye, not the
+;;; thing a stamp has to be placed around.
+;;;
+;;; Its rows reach INWARD from that spine, and that is not a knob: a
+;;; tick and a label hung off the outside of a spine pinned near an
+;;; edge would be drawn past the edge, where nothing can be read and a
+;;; pick is a pan away.  So the side decides the direction --
+;;; ds:*ruler-screen-x* past the middle of the view reaches left, short
+;;; of it reaches right -- and the ruler is inside the view wherever it
+;;; is pinned.  That strip is reserved: a click inside it picks a row,
+;;; so stamps land outside it.
 ;;;
 ;;; From there, one prompt does three jobs:
 ;;;   * click empty space           -- stamps the CURRENT text there;
@@ -111,7 +122,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.4")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.5")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -178,12 +189,17 @@
 (setq ds:*ruler-color* 3)          ; ACI colour of the ruler, on the
                                     ; entities themselves so it reads
                                     ; the same whatever its layer says
-(setq ds:*ruler-screen-x* 0.12)    ; where the spine sits across the
+(setq ds:*ruler-screen-x* 0.88)    ; where the spine sits across the
                                     ; view: a fraction of the view's
-                                    ; WIDTH in from its left edge.
-                                    ; Raise it to move the ruler right,
-                                    ; out of the way of work at the
-                                    ; left of the screen
+                                    ; WIDTH in from its LEFT edge, so
+                                    ; 0.88 is near the right edge --
+                                    ; the strip that sits over the
+                                    ; least of the drawing.  The rows
+                                    ; reach INWARD from the spine
+                                    ; whichever side it is on, so a
+                                    ; value under 0.5 puts the ruler
+                                    ; back on the left and turns the
+                                    ; rows round to reach right
 (setq ds:*ruler-row-frac* 0.042)   ; one row's share of the view's
                                     ; HEIGHT -- the ruler's whole size
                                     ; knob.  Raise it for a bigger
@@ -202,10 +218,13 @@
                                     ; means it reads in exactly the
                                     ; colour the stamp will.  A number
                                     ; here overrides that
-(setq ds:*ruler-reach* 6.0)        ; how far right of the spine, in row
+(setq ds:*ruler-reach* 6.0)        ; how far INBOARD of the spine -- the
+                                    ; way the rows run -- in row
                                     ; spacings, a click still counts as
                                     ; picking a row rather than as an
-                                    ; empty-space stamp
+                                    ; empty-space stamp.  The far side
+                                    ; of the spine is half a row
+                                    ; spacing, which is the tick itself
 
 ;;; -------------------- helpers ----------------------------------------
 
@@ -460,6 +479,16 @@
   (setq vw (* vh aspect))
   (list (- (car ctr) (/ vw 2.0)) (- (cadr ctr) (/ vh 2.0)) vw vh))
 
+;; Which way a ruler row reaches from the spine: 1.0 toward higher x,
+;; -1.0 toward lower.  It is derived, not a knob, and it is what lets
+;; the ruler sit at either edge: a tick and a label hung off the
+;; OUTSIDE of a spine pinned near an edge would be drawn past that
+;; edge, off the screen the whole thing is pinned to, so the rows
+;; always run toward the middle of the view.  The spine's own side is
+;; the only thing that has to be said, and ds:*ruler-screen-x* says it.
+(defun ds:ruler-dir ()
+  (if (> ds:*ruler-screen-x* 0.5) -1.0 1.0))
+
 ;; Label height for a ruler row of this TIER, against a row spacing of
 ;; GAP.
 (defun ds:ruler-hgt (tier gap / base)
@@ -526,11 +555,14 @@
                      " so the stamps have a style to carry."))))
   name)
 
-;; One MTEXT, written the way the shop's dimension text is: attached
-;; TOP LEFT at PT, the tool's own style, unwrapped, upright.  COL is
-;; an ACI number for the scratch ruler's own colour, or nil for
-;; ByLayer, which is what a real stamp takes.
-(defun ds:mtext (pt hgt str lay col / dxf)
+;; One MTEXT, written the way the shop's dimension text is: the tool's
+;; own style, unwrapped, upright, attached at PT by ATT -- 1 top left,
+;; 3 top right, AutoCAD's own codes.  A stamp is always 1, the way the
+;; shop's text is; a ruler label takes 3 when its row reaches LEFT, so
+;; the label grows away from the spine instead of over it.  COL is an
+;; ACI number for the scratch ruler's own colour, or nil for ByLayer,
+;; which is what a real stamp takes.
+(defun ds:mtext (pt hgt str lay col att / dxf)
   (setq dxf (list '(0 . "MTEXT") '(100 . "AcDbEntity") (cons 8 lay)))
   (if col (setq dxf (append dxf (list (cons 62 col)))))
   (entmakex
@@ -539,7 +571,7 @@
                   (cons 10 (list (car pt) (cadr pt) 0.0))
                   (cons 40 hgt)
                   (cons 41 ds:*text-width*)   ; 0 = no wrap
-                  '(71 . 1)                   ; attachment: top left
+                  (cons 71 att)               ; 1 top left, 3 top right
                   '(72 . 5)                   ; direction: by style
                   (cons 1 str)
                   (cons 7 ds:*style*)
@@ -550,7 +582,7 @@
 ;; Stamp STR at PT -- the drawing content this whole tool exists for.
 ;; STR arrives in the plain spelling and is drawn in the stacked one.
 (defun ds:stamp (pt str)
-  (ds:mtext pt ds:*text-hgt* (ds:drawn str) ds:*layer* nil))
+  (ds:mtext pt ds:*text-hgt* (ds:drawn str) ds:*layer* nil 1))
 
 ;; Erase every entity in ENTS -- how the scratch ruler is swept away,
 ;; before a redraw and for good when the run ends.
@@ -592,7 +624,7 @@
 ;; pick, and makes it read as what it would stamp.
 (defun ds:draw-ruler (total-eighths hasfeet / rows n i row val tier y
                           hgt tl spx ents lbl result view vx vy vw vh
-                          gap base rlay rcol)
+                          gap base rlay rcol dir far near)
   (ds:ensure-layer ds:*ruler-layer* ds:*ruler-color*)
   (ds:ensure-layer ds:*layer* ds:*layer-color*)   ; the current row's
   (ds:ensure-style ds:*style*)
@@ -605,6 +637,7 @@
   (setq n    (length rows)
         gap  (* vh ds:*ruler-row-frac*)
         spx  (+ vx (* vw ds:*ruler-screen-x*))
+        dir  (ds:ruler-dir)           ; rows run inward from the spine
         ;; centred on the view's own middle, however many rows there are
         base (- (+ vy (/ vh 2.0)) (* gap (/ (- n 1) 2.0)))
         i    0
@@ -620,15 +653,19 @@
     (if (eq tier 'current)
       (setq rlay ds:*layer*       rcol ds:*current-color*)
       (setq rlay ds:*ruler-layer* rcol ds:*ruler-color*))
-    (setq ents (cons (ds:ruler-line spx y (+ spx tl) y rlay rcol) ents))
+    (setq ents (cons (ds:ruler-line spx y (+ spx (* dir tl)) y rlay rcol)
+                     ents))
     ;; the ruler is drawn text too, so its rows stack the way a stamp
     ;; off that row will -- the label IS the preview
     (setq lbl (ds:stacked val hasfeet))
-    ;; top-left attachment, so half a label's height above the tick
-    ;; puts the label astride its own row
-    (setq ents (cons (ds:mtext (list (+ spx tl (* gap 0.35))
+    ;; half a label's height above the tick puts it astride its own
+    ;; row, and the attachment turns with the row: a label on a row
+    ;; that reaches left is hung by its RIGHT edge, so it grows away
+    ;; from the spine rather than back across it
+    (setq ents (cons (ds:mtext (list (+ spx (* dir (+ tl (* gap 0.35))))
                                      (+ y (/ hgt 2.0)))
-                               hgt lbl rlay rcol)
+                               hgt lbl rlay rcol
+                               (if (< dir 0.0) 3 1))
                      ents))
     (if (eq tier 'current)
       (setq ents (cons (ds:ruler-ring spx y (* gap ds:*ring-frac*)
@@ -639,9 +676,12 @@
   (setq ents (cons (ds:ruler-line spx base spx (+ base (* (- n 1) gap))
                                   ds:*ruler-layer* ds:*ruler-color*)
                    ents))
+  ;; the strip a click counts as a pick in: the reach on the side the
+  ;; rows run, half a spacing on the other -- the tick's own side
+  (setq near (+ spx (* dir gap ds:*ruler-reach*))
+        far  (- spx (* dir (/ gap 2.0))))
   (list ents
-        (list (- spx (/ gap 2.0)) (+ spx (* gap ds:*ruler-reach*))
-              (/ gap 2.0))
+        (list (min near far) (max near far) (/ gap 2.0))
         (reverse result)))
 
 ;; Erase OLDENTS and draw a fresh ruler for PARSED -- the
