@@ -150,6 +150,19 @@ Public Class CommandsTab
     Private ReadOnly _hits As New ListBox() With {
         .DisplayMemberPath = "Text",
         .Visibility = Visibility.Collapsed}
+    Private ReadOnly _howToBtn As New Button() With {
+        .Content = "How it works",
+        .Padding = New Thickness(8, 2, 8, 2),
+        .Margin = New Thickness(0, 4, 4, 0),
+        .ToolTip = "The fuller step-by-step explanation for what is highlighted"}
+    Private ReadOnly _tutorialBtn As New Button() With {
+        .Content = "Run tutorial",
+        .Padding = New Thickness(8, 2, 8, 2),
+        .Margin = New Thickness(0, 4, 0, 0),
+        .ToolTip = "Launch the interactive TUTORIAL* walkthrough, where one exists"}
+    Private ReadOnly _findActions As New StackPanel() With {
+        .Orientation = Orientation.Horizontal,
+        .Visibility = Visibility.Collapsed}
     Private ReadOnly _rows As New StackPanel()
     Private ReadOnly _tabs As New TabControl()
 
@@ -175,6 +188,13 @@ Public Class CommandsTab
         ' double click or Enter, which is lzp:hitpick's rule
         AddHandler _hits.MouseDoubleClick, Sub() RunSelected()
         AddHandler _hits.KeyDown, AddressOf HitKey
+
+        _findActions.Children.Add(_howToBtn)
+        _findActions.Children.Add(_tutorialBtn)
+        AddHandler _howToBtn.Click, Sub() ShowHowTo()
+        AddHandler _tutorialBtn.Click, Sub() RunTutorial()
+        DockPanel.SetDock(_findActions, Dock.Bottom)
+        root.Children.Add(_findActions)
 
         Dim body As New Grid()
         body.Children.Add(_tabs)
@@ -331,7 +351,7 @@ Public Class CommandsTab
         For Each e In CommandCatalog.All
             If e.Command = command Then Return e
         Next
-        Return New CommandCatalog.Entry(command, command, command)
+        Return New CommandCatalog.Entry(command, command, command, command, "")
     End Function
 
     ' ------------------------------------------------------------- find
@@ -364,6 +384,8 @@ Public Class CommandsTab
         Dim searching = needle.Length > 0
         _hits.Visibility = If(searching, Visibility.Visible,
                               Visibility.Collapsed)
+        _findActions.Visibility = If(searching, Visibility.Visible,
+                                     Visibility.Collapsed)
         _tabs.Visibility = If(searching, Visibility.Collapsed,
                               Visibility.Visible)
         _rows.Visibility = If(searching, Visibility.Collapsed,
@@ -420,17 +442,72 @@ Public Class CommandsTab
         End If
     End Sub
 
+    ''' <summary>
+    ''' The fuller explanation for what is highlighted -- an OK-only
+    ''' message box, reached without leaving the palette. A tutorial
+    ''' mapping, when there is one, is mentioned rather than run: Run
+    ''' tutorial beside this button is what launches it.
+    ''' </summary>
+    Private Sub ShowHowTo()
+        Dim hit = TryCast(_hits.SelectedItem, CommandHit)
+        If hit Is Nothing Then
+            _message.Text = "nothing highlighted - pick a tool first"
+            Return
+        End If
+        Dim e = EntryFor(hit.Command)
+        Dim msg = e.Command & "  -  " & e.Caption & vbLf & vbLf & e.HowTo
+        If e.TutorialCommand.Length > 0 Then
+            msg &= vbLf & vbLf & "An interactive walkthrough is also " &
+                   "available - click Run tutorial, or type " &
+                   e.TutorialCommand & "."
+        End If
+        MessageBox.Show(msg, e.Command, MessageBoxButton.OK,
+                        MessageBoxImage.Information)
+    End Sub
+
+    ''' <summary>
+    ''' Launch the highlighted tool's TUTORIAL* walkthrough instead of
+    ''' the tool itself. Same refusal shape as RunSelected -- nothing
+    ''' highlighted, no walkthrough for this tool, or the walkthrough
+    ''' itself not loaded each say so on the message line -- plus
+    ''' Remember:=False, since a TUTORIAL* satellite must not land in
+    ''' Recent the way a real launch would.
+    ''' </summary>
+    Private Sub RunTutorial()
+        Dim hit = TryCast(_hits.SelectedItem, CommandHit)
+        If hit Is Nothing Then
+            _message.Text = "nothing highlighted to run"
+            Return
+        End If
+        Dim e = EntryFor(hit.Command)
+        If e.TutorialCommand.Length = 0 Then
+            _message.Text = hit.Command &
+                            " has no interactive tutorial - see How it works"
+        ElseIf Not IsLoaded(e.TutorialCommand) Then
+            _message.Text = e.TutorialCommand & " is not loaded in this session"
+        Else
+            RunCommand(e.TutorialCommand, remember:=False)
+        End If
+    End Sub
+
     ' -------------------------------------------------------- launching
 
     ''' <summary>
     ''' A command cannot be started while the palette holds the thread, so
     ''' the name is queued on the document and runs once we yield.
+    '''
+    ''' REMEMBER is false only for a TUTORIAL* walkthrough launched off
+    ''' the Run tutorial button: it is a satellite (see lzp:*groups*'s
+    ''' own roster comment in LAZPANEL.lsp), and must not land in Recent
+    ''' the way a real launch would.
     ''' </summary>
-    Private Sub RunCommand(command As String)
+    Private Sub RunCommand(command As String, Optional remember As Boolean = True)
         Dim doc = AcadApp.DocumentManager.MdiActiveDocument
         If doc Is Nothing Then Return
-        PaletteMemory.Remember(command)
-        RefreshRows()
+        If remember Then
+            PaletteMemory.Remember(command)
+            RefreshRows()
+        End If
         doc.SendStringToExecute("_." & command & vbLf, True, False, True)
     End Sub
 
