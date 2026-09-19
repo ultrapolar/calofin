@@ -2084,7 +2084,11 @@ def test_lisp_file_is_well_formed():
     depth = paren_depth(src)
     assert depth == 0, "abhd.lsp has %d unclosed paren(s)" % depth
     defined = set(re.findall(r"\(defun\s+((?:pf:|c:)[^\s(]+)", src))
+    # a helper is CALLED in head position -- and also where it is
+    # QUOTED and handed to something that will call it, which is how
+    # the length ruler sorts its rows: (vl-sort rows 'pf:ruler-val-lt)
     called = set(re.findall(r"\((pf:[a-z0-9-]+)", src))
+    called |= set(re.findall(r"'(pf:[a-z0-9-]+)", src))
     missing = called - defined
     assert not missing, "abhd.lsp calls undefined: %s" % sorted(missing)
     dead = {d for d in defined - called if not d.startswith("c:")}

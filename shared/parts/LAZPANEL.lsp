@@ -141,7 +141,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.50")
+(setq *lazpanel-version* "v3.51")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -4256,7 +4256,17 @@
      ("*PF-THIN-EPS*" "0.01" "consecutive samples of an offset curve closer than this (a hundredth) collapse to one - a tight offset can...")
      ("*PF-BULGE-CLAMP*" "1.373" "the half-angle a tangent-window edge, or a span's own permitted turn, may reach (radians): its tangent is a...")
      ("*PF-STRAIGHT-R*" "1.0e6" "an arc whose radius reaches this is a straight line for every practical purpose: it is not snapped to a nic...")
-     ("*PF-2OPT-PASSES*" "40" "the automatic point ordering uncrosses its loop with 2-opt passes until one improves nothing, or this many..."))
+     ("*PF-2OPT-PASSES*" "40" "the automatic point ordering uncrosses its loop with 2-opt passes until one improves nothing, or this many...")
+     ("*PF-RULER-LAYER*" "\"ABHD-RULER\"" "scratch layer the rows are drawn on, made if missing and left behind empty The LENGTH RULER beside the thre...")
+     ("*PF-RULER-COLOR*" "3" "ACI colour of the rows you can PICK, carried on the entities themselves on, made if missing and left behind...")
+     ("*PF-RULER-CUR-COLOR*" "7" "...and of the ringed CURRENT row, so it reads apart from the options; 7 is AutoCAD's black/white swap PICK,...")
+     ("*PF-RULER-SCREEN-X*" "0.88" "where the spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach...")
+     ("*PF-RULER-ROW-FRAC*" "0.042" "one row's share of the view's height -- the ruler's size knob view, as a fraction of its width in from the...")
+     ("*PF-RULER-TXT-FRAC*" "0.5" "the biggest row label's height, as a fraction of the row spacing height -- the ruler's size knob")
+     ("*PF-RULER-TICK-FRAC*" "0.6" "the longest tick, same measure a fraction of the row spacing")
+     ("*PF-RULER-RING-FRAC*" "0.26" "the ring round the current row, same measure a fraction of the row spacing")
+     ("*PF-RULER-REACH*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
+     ("*PF-HOP-OFF-LADDER*" "'(6.0 48.0 6.0)" "the rungs those three prompts offer, as (LOW HIGH STEP) in inches -- 6\" to 4' by 6\", the offsets a hopper i..."))
     ("ABLOBF" "lisp/ablobf/ABLOBF.lsp"
      ("*ABL-POOL-LAYER*" "\"POOL\"" "layer the kept run ends up on - ABHD's, so the rest of the toolset can read the result reads this banner an...")
      ("*ABL-POINT-LAYER*" "\"POINTS\"" "layer whose POINTs/INSERTs are always points ABHD's, so the rest of the toolset can read the result")

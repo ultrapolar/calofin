@@ -1385,6 +1385,38 @@ TOOLS = {
             'pf:cand-matches': 'cal:cand-matches',
             'pf:cand-nearest': 'cal:cand-nearest',
             'pf:askpoint': 'cal:askpoint',
+            # the length ruler beside the three hopper offsets: one
+            # block, held to the library by tests/test_ruler_copies.py;
+            # the style builder, the scratch layer, the sweeper and
+            # pf:ask-rung stay local, since each reads this file's own
+            # knobs
+            'pf:len-digit-p': 'cal:len-digit-p',
+            'pf:len-num-p': 'cal:len-num-p',
+            'pf:len-split': 'cal:len-split',
+            'pf:len-token': 'cal:len-token',
+            'pf:len-inches': 'cal:len-inches',
+            'pf:parse-len': 'cal:parse-len',
+            'pf:len-eighths': 'cal:len-eighths',
+            'pf:spell-len': 'cal:spell-len',
+            'pf:len-unread': 'cal:len-unread',
+            'pf:ruler-tier': 'cal:ruler-tier',
+            'pf:ladder-tier': 'cal:ladder-tier',
+            'pf:ladder-rows': 'cal:ladder-rows',
+            'pf:ruler-rows': 'cal:ruler-rows',
+            'pf:ruler-val-lt': 'cal:ruler-val-lt',
+            'pf:ruler-view': 'cal:ruler-view',
+            'pf:ruler-dir': 'cal:ruler-dir',
+            'pf:ruler-hgt': 'cal:ruler-hgt',
+            'pf:ruler-tick': 'cal:ruler-tick',
+            'pf:ruler-line': 'cal:ruler-line',
+            'pf:ruler-ring': 'cal:ruler-ring',
+            'pf:ruler-label': 'cal:ruler-label',
+            'pf:draw-ruler': 'cal:draw-ruler',
+            'pf:ruler-hit': 'cal:ruler-hit',
+            'pf:ruler-new': 'cal:ruler-new',
+            'pf:ruler-off': 'cal:ruler-off',
+            'pf:ruler-show': 'cal:ruler-show',
+            'pf:ask-len': 'cal:ask-len',
         },
         'drop_globals': [],
         'expand': {

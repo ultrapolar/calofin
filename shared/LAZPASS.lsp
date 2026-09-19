@@ -30644,6 +30644,51 @@
                                     ; passes until one improves nothing,
                                     ; or this many have run - a bound
                                     ; on the search, not a target
+
+;; The LENGTH RULER beside the three hopper offsets.  They are asked
+;; one after another, each defaulting to the one before, and they are
+;; not taped off anything -- a hopper is offset in from the walls by
+;; whatever the sheet says, out of a short list the shop builds to.  So
+;; each stands beside DIMSTAMP's ruler, drawn down a strip near the
+;; right edge of the view, and a click on a row IS the offset.  Scratch
+;; on its own layer, taken down before any prompt that does not take it
+;; and on every way out.  Every size is a fraction of the current view,
+;; so the ruler reads the same at any zoom.
+(setq *PF-RULER-LAYER* "ABHD-RULER") ; scratch layer the rows are drawn
+                                    ; on, made if missing and left
+                                    ; behind empty
+(setq *PF-RULER-COLOR* 3)           ; ACI colour of the rows you can
+                                    ; PICK, carried on the entities
+                                    ; themselves
+(setq *PF-RULER-CUR-COLOR* 7)       ; ...and of the ringed CURRENT row,
+                                    ; so it reads apart from the
+                                    ; options; 7 is AutoCAD's
+                                    ; black/white swap
+(setq *PF-RULER-SCREEN-X* 0.88)     ; where the spine sits across the
+                                    ; view, as a fraction of its width
+                                    ; in from the left; past 0.5 the
+                                    ; rows reach left, short of it they
+                                    ; reach right, so the ruler is
+                                    ; always inside the view
+(setq *PF-RULER-ROW-FRAC* 0.042)    ; one row's share of the view's
+                                    ; height -- the ruler's size knob
+(setq *PF-RULER-TXT-FRAC* 0.5)      ; the biggest row label's height, as
+                                    ; a fraction of the row spacing
+(setq *PF-RULER-TICK-FRAC* 0.6)     ; the longest tick, same measure
+(setq *PF-RULER-RING-FRAC* 0.26)    ; the ring round the current row,
+                                    ; same measure
+(setq *PF-RULER-REACH* 6.0)         ; how far inboard of the spine, in
+                                    ; row spacings, a click still counts
+                                    ; as picking a row rather than as
+                                    ; the first point of a measured
+                                    ; length
+(setq *PF-HOP-OFF-LADDER* '(6.0 48.0 6.0))
+                                    ; the rungs those three prompts
+                                    ; offer, as (LOW HIGH STEP) in
+                                    ; inches -- 6" to 4' by 6", the
+                                    ; offsets a hopper is laid out to.
+                                    ; nil leaves them the plain typed
+                                    ; questions they were
 ;; ---- end of tunables -----------------------------------------------
 
 ;; ---- session memory and run state ----------------------------------
@@ -30652,7 +30697,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "091626 REV20") ; announced on load.  The
+(setq pf:*version*      "091926 REV21") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -32076,6 +32121,9 @@
 (defun pf:temp-clear ( / en)
   (foreach en pf-temp
     (if (and en (entget en)) (entdel en)))
+  ;; the length ruler is scaffolding too, and this is the one call
+  ;; every handler and every clean exit already makes
+  (pf:rulerkill)
   (setq pf-temp nil))
 
 ;; Scaffolding removed early - when a Back re-opens the step that
@@ -32083,6 +32131,108 @@
 (defun pf:temp-kill (en)
   (if (and en (entget en)) (entdel en))
   (pf:temp-drop en))
+
+;;; -------------------- the length ruler --------------------------------
+;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
+;;;  Once a first length has been given, the prompt draws the eighths
+;;;  of an inch for a whole inch either side of the last one down a
+;;;  strip near the right edge of the view, graded like a tape with the
+;;;  last length ringed in the middle -- and one prompt then takes a
+;;;  click on a row (that row's value), a typed measurement in any
+;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  or a click on empty space as the first of two points to measure
+;;;  between, which is what getdist always offered.  A run of
+;;;  near-equal lengths is clicked rather than typed over and over.
+;;;
+;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
+;;;  ask their lengths through it.  Each carries this block under its
+;;;  own prefix so the standalone file loads alone, the grouped build
+;;;  swaps the copy for the library's, and tests/test_ruler_copies.py
+;;;  holds every copy to this one text.  DIMSTAMP keeps its own ruler:
+;;;  its current row is drawn as the stamp it would make, on the
+;;;  stamp's layer in the stamp's style, which is a different thing
+;;;  from a row of nearby lengths.
+;;;
+;;;  A ruler comes in two families, and the prompt picks which.
+;;;
+;;;  The TAPE is the one above: the eighths of an inch for a whole inch
+;;;  either side of the LAST answer, which is what a run of near-equal
+;;;  numbers wants.  It needs a last answer to be built round, so the
+;;;  first prompt of a run stands alone.
+;;;
+;;;  The LADDER is the other: a fixed (LO HI STEP) of the values that
+;;;  prompt is actually answered with, every one of them offered from
+;;;  the first prompt on.  A corner radius is 3" to 2'-0" by 3" and a
+;;;  tape of eighths round nothing helps nobody -- 3, 6, 9, 12 is the
+;;;  whole vocabulary, and a drafter picks out of it rather than types
+;;;  into it.  Its rows are graded off the VALUE, not off a distance
+;;;  from the current row: the foot marks are the deep ones and the
+;;;  half-foot next, which is where a tape's deep marks are too.  A
+;;;  ladder still takes a typed measurement that is not on it, and the
+;;;  answer is then ringed among the rungs as the current row.
+;;;
+;;;  Nothing in here reads a knob.  A tool hands its knobs in as one
+;;;  STYLE list and keeps the ruler between prompts as one STATE list:
+;;;    STYLE  (COLOR CURRENT-COLOR SCREEN-X ROW-FRAC TXT-FRAC TICK-FRAC
+;;;            RING-FRAC REACH) -- a caller's tunables block says what
+;;;            each one moves
+;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID LADDER) -- the
+;;;            length the ruler stands round (nil = none), the family it
+;;;            is labelled in (T = feet), what is drawn, its layer, the
+;;;            style, whether the one-line hint has been said, and the
+;;;            ladder it is standing on (nil = a tape)
+;;;  Values are INCHES, the unit this shop draws in, and the ruler
+;;;  steps in eighths of one, which is what a tape reads in.
+
+;;; -------------------- end of the length ruler -------------------------
+
+;; The ruler standing beside one of the hopper offsets -- RUN STATE,
+;; not a setting: it is what the run put there.  A module global rather
+;; than a local of pf:get-off, because the reader is several calls down
+;; from the command and what a command's *error* can take down is what
+;; the command can see: Esc at an offset is the likeliest way out of
+;; the question, and a ruler left standing is scratch in somebody's
+;; drawing.  pf:temp-clear is where every handler and every clean exit
+;; already sweeps this run's scaffolding, so that is where it goes.
+(setq pf:*ruler* nil)
+
+;; The scratch layer the rows are drawn on, made if it is missing.  A
+;; layer of its own is what lets a drafter turn the ruler off without
+;; turning anything of the fit off with it.
+(defun pf:rulerlayer ()
+  (if (not (tblsearch "LAYER" *PF-RULER-LAYER*))
+    (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLayerTableRecord")
+                   (cons 2 *PF-RULER-LAYER*) '(70 . 0) '(62 . 7)
+                   (cons 6 "CONTINUOUS"))))
+  *PF-RULER-LAYER*)
+
+;; This file's knobs, in the order the ruler reads them.
+(defun pf:ruler-style ()
+  (list *PF-RULER-COLOR* *PF-RULER-CUR-COLOR* *PF-RULER-SCREEN-X*
+        *PF-RULER-ROW-FRAC* *PF-RULER-TXT-FRAC* *PF-RULER-TICK-FRAC*
+        *PF-RULER-RING-FRAC* *PF-RULER-REACH*))
+
+;; Take the ruler down.  pf:temp-clear calls it, which is every
+;; handler and every clean exit.
+(defun pf:rulerkill ()
+  (if pf:*ruler* (setq pf:*ruler* (cal:ruler-off pf:*ruler*))))
+
+;; One prompt of PROMPT beside the ruler on LADDER, taking Back and
+;; Undo where pf:back-word took them and Enter as nothing.  Returns the
+;; answer in inches, 'CAL-BACK, or nil for Enter -- the caller decides
+;; what Enter means, as it always did.
+(defun pf:ask-rung (prompt ladder back / rr v)
+  (setq pf:*ruler*
+          (cal:ruler-show (if pf:*ruler* pf:*ruler*
+                             (cal:ruler-new (pf:rulerlayer)
+                                           (pf:ruler-style)))
+                         nil ladder)
+        rr (cal:ask-len prompt (if back "Back Undo" nil) pf:*ruler* nil)
+        v  (car rr)
+        pf:*ruler* (cadr rr))
+  (pf:rulerkill)
+  (if (and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK v))
 
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
@@ -33156,24 +33306,43 @@
 ;; refused, zero too unless ALLOWZERO (a waypoint may pin the line
 ;; to the wall).  With BACK non-nil, typing B (Back; Undo works too)
 ;; returns the symbol CAL-BACK instead.
-(defun pf:get-off (msg def allowzero back / s v res)
-  (setq res nil)
+;; LADDER stands the question beside the LENGTH RULER, which is what
+;; the three hopper offsets hand in: they are the stations a hopper is
+;; LAID OUT to, not lengths taped off the drawing.  An ALLOWZERO
+;; question admits a zero and the ruler's prompt does not -- no length
+;; on a ruler is zero -- so a ladder handed to one is ignored rather
+;; than quietly tightening what the question takes.  The two routes
+;; agree on everything the answer carries, the FTIN flag included: the
+;; ruler's state records the family the answer was spelled in, whether
+;; it was typed or clicked off a row, which is the same question
+;; (wcmatch s "*'*") asks of a typed string.
+(defun pf:get-off (msg def allowzero back ladder / s v res prompt)
+  (setq res nil
+        prompt (strcat msg " <" (pf:fmt-off def) ">"
+                       (if back " [Back]" "") ": "))
   (while (null res)
-    (setq s (getstring T (strcat msg " <" (pf:fmt-off def) ">"
-                                 (if back " [Back]" "") ": ")))
-    (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
-    (cond
-      ((= s "") (setq res def))
-      ((and back (cal:back-word-p s)) (setq res 'CAL-BACK))
-      (T
-       (setq v (distof s 4))
-       (cond
-         ((null v)
-          (princ "\n  (that is not a distance - type inches like 42, or feet and inches like 3'6)"))
-         ((or (< v 0.0) (and (= v 0.0) (not allowzero)))
-          (princ (strcat "\n  (the offset must be a positive distance"
-                         (if allowzero " or zero" "") ")")))
-         (T (setq res (cons v (if (wcmatch s "*'*") T nil))))))))
+    (if (and ladder (not allowzero))
+      (progn
+        (setq v (pf:ask-rung prompt ladder back))
+        (cond
+          ((eq v 'CAL-BACK) (setq res 'CAL-BACK))
+          ((null v) (setq res def))              ; Enter takes the default
+          (T (setq res (cons v (nth 1 pf:*ruler*))))))
+      (progn
+        (setq s (getstring T prompt))
+        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
+        (cond
+          ((= s "") (setq res def))
+          ((and back (cal:back-word-p s)) (setq res 'CAL-BACK))
+          (T
+           (setq v (distof s 4))
+           (cond
+             ((null v)
+              (princ "\n  (that is not a distance - type inches like 42, or feet and inches like 3'6)"))
+             ((or (< v 0.0) (and (= v 0.0) (not allowzero)))
+              (princ (strcat "\n  (the offset must be a positive distance"
+                             (if allowzero " or zero" "") ")")))
+             (T (setq res (cons v (if (wcmatch s "*'*") T nil))))))))))
   res)
 
 ;; The survey point marking the BACK of the hopper: cast a ray from
@@ -33618,9 +33787,12 @@
           ;; clears itself when the command ends (or on a Back)
           (setq mk (pf:temp-add (pf:tag-mine (pf:draw-corner-marker wp))))
           (setq pf-phase "reading a slope waypoint offset")
+          ;; no ladder: this offset admits ZERO -- a waypoint flush
+          ;; with the line is a real answer -- and no length on a ruler
+          ;; is zero
           (setq o (pf:get-off (strcat "\n  What is the offset at Pt."
                                       (pf:pt-name wp) "?")
-                              seed T T))
+                              seed T T nil))
           (if (eq o 'CAL-BACK)
             (progn                       ; un-pick this waypoint, re-ask
               (pf:temp-kill mk)
@@ -33771,21 +33943,22 @@
        (setq pf-phase "reading the hopper offsets")
        (setq o1 (pf:get-off (strcat "\n  What is the deep end offset at Pt."
                                     nm1 "?")
-                            (cons *PF-HOP-OFF* nil) nil T))
+                            (cons *PF-HOP-OFF* nil) nil T
+                            *PF-HOP-OFF-LADDER*))
        (if (eq o1 'CAL-BACK)
          (setq stage 4)
          (setq off1 (car o1) stage 6)))
       ((= stage 6)
        (setq o2 (pf:get-off (strcat "\n  What is the deep end offset at Pt."
                                     nm2 "?")
-                            o1 nil T))
+                            o1 nil T *PF-HOP-OFF-LADDER*))
        (if (eq o2 'CAL-BACK)
          (setq stage 5)
          (setq off2 (car o2) stage 7)))
       ((= stage 7)
        (setq o3 (pf:get-off (strcat "\n  What is the offset at the back of the"
                                     " hopper (Pt." (pf:pt-name back) ")?")
-                            o1 nil T))
+                            o1 nil T *PF-HOP-OFF-LADDER*))
        (if (eq o3 'CAL-BACK)
          (setq stage 6)
          (progn
@@ -119842,7 +120015,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.50")
+(setq *lazpanel-version* "v3.51")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -123957,7 +124130,17 @@
      ("*PF-THIN-EPS*" "0.01" "consecutive samples of an offset curve closer than this (a hundredth) collapse to one - a tight offset can...")
      ("*PF-BULGE-CLAMP*" "1.373" "the half-angle a tangent-window edge, or a span's own permitted turn, may reach (radians): its tangent is a...")
      ("*PF-STRAIGHT-R*" "1.0e6" "an arc whose radius reaches this is a straight line for every practical purpose: it is not snapped to a nic...")
-     ("*PF-2OPT-PASSES*" "40" "the automatic point ordering uncrosses its loop with 2-opt passes until one improves nothing, or this many..."))
+     ("*PF-2OPT-PASSES*" "40" "the automatic point ordering uncrosses its loop with 2-opt passes until one improves nothing, or this many...")
+     ("*PF-RULER-LAYER*" "\"ABHD-RULER\"" "scratch layer the rows are drawn on, made if missing and left behind empty The LENGTH RULER beside the thre...")
+     ("*PF-RULER-COLOR*" "3" "ACI colour of the rows you can PICK, carried on the entities themselves on, made if missing and left behind...")
+     ("*PF-RULER-CUR-COLOR*" "7" "...and of the ringed CURRENT row, so it reads apart from the options; 7 is AutoCAD's black/white swap PICK,...")
+     ("*PF-RULER-SCREEN-X*" "0.88" "where the spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach...")
+     ("*PF-RULER-ROW-FRAC*" "0.042" "one row's share of the view's height -- the ruler's size knob view, as a fraction of its width in from the...")
+     ("*PF-RULER-TXT-FRAC*" "0.5" "the biggest row label's height, as a fraction of the row spacing height -- the ruler's size knob")
+     ("*PF-RULER-TICK-FRAC*" "0.6" "the longest tick, same measure a fraction of the row spacing")
+     ("*PF-RULER-RING-FRAC*" "0.26" "the ring round the current row, same measure a fraction of the row spacing")
+     ("*PF-RULER-REACH*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
+     ("*PF-HOP-OFF-LADDER*" "'(6.0 48.0 6.0)" "the rungs those three prompts offer, as (LOW HIGH STEP) in inches -- 6\" to 4' by 6\", the offsets a hopper i..."))
     ("ABLOBF" "lisp/ablobf/ABLOBF.lsp"
      ("*ABL-POOL-LAYER*" "\"POOL\"" "layer the kept run ends up on - ABHD's, so the rest of the toolset can read the result reads this banner an...")
      ("*ABL-POINT-LAYER*" "\"POINTS\"" "layer whose POINTs/INSERTs are always points ABHD's, so the rest of the toolset can read the result")

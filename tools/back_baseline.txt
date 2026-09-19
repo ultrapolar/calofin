@@ -6,6 +6,8 @@
 # into its chain, or say here which reason it falls under.
 # Regenerate with: python3 tools/check_back.py --update-baseline
 lisp/abhd/abhd.lsp|c:TUTORIALABHD|\n Read the checks it applies, watch a drawn demo, or both? [Checks/Demo/Both] <Both>:|demo / tutorial
+lisp/abhd/abhd.lsp|pf:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/abhd/abhd.lsp|pf:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/abhd/abhd.lsp|pf:bottom|\n\n Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>:|past committed geometry
 lisp/abhd/abhd.lsp|pf:compare|\n Keep which fit - click one, or [ 1/2/3/4/5 1/2/3 /All/None/Redo] < >:|the fit picker - Redo is its way back
 lisp/abhd/abhd.lsp|pf:tut-demo|\n Keep the demo drawing to poke at? [Yes/No] <No>:|demo / tutorial
