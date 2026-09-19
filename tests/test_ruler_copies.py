@@ -3,10 +3,10 @@
 """Every copy of the length ruler is the library's text, prefix aside.
 
 The ruler beside a length prompt -- DIMSTAMP's, made a helper -- lives
-once in shared/parts/CALOFIN-LIB.lsp under cal:, and ten standalone
-files carry it under their own prefix so each loads alone: PERPPTS,
-CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP, NORMIESTEP, POOL, SPA, OASIS
-and POOLSIDE.  The grouped
+once in shared/parts/CALOFIN-LIB.lsp under cal:, and eleven
+standalone files carry it under their own prefix so each loads alone:
+PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP, NORMIESTEP, POOL,
+SPA, OASIS, POOLSIDE and FITABHD.  The grouped
 build swaps a copy for the library's (tools/mirror_shared.py), and
 tests/test_cal_parity.py calls both halves of every pure swap with the
 same arguments.  What neither can see is a copy that DRAWS or ASKS
@@ -16,7 +16,7 @@ another -- because the drawing and asking halves are excused there.
 So this holds the TEXT: the block between the two rule lines that fence
 the ruler, read out of every copy with its prefix folded back to cal:,
 must be the library's block byte for byte.  A change to the ruler is
-made in the library and copied out to the ten files (the same rule
+made in the library and copied out to the eleven files (the same rule
 STANDARDS.md section 4 gives the ask helpers), and a copy edited on its
 own fails here.
 
@@ -51,6 +51,7 @@ COPIES = [
     ("SPA", "lisp/spa/SPA.LSP", "spa:"),
     ("OASIS", "lisp/oasis/OASIS.lsp", "oasis:"),
     ("POOLSIDE", "lisp/poolside/POOLSIDE.lsp", "psd:"),
+    ("FITABHD", "lisp/fitabhd/FITABHD.lsp", "fit:"),
 ]
 
 START = ";;; -------------------- the length ruler"

@@ -378,6 +378,38 @@ TOOLS = {
             'fit:cand-matches': 'cal:cand-matches',
             'fit:cand-nearest': 'cal:cand-nearest',
             'fit:askpoint': 'cal:askpoint',
+            # the length ruler beside the hopper offsets and the
+            # tolerance: one block, held to the library by
+            # tests/test_ruler_copies.py; the style builder, the scratch
+            # layer, the sweeper and fit:ask-rung stay local, since each
+            # reads this file's own knobs
+            'fit:len-digit-p': 'cal:len-digit-p',
+            'fit:len-num-p': 'cal:len-num-p',
+            'fit:len-split': 'cal:len-split',
+            'fit:len-token': 'cal:len-token',
+            'fit:len-inches': 'cal:len-inches',
+            'fit:parse-len': 'cal:parse-len',
+            'fit:len-eighths': 'cal:len-eighths',
+            'fit:spell-len': 'cal:spell-len',
+            'fit:len-unread': 'cal:len-unread',
+            'fit:ruler-tier': 'cal:ruler-tier',
+            'fit:ladder-tier': 'cal:ladder-tier',
+            'fit:ladder-rows': 'cal:ladder-rows',
+            'fit:ruler-rows': 'cal:ruler-rows',
+            'fit:ruler-val-lt': 'cal:ruler-val-lt',
+            'fit:ruler-view': 'cal:ruler-view',
+            'fit:ruler-dir': 'cal:ruler-dir',
+            'fit:ruler-hgt': 'cal:ruler-hgt',
+            'fit:ruler-tick': 'cal:ruler-tick',
+            'fit:ruler-line': 'cal:ruler-line',
+            'fit:ruler-ring': 'cal:ruler-ring',
+            'fit:ruler-label': 'cal:ruler-label',
+            'fit:draw-ruler': 'cal:draw-ruler',
+            'fit:ruler-hit': 'cal:ruler-hit',
+            'fit:ruler-new': 'cal:ruler-new',
+            'fit:ruler-off': 'cal:ruler-off',
+            'fit:ruler-show': 'cal:ruler-show',
+            'fit:ask-len': 'cal:ask-len',
         },
         'drop_globals': [],
         # fit:askkw already takes the SHOWN bracket third, like the
