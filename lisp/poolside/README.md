@@ -130,6 +130,18 @@ puts your setting back.
 | Global | Default | What it does |
 | --- | --- | --- |
 | `psd:*pv-col*` / `psd:*pvx-col*` / `psd:*hi-col*` | `'auto` / `7` / `1` | guide outline, guide tie, and the highlight on the tie being asked |
+| `psd:*ruler-layer*` | `"POOLSIDE-RULER"` | Scratch layer the length ruler's rows are drawn on, made if missing. A layer of its own is what lets a drafter turn the ruler off without turning anything of the section off with it |
+| `psd:*ruler-color*` | `3` | ACI colour of the ruler's rows -- the ones you can pick |
+| `psd:*ruler-current-color*` | `7` | ACI colour of its ringed current row, so it reads apart from the options; 7 is AutoCAD's black/white swap |
+| `psd:*ruler-screen-x*` | `0.88` | Where the ruler's spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach left, short of it right, so the ruler stays inside the view |
+| `psd:*ruler-row-frac*` | `0.042` | One row's share of the view's height -- the ruler's size knob |
+| `psd:*ruler-txt-frac*` | `0.5` | The biggest row label's height, as a fraction of the row spacing |
+| `psd:*ruler-tick-frac*` | `0.6` | The longest tick, same measure |
+| `psd:*ruler-ring-frac*` | `0.26` | The ring round the current row, as a fraction of the row spacing |
+| `psd:*ruler-reach*` | `6.0` | How far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the first point of a measured length |
+| `psd:*wallheight-ladder*` | `'(36.0 54.0 3.0)` | The rungs C offers, as (LOW HIGH STEP) in inches -- POOL's own, since the two tools draw the same pool. `nil` leaves the prompt the plain typed one, with no ruler |
+| `psd:*deepdepth-ladder*` | `'(60.0 96.0 6.0)` | The same for D |
+| `psd:*breakdepth-ladder*` | `'(36.0 96.0 6.0)` | ...and for C2, which lands between the two |
 
 The nominal guide is drawn at `0.09 * B` for `C` and `0.20 * B` for `D`
 (about 3'6" and 8' on a 40' pool) with the run proportions of

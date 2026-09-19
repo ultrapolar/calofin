@@ -92,6 +92,42 @@ def ruler_ents(vm, live_only=True):
     return out
 
 
+def ruler_values(vm):
+    """The values the ruler standing right now is offering, in eighths,
+    read off its LABELS: the ruler is scratch, so what it says is the
+    only record of what it offered."""
+    out = []
+    for e in ruler_ents(vm):
+        kind = txt = None
+        for g in vm.entdata.get(e, []):
+            if isinstance(g, Dot) and g.a == 0:
+                kind = g.b
+            elif isinstance(g, Dot) and g.a == 1:
+                txt = g.b
+        if kind == 'MTEXT' and txt:
+            out.append(eighths_of(txt))
+    return [v for v in out if v is not None]
+
+
+def eighths_of(label):
+    """A ruler label back to eighths: 42" is 336, 3'-6" is 336 too."""
+    t = label.replace('\\A1;', '').replace('"', '')
+    feet = 0
+    if "'-" in t:
+        f, t = t.split("'-", 1)
+        feet = int(f)
+    whole, frac = t, 0.0
+    if '{' in t:                       # a stacked fraction: {\\H1.0000x;\\S1/2;}
+        whole = t[:t.index('{')]
+        inner = t[t.index('\\S') + 2:t.index(';}')]
+        n, d = inner.split('/')
+        frac = float(n) / float(d)
+    try:
+        return int(round(8 * (feet * 12 + int(whole) + frac)))
+    except ValueError:
+        return None
+
+
 def geometry(vm):
     """Every live entity as (type, points) -- the drawing a run leaves
     behind, the ruler's scratch excluded by being erased."""
@@ -285,6 +321,79 @@ def test_esc_at_the_size_takes_the_ruler_down():
           repr(len(ruler_ents(vm))))
 
 
+
+
+# ---- the depth chain --------------------------------------------------
+#
+# A pool's depths are as short a list as its corners: a wall is built
+# to a handful of heights and a deep end to a handful of depths, so C,
+# D and C2 stand on ladders of their own rather than on a tape.
+
+#: a wedge-bottom rectangle, which asks C and D at the end of its run
+def wedge(c, d):
+    return (["Outofsquare", "Rectangle"] + BASE
+            + [240.0, 240.0, 120.0, 120.0,
+               "Cut", 24.0, None, None, None, None, None, None,
+               "Ends", 260.0, 260.0, 260.0, 260.0,
+               "Yes", "Wedge",
+               30.0, 180.0,
+               None, 60.0, None,
+               c, d,
+               "No"])
+
+
+def test_the_depths_stand_on_their_own_ladders():
+    seen = {}
+
+    def look(label, answer):
+        def probe(vm):
+            seen[label] = sorted(
+                int(v) for v in ruler_values(vm))
+            return answer
+        return probe
+
+    run(wedge(look("C", 42.0), look("D", 72.0)), "depths")
+    # pool:*wallheight-ladder* is 36" to 54" by 3"
+    check("C stands on the wall-height ladder",
+          seen["C"] == [288, 312, 336, 360, 384, 408, 432], seen.get("C"))
+    # pool:*deepdepth-ladder* is 60" to 96" by 6", with C's answer of
+    # 42" nowhere near it -- D is asked with no length of its own yet
+    check("D stands on the deep-end ladder",
+          seen["D"] == [480, 528, 576, 624, 672, 720, 768], seen.get("D"))
+
+
+def test_a_depth_rung_clicked_is_the_number_typed():
+    typed = run(wedge(42.0, 72.0), "typed")
+    clicked = run(wedge(row_click(336, ladder="'(36.0 54.0 3.0)"),
+                        row_click(576, ladder="'(60.0 96.0 6.0)")),
+                  "clicked")
+    check("a rung clicked at C and at D draws what the numbers typed draw",
+          geometry(typed) == geometry(clicked))
+    check("...and it drew something", bool(geometry(typed)))
+    check("nothing of the ruler is left behind",
+          not ruler_ents(clicked) and not ruler_ents(typed))
+
+
+def test_a_wall_length_is_still_the_plain_typed_question():
+    seen = {}
+
+    def look(label, answer):
+        def probe(vm):
+            seen[label] = len(ruler_ents(vm))
+            return answer
+        return probe
+
+    run(["Outofsquare", "Rectangle"] + BASE
+        + [look("top", 240.0), look("bottom", 240.0), 120.0, 120.0,
+           "Cut", 24.0, None, None, None, None, None, None,
+           look("cross", "Ends"), 260.0, 260.0, 260.0, 260.0,
+           "No", "No"],
+        "wall lengths")
+    check("a wall length is measured, not picked off a list - no ruler",
+          seen["top"] == 0 and seen["bottom"] == 0, seen)
+    check("...nor is a cross dim", seen["cross"] == 0, seen)
+
+
 def main():
     print("POOL's corner-size ruler  [%s]"
           % (os.environ.get('CALOFIN_LISP_ROOT') or 'lisp/ (standalone)'))
@@ -295,6 +404,9 @@ def main():
     test_the_ruler_is_up_at_the_size_and_down_at_the_question_after()
     test_a_size_over_the_cap_is_refused_and_the_ruler_stands_again()
     test_esc_at_the_size_takes_the_ruler_down()
+    test_the_depths_stand_on_their_own_ladders()
+    test_a_depth_rung_clicked_is_the_number_typed()
+    test_a_wall_length_is_still_the_plain_typed_question()
     print()
     if failures:
         print("%d FAILED: %s" % (len(failures), ", ".join(failures)))

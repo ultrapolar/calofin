@@ -2520,7 +2520,9 @@ def ruler_rows(path, prefix, eighths, hasfeet=False):
     # library's at the grouped one, where the mirror has swapped it
     draw = 'cal:draw-ruler' if os.environ.get('CALOFIN_LISP_ROOT') \
         else prefix + ':draw-ruler'
-    _, box, rows = vm.loads('(%s %d %s "PERPPTS-TEMP" (%s:ruler-style))'
+    # nil ladder: a perpendicular length is taped off a wall, so this
+    # prompt stands beside the tape and never a ladder
+    _, box, rows = vm.loads('(%s %d %s "PERPPTS-TEMP" (%s:ruler-style) nil)'
                             % (draw, eighths, 't' if hasfeet else 'nil', prefix))
     return box, rows
 

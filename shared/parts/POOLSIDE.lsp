@@ -64,7 +64,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.6")
+(setq *poolside-version* "v1.7")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -90,6 +90,55 @@
 ;; them differently would be a second vocabulary for one question.
 (setq psd:*btypes*  "Normal Sport Wedge SLope MOdflat SHallow")
 (setq psd:*btshown* "Normal/Sport/Wedge/SLope/MOdflat/SHallow")
+
+;; The LENGTH RULER beside the DEPTH prompts.  A pool's depths are a
+;; short list: a wall is built to a handful of heights, a deep end to a
+;; handful of depths, and the break between them lands in the span of
+;; the two.  So C, D and C2 stand beside DIMSTAMP's ruler, drawn down a
+;; strip near the right edge of the view, and a click on a row IS the
+;; depth.  The RUNS along the floor are not on it -- those are taped off
+;; the sheet, and there is no short list of what a run comes to.
+;; Scratch on its own layer, taken down before any prompt that does not
+;; take it and on every way out.  Every size is a fraction of the
+;; current view, so the ruler reads the same at any zoom.
+(setq psd:*ruler-layer* "POOLSIDE-RULER") ; scratch layer the rows go on
+(setq psd:*ruler-color* 3)         ; ACI colour of the rows you can PICK
+(setq psd:*ruler-current-color* 7) ; ACI colour of the ringed CURRENT
+                                   ; row; 7 is AutoCAD's black/white
+                                   ; swap
+(setq psd:*ruler-screen-x* 0.88)   ; where the spine sits across the
+                                   ; view, as a fraction of its width in
+                                   ; from the left; past 0.5 the rows
+                                   ; reach left, short of it they reach
+                                   ; right, so the ruler is always
+                                   ; inside the view
+(setq psd:*ruler-row-frac* 0.042)  ; one row's share of the view's
+                                   ; height -- the ruler's size knob
+(setq psd:*ruler-txt-frac* 0.5)    ; the biggest row label's height, as
+                                   ; a fraction of the row spacing
+(setq psd:*ruler-tick-frac* 0.6)   ; the longest tick, same measure
+(setq psd:*ruler-ring-frac* 0.26)  ; the ring round the current row, as
+                                   ; a fraction of the row spacing
+(setq psd:*ruler-reach* 6.0)       ; how far inboard of the spine, in
+                                   ; row spacings, a click still counts
+                                   ; as picking a row rather than as the
+                                   ; first point of a measured length
+
+;; The three LADDERS those prompts stand on, as (LOW HIGH STEP) in
+;; inches -- POOL's own, since the two tools draw the same pool and a
+;; depth offered one way here and another there would be two
+;; vocabularies for one question.  nil on any of them leaves that
+;; prompt the plain typed one it was.
+(setq psd:*wallheight-ladder* '(36.0 54.0 3.0))   ; C, the shallow depth
+(setq psd:*deepdepth-ladder*  '(60.0 96.0 6.0))   ; D, the deep end
+(setq psd:*breakdepth-ladder* '(36.0 96.0 6.0))   ; C2, between the two
+
+;; The ruler standing beside one of them.  A module global, not a local
+;; of the sequence: the reader is several calls down from c:POOLSIDE,
+;; and what c:POOLSIDE's *error* can take down is what c:POOLSIDE can
+;; see.  Esc at a depth is the likeliest way out of the question, and a
+;; ruler left standing is scratch in somebody's drawing.
+(setq psd:*ruler* nil)
 
 ;;; -------------------- small vector helpers ---------------------------
 ;;; Copies of the CALOFIN-LIB originals (STANDARDS.md section 4); the
@@ -176,6 +225,85 @@
 
 ;;; -------------------- user input -------------------------------------
 ;;; The ask layer of STANDARDS.md section 4, under this file's prefix.
+
+;;; -------------------- the length ruler --------------------------------
+;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
+;;;  Once a first length has been given, the prompt draws the eighths
+;;;  of an inch for a whole inch either side of the last one down a
+;;;  strip near the right edge of the view, graded like a tape with the
+;;;  last length ringed in the middle -- and one prompt then takes a
+;;;  click on a row (that row's value), a typed measurement in any
+;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  or a click on empty space as the first of two points to measure
+;;;  between, which is what getdist always offered.  A run of
+;;;  near-equal lengths is clicked rather than typed over and over.
+;;;
+;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
+;;;  ask their lengths through it.  Each carries this block under its
+;;;  own prefix so the standalone file loads alone, the grouped build
+;;;  swaps the copy for the library's, and tests/test_ruler_copies.py
+;;;  holds every copy to this one text.  DIMSTAMP keeps its own ruler:
+;;;  its current row is drawn as the stamp it would make, on the
+;;;  stamp's layer in the stamp's style, which is a different thing
+;;;  from a row of nearby lengths.
+;;;
+;;;  A ruler comes in two families, and the prompt picks which.
+;;;
+;;;  The TAPE is the one above: the eighths of an inch for a whole inch
+;;;  either side of the LAST answer, which is what a run of near-equal
+;;;  numbers wants.  It needs a last answer to be built round, so the
+;;;  first prompt of a run stands alone.
+;;;
+;;;  The LADDER is the other: a fixed (LO HI STEP) of the values that
+;;;  prompt is actually answered with, every one of them offered from
+;;;  the first prompt on.  A corner radius is 3" to 2'-0" by 3" and a
+;;;  tape of eighths round nothing helps nobody -- 3, 6, 9, 12 is the
+;;;  whole vocabulary, and a drafter picks out of it rather than types
+;;;  into it.  Its rows are graded off the VALUE, not off a distance
+;;;  from the current row: the foot marks are the deep ones and the
+;;;  half-foot next, which is where a tape's deep marks are too.  A
+;;;  ladder still takes a typed measurement that is not on it, and the
+;;;  answer is then ringed among the rungs as the current row.
+;;;
+;;;  Nothing in here reads a knob.  A tool hands its knobs in as one
+;;;  STYLE list and keeps the ruler between prompts as one STATE list:
+;;;    STYLE  (COLOR CURRENT-COLOR SCREEN-X ROW-FRAC TXT-FRAC TICK-FRAC
+;;;            RING-FRAC REACH) -- a caller's tunables block says what
+;;;            each one moves
+;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID LADDER) -- the
+;;;            length the ruler stands round (nil = none), the family it
+;;;            is labelled in (T = feet), what is drawn, its layer, the
+;;;            style, whether the one-line hint has been said, and the
+;;;            ladder it is standing on (nil = a tape)
+;;;  Values are INCHES, the unit this shop draws in, and the ruler
+;;;  steps in eighths of one, which is what a tape reads in.
+
+;;; -------------------- end of the length ruler -------------------------
+
+;; The scratch layer the rows are drawn on, made if it is missing.  A
+;; layer of its own is what lets a drafter turn the ruler off without
+;; turning anything of the section off with it.
+(defun psd:rulerlayer ()
+  (if (not (tblsearch "LAYER" psd:*ruler-layer*))
+    (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLayerTableRecord")
+                   (cons 2 psd:*ruler-layer*) '(70 . 0) '(62 . 7)
+                   (cons 6 "CONTINUOUS"))))
+  psd:*ruler-layer*)
+
+;; Take the ruler down -- the one call *error* and the clean exit both
+;; make, so neither has to know whether one was up.  What is left is
+;; the swept STATE, not nil: it carries the one-line hint's said flag,
+;; and a prompt that threw it away would say the hint again at the next
+;; depth.  c:POOLSIDE clears it at the START of a run.
+(defun psd:rulerkill ()
+  (if psd:*ruler* (setq psd:*ruler* (cal:ruler-off psd:*ruler*))))
+
+;; This file's knobs, in the order the ruler reads them.
+(defun psd:ruler-style ()
+  (list psd:*ruler-color* psd:*ruler-current-color* psd:*ruler-screen-x*
+        psd:*ruler-row-frac* psd:*ruler-txt-frac* psd:*ruler-tick-frac*
+        psd:*ruler-ring-frac* psd:*ruler-reach*))
 
 ;;; -------------------- form answers -----------------------------------
 ;;;
@@ -268,35 +396,81 @@
 
 ;; A plain required measurement, no guide highlight and no Back -- the
 ;; re-ask after a range check, where Back would step out of the check.
-(defun psd:ask (msg / v)
+(defun psd:ask (msg ladder / v rr)
   (cal:osup)
-  (initget 7)                           ; no null, no zero, no negative
-  (setq v (getdist (strcat "\n" msg ": ")))
-  (if lzd:ask (lzd:ask msg v) v)
+  (if ladder
+    (progn
+      ;; the ruler goes up BEFORE the prompt and its state is the run's,
+      ;; not a local: an Esc in here runs c:POOLSIDE's *error*, and what
+      ;; that can take down is what c:POOLSIDE can see
+      (setq v nil)
+      (while (null v)
+        (setq psd:*ruler*
+                (cal:ruler-show (if psd:*ruler* psd:*ruler*
+                                    (cal:ruler-new (psd:rulerlayer)
+                                                   (psd:ruler-style)))
+                                nil ladder)
+              rr (cal:ask-len (strcat "\n" msg ": ") nil psd:*ruler* nil)
+              v  (car rr)
+              psd:*ruler* (cadr rr))
+        (if (null v)
+          (princ (strcat "\nA depth is required - type it, or click a"
+                         " ruler row."))))
+      (psd:rulerkill))
+    (progn
+      (initget 7)                       ; no null, no zero, no negative
+      (setq v (getdist (strcat "\n" msg ": ")))
+      (if lzd:ask (lzd:ask msg v) v)))
   (cal:osdown)
   v)
 
 ;; One prompt of a sequence, with the guide entities ents lit red while
 ;; it is asked.  kind is REQ (required), NAX (NA accepted) or ZER (NA
 ;; and zero accepted).  Returns the value, nil for NA, or CAL-BACK.
-(defun psd:asks (kind msg ents back / v cols kw e c)
+(defun psd:asks (kind msg ents back ladder / v cols kw e c prompt rr)
   (setq cols (mapcar 'psd:getcol ents))
   (foreach e ents (psd:setcol e psd:*hi-col*))
   (cal:osup)
   (setq kw (cond ((eq kind 'REQ) (if back "Back Undo" nil))
                  (back "NA Back Undo")
                  (t "NA")))
-  ;; REQ always rejects zero - offering Back must not loosen what
-  ;; counts as a valid measurement; ZER alone admits 0
-  (if kw
-      (initget (if (eq kind 'ZER) 5 7) kw)
-      (initget 7))
-  (setq v (getdist
-            (strcat "\n" msg
-                    (if (eq kind 'REQ) "" " (or NA if not measured)")
-                    (if back " [Back]" "")
-                    ": ")))
-  (if lzd:ask (lzd:ask msg v) v)
+  ;; the prompt's TEXT is built once, above the fork, so the two routes
+  ;; in cannot drift apart -- the form tests pin this wording
+  (setq prompt (strcat "\n" msg
+                       (if (eq kind 'REQ) "" " (or NA if not measured)")
+                       (if back " [Back]" "")
+                       ": "))
+  ;; A ZER question admits a zero and the ruler's prompt does not -- no
+  ;; length on a ruler is zero -- so a ladder handed to one is ignored
+  ;; rather than quietly tightening what the question takes.  Only the
+  ;; depths hand one in, and every depth is REQ.
+  (if (and ladder (not (eq kind 'ZER)))
+    (progn
+      (setq v nil)
+      (while (null v)
+        (setq psd:*ruler*
+                (cal:ruler-show (if psd:*ruler* psd:*ruler*
+                                    (cal:ruler-new (psd:rulerlayer)
+                                                   (psd:ruler-style)))
+                                nil ladder)
+              rr (cal:ask-len prompt kw psd:*ruler* nil)
+              v  (car rr)
+              psd:*ruler* (cadr rr))
+        ;; Enter stays refused where initget 7 refused it
+        (if (null v)
+          (princ (strcat "\nA depth is required - type it, or click a"
+                         " ruler row."))))
+      ;; down before the answer is used: what follows a depth is another
+      ;; question, and it asks for a ruler of its own if it wants one
+      (psd:rulerkill))
+    (progn
+      ;; REQ always rejects zero - offering Back must not loosen what
+      ;; counts as a valid measurement; ZER alone admits 0
+      (if kw
+          (initget (if (eq kind 'ZER) 5 7) kw)
+          (initget 7))
+      (setq v (getdist prompt))
+      (if lzd:ask (lzd:ask msg v) v)))
   (cal:osdown)
   (mapcar '(lambda (e c) (psd:setcol e c)) ents cols)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
@@ -307,7 +481,9 @@
 ;;;
 ;;;  Every question after the first offers Back, which re-asks the
 ;;;  previous one -- a typo no longer means Esc and start over.  Each
-;;;  item is (key kind msg ents).
+;;;  item is (key kind msg ents ladder), the last being the length
+;;;  ruler's rungs where the question has a short list of answers and
+;;;  nil where it does not.
 
 (defun psd:sq (ans key) (cdr (assoc key ans)))
 
@@ -338,7 +514,8 @@
     (setq v (if (psd:fhas (car it)) (psd:ftake (car it)) 'PSD-ASK))
     (if (not (psd:fok (cadr it) v)) (setq v 'PSD-ASK))
     (if (eq v 'PSD-ASK)
-      (setq v (psd:asks (cadr it) (caddr it) (cadddr it) (if asked t nil))))
+      (setq v (psd:asks (cadr it) (caddr it) (cadddr it) (if asked t nil)
+                        (nth 4 it))))
     (if (eq v 'CAL-BACK)
         ;; Back is not offered on the first question, so there is
         ;; always somewhere to step back to
@@ -615,6 +792,7 @@
     (cal:sysrestore)
     ;; nothing to put DIMSTYLE back to: POOLSIDE never switches it
     (psd:pvkill)
+    (psd:rulerkill)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (psd:fclear)                        ; both exits clear the form store
@@ -627,7 +805,10 @@
   (if *push-error-using-command* (*push-error-using-command*))
 
   (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
-  (setq psd:*valnotes* nil)
+  ;; a fresh run, so a fresh ruler: the hint is said once a run, and the
+  ;; flag that says it has been said travels in here
+  (setq psd:*valnotes* nil
+        psd:*ruler* nil)
   (setvar "CMDECHO" 0)
   (setq undo-open (cal:undobegin))
   ;; architectural units while prompting so every distance can be typed
@@ -668,7 +849,7 @@
 
   (setq total (if (setq fv (psd:fnum 'b))
                   fv
-                  (psd:ask "B - overall length, wall to wall"))
+                  (psd:ask "B - overall length, wall to wall" nil))
         doff  (max 12.0 (/ total 18.0))
         th    (max 3.0 (/ total 70.0))
         chain (psd:chain style)
@@ -688,11 +869,12 @@
   (while (<= dp wh)
     (princ (strcat "\nD must be deeper than the wall height C ("
                    (rtos wh) ") -- re-enter."))
-    (setq dp (psd:ask "D - deep end depth")))
+    (setq dp (psd:ask "D - deep end depth" psd:*deepdepth-ladder*)))
   (while (or (< c2 wh) (> c2 dp))
     (princ (strcat "\nC2 must be between C (" (rtos wh) ") and D ("
                    (rtos dp) ") -- re-enter."))
-    (setq c2 (psd:ask "C2 - depth where the shallow floor meets the break")))
+    (setq c2 (psd:ask "C2 - depth where the shallow floor meets the break"
+                      psd:*breakdepth-ladder*)))
   (psd:pvkill)
 
   ;; resolve the runs against B: NA takes the remainder (split when
@@ -783,6 +965,7 @@
 
   (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
+  (psd:rulerkill)
   (if *pop-error-mode* (*pop-error-mode*))
   (psd:fclear)                          ; both exits clear the form store
   (if lzd:end (lzd:end "POOLSIDE"))
@@ -797,14 +980,20 @@
                           (strcat (car c) " - " (caddr c))
                           (cdr (assoc (car c) pv)))
                     out)))
-  (setq out (cons (list 'd 'REQ "D - deep end depth" (cdr (assoc "D" pv)))
+  ;; the three DEPTHS carry a ladder; the runs above them do not -- a
+  ;; run is taped off the sheet and there is no short list of what one
+  ;; comes to
+  (setq out (cons (list 'd 'REQ "D - deep end depth" (cdr (assoc "D" pv))
+                        psd:*deepdepth-ladder*)
                   (cons (list 'c 'REQ "C - wall height (shallow depth)"
-                              (cdr (assoc "C" pv)))
+                              (cdr (assoc "C" pv))
+                              psd:*wallheight-ladder*)
                         out)))
   (if (= style "SHallow")
       (setq out (cons (list 'c2 'REQ
                             "C2 - depth where the shallow floor meets the break"
-                            (cdr (assoc "C2" pv)))
+                            (cdr (assoc "C2" pv))
+                            psd:*breakdepth-ladder*)
                       out)))
   (reverse out))
 

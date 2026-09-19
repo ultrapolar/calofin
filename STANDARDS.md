@@ -476,27 +476,61 @@ whatever was nearest. The rules it carries:
 distance taped off the wall: the numbers a drafter types at one prompt
 after another are near-equal, and `DIMSTAMP`'s ruler is how the tree
 stops making them retype. `tool:ask-len` (`cal:ask-len` in the
-library) is one length prompt that, from the second answer on, draws
-the eighths of an inch for a whole inch either side of the last
-length down a strip near the right edge of the view, graded like a
-tape with the last length ringed, and then takes any of: a click on a
-row (that row's value), a typed measurement in any spelling
-`tool:parse-len` reads (`44`, `44.5`, `44 1/2`, `4'4.5`,
-`4'-4 1/2"` -- kept exactly as typed, only the ruler rounds to the
-eighth), Enter (nil back, meaning what it always meant at that
-prompt), a keyword out of the list handed in, or a click on empty
-space as the first of two points to measure between. Zero, a leading
-minus and text that is not a length are refused where they stand. The
-prompt's WORDING does not change when a tool moves to it -- the form
-suites hold that -- only what it takes.
+library) is one length prompt that draws a column of nearby values
+down a strip near the right edge of the view, graded like a tape, and
+then takes any of: a click on a row (that row's value), a typed
+measurement in any spelling `tool:parse-len` reads (`44`, `44.5`,
+`44 1/2`, `4'4.5`, `4'-4 1/2"` -- kept exactly as typed, only the
+ruler rounds to the eighth), Enter (nil back, meaning what it always
+meant at that prompt), a keyword out of the list handed in, or a click
+on empty space as the first of two points to measure between. Zero, a
+leading minus and text that is not a length are refused where they
+stand. The prompt's WORDING does not change when a tool moves to it --
+the form suites hold that -- only what it takes.
+
+A caller that reads a spelling the library does not -- SPA's `600mm`
+-- hands that reader in as `cal:ask-len`'s fourth argument. It is
+tried AFTER the standard spellings, so a measurement written the
+tree's way still reads the tree's way, and what it returns is refused
+on the same terms as anything else. Every other caller passes `nil`.
+
+**The ruler comes in two families, and the prompt picks which.** The
+TAPE is the eighths of an inch for a whole inch either side of the
+LAST answer, which is what a run of near-equal numbers wants; it has
+to be built round a last answer, so a prompt asked cold has no tape.
+The LADDER is a fixed `(LOW HIGH STEP)` of the values that prompt is
+actually answered with, offered from the first prompt on: a corner
+radius is `3"` to `2'-0"` by `3"`, a step drop is whole inches, a
+pool's wall height is `36"` to `54"` by `3"`. Its rungs are graded off
+the VALUE rather than off a distance from the current row -- the foot
+marks deepest, the half-foot next, where a tape's deep marks are too
+-- and a length already given is RINGED among them rather than drawn
+twice. `tool:ruler-show` takes the ladder as its third argument and
+`tool:draw-ruler` as its fifth; `nil` on both is the plain typed
+prompt with no ruler at all.
+
+Which family a prompt takes is the CALLER's editorial call, not the
+library's, and it turns on what the question is. A measurement -- a
+wall, a bound, a cross dim, a tie between two centres -- gets no
+ladder: there is no short list of what one comes to. A size picked off
+an order sheet -- a radius, a cut face, a depth, a tread -- gets one.
+A prompt that is both (a step tread: picked cold, then near-equal
+after) hands the ladder in only while there is no last answer, so the
+finer tape takes over the moment one can be built. A ladder is a KNOB
+in the tool's tunables block, so a shop that builds to other numbers
+sets its own; a knob typed wrong has no rungs, and that reads as no
+ladder, which costs the ruler and never the command.
 
 It is one block, not a set of helpers to pick from: the reader, the
 speller, the row geometry and the prompt live once in
 `shared/parts/CALOFIN-LIB.lsp` between the two rule lines that fence
 `the length ruler`, and a standalone file carries that whole block
-under its own prefix (`perp:`, `pm:`, `cs-`...), plus one local
-`tool:ruler-style` that lists its own knobs in the order the ruler
-reads them. `tests/test_ruler_copies.py` holds every copy to the
+under its own prefix (`perp:`, `pm:`, `cs-`, `pool:`, `spa:`,
+`oasis:`, `psd:`...), plus one local `tool:ruler-style` that lists its
+own knobs in the order the ruler reads them -- and, where the ruler is
+drawn on a scratch layer of its own rather than on the current one,
+a local `tool:rulerlayer` to make it and a `tool:rulerkill` for the
+handler and the clean exit to call. `tests/test_ruler_copies.py` holds every copy to the
 library's text byte for byte, so a change is made in the library and
 copied out, never edited in one file. What a tool keeps between
 prompts is the STATE the prompt hands back -- `(setq rr (tool:ask-len
@@ -506,9 +540,22 @@ prompt that does not take the ruler and on every way out, the
 `*error*` handler included. The eight knobs are the same in every
 file that has them (`*ruler-color*`, `*ruler-current-color*`,
 `*ruler-screen-x*`, `*ruler-row-frac*`, `*ruler-txt-frac*`,
-`*ruler-tick-frac*`, `*ruler-ring-frac*`, `*ruler-reach*`) and
-`DIMSTAMP` keeps its own ruler, whose current row is the stamp it
-would make rather than a length.
+`*ruler-tick-frac*`, `*ruler-ring-frac*`, `*ruler-reach*`), each
+file's ladders are knobs of its own beside them, and `DIMSTAMP` keeps
+its own ruler, whose current row is the stamp it would make rather
+than a length.
+
+**Where the asking helper is several calls down from the command, the
+ruler's STATE is a run state and not its local** -- the reason OSMODE
+is one. An Esc at a length prompt runs the COMMAND's `*error*`, and
+what that handler can take down is what the command can see; a state
+kept in `pool:askcorner`'s own local would outlive the Esc as scratch
+in somebody's drawing. So `pool:*ruler*`, `spa:*ruler*`,
+`oasis:*ruler*` and `psd:*ruler*` sit with the rest of the run state,
+are cleared at the START of a run (the one-line hint is said once a
+run, and the flag that says so travels in the state), and are taken
+down by `tool:rulerkill` from the handler and from the clean exit
+alike.
 
 ## 5. Code structure
 

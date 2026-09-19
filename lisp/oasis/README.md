@@ -719,6 +719,16 @@ a floor under the result.
 | `oasis:*ucsfuzz*` | `1.0e-8` | How far out of the world plan the UCS may lie and still count as flat. A **direction cosine**, not a length — it does not scale with the drawing and has nothing to do with `*fuzz*` |
 | `oasis:*cmdguard*` | `10` | How many empty `(command)` calls the error handler will send to drain a dimension left pending by an Esc |
 | `oasis:*ringguard*` | `4` | How many elements the sub-ring walker may cross, as a multiple of the ring's own length |
+| `oasis:*ruler-layer*` | `"OASIS-RULER"` | Scratch layer the length ruler's rows are drawn on, made if missing. A layer of its own is what lets a drafter turn the ruler off without turning anything of the pool off with it |
+| `oasis:*ruler-color*` | `3` | ACI colour of the ruler's rows -- the ones you can pick |
+| `oasis:*ruler-current-color*` | `7` | ACI colour of its ringed current row, so it reads apart from the options; 7 is AutoCAD's black/white swap |
+| `oasis:*ruler-screen-x*` | `0.88` | Where the ruler's spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach left, short of it right, so the ruler stays inside the view |
+| `oasis:*ruler-row-frac*` | `0.042` | One row's share of the view's height -- the ruler's size knob |
+| `oasis:*ruler-txt-frac*` | `0.5` | The biggest row label's height, as a fraction of the row spacing |
+| `oasis:*ruler-tick-frac*` | `0.6` | The longest tick, same measure |
+| `oasis:*ruler-ring-frac*` | `0.26` | The ring round the current row, as a fraction of the row spacing |
+| `oasis:*ruler-reach*` | `6.0` | How far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the first point of a measured length |
+| `oasis:*radius-ladder*` | `'(48.0 144.0 12.0)` | The rungs every RADIUS prompt offers, as (LOW HIGH STEP) in inches -- 4' to 12' by a foot, the bulge radii these shapes are built out of. The two BOUNDS and the tie are not on it: those are taped, and there is no short list of what one comes to. `nil` leaves every radius prompt the plain typed one |
 
 Neither guard is reached by any input the questions admit; they are
 there so a bug upstream costs a wrong drawing rather than a hung

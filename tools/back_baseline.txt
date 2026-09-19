@@ -94,6 +94,8 @@ lisp/lisplab/LISPLAB.lsp|lab:pause|\n--- press Enter to continue ---|pause
 lisp/lobf/LOBF.lsp|lobf:askfit|\n Keep which fit - click one, or [1/2/3/All/None/Redo] < >:|the fit picker - Redo is its way back
 lisp/mohamaddle/MOHAMADDLE.lsp|c:MOHAMADDLE|\nClose the gap the arrow points at with a zero fillet? [Yes/No] <Yes>:|only the selection is in front of it, and No is itself the way past it
 lisp/mohamaddle/MOHAMADDLE.lsp|mohamaddle--asksize|\nPad size (inches)? [ ] < >:|first question of its command or branch
+lisp/oasis/OASIS.lsp|oasis:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/oasis/OASIS.lsp|oasis:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/paddle/PADDLE.lsp|c:PADDLE|\nClose the gap the arrow points at with a zero fillet? [Yes/No] <Yes>:|only the selection is in front of it, and No is itself the way past it
 lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nDraw a live demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
 lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nErase the demonstration? [Yes/No] <No>:|demo / tutorial
@@ -125,6 +127,8 @@ lisp/pool/POOL.LSP|pool:ask-len|\nSecond point of the length:|second half of a t
 lisp/pool/POOL.LSP|pool:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/pool/POOL.LSP|pool:ask|\n :|the re-ask after a failed range check - Back would leave the check
 lisp/pool/TUTORIALPOOL.LSP|tutorial:pause|\nPress ENTER for the next topic (X then ENTER to stop here):|demo / tutorial
+lisp/poolside/POOLSIDE.lsp|psd:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/poolside/POOLSIDE.lsp|psd:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/poolside/POOLSIDE.lsp|psd:ask|\n :|the re-ask after a failed range check - Back would leave the check
 lisp/spa/SPA.LSP|spa:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
 lisp/spa/SPA.LSP|spa:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)

@@ -92,6 +92,18 @@ INPUTS = {
     "cal:ruler-tier": ['0', '1', '2', '3', '4', '5', '6', '7', '8', '-4',
                        '16', '-3'],
     "cal:ruler-rows": ['352 nil', '352 t', '4 nil', '20 t', '1 nil'],
+    # the ladder half: a rung on a foot, a half foot, a quarter foot and
+    # none of the three, then the shapes a mistyped knob comes in as --
+    # a string, two numbers, a zero step, a negative step, a list of
+    # strings, nil -- each of which has to come back with no rungs
+    "cal:ladder-tier": ['96', '192', '48', '144', '24', '72', '30', '1',
+                        '0'],
+    "cal:ladder-rows": ["'(3.0 24.0 3.0)", "'(6.0 36.0 6.0)",
+                        "'(6.0 12.0 1.0)", "'(48.0 144.0 12.0)",
+                        "'(0.0 12.0 6.0)", "'(3.0 3.0 3.0)",
+                        "'(24.0 3.0 3.0)", '"3 to 24"', "'(3.0 24.0)",
+                        "'(3.0 24.0 0.0)", "'(3.0 24.0 -3.0)",
+                        '\'("a" "b" "c")', 'nil'],
     "cal:ruler-val-lt": ["'(1 a) '(2 b)", "'(2 a) '(1 b)", "'(3 a) '(3 b)"],
     "cal:ruler-view": [''],
     "cal:ruler-dir": ['0.88', '0.12', '0.5', '0.51'],

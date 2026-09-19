@@ -124,7 +124,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091926 REV34")
+(setq pool:*version* "091926 REV35")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -515,6 +515,16 @@
 ;;;  plain typed one it was, with no ruler beside it.
 (setq pool:*radius-ladder* '(3.0 24.0 3.0))
 (setq pool:*cutface-ladder* '(3.0 24.0 3.0))
+
+;;;  ...and the three the DEPTH chain stands on.  A pool's depths are
+;;;  as short a list as its corners are: a wall is built to a handful
+;;;  of heights, a deep end to a handful of depths, and the break
+;;;  between them lands somewhere in the span of the two.  Same shape,
+;;;  (LOW HIGH STEP) in inches, and nil on any of them leaves that
+;;;  prompt the plain typed one it was.
+(setq pool:*wallheight-ladder* '(36.0 54.0 3.0))   ; C, the shallow depth
+(setq pool:*deepdepth-ladder*  '(60.0 96.0 6.0))   ; D, the deep end
+(setq pool:*breakdepth-ladder* '(36.0 96.0 6.0))   ; C2, between the two
 
 ;;; -------------------- run state (not tunables) ----------------------
 ;;;
@@ -2127,7 +2137,36 @@
 
 ;; Ask for a distance while the matching guide elements glow red, then
 ;; restore each element to the color it had (outline vs cross-dim gray).
-(defun pool:askh (msg ents / v cols k)
+;; The question pool:ask asks, standing beside the LENGTH RULER on
+;; LADDER.  A depth is picked out of a short list rather than taped off
+;; anything, so the rungs stand from the first prompt and a click on one
+;; IS the answer.  Enter stays refused where pool:ask's initget 7
+;; refused it, and the ruler is down before the answer is used --
+;; nothing after a depth takes one.
+(defun pool:askl (msg ladder / v rr)
+  (pool:osup)
+  (setq v nil)
+  (while (null v)
+    (setq pool:*ruler*
+            (pool:ruler-show (if pool:*ruler* pool:*ruler*
+                                 (pool:ruler-new (pool:rulerlayer)
+                                                 (pool:ruler-style)))
+                             nil ladder)
+          rr (pool:ask-len (strcat "\n" msg ": ") nil pool:*ruler* nil)
+          v  (car rr)
+          pool:*ruler* (cadr rr))
+    (if (null v)
+      (princ (strcat "\nA measurement is required - type it, or click"
+                     " a ruler row."))))
+  (pool:rulerkill)
+  (pool:osdown)
+  v)
+
+;; LADDER nil is the plain typed question this has always been; a
+;; (LOW HIGH STEP) stands it beside the ruler, which is what the depth
+;; chain hands in and no wall length does -- a wall is measured, and
+;; there is no short list of what it comes to.
+(defun pool:askh (msg ents ladder / v cols k)
   ;; A form answer for this letter skips the prompt and the highlight
   ;; with it -- there is nothing to look at while nothing is being
   ;; asked.  Only a real measurement is taken: every caller here range
@@ -2140,7 +2179,7 @@
       (progn
         (setq cols (mapcar 'pool:getcol ents))
         (foreach e ents (pool:setcol e pool:*hi-col*))
-        (setq v (pool:ask msg))
+        (setq v (if ladder (pool:askl msg ladder) (pool:ask msg)))
         (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
         v)))
 
@@ -5689,20 +5728,20 @@
   (append (list label tgt act) (if (member i fixed) (list t) nil)))
 
 ;; Deep depth must beat the wall height; C2 must land between them.
-(defun pool:askdeep (msg ents wh / dp)
-  (setq dp (pool:askh msg ents))
+(defun pool:askdeep (msg ents wh ladder / dp)
+  (setq dp (pool:askh msg ents ladder))
   (while (<= dp wh)
     (princ (strcat "\nD must be deeper than the wall height C ("
                    (rtos wh) ") -- re-enter."))
-    (setq dp (pool:askh msg ents)))
+    (setq dp (pool:askh msg ents ladder)))
   dp)
 
-(defun pool:askc2 (msg ents wh dp / c2)
-  (setq c2 (pool:askh msg ents))
+(defun pool:askc2 (msg ents wh dp ladder / c2)
+  (setq c2 (pool:askh msg ents ladder))
   (while (or (< c2 wh) (> c2 dp))
     (princ (strcat "\nC2 must be between C (" (rtos wh) ") and D ("
                    (rtos dp) ") -- re-enter."))
-    (setq c2 (pool:askh msg ents)))
+    (setq c2 (pool:askh msg ents ladder)))
   c2)
 
 ;; Hopper-language bottom: lettered guide, the H/G/F/E/M/L/K chain,
@@ -5853,13 +5892,16 @@
   ;; of the user
   (if (caddr sp)
       (progn
-        (setq wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv))))
+        (setq wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv))
+                            pool:*wallheight-ladder*))
         (pool:pvnote 'wh wh)
-        (setq dp (pool:askdeep "D - deep end depth" (cdr (assoc "D" pv)) wh))
+        (setq dp (pool:askdeep "D - deep end depth" (cdr (assoc "D" pv)) wh
+                               pool:*deepdepth-ladder*))
         (pool:pvnote 'dp dp)
         (setq c2 (if (cadddr sp)
                      (pool:askc2 "C2 - depth where the shallow floor meets the break"
-                                 (cdr (assoc "C2" pv)) wh dp)
+                                 (cdr (assoc "C2" pv)) wh dp
+                                 pool:*breakdepth-ladder*)
                      wh))
         (if (cadddr sp) (pool:pvnote 'c2 c2))))
   (pool:pvkill)
@@ -5886,8 +5928,10 @@
   (if (and (= g 0.0) (not (caddr sp)))
       (progn
         (princ "\nG = 0 -- that is a slope bottom, so a side view is drawn too.")
-        (setq wh (pool:askh "C - wall height (shallow depth)" nil)
-              dp (pool:askdeep "D - deep end depth" nil wh)
+        (setq wh (pool:askh "C - wall height (shallow depth)" nil
+                            pool:*wallheight-ladder*)
+              dp (pool:askdeep "D - deep end depth" nil wh
+                               pool:*deepdepth-ladder*)
               c2 wh)))
   (setq gg (pool:hopcalc quad corners h g e m k))
   (pool:hopdraw gg pool:*lay-pool* tie)
@@ -6111,9 +6155,11 @@
         f1r (pool:sq ans 'f1) e1r (pool:sq ans 'e1)
         mraw (pool:sq ans 'm) lraw (pool:sq ans 'l) kraw (pool:sq ans 'k)
         nopad (and gr (< gr 1.0e-6))
-        wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv))))
+        wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv))
+                      pool:*wallheight-ladder*))
   (pool:pvnote 'wh wh)
-  (setq hd (pool:askdeep "D - deep depth" (cdr (assoc "D" pv)) wh))
+  (setq hd (pool:askdeep "D - deep depth" (cdr (assoc "D" pv)) wh
+                         pool:*deepdepth-ladder*))
   (pool:pvnote 'dp hd)
   (pool:pvkill)
   ;; resolve: horizontal chain vs the pool length (G absorbs; the
@@ -7287,7 +7333,7 @@
                                "\nThe total length is needed when a side length is NA."
                                "\nThe total length is needed when an end radius is NA."))
                     (setq totl (pool:askh "Total pool length (arc tip to arc tip)"
-                                          (cdr (assoc 'tot pv))))
+                                          (cdr (assoc 'tot pv)) nil))
                     (pool:pvnote 'tot totl)))
               (if (or tpna bona) (qf:ovalsides))
               nil)))))
@@ -7310,13 +7356,14 @@
        (if pool:*insq*
            (setq tp (pool:askh "Side length (top & bottom)"
                                (append (cdr (assoc 'dc pv))
-                                       (cdr (assoc 'ab pv))))
+                                       (cdr (assoc 'ab pv)))
+                               nil)
                  bo tp)
            (progn
              (if tpna (setq tp (pool:askh "Side length TOP (D-C)"
-                                          (cdr (assoc 'dc pv)))))
+                                          (cdr (assoc 'dc pv)) nil)))
              (if bona (setq bo (pool:askh "Side length BOTTOM (A-B)"
-                                          (cdr (assoc 'ab pv)))))))
+                                          (cdr (assoc 'ab pv)) nil)))))
        (setq tpna nil bona nil))
       ((and tpna bona)
        (setq tp ax bo ax)
