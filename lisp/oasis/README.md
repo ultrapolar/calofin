@@ -463,6 +463,21 @@ of `Top-right tangent radius`. A **CLoud** asks `Cloud bottom?
 [Straight/Rounded/Back] <Straight>:` second, and then drops the left and
 top bulges and the two extra joiners — see the table above.)
 
+**Every RADIUS in that list stands beside a ruler.** Six of them come
+one after another and they come off a plan in whole feet, so each is
+asked with `DIMSTAMP`'s ruler drawn down a strip near the right edge
+of the view, offering 4' to 12' by a foot (`oasis:*radius-ladder*`).
+Click a row and that is the radius; type one and it reads the way
+`DIMSTAMP` reads (`96`, `96.5`, `8'`, `7'-6"`); click empty space and
+it is the first of two points to measure between. `Back`, `NA` and the
+re-ask on a bulge that will not fit all mean exactly what they meant.
+The two **bounds** above them and the TopRight **tie** do not get one:
+those are taped across the pool, and there is no short list of what
+one comes to. The ruler is scratch on `OASIS-RULER`, down before the
+next question and swept on every way out, Esc included — it shares the
+view with the live preview, which redraws at every question as it
+always did.
+
 A **NXTcloud** asks for its three lobes and then its four fillets, in
 the order the outline meets them:
 

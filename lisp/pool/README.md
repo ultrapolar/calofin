@@ -157,6 +157,25 @@ A remembered size is only offered back as the default when the new
 answer **matches** the previous one: a radius is not a cut face, so
 24" does not carry across from one to the other.
 
+**The size question stands beside a ruler.** A corner radius is not
+measured off the sheet the way a wall is -- it is picked out of the
+short list a shop builds to -- so `Radius for <subject>` and
+`Cut face length for <subject>` are asked with `DIMSTAMP`'s ruler
+drawn down a strip near the right edge of the view, offering 3" to
+2'-0" in 3" steps (`pool:*radius-ladder*`, `pool:*cutface-ladder*`).
+Click a row and that is the size; type one and it reads the way
+`DIMSTAMP` reads (`24`, `24.5`, `2'`, `1'-4 1/2"`); click empty space
+and it is the first of two points to measure between. The remembered
+size is ringed among the rungs when there is one, Enter still takes
+it, and a size over the corner's cap is refused and asked again with
+the ruler still standing. The depth chain does the same on ladders of
+its own: C on 36"-54" by 3", D on 60"-96" by 6", C2 on the span of
+the two. Everything else POOL asks is a MEASUREMENT -- a wall, a
+diagonal, a cross dim, a hopper run -- and stays the plain typed
+question it was, there being no short list of what one comes to. The
+ruler is scratch on `POOL-RULER`, down before the next question and
+swept on every way out, Esc included.
+
 **`NotGiven` is built square but never drawn as a 90.** Its geometry is
 the plain sharp corner, but the sheet marks it with a circled, **boxed**
 `?` and a `Not Given` note on a leader off that box, so nobody

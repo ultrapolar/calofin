@@ -382,13 +382,6 @@
 (setq fit:*hop-back-ladder* '(6.0 48.0 6.0))     ; hopper in from the end
 (setq fit:*tol-ladder* '(0.25 2.0 0.25))         ; the fit tolerance
 
-;; The ruler standing beside one of them.  A module global, not a local
-;; of fit:get-off: the reader is several calls down from c:FITABHD, and
-;; what c:FITABHD's *error* can take down is what c:FITABHD can see.
-;; Esc at an offset is the likeliest way out of the question, and a
-;; ruler left standing is scratch in somebody's drawing.
-(setq fit:*ruler* nil)
-
 ;; the template wall directions, one CCW ring per type (see below)
 (setq fit:*rect-dirs* (list 0.0 (/ pi 2.0) pi (* pi 1.5)))
 (setq fit:*grec-dirs* (list 0.0 (/ pi 4.0) (/ pi 2.0) (* pi 0.75)
@@ -4384,6 +4377,16 @@
 ;;;  steps in eighths of one, which is what a tape reads in.
 
 ;;; -------------------- end of the length ruler -------------------------
+
+;; The ruler standing beside one of those prompts -- RUN STATE, not a
+;; setting: it is what the run put there, and it is declared here
+;; rather than in the block at the top so LAZTUNE does not offer it as
+;; a knob.  A module global rather than a local of fit:get-off, because
+;; the reader is several calls down from c:FITABHD and what that
+;; command's *error* can take down is what the command can see: Esc at
+;; an offset is the likeliest way out of the question, and a ruler left
+;; standing is scratch in somebody's drawing.
+(setq fit:*ruler* nil)
 
 ;; The scratch layer the rows are drawn on, made if it is missing.  A
 ;; layer of its own is what lets a drafter turn the ruler off without

@@ -141,7 +141,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.48")
+(setq *lazpanel-version* "v3.50")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -4545,7 +4545,17 @@
      ("cst:*dotr*" "0.008" "Label height, preview marker radius and how far a perimeter dim stands off, as shares of the smaller side o...")
      ("cst:*dimoff*" "0.060" "Label height, preview marker radius and how far a perimeter dim stands off, as shares of the smaller side o...")
      ("cst:*texth-min*" "0.5" "Floors under the first two, in drawing units, so a tiny space still gets a label that can be read and a mar...")
-     ("cst:*dotr-min*" "0.1" "Floors under the first two, in drawing units, so a tiny space still gets a label that can be read and a mar..."))
+     ("cst:*dotr-min*" "0.1" "Floors under the first two, in drawing units, so a tiny space still gets a label that can be read and a mar...")
+     ("cst:*ruler-layer*" "\"CONSTELLATION-RULER\"" "scratch layer the rows are drawn on The LENGTH RULER beside the ARC RADIUS prompt. When a run of points lie...")
+     ("cst:*ruler-color*" "3" "ACI colour of the rows you can PICK are drawn on")
+     ("cst:*ruler-current-color*" "7" "ACI colour of the ringed CURRENT row; 7 is AutoCAD's black/white swap are drawn on")
+     ("cst:*ruler-screen-x*" "0.88" "where the spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach...")
+     ("cst:*ruler-row-frac*" "0.042" "one row's share of the view's height -- the ruler's size knob view, as a fraction of its width in from the...")
+     ("cst:*ruler-txt-frac*" "0.5" "the biggest row label's height, as a fraction of the row spacing height -- the ruler's size knob")
+     ("cst:*ruler-tick-frac*" "0.6" "the longest tick, same measure a fraction of the row spacing")
+     ("cst:*ruler-ring-frac*" "0.26" "the ring round the current row, as a fraction of the row spacing a fraction of the row spacing")
+     ("cst:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
+     ("cst:*radius-ladder*" "'(24.0 240.0 12.0)" "The LADDER it stands on, as (LOW HIGH STEP) in inches: the radii a curved wall is drawn to, 2' to 20' by a..."))
     ("COVERCHECK" "lisp/covercheck/covercheck.lsp"
      ("*cchk-pool-layer*" "\"POOL\"" "The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these ar...")
      ("*cchk-cover-layer*" "\"COVER\"" "The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these ar...")
@@ -4766,7 +4776,6 @@
      ("fit:*hop-side-ladder*" "'(6.0 48.0 6.0)" "hopper in from a side The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per question,...")
      ("fit:*hop-back-ladder*" "'(6.0 48.0 6.0)" "hopper in from the end The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per question...")
      ("fit:*tol-ladder*" "'(0.25 2.0 0.25)" "the fit tolerance The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per question, sin...")
-     ("fit:*ruler*" "nil" "The ruler standing beside one of them. A module global, not a local of fit:get-off: the reader is several c...")
      ("fit:*rect-dirs*" "(list 0.0 (/ pi 2.0) pi (* pi 1.5))" "the template wall directions, one CCW ring per type (see below)")
      ("fit:*grec-dirs*" "(list 0.0 (/ pi 4.0) (/ pi 2.0) (* pi 0.75) pi (* pi 1.25) (* pi 1.5) (* pi 1.75))" "the template wall directions, one CCW ring per type (see below)")
      ("fit:*l-dirs*" "(list 0.0 (/ pi 2.0) pi (* pi 1.5) pi (* pi 1.5))" "")
@@ -5325,8 +5334,7 @@
      ("psd:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
      ("psd:*wallheight-ladder*" "'(36.0 54.0 3.0)" "C, the shallow depth The three LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- POOL's own,...")
      ("psd:*deepdepth-ladder*" "'(60.0 96.0 6.0)" "D, the deep end The three LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- POOL's own, since...")
-     ("psd:*breakdepth-ladder*" "'(36.0 96.0 6.0)" "C2, between the two The three LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- POOL's own, s...")
-     ("psd:*ruler*" "nil" "The ruler standing beside one of them. A module global, not a local of the sequence: the reader is several..."))
+     ("psd:*breakdepth-ladder*" "'(36.0 96.0 6.0)" "C2, between the two The three LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- POOL's own, s..."))
     ("SMARTFILLET" "lisp/smartfillet/SMARTFILLET.lsp"
      ("sf:*first*" "6.0" "the smallest radius offered, and the step")
      ("sf:*step*" "6.0" "between the ones after it -- 6\" of radius is the smallest difference that reads on a pool plan")

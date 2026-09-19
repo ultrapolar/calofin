@@ -131,11 +131,16 @@
 (setq psd:*deepdepth-ladder*  '(60.0 96.0 6.0))   ; D, the deep end
 (setq psd:*breakdepth-ladder* '(36.0 96.0 6.0))   ; C2, between the two
 
-;; The ruler standing beside one of them.  A module global, not a local
-;; of the sequence: the reader is several calls down from c:POOLSIDE,
-;; and what c:POOLSIDE's *error* can take down is what c:POOLSIDE can
-;; see.  Esc at a depth is the likeliest way out of the question, and a
-;; ruler left standing is scratch in somebody's drawing.
+;;; -------------------- run state (not tunables) -----------------------
+;;;
+;;;  The length ruler standing beside a depth prompt.  Declared here
+;;;  because AutoLISP wants a global declared at top level, but set and
+;;;  cleared by the run itself -- editing it here changes nothing.  A
+;;;  module global rather than a local of the sequence, because the
+;;;  reader is several calls down from c:POOLSIDE and what that
+;;;  command's *error* can take down is what the command can see: Esc
+;;;  at a depth is the likeliest way out of the question, and a ruler
+;;;  left standing is scratch in somebody's drawing.
 (setq psd:*ruler* nil)
 
 ;;; -------------------- small vector helpers ---------------------------

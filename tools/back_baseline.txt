@@ -20,6 +20,8 @@ lisp/autobead/AUTOBEAD.lsp|autobead-tutorial-demo|\nPick an empty spot for the d
 lisp/autobead/AUTOBEAD.lsp|c:TUTORIALAUTOBEAD|\nAUTOBEAD tutorial - read the Checks, or watch a live Demo? \n [Checks/Demo/Both] <Both>:|demo / tutorial
 lisp/bpcallout/BPCALLOUT.lsp|c:BPCALLOUT|\nClick a bad point (a ringed one un-rings it, Enter when done):|reselection loop - clicking again undoes it
 lisp/cabhd/CABHD.lsp|cab:compare|\n Keep which fit - click one, or [1/2/3/All/None/Redo] < >:|the fit picker - Redo is its way back
+lisp/constellation/CONSTELLATION.lsp|cst:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/constellation/CONSTELLATION.lsp|cst:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nAdd a side profile? [Yes/No] <Yes>:|past committed geometry
 lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nBead the steps? [Yes/No] <Yes>:|past committed geometry
 lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>:|first of the option chain; only the selection is in front of it

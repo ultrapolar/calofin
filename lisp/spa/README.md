@@ -194,6 +194,20 @@ that corner. Side lengths are always measured to the *true* (sharp)
 corner; the treatment cuts inward from there, and a treatment too big
 for its walls is re‑asked.
 
+**The size question stands beside a ruler.** A corner radius is picked
+out of the short list a shop builds to rather than taped off the
+sheet, so `Radius for <label>` and `Cut face length for <label>` are
+asked with `DIMSTAMP`'s ruler drawn down a strip near the right edge
+of the view, offering 3" to 1'-6" in 3" steps
+(`spa:*radius-ladder*`, `spa:*cutface-ladder*` — one size down from
+POOL's, a spa being the smaller shape). Click a row and that is the
+size; type one and it reads everything this prompt has always read,
+**`600mm` included**. Enter still takes the autofilled size where
+there is one and `Back` still re‑asks the treatment. Every other
+distance SPA asks is a measurement and stays the plain typed question
+it was. The ruler is scratch on `SPA-RULER`, down before the next
+question and swept on every way out, Esc included.
+
 `Back` at the gate leaves the corner stage for the overalls; `Back` at
 the round, or at corner A, re‑asks the gate.
 

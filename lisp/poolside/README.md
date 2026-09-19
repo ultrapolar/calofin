@@ -34,6 +34,20 @@ and the run chain, left to right, which always adds up to `B`:
 | `MOdflat` | `H G F` | one flat pad, sloping up to both walls, no shallow flat |
 | `Sport` | `E2 F2 G F1 E1` | symmetric: a shallow flat at each end, a deep flat between the slopes |
 
+**The three DEPTHS stand beside a ruler.** A pool is built to a
+handful of wall heights and a handful of deep-end depths, so `C`, `D`
+and `C2` are asked with `DIMSTAMP`'s ruler drawn down a strip near the
+right edge of the view -- `C` on 36"-54" by 3", `D` on 60"-96" by 6",
+`C2` on the span of the two, which are POOL's own numbers since the
+two tools draw the same pool. Click a row and that is the depth; type
+one and it reads the way `DIMSTAMP` reads. `Back`, `NA` and the two
+range re-asks (`D` must beat `C`, `C2` must land between them) mean
+exactly what they meant, and the re-asks keep the ruler. The floor
+`B` and the RUNS beside them do not get one: those are taped off the
+sheet, and there is no short list of what a run comes to. The ruler is
+scratch on `POOLSIDE-RULER`, down before the next question and swept
+on every way out, Esc included.
+
 ```
    C  --.___                    ___.--  C          <- waterline
          |   \__            ____/    |

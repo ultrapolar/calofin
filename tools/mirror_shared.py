@@ -218,13 +218,18 @@ TOOLS = {
     # under cst:, checked byte-for-byte against them, so all of it comes
     # back out here and the twin is a rename and nothing else.  What
     # stays local is the solver, which is the tool.
+    # cst:askdist is NOT a library body any more, for the same reason
+    # oasis:askdist is not: it takes a LADDER now, and stands the arc
+    # radius beside the length ruler on it.  Swapping it for the
+    # library's four-argument pair leaves every call site handing in a
+    # fifth argument nothing takes, and the grouped build dies at the
+    # first radius.  It stays local; the rest still goes.
     'CONSTELLATION': {
         'src': 'lisp/constellation/CONSTELLATION.lsp',
         'swap': {
             # the ink table: one body, and the library's is it
             'cst:ink': 'cal:ink',
             'cst:askkw': 'cal:askkw', 'cst:askyn': 'cal:askyn',
-            'cst:askdist': 'cal:askdist',
             'cst:back-word-p': 'cal:back-word-p',
             'cst:trim': 'cal:trim', 'cst:pad': 'cal:pad',
             'cst:syssave': 'cal:syssave',
@@ -243,6 +248,37 @@ TOOLS = {
             'cst:tan': 'cal:tan',
             'cst:nthcdr': 'cal:nthcdr', 'cst:sublist': 'cal:sublist',
             'cst:circumcenter': 'cal:circumcenter',
+            # the length ruler beside the arc-radius prompt: one block,
+            # held to the library by tests/test_ruler_copies.py; the
+            # style builder, the scratch layer and the sweeper stay
+            # local, since each reads this file's own knobs
+            'cst:len-digit-p': 'cal:len-digit-p',
+            'cst:len-num-p': 'cal:len-num-p',
+            'cst:len-split': 'cal:len-split',
+            'cst:len-token': 'cal:len-token',
+            'cst:len-inches': 'cal:len-inches',
+            'cst:parse-len': 'cal:parse-len',
+            'cst:len-eighths': 'cal:len-eighths',
+            'cst:spell-len': 'cal:spell-len',
+            'cst:len-unread': 'cal:len-unread',
+            'cst:ruler-tier': 'cal:ruler-tier',
+            'cst:ladder-tier': 'cal:ladder-tier',
+            'cst:ladder-rows': 'cal:ladder-rows',
+            'cst:ruler-rows': 'cal:ruler-rows',
+            'cst:ruler-val-lt': 'cal:ruler-val-lt',
+            'cst:ruler-view': 'cal:ruler-view',
+            'cst:ruler-dir': 'cal:ruler-dir',
+            'cst:ruler-hgt': 'cal:ruler-hgt',
+            'cst:ruler-tick': 'cal:ruler-tick',
+            'cst:ruler-line': 'cal:ruler-line',
+            'cst:ruler-ring': 'cal:ruler-ring',
+            'cst:ruler-label': 'cal:ruler-label',
+            'cst:draw-ruler': 'cal:draw-ruler',
+            'cst:ruler-hit': 'cal:ruler-hit',
+            'cst:ruler-new': 'cal:ruler-new',
+            'cst:ruler-off': 'cal:ruler-off',
+            'cst:ruler-show': 'cal:ruler-show',
+            'cst:ask-len': 'cal:ask-len',
         },
         'drop_globals': ['cst:*sysold*'],
         # cst:askkw already takes the SHOWN bracket third, like the
