@@ -231,7 +231,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091626 REV25")
+(setq spa:*version* "091926 REV26")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -546,6 +546,53 @@
 ;;;  corner A's form boxes.  Lower case, because spa:fckey folds first.
 (setq spa:*allcorners* "the four corners")
 
+;; ---- the length ruler
+;;;
+;;;  The LENGTH RULER beside the corner-size prompts.  A corner radius
+;;;  and a diagonal's cut face are not measured off the sheet the way a
+;;;  wall is -- they are picked out of the short list a shop actually
+;;;  builds: 3", 6", 9", a foot, two feet.  So those prompts stand
+;;;  beside DIMSTAMP's ruler, drawn down a strip near the right edge of
+;;;  the view, and a click on a row IS the size.  Scratch on its own
+;;;  layer, taken down before any prompt that does not take it and on
+;;;  every way out.  Every size is a fraction of the current view, so
+;;;  the ruler reads the same at any zoom.
+(setq spa:*ruler-layer* "SPA-RULER")   ; scratch layer the rows are
+                                       ; drawn on, made if missing and
+                                       ; left behind empty
+(setq spa:*ruler-color* 3)         ; ACI colour of the rows you can PICK,
+                                   ; carried on the entities themselves
+(setq spa:*ruler-current-color* 7) ; ACI colour of the ringed CURRENT
+                                   ; row -- the size already given -- so
+                                   ; it reads apart from the options; 7
+                                   ; is AutoCAD's black/white swap
+(setq spa:*ruler-screen-x* 0.88)   ; where the spine sits across the
+                                   ; view, as a fraction of its width in
+                                   ; from the left; past 0.5 the rows
+                                   ; reach left, short of it they reach
+                                   ; right, so the ruler is always inside
+                                   ; the view
+(setq spa:*ruler-row-frac* 0.042)  ; one row's share of the view's
+                                   ; height -- the ruler's size knob
+(setq spa:*ruler-txt-frac* 0.5)    ; the biggest row label's height, as
+                                   ; a fraction of the row spacing
+(setq spa:*ruler-tick-frac* 0.6)   ; the longest tick, same measure
+(setq spa:*ruler-ring-frac* 0.26)  ; the ring round the current row, as
+                                   ; a fraction of the row spacing
+(setq spa:*ruler-reach* 6.0)       ; how far inboard of the spine, in
+                                   ; row spacings, a click still counts
+                                   ; as picking a row rather than as the
+                                   ; first point of a measured length
+
+;;;  The two LADDERS those prompts stand on, as (LOW HIGH STEP) in
+;;;  inches.  A spa is a small shape and its corners are smaller than a
+;;;  pool's: 3" to 1'-6" by 3" is the vocabulary here.  A shop whose
+;;;  corners run to some other measure sets its own; nil on either
+;;;  leaves that prompt the plain typed one it was, with no ruler
+;;;  beside it.
+(setq spa:*radius-ladder* '(3.0 18.0 3.0))
+(setq spa:*cutface-ladder* '(3.0 18.0 3.0))
+
 ;;; -------------------- run state (not tunables) ----------------------
 ;;;
 ;;;  Declared here because AutoLISP wants a global declared at top
@@ -575,6 +622,13 @@
 (setq spa:*grade*     nil)           ; from the Spa Cover Details block
 (setq spa:*taper*     nil)
 (setq spa:*blockasked* nil)          ; ...which is offered ONCE a run
+;; The length ruler standing beside a corner-size prompt.  A RUN STATE
+;; and not a local of spa:askcorner, for the reason OSMODE is one: the
+;; helper that asks is three calls down from the command, and what
+;; c:SPA's *error* can take down is what c:SPA can see.  Esc at a
+;; radius prompt is the likeliest way out of the question, and a ruler
+;; left standing is scratch in somebody's drawing.
+(setq spa:*ruler*     nil)
 ;;; -------------------- small vector helpers --------------------------
 
 (defun spa:unit (p / d)
@@ -1000,6 +1054,94 @@
 ;;;  existing geometry).  OSMODE is zeroed only while the routine feeds
 ;;;  points to commands, where a snap would grab the wrong geometry.
 
+;;; -------------------- the length ruler --------------------------------
+;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
+;;;  Once a first length has been given, the prompt draws the eighths
+;;;  of an inch for a whole inch either side of the last one down a
+;;;  strip near the right edge of the view, graded like a tape with the
+;;;  last length ringed in the middle -- and one prompt then takes a
+;;;  click on a row (that row's value), a typed measurement in any
+;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  or a click on empty space as the first of two points to measure
+;;;  between, which is what getdist always offered.  A run of
+;;;  near-equal lengths is clicked rather than typed over and over.
+;;;
+;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
+;;;  ask their lengths through it.  Each carries this block under its
+;;;  own prefix so the standalone file loads alone, the grouped build
+;;;  swaps the copy for the library's, and tests/test_ruler_copies.py
+;;;  holds every copy to this one text.  DIMSTAMP keeps its own ruler:
+;;;  its current row is drawn as the stamp it would make, on the
+;;;  stamp's layer in the stamp's style, which is a different thing
+;;;  from a row of nearby lengths.
+;;;
+;;;  A ruler comes in two families, and the prompt picks which.
+;;;
+;;;  The TAPE is the one above: the eighths of an inch for a whole inch
+;;;  either side of the LAST answer, which is what a run of near-equal
+;;;  numbers wants.  It needs a last answer to be built round, so the
+;;;  first prompt of a run stands alone.
+;;;
+;;;  The LADDER is the other: a fixed (LO HI STEP) of the values that
+;;;  prompt is actually answered with, every one of them offered from
+;;;  the first prompt on.  A corner radius is 3" to 2'-0" by 3" and a
+;;;  tape of eighths round nothing helps nobody -- 3, 6, 9, 12 is the
+;;;  whole vocabulary, and a drafter picks out of it rather than types
+;;;  into it.  Its rows are graded off the VALUE, not off a distance
+;;;  from the current row: the foot marks are the deep ones and the
+;;;  half-foot next, which is where a tape's deep marks are too.  A
+;;;  ladder still takes a typed measurement that is not on it, and the
+;;;  answer is then ringed among the rungs as the current row.
+;;;
+;;;  Nothing in here reads a knob.  A tool hands its knobs in as one
+;;;  STYLE list and keeps the ruler between prompts as one STATE list:
+;;;    STYLE  (COLOR CURRENT-COLOR SCREEN-X ROW-FRAC TXT-FRAC TICK-FRAC
+;;;            RING-FRAC REACH) -- a caller's tunables block says what
+;;;            each one moves
+;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID LADDER) -- the
+;;;            length the ruler stands round (nil = none), the family it
+;;;            is labelled in (T = feet), what is drawn, its layer, the
+;;;            style, whether the one-line hint has been said, and the
+;;;            ladder it is standing on (nil = a tape)
+;;;  Values are INCHES, the unit this shop draws in, and the ruler
+;;;  steps in eighths of one, which is what a tape reads in.
+
+;;; -------------------- end of the length ruler -------------------------
+
+;; The scratch layer the rows are drawn on, made if it is missing.  A
+;; layer of its own is what lets a drafter turn the ruler off without
+;; turning anything of the spa off with it.
+(defun spa:rulerlayer ()
+  (if (not (tblsearch "LAYER" spa:*ruler-layer*))
+    (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLayerTableRecord")
+                   (cons 2 spa:*ruler-layer*) '(70 . 0) '(62 . 7)
+                   (cons 6 "CONTINUOUS"))))
+  spa:*ruler-layer*)
+
+;; Take the ruler down -- the one call *error* and the clean exit both
+;; make, so neither has to know whether one was up.  What is left is
+;; the swept STATE, not nil: it carries the one-line hint's said flag,
+;; and a corner that threw it away would say the hint again at the next
+;; corner, and the next.  c:SPA clears it at the START of a run, which
+;; is where a fresh run wants a fresh hint.
+(defun spa:rulerkill ()
+  (if spa:*ruler* (setq spa:*ruler* (cal:ruler-off spa:*ruler*))))
+
+;; The ruler this file's knobs describe, standing round LAST on LADDER.
+(defun spa:rulerup (last ladder)
+  (setq spa:*ruler*
+        (cal:ruler-show (if spa:*ruler* spa:*ruler*
+                            (cal:ruler-new (spa:rulerlayer)
+                                           (spa:ruler-style)))
+                        last ladder)))
+
+;; This file's knobs, in the order the ruler reads them.
+(defun spa:ruler-style ()
+  (list spa:*ruler-color* spa:*ruler-current-color* spa:*ruler-screen-x*
+        spa:*ruler-row-frac* spa:*ruler-txt-frac* spa:*ruler-tick-frac*
+        spa:*ruler-ring-frac* spa:*ruler-reach*))
+
 ;;; -------------------- measurement sequences (Back) -------------------
 ;;;
 ;;;  A block of related measurements runs through spa:askseqb so every
@@ -1235,29 +1377,59 @@
 ;; return to, shown in the prompt's brackets like everywhere else.
 ;; xkw is any extra keyword to merge in, dflt an Enter answer.
 ;; Returns the distance, a matched keyword string, or CAL-BACK.
-(defun spa:askd (msg xkw dflt back / kw v out)
+;;
+;; LADDER is what turns this into a prompt standing beside the LENGTH
+;; RULER: a (LOW HIGH STEP) of the sizes the question is answered with,
+;; and a click on a row IS the answer.  nil -- every prompt but the
+;; corner sizes -- is the plain typed question it has always been, read
+;; by getdist, and NOT a ruler prompt with nothing on it: the two read
+;; the same spellings but not by the same route, and a prompt that has
+;; no ruler to gain should not change route to find that out.  The
+;; prompt's own TEXT is built once, above the fork, so the two cannot
+;; drift apart -- the form tests pin that wording.
+(defun spa:askd (msg xkw dflt back ladder / kw v out prompt rr)
   (setq kw (cond ((and xkw back) (strcat xkw " Back Undo"))
                  (back "Back Undo")
                  (t xkw)))
+  (setq prompt (strcat "\n" msg
+                       (if dflt (strcat " <" (rtos dflt) ">") "")
+                       (cond ((and xkw back) (strcat " [" xkw "/Back]"))
+                             (xkw (strcat " [" xkw "]"))
+                             (back " [Back]")
+                             (t ""))
+                       ": "))
   (cal:osup)
   (while (null out)
-    ;; 128 = arbitrary input, so a mm answer reaches us as text
-    (if kw (initget (+ (if dflt 6 7) 128) kw)
-        (initget (+ (if dflt 6 7) 128)))
-    (setq v (getdist (strcat "\n" msg
-                             (if dflt (strcat " <" (rtos dflt) ">") "")
-                             (cond ((and xkw back) (strcat " [" xkw "/Back]"))
-                                   (xkw (strcat " [" xkw "]"))
-                                   (back " [Back]")
-                                   (t ""))
-                             ": ")))
-    (if lzd:ask (lzd:ask msg v) v)
-    (cond
-      ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'CAL-BACK))
-      ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
-      ((and (null v) dflt) (setq out dflt))
-      ((setq out (spa:dval v)))
-      (t (princ "\nNot a measurement -- type inches, 6'10\", or 600mm."))))
+    (if ladder
+      (progn
+        ;; the ruler goes up BEFORE the prompt and its state is the
+        ;; run's, not a local: an Esc in here runs c:SPA's *error*, and
+        ;; what that can take down is what c:SPA can see
+        (spa:rulerup dflt ladder)
+        (setq rr (cal:ask-len prompt kw spa:*ruler* 'spa:mmval)
+              v  (car rr)
+              spa:*ruler* (cadr rr))
+        (cond
+          ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+           (setq out 'CAL-BACK))
+          ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
+          ((and (null v) dflt) (setq out dflt))
+          ((null v)
+           (princ "\nA size is required - type it, or click a ruler row."))
+          (t (setq out v))))
+      (progn
+        ;; 128 = arbitrary input, so a mm answer reaches us as text
+        (if kw (initget (+ (if dflt 6 7) 128) kw)
+            (initget (+ (if dflt 6 7) 128)))
+        (setq v (getdist prompt))
+        (if lzd:ask (lzd:ask msg v) v)
+        (cond
+          ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+           (setq out 'CAL-BACK))
+          ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
+          ((and (null v) dflt) (setq out dflt))
+          ((setq out (spa:dval v)))
+          (t (princ "\nNot a measurement -- type inches, 6'10\", or 600mm."))))))
   (cal:osdown)
   out)
 
@@ -1273,7 +1445,7 @@
            (numberp v)
            (> v 0.0))
       v
-      (spa:askd msg xkw dflt back)))
+      (spa:askd msg xkw dflt back nil)))
 
 ;; Back typed like a value, for the one prompt that cannot take
 ;; keywords (getstring).  Any case, per the shared convention.
@@ -2097,7 +2269,7 @@
 ;;; ---------- the guided flow ----------
 
 (defun spa:hask (msg back)
-  (spa:askd msg nil nil back))
+  (spa:askd msg nil nil back nil))
 
 ;; Ask the spillaways.  Returns them as measured -- (kind name length),
 ;; kind "Corner" or "Wall" -- NOT as x-intervals: the spa may still be
@@ -2796,7 +2968,8 @@
 ;; wall, so two treatments can never overlap and fold the perimeter;
 ;; too-large answers are re-asked.  Returns (type size) or CAL-BACK.
 (defun spa:askcorner (label dflty dfltsz ents maxsb back / ty sz cols sb e
-                                                            dsz out fk fty fsz)
+                                                            dsz out fk fty fsz
+                                                            lad)
   ;; A form can answer this corner: <stem>-ty carries the treatment,
   ;; <stem>-sz the radius or diagonal face.  Both are consumed NOW,
   ;; valid or not -- consume-once is what keeps Back from deadlocking,
@@ -2855,8 +3028,15 @@
                      nil dfltsz)
              ;; the form's size stands in the same way -- once; the
              ;; too-large loop below re-asks at the keyboard
+             ;; the LADDER this size is picked from: a radius and a
+             ;; diagonal face are both read off the order sheet in
+             ;; quarter feet, so the rungs stand whether or not corner
+             ;; A already gave one -- the eighths either side of the
+             ;; last corner are not what the next corner wants
+             lad (if (= ty "Radius") spa:*radius-ladder*
+                     spa:*cutface-ladder*)
              sz (if fsz fsz
-                    (spa:askd (spa:cornersizemsg ty label) nil dsz t))
+                    (spa:askd (spa:cornersizemsg ty label) nil dsz t lad))
              fsz nil)
        ;; Back at the size re-asks the type, its previous question
        (if (not (eq sz 'CAL-BACK))
@@ -2871,9 +3051,17 @@
                               (rtos (if (= ty "Radius") maxsb
                                         (/ maxsb 0.70711)))
                               ".  Re-enter."))
+               ;; the same question again, so the same ruler: a rung
+               ;; over the cap is still shown, since what will not fit
+               ;; here is what the sheet says and the drafter has to
+               ;; see it to disbelieve it
                (setq sz (spa:askd (spa:cornersizemsg ty label)
-                                  nil nil t)))
-             (if (not (eq sz 'CAL-BACK)) (setq out (list ty sz))))))))
+                                  nil nil t lad)))
+             (if (not (eq sz 'CAL-BACK)) (setq out (list ty sz)))))
+       ;; down before anything else is asked: a Back from here re-asks
+       ;; the TREATMENT, which takes no ruler, and so does the next
+       ;; corner's
+       (spa:rulerkill))))
   (mapcar '(lambda (e c) (spa:setcol e c)) ents cols)
   out)
 
@@ -3601,7 +3789,8 @@
                         (numberp (setq bov (spa:ftake 'b)))
                         (> bov 0.0))
                    bov)
-                  (t (spa:askd "Overall diameter" "Outofround" nil nil))))
+                  (t (spa:askd "Overall diameter" "Outofround" nil nil
+                                nil))))
   (if (= (type bov) 'STR)
       (progn
         (setq ans (spa:askseqb
@@ -3796,6 +3985,7 @@
     ;; both exits, this one included
     (spa:fclear)
     (spa:pvkill)
+    (spa:rulerkill)
     (if undo-open (setq undo-open (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "SPA" spa:*version* msg))
@@ -3809,6 +3999,9 @@
   (cal:syssave (spa:sysvars))
   (cal:dimstysave)
   (setq spa:*valnotes* nil
+        ;; a fresh run, so a fresh ruler: the hint is said once a run,
+        ;; and the flag that says it has been said travels in here
+        spa:*ruler* nil
         spa:*turned* nil
         spa:*spillturn* nil
         spa:*hingeon* nil
@@ -3925,6 +4118,7 @@
   (cal:sysrestore)
   (cal:dimstyrestore)
   (spa:fclear)
+  (spa:rulerkill)
   (if *pop-error-mode* (*pop-error-mode*))
   (if lzd:end (lzd:end "SPA"))
   (princ))

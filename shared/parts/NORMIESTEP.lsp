@@ -311,9 +311,29 @@
 ;; as picking a row rather than as the first point of a measured length.
 (if (not (boundp '*cs-ruler-reach*)) (setq *cs-ruler-reach* 6.0))
 
+;; The two LADDERS those prompts stand on before there is a last answer
+;; to build a tape round -- and beside it afterwards, with the answer
+;; ringed among the rungs.  A flight is not built out of arbitrary
+;; numbers: treads come in half-feet and drops in whole inches, so those
+;; are the rows offered, as (LOW HIGH STEP) in inches.  A shop whose
+;; steps run to some other measure sets its own here; nil on either
+;; leaves that prompt the plain tape it was, with nothing offered until
+;; the second answer.
+(if (not (boundp '*cs-tread-ladder*)) (setq *cs-tread-ladder* '(6.0 36.0 6.0)))
+(if (not (boundp '*cs-drop-ladder*)) (setq *cs-drop-ladder* '(6.0 12.0 1.0)))
+
+;; ...and the one the CORNER TREATMENT's size stands on.  A corner
+;; radius, a cut face and the offset behind it all come off an order
+;; sheet in quarter feet -- 3" to 2'-0" by 3" is the whole vocabulary --
+;; so the rungs stand from the first prompt rather than waiting for a
+;; second answer there will never be: a run treats one corner.  nil
+;; leaves those three prompts the plain typed ones they were.
+(if (not (boundp '*cs-corner-ladder*))
+  (setq *cs-corner-ladder* '(3.0 24.0 3.0)))
+
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.13") ; printed on load and at command start so a
+(setq *ns-version* "v3.15") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -1087,15 +1107,34 @@
 ;;;  stamp's layer in the stamp's style, which is a different thing
 ;;;  from a row of nearby lengths.
 ;;;
+;;;  A ruler comes in two families, and the prompt picks which.
+;;;
+;;;  The TAPE is the one above: the eighths of an inch for a whole inch
+;;;  either side of the LAST answer, which is what a run of near-equal
+;;;  numbers wants.  It needs a last answer to be built round, so the
+;;;  first prompt of a run stands alone.
+;;;
+;;;  The LADDER is the other: a fixed (LO HI STEP) of the values that
+;;;  prompt is actually answered with, every one of them offered from
+;;;  the first prompt on.  A corner radius is 3" to 2'-0" by 3" and a
+;;;  tape of eighths round nothing helps nobody -- 3, 6, 9, 12 is the
+;;;  whole vocabulary, and a drafter picks out of it rather than types
+;;;  into it.  Its rows are graded off the VALUE, not off a distance
+;;;  from the current row: the foot marks are the deep ones and the
+;;;  half-foot next, which is where a tape's deep marks are too.  A
+;;;  ladder still takes a typed measurement that is not on it, and the
+;;;  answer is then ringed among the rungs as the current row.
+;;;
 ;;;  Nothing in here reads a knob.  A tool hands its knobs in as one
 ;;;  STYLE list and keeps the ruler between prompts as one STATE list:
 ;;;    STYLE  (COLOR CURRENT-COLOR SCREEN-X ROW-FRAC TXT-FRAC TICK-FRAC
 ;;;            RING-FRAC REACH) -- a caller's tunables block says what
 ;;;            each one moves
-;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID) -- the length the
-;;;            ruler stands round (nil = none up), the family it is
-;;;            labelled in (T = feet), what is drawn, its layer, the
-;;;            style, and whether the one-line hint has been said
+;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID LADDER) -- the
+;;;            length the ruler stands round (nil = none), the family it
+;;;            is labelled in (T = feet), what is drawn, its layer, the
+;;;            style, whether the one-line hint has been said, and the
+;;;            ladder it is standing on (nil = a tape)
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
@@ -1104,6 +1143,13 @@
 ;; The shared step settings, in the order the ruler reads them -- each
 ;; through the same guard every other knob is read through, so a
 ;; mistyped setting draws the default rather than nothing.
+;; Which ruler the next length prompt stands beside: the LADDER while
+;; there is no last answer, nothing once there is one.  A tape of
+;; eighths is the finer offer and wins wherever it can be built -- a
+;; flight's second tread is 24, 24 1/2, 24 -- but it has to be built
+;; round something, and the ladder is what stands there until it can be.
+(defun ns-ladder (last ladder) (if last nil ladder))
+
 (defun ns-ruler-style ()
   (list (ns-num *cs-ruler-color* 3) (ns-num *cs-ruler-current-color* 7)
         (ns-num *cs-ruler-screen-x* 0.88) (ns-num *cs-ruler-row-frac* 0.042)
@@ -1112,7 +1158,7 @@
 
 ;;; --------------------------- main command -----------------------------
 
-(defun c:NORMIESTEP ( / *error* ns-popstep undoflag ss i en ed et zf
+(defun c:NORMIESTEP ( / *error* ns-popstep ns-ask-size undoflag ss i en ed et zf
                         segs mode base side arm1 arm2 corner fuzz
                         sp u dir pt s d1 d2 f1 f2 reflen tol txth
                         wid dep n drawn p inn outp e1 e2 bey stopf
@@ -1127,7 +1173,7 @@
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt totrun totdrop px0 cx cy
                         tt cnrs ca cb pfo pgap lastinn fsteps fkey
-                        bstep rredo rl rr)
+                        bstep rredo rl rr szv)
 
   (defun *error* (msg)
     (ns-fclear)                     ; both exits clear the form store
@@ -1150,6 +1196,27 @@
   (if lzd:begin (lzd:begin "NORMIESTEP" *ns-version*))
 
   ;; remove the most recently drawn step and roll the state back
+  ;; One corner-size prompt beside the LENGTH RULER: the same question
+  ;; initget 7 and getdist asked, with the ladder of the sizes a corner
+  ;; is built to standing beside it and a click on a rung for an answer.
+  ;; Enter stays refused where initget 7 refused it, Back and Undo come
+  ;; back as the strings ns-back-kw already reads, and the ruler is down
+  ;; before the answer is used -- nothing after this question takes one.
+  ;; Nested here, like ns-popstep, because the ruler it moves is rl, a
+  ;; local of this command: what c:NORMIESTEP's *error* can take down is
+  ;; what c:NORMIESTEP can see.
+  (defun ns-ask-size (msg / szv rr)
+    (setq szv nil)
+    (while (null szv)
+      (setq rl  (cal:ruler-show rl nil *cs-corner-ladder*)
+            rr  (cal:ask-len msg "Back Undo" rl nil)
+            szv (car rr)
+            rl  (cadr rr))
+      (if (null szv)
+        (princ "\n  A size is required - type it, or click a ruler row.")))
+    (setq rl (cal:ruler-off rl))
+    szv)
+
   (defun ns-popstep ( / e)
     (if (null slog)
       (progn (princ "\n  Already at the first step.") nil)
@@ -1457,10 +1524,8 @@
          ;; falls back to the keyboard
          (if (ns-fhas 'treat-sz) (setq rrad (ns-fnum 'treat-sz)))
          (if (not (numberp rrad))
-           (progn
-             (initget 7 "Back Undo")
-             (setq rrad (getdist (strcat "\nRadius for " rsubj " [Back]: ")))
-             (if lzd:ask (lzd:ask (getvar "LASTPROMPT") rrad) rrad)))
+           (setq rrad (ns-ask-size (strcat "\nRadius for " rsubj
+                                           " [Back]: "))))
          (if (ns-back-kw rrad)
            (progn (princ "\n  Stepping back one question.")
                   (setq rrad  nil
@@ -1487,21 +1552,17 @@
                (progn
                  (if (ns-fhas 'treat-sz) (setq rcut (ns-fnum 'treat-sz)))
                  (if (not (numberp rcut))
-                   (progn
-                     (initget 7 "Back Undo")
-                     (setq rcut (getdist (strcat "\nCut face length for "
-                                                 rsubj " [Back]: ")))
-                     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") rcut) rcut)))
+                   (setq rcut (ns-ask-size
+                                (strcat "\nCut face length for "
+                                        rsubj " [Back]: "))))
                  (if (ns-back-kw rcut)
                    (setq rcut nil rredo T)
                    (setq roff (/ rcut (sqrt 2.0)))))
                (progn
                  (if (ns-fhas 'treat-sz) (setq roff (ns-fnum 'treat-sz)))
                  (if (not (numberp roff))
-                   (progn
-                     (initget 7 "Back Undo")
-                     (setq roff (getdist "\nOffset back along each line [Back]: "))
-                     (if lzd:ask (lzd:ask "\nOffset back along each line [Back]: " roff) roff)))
+                   (setq roff (ns-ask-size
+                                "\nOffset back along each line [Back]: ")))
                  (if (ns-back-kw roff)
                    (setq roff nil rredo T)
                    (setq rcut (* roff (sqrt 2.0))))))
@@ -1588,7 +1649,7 @@
                (T
                 ;; Undo is the old keyword, kept as a hidden synonym; the
                 ;; length ruler stands round the last tread
-                (setq rl  (cal:ruler-show rl lastdep)
+                (setq rl  (cal:ruler-show rl lastdep (ns-ladder lastdep *cs-tread-ladder*))
                       rr  (cal:ask-len
                             (strcat "\nStep " (itoa n)
                                     " - step tread [Back"
@@ -1598,7 +1659,7 @@
                                               (rtos lastdep) ">: ")
                                       " <Enter = done>: "))
                             (strcat "Back" (if lastdep " Same" "") " Undo")
-                            rl)
+                            rl nil)
                       dep (car rr)
                       rl  (cadr rr))
                 (if (= (type dep) 'STR)
@@ -1866,7 +1927,8 @@
               ;; Back/Undo hidden at the first step: typing them only
               ;; gets the already-at-the-first-step feedback.  The
               ;; length ruler stands round the previous depth
-              (setq rl (cal:ruler-show rl (car drops))
+              (setq rl (cal:ruler-show rl (car drops)
+                                (ns-ladder (car drops) *cs-drop-ladder*))
                     rr (cal:ask-len
                          (if (= k 1)
                            "\nStep 1 - step depth (the drop): "
@@ -1876,7 +1938,7 @@
                              (strcat "\nStep " (itoa k)
                                      " - step depth [Back] <"
                                      (rtos (car drops)) ">: ")))
-                         "Back Undo" rl)
+                         "Back Undo" rl nil)
                     dv (car rr)
                     rl (cadr rr)))
             (cond

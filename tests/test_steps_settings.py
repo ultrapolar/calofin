@@ -63,8 +63,12 @@ NOT_A_KNOB = {'*cs-version*', '*cs-form*'}
 PICK = (500.0, 400.0)
 DEPTHS = [7.5, 10.75, 10.75, 10.5]     # 3 steps -> 4 depths
 
+#: a knob's value is an atom -- a number, a string, a keyword -- or a
+#: quoted LIST, which the two ruler ladders are: (LOW HIGH STEP).  The
+#: list alternative comes first, since [^)]* would stop at its own
+#: closing paren and hand back half a form.
 KNOB = re.compile(r"\(if\s+\(not\s+\(boundp\s+'(\*cs-[\w-]+\*)\)\)\s*"
-                  r"\(setq\s+\1\s+([^)]*)\)\)")
+                  r"\(setq\s+\1\s+('\([^()]*\)|[^)]*)\)\)")
 READER = re.compile(r"\((?:cs|hs|ns)-num\s+(\*cs-[\w-]+\*)\s+")
 REFERENCE = re.compile(r"\*cs-[\w-]+\*")
 

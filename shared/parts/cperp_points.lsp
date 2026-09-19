@@ -245,7 +245,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.18")
+(setq *cperp-version* "v0.19")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -302,15 +302,34 @@
 ;;;  stamp's layer in the stamp's style, which is a different thing
 ;;;  from a row of nearby lengths.
 ;;;
+;;;  A ruler comes in two families, and the prompt picks which.
+;;;
+;;;  The TAPE is the one above: the eighths of an inch for a whole inch
+;;;  either side of the LAST answer, which is what a run of near-equal
+;;;  numbers wants.  It needs a last answer to be built round, so the
+;;;  first prompt of a run stands alone.
+;;;
+;;;  The LADDER is the other: a fixed (LO HI STEP) of the values that
+;;;  prompt is actually answered with, every one of them offered from
+;;;  the first prompt on.  A corner radius is 3" to 2'-0" by 3" and a
+;;;  tape of eighths round nothing helps nobody -- 3, 6, 9, 12 is the
+;;;  whole vocabulary, and a drafter picks out of it rather than types
+;;;  into it.  Its rows are graded off the VALUE, not off a distance
+;;;  from the current row: the foot marks are the deep ones and the
+;;;  half-foot next, which is where a tape's deep marks are too.  A
+;;;  ladder still takes a typed measurement that is not on it, and the
+;;;  answer is then ringed among the rungs as the current row.
+;;;
 ;;;  Nothing in here reads a knob.  A tool hands its knobs in as one
 ;;;  STYLE list and keeps the ruler between prompts as one STATE list:
 ;;;    STYLE  (COLOR CURRENT-COLOR SCREEN-X ROW-FRAC TXT-FRAC TICK-FRAC
 ;;;            RING-FRAC REACH) -- a caller's tunables block says what
 ;;;            each one moves
-;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID) -- the length the
-;;;            ruler stands round (nil = none up), the family it is
-;;;            labelled in (T = feet), what is drawn, its layer, the
-;;;            style, and whether the one-line hint has been said
+;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID LADDER) -- the
+;;;            length the ruler stands round (nil = none), the family it
+;;;            is labelled in (T = feet), what is drawn, its layer, the
+;;;            style, whether the one-line hint has been said, and the
+;;;            ladder it is standing on (nil = a tape)
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
@@ -1192,7 +1211,7 @@
                   (t
                    ;; Undo kept as a hidden synonym; Max is offered only
                    ;; where there is a boundary ahead of this point to reach
-                   (setq rl  (cal:ruler-show rl lastLen)
+                   (setq rl  (cal:ruler-show rl lastLen nil)
                          rr  (cal:ask-len
                                (strcat "\nLength for point " (itoa (1+ i))
                                        " of " (itoa n)
@@ -1205,7 +1224,7 @@
                                          "")
                                        (if cap " [Back/Max]: " " [Back]: "))
                                (if cap "Back Undo Max" "Back Undo")
-                               rl)
+                               rl nil)
                              len (car rr)
                              rl  (cadr rr))
                    (if (null len) (setq len lastLen))

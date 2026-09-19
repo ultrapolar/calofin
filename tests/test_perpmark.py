@@ -1028,7 +1028,9 @@ def ruler_rows(eighths, hasfeet=False):
     # grouped one, where the mirror has swapped it
     draw = 'cal:draw-ruler' if os.environ.get('CALOFIN_LISP_ROOT') \
         else 'pm:draw-ruler'
-    _, box, rows = vm.loads('(%s %d %s "PERPMARK" (pm:ruler-style))'
+    # nil ladder: a distance taped off a wall is whatever the tape said,
+    # so this prompt stands beside the tape and never a ladder
+    _, box, rows = vm.loads('(%s %d %s "PERPMARK" (pm:ruler-style) nil)'
                             % (draw, eighths, 't' if hasfeet else 'nil'))
     return box, rows
 

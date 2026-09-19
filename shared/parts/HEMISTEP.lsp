@@ -279,9 +279,20 @@
 ;; as picking a row rather than as the first point of a measured length.
 (if (not (boundp '*cs-ruler-reach*)) (setq *cs-ruler-reach* 6.0))
 
+;; The two LADDERS those prompts stand on before there is a last answer
+;; to build a tape round -- and beside it afterwards, with the answer
+;; ringed among the rungs.  A flight is not built out of arbitrary
+;; numbers: treads come in half-feet and drops in whole inches, so those
+;; are the rows offered, as (LOW HIGH STEP) in inches.  A shop whose
+;; steps run to some other measure sets its own here; nil on either
+;; leaves that prompt the plain tape it was, with nothing offered until
+;; the second answer.
+(if (not (boundp '*cs-tread-ladder*)) (setq *cs-tread-ladder* '(6.0 36.0 6.0)))
+(if (not (boundp '*cs-drop-ladder*)) (setq *cs-drop-ladder* '(6.0 12.0 1.0)))
+
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.19") ; printed on load and at command start so a
+(setq *hs-version* "v3.20") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -909,15 +920,34 @@
 ;;;  stamp's layer in the stamp's style, which is a different thing
 ;;;  from a row of nearby lengths.
 ;;;
+;;;  A ruler comes in two families, and the prompt picks which.
+;;;
+;;;  The TAPE is the one above: the eighths of an inch for a whole inch
+;;;  either side of the LAST answer, which is what a run of near-equal
+;;;  numbers wants.  It needs a last answer to be built round, so the
+;;;  first prompt of a run stands alone.
+;;;
+;;;  The LADDER is the other: a fixed (LO HI STEP) of the values that
+;;;  prompt is actually answered with, every one of them offered from
+;;;  the first prompt on.  A corner radius is 3" to 2'-0" by 3" and a
+;;;  tape of eighths round nothing helps nobody -- 3, 6, 9, 12 is the
+;;;  whole vocabulary, and a drafter picks out of it rather than types
+;;;  into it.  Its rows are graded off the VALUE, not off a distance
+;;;  from the current row: the foot marks are the deep ones and the
+;;;  half-foot next, which is where a tape's deep marks are too.  A
+;;;  ladder still takes a typed measurement that is not on it, and the
+;;;  answer is then ringed among the rungs as the current row.
+;;;
 ;;;  Nothing in here reads a knob.  A tool hands its knobs in as one
 ;;;  STYLE list and keeps the ruler between prompts as one STATE list:
 ;;;    STYLE  (COLOR CURRENT-COLOR SCREEN-X ROW-FRAC TXT-FRAC TICK-FRAC
 ;;;            RING-FRAC REACH) -- a caller's tunables block says what
 ;;;            each one moves
-;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID) -- the length the
-;;;            ruler stands round (nil = none up), the family it is
-;;;            labelled in (T = feet), what is drawn, its layer, the
-;;;            style, and whether the one-line hint has been said
+;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID LADDER) -- the
+;;;            length the ruler stands round (nil = none), the family it
+;;;            is labelled in (T = feet), what is drawn, its layer, the
+;;;            style, whether the one-line hint has been said, and the
+;;;            ladder it is standing on (nil = a tape)
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
@@ -926,6 +956,13 @@
 ;; The shared step settings, in the order the ruler reads them -- each
 ;; through the same guard every other knob is read through, so a
 ;; mistyped setting draws the default rather than nothing.
+;; Which ruler the next length prompt stands beside: the LADDER while
+;; there is no last answer, nothing once there is one.  A tape of
+;; eighths is the finer offer and wins wherever it can be built -- a
+;; flight's second tread is 24, 24 1/2, 24 -- but it has to be built
+;; round something, and the ladder is what stands there until it can be.
+(defun hs-ladder (last ladder) (if last nil ladder))
+
 (defun hs-ruler-style ()
   (list (hs-num *cs-ruler-color* 3) (hs-num *cs-ruler-current-color* 7)
         (hs-num *cs-ruler-screen-x* 0.88) (hs-num *cs-ruler-row-frac* 0.042)
@@ -1264,7 +1301,7 @@
                (T
                 ;; Undo is the old keyword, kept as a hidden synonym; the
                 ;; length ruler stands round the last tread
-                (setq rl  (cal:ruler-show rl lastdep)
+                (setq rl  (cal:ruler-show rl lastdep (hs-ladder lastdep *cs-tread-ladder*))
                       rr  (cal:ask-len
                             (strcat "\nStep " (itoa n)
                                     " - step tread [Back"
@@ -1274,7 +1311,7 @@
                                               (rtos lastdep) ">: ")
                                       " <Enter = done>: "))
                             (strcat "Back" (if lastdep " Same" "") " Undo")
-                            rl)
+                            rl nil)
                       dep (car rr)
                       rl  (cadr rr))
                 (if (= (type dep) 'STR)
@@ -1528,7 +1565,8 @@
                 ;; Back/Undo hidden at the first depth: typing them only
                 ;; gets the already-at-the-first-step feedback.  The
                 ;; length ruler stands round the previous depth
-                (setq rl (cal:ruler-show rl (car drops))
+                (setq rl (cal:ruler-show rl (car drops)
+                                  (hs-ladder (car drops) *cs-drop-ladder*))
                       rr (cal:ask-len
                            (cond
                              ;; the flight starts where the run does, so
@@ -1544,7 +1582,7 @@
                              (T (strcat "\nStep " (itoa jx)
                                         " - step depth [Back] <"
                                         (rtos (car drops)) ">: ")))
-                           "Back Undo" rl)
+                           "Back Undo" rl nil)
                       dd (car rr)
                       rl (cadr rr))))
             (cond

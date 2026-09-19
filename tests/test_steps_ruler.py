@@ -36,6 +36,10 @@ HEMISTEP = os.path.join(HERE, '..', 'lisp', 'cornerstp', 'HEMISTEP.lsp')
 NORMIESTEP = os.path.join(HERE, '..', 'lisp', 'cornerstp', 'NORMIESTEP.lsp')
 
 PICK = (500.0, 400.0)
+#: the two ladders the tread and depth prompts stand on -- *cs-tread-ladder*
+#: and *cs-drop-ladder*, spelled as the routine reads them
+TREAD_LADDER = "'(6.0 36.0 6.0)"
+DROP_LADDER = "'(6.0 12.0 1.0)"
 #: the ruler's own colour, the one knob-free way to tell its scratch
 #: from the steps, which are ByLayer
 RULER_COLOR = 3
@@ -71,17 +75,20 @@ def run(path, cmd, pair, script, label):
     return vm
 
 
-def row_click(path, prefix, eighths, want):
+def row_click(path, prefix, eighths, want, ladder='nil'):
     """A click on the row offering WANT eighths, on the ruler drawn
-    round EIGHTHS -- read off the routine itself in a throwaway VM with
-    the same view as a run's."""
+    round EIGHTHS on LADDER -- read off the routine itself in a
+    throwaway VM with the same view as a run's.  The ladder matters:
+    the prompt draws its rungs as well as the tape's rows, so a row's
+    y is only the prompt's row when the same ladder is under it."""
     vm = fresh(path)
     # the copy under the tool's prefix at the standalone tier; the
     # library's at the grouped one, where the mirror has swapped it
     draw = 'cal:draw-ruler' if os.environ.get('CALOFIN_LISP_ROOT') \
         else prefix + 'draw-ruler'
-    _, box, rows = vm.loads('(%s %d nil "0" (%sruler-style))'
-                            % (draw, eighths, prefix))
+    _, box, rows = vm.loads('(%s %s nil "0" (%sruler-style) %s)'
+                            % (draw, eighths if eighths is not None else 'nil',
+                               prefix, ladder))
     y = dict((int(v), yy) for v, yy in rows)[want]
     return [(box[0] + box[1]) / 2.0, y, 0.0]
 
@@ -175,7 +182,7 @@ def test_a_row_clicked_is_the_number_typed():
         assert ruler_ever(clicked), "%s never drew a ruler" % name
         assert not ruler_live(clicked), "%s left ruler scratch behind" % name
         assert not ruler_live(typed), name
-        assert said(clicked).count("A ruler of nearby lengths") == 1, \
+        assert said(clicked).count("A ruler of") == 1, \
             "the hint is said once a run"
         print("%s: a row clicked at a tread and at a depth is the number"
               " typed, and the ruler is swept" % name)
@@ -199,7 +206,7 @@ def test_the_ruler_is_up_at_the_tread_prompt_and_down_at_the_width():
          look("tread3", 24.0), None,
          look("tread4", None), "No"],
         "CORNERSTP up/down")
-    assert seen["tread1"] == 0, seen              # nothing to build one round
+    assert seen["tread1"] > 5, seen               # the LADDER, from the first
     assert seen["width1"] == 0, seen
     assert seen["tread2"] > 20, seen              # a ruler is up
     assert seen["width2"] == 0, seen              # and down again
@@ -212,7 +219,7 @@ def test_the_ruler_is_up_at_the_tread_prompt_and_down_at_the_width():
          look("tread2", 24.0), look("width2", 60.0),
          look("tread3", None), look("crown", None), "No"],
         "HEMISTEP up/down")
-    assert seen["tread1"] == 0 and seen["width1"] == 0, seen
+    assert seen["tread1"] > 5 and seen["width1"] == 0, seen
     assert seen["tread2"] > 20 and seen["width2"] == 0, seen
     assert seen["tread3"] > 20, seen
     assert seen["crown"] == 0, "the ruler must be down at the crown prompt"
@@ -233,7 +240,10 @@ def test_the_ruler_is_up_through_the_depths_and_down_at_the_pick():
          "Yes", look("d1", 7.5), look("d2", 10.75), look("d3", 10.5),
          look("pick", PICK)],
         "NORMIESTEP depths")
-    assert seen["d1"] == 0, seen
+    # the first drop has no last answer to be taped round, so the LADDER
+    # of whole-inch drops stands there instead -- smaller than a tape,
+    # and up all the same
+    assert 5 < seen["d1"] < 20, seen
     assert seen["d2"] > 20 and seen["d3"] > 20, seen
     assert seen["pick"] == 0, "the ruler must be down before the pick"
     print("the ruler stands through the depths and is down at the pick")
@@ -283,12 +293,92 @@ def test_esc_with_the_ruler_up_leaves_nothing_behind():
         print("%s: Esc with the ruler up takes it down" % name)
 
 
+
+
+# ---- NORMIESTEP's corner treatment ------------------------------------
+#
+# The step corner is not a tread: its radius, its cut face and the
+# offset behind them come off an order sheet in quarter feet, so those
+# three prompts stand on *cs-corner-ladder* rather than on a tape --
+# and stand from the first prompt, since a run treats ONE corner and
+# there is never a second answer for a tape to be built round.
+
+CORNER_LADDER = "'(3.0 24.0 3.0)"
+
+
+def corner_script(treatment, size):
+    """base line -> side -> width 60 -> <treatment> -> its size -> no
+    dims -> one tread -> done -> no profile."""
+    return (['WALLS', (100.0, 50.0), 60.0, treatment, size, "No",
+             24.0, None, "No"])
+
+
+def test_the_corner_size_stands_on_the_corner_ladder():
+    seen = {}
+
+    def look(label, answer):
+        def probe(vm):
+            seen[label] = len(ruler_live(vm))
+            return answer
+        return probe
+
+    vm = fresh(NORMIESTEP)
+    w = walls(vm, False)
+    vm.run('c:NORMIESTEP',
+           [None, w, (100.0, 50.0), 60.0, look("treat", "Radius"),
+            look("size", 12.0), look("dims", "No"),
+            look("tread1", 24.0), None, "No"])
+    assert seen["treat"] == 0, seen        # the keyword question takes none
+    # 8 rungs, each a tick and a label, plus the spine
+    assert seen["size"] == 17, seen
+    assert seen["dims"] == 0, seen         # down before the next question
+    assert not ruler_live(vm), "the run left ruler scratch behind"
+    print("NORMIESTEP: the corner size stands on the ladder, and only there")
+
+
+def test_a_rung_clicked_at_the_corner_is_the_number_typed():
+    for treatment, want in (("Radius", 96), ("Cut", 96)):
+        typed = run(NORMIESTEP, 'c:NORMIESTEP', False,
+                    corner_script(treatment, 12.0)
+                    if treatment == "Radius"
+                    else ['WALLS', (100.0, 50.0), 60.0, "Cut", "Cut", 12.0,
+                          "No", 24.0, None, "No"],
+                    "NORMIESTEP %s typed" % treatment)
+        click = row_click(NORMIESTEP, 'ns-', None, want, CORNER_LADDER)
+        clicked = run(NORMIESTEP, 'c:NORMIESTEP', False,
+                      corner_script(treatment, click)
+                      if treatment == "Radius"
+                      else ['WALLS', (100.0, 50.0), 60.0, "Cut", "Cut", click,
+                            "No", 24.0, None, "No"],
+                      "NORMIESTEP %s clicked" % treatment)
+        assert geometry(typed) == geometry(clicked), \
+            ("NORMIESTEP %s: a clicked rung does not draw what 1'-0\" typed"
+             " draws" % treatment)
+        assert geometry(typed), treatment
+    print("NORMIESTEP: a rung clicked at a Radius and at a Cut face is the"
+          " number typed")
+
+
+def test_enter_at_the_corner_size_is_refused():
+    vm = run(NORMIESTEP, 'c:NORMIESTEP', False,
+             ['WALLS', (100.0, 50.0), 60.0, "Radius", None, 12.0, "No",
+              24.0, None, "No"],
+             "NORMIESTEP corner Enter")
+    assert "A size is required" in said(vm), \
+        "Enter at the corner size must be refused, as initget 7 refused it"
+    assert not ruler_live(vm), "the refused run left ruler scratch behind"
+    print("NORMIESTEP: Enter at the corner size is refused where it stands")
+
+
 def main():
     test_a_row_clicked_is_the_number_typed()
     test_the_ruler_is_up_at_the_tread_prompt_and_down_at_the_width()
     test_the_ruler_is_up_through_the_depths_and_down_at_the_pick()
     test_a_fraction_types_and_enter_at_the_first_depth_is_refused()
     test_esc_with_the_ruler_up_leaves_nothing_behind()
+    test_the_corner_size_stands_on_the_corner_ladder()
+    test_a_rung_clicked_at_the_corner_is_the_number_typed()
+    test_enter_at_the_corner_size_is_refused()
     print("\nall step ruler tests passed")
 
 

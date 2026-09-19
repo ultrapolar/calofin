@@ -291,9 +291,20 @@
 ;; as picking a row rather than as the first point of a measured length.
 (if (not (boundp '*cs-ruler-reach*)) (setq *cs-ruler-reach* 6.0))
 
+;; The two LADDERS those prompts stand on before there is a last answer
+;; to build a tape round -- and beside it afterwards, with the answer
+;; ringed among the rungs.  A flight is not built out of arbitrary
+;; numbers: treads come in half-feet and drops in whole inches, so those
+;; are the rows offered, as (LOW HIGH STEP) in inches.  A shop whose
+;; steps run to some other measure sets its own here; nil on either
+;; leaves that prompt the plain tape it was, with nothing offered until
+;; the second answer.
+(if (not (boundp '*cs-tread-ladder*)) (setq *cs-tread-ladder* '(6.0 36.0 6.0)))
+(if (not (boundp '*cs-drop-ladder*)) (setq *cs-drop-ladder* '(6.0 12.0 1.0)))
+
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.8") ; printed on load and at command start so a
+(setq *cs-version* "v4.9") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -825,15 +836,34 @@
 ;;;  stamp's layer in the stamp's style, which is a different thing
 ;;;  from a row of nearby lengths.
 ;;;
+;;;  A ruler comes in two families, and the prompt picks which.
+;;;
+;;;  The TAPE is the one above: the eighths of an inch for a whole inch
+;;;  either side of the LAST answer, which is what a run of near-equal
+;;;  numbers wants.  It needs a last answer to be built round, so the
+;;;  first prompt of a run stands alone.
+;;;
+;;;  The LADDER is the other: a fixed (LO HI STEP) of the values that
+;;;  prompt is actually answered with, every one of them offered from
+;;;  the first prompt on.  A corner radius is 3" to 2'-0" by 3" and a
+;;;  tape of eighths round nothing helps nobody -- 3, 6, 9, 12 is the
+;;;  whole vocabulary, and a drafter picks out of it rather than types
+;;;  into it.  Its rows are graded off the VALUE, not off a distance
+;;;  from the current row: the foot marks are the deep ones and the
+;;;  half-foot next, which is where a tape's deep marks are too.  A
+;;;  ladder still takes a typed measurement that is not on it, and the
+;;;  answer is then ringed among the rungs as the current row.
+;;;
 ;;;  Nothing in here reads a knob.  A tool hands its knobs in as one
 ;;;  STYLE list and keeps the ruler between prompts as one STATE list:
 ;;;    STYLE  (COLOR CURRENT-COLOR SCREEN-X ROW-FRAC TXT-FRAC TICK-FRAC
 ;;;            RING-FRAC REACH) -- a caller's tunables block says what
 ;;;            each one moves
-;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID) -- the length the
-;;;            ruler stands round (nil = none up), the family it is
-;;;            labelled in (T = feet), what is drawn, its layer, the
-;;;            style, and whether the one-line hint has been said
+;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID LADDER) -- the
+;;;            length the ruler stands round (nil = none), the family it
+;;;            is labelled in (T = feet), what is drawn, its layer, the
+;;;            style, whether the one-line hint has been said, and the
+;;;            ladder it is standing on (nil = a tape)
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
@@ -993,6 +1023,45 @@
         (setq i (1+ i)))))
   (vl-remove-if '(lambda (pr) (<= (car pr) 0)) out))
 
+;; The RULER TIER a LADDER rung falls in, read off the value itself
+;; rather than off a distance from the current row: a whole foot is the
+;; deepest mark, a half foot the next, a quarter foot after that, and
+;; everything else is a plain rung.  That is where a tape's deep marks
+;; are, so a ladder of radii reads as a ruler and not as a list.
+(defun cs-ladder-tier (eighths)
+  (cond
+    ((= 0 (rem eighths 96)) 'jump)        ; a whole foot
+    ((= 0 (rem eighths 48)) 'half)        ; a half foot
+    ((= 0 (rem eighths 24)) 'quarter)     ; a quarter foot
+    (T 'eighth)))
+
+;; The rungs of LADDER, given as (LO HI STEP) in inches: every step from
+;; LO to HI, as the same (EIGHTHS TIER) pairs a tape's rows are.  A rung
+;; at or below zero is dropped, as a tape's rows are.
+;;
+;; A ladder is a KNOB, and a knob is whatever a drafter left in it -- a
+;; string, two numbers where three were wanted, a step of zero.  So the
+;; shape is read here rather than trusted: anything that is not three
+;; numbers with a positive step has no rungs, and cs-ruler-show reads
+;; that as no ladder.  A settings line typed wrong costs the ruler, not
+;; the command.  Unsorted -- the ruler sorts once it also has the
+;; current row.
+(defun cs-ladder-rows (ladder / lo hi step v out)
+  (setq out nil)
+  (if (and (= (type ladder) 'LIST) (= 3 (length ladder))
+           (numberp (car ladder)) (numberp (cadr ladder))
+           (numberp (caddr ladder)) (> (caddr ladder) 0.0))
+    (progn
+      (setq lo   (cs-len-eighths (car ladder))
+            hi   (cs-len-eighths (cadr ladder))
+            step (cs-len-eighths (caddr ladder))
+            v    lo)
+      (if (> step 0)
+        (while (<= v hi)
+          (if (> v 0) (setq out (cons (list v (cs-ladder-tier v)) out)))
+          (setq v (+ v step))))))
+  out)
+
 ;; Ascending by value -- the comparator the ruler sorts rows with.
 (defun cs-ruler-val-lt (a b) (< (car a) (car b)))
 
@@ -1062,13 +1131,24 @@
 ;; TOTAL-EIGHTHS, in the HASFEET family, on layer LAY, sized and
 ;; coloured by STYLE: one row per suggestion plus the ringed current
 ;; row among them, the whole thing centred vertically in the view.
+;; LADDER nil is the tape, the eighths either side of TOTAL-EIGHTHS;
+;; a (LO HI STEP) is the ladder, its rungs instead.  TOTAL-EIGHTHS may
+;; be nil ON A LADDER and only there -- a ladder is the values a prompt
+;; is answered with and stands whether or not one has been given yet,
+;; where a tape is built round the last answer and has nothing to be
+;; without it.  A rung equal to the current row is dropped, so the row
+;; is ringed once rather than drawn twice.
 ;; Returns (ENTS BOX ROWS): the entities drawn, BOX as (XMIN XMAX YTOL)
 ;; for the hit test, and ROWS as (EIGHTHS ROW-Y) pairs.
-(defun cs-draw-ruler (total-eighths hasfeet lay style / rows n i row val
-                          tier y hgt tl spx ents result view vx vy vw vh
+(defun cs-draw-ruler (total-eighths hasfeet lay style ladder / rows n i row
+                          val tier y hgt tl spx ents result view vx vy vw vh
                           gap base rcol dir far near)
-  (setq rows (cons (list total-eighths 'current)
-                   (cs-ruler-rows total-eighths hasfeet)))
+  (setq rows (if ladder
+               (vl-remove-if '(lambda (pr) (equal (car pr) total-eighths))
+                             (cs-ladder-rows ladder))
+               (cs-ruler-rows total-eighths hasfeet)))
+  (if total-eighths
+    (setq rows (cons (list total-eighths 'current) rows)))
   (setq rows (vl-sort rows 'cs-ruler-val-lt))
   (setq view (cs-ruler-view)
         vx   (car view)  vy (cadr view)
@@ -1128,33 +1208,44 @@
 
 ;; A ruler that is not up yet, to draw on LAY in STYLE.
 (defun cs-ruler-new (lay style)
-  (list nil nil nil nil nil lay style nil))
+  (list nil nil nil nil nil lay style nil nil))
 
 ;; The ruler taken down: its entities erased and forgotten.  The family
-;; and the hint flag are kept, since neither is about what is drawn.
+;; and the hint flag are kept, since neither is about what is drawn; the
+;; ladder is not, since it is what the next prompt asks for and the next
+;; prompt says so itself.
 (defun cs-ruler-off (state / e)
   (foreach e (nth 2 state) (if (and e (entget e)) (entdel e)))
   (list nil (nth 1 state) nil nil nil (nth 5 state) (nth 6 state)
-        (nth 7 state)))
+        (nth 7 state) nil))
 
-;; The ruler standing round LEN: drawn fresh when it is not up, or is
-;; up round some other length; left alone when it already is; taken
-;; down when LEN is nil, since there is nothing to build one round.
+;; The ruler the next prompt stands beside: the tape round LEN when
+;; LADDER is nil, the rungs of LADDER when it is not -- with LEN ringed
+;; among them when there is one.  Drawn fresh when it is not up, or is
+;; up round some other length or on some other ladder; left alone when
+;; it already is what was asked for; taken down when neither is given,
+;; since there is then nothing to build one out of.  Whether it is UP is
+;; what is drawn, not what it stands round: a ladder with no answer yet
+;; stands round nothing and is up all the same.
 ;; The one-line hint is said the first time a run draws one.
-(defun cs-ruler-show (state len / rr)
+(defun cs-ruler-show (state len ladder / rr)
+  ;; a ladder nothing can be built out of is no ladder at all, and is
+  ;; dropped here rather than drawn as an empty one
+  (if (and ladder (null (cs-ladder-rows ladder))) (setq ladder nil))
   (cond
-    ((null len) (cs-ruler-off state))
-    ((and (nth 0 state) (equal (nth 0 state) len)) state)
+    ((and (null len) (null ladder)) (cs-ruler-off state))
+    ((and (nth 2 state) (equal (nth 0 state) len)
+          (equal (nth 8 state) ladder)) state)
     (T
      (setq state (cs-ruler-off state))
-     (setq rr (cs-draw-ruler (cs-len-eighths len) (nth 1 state)
-                              (nth 5 state) (nth 6 state)))
+     (setq rr (cs-draw-ruler (if len (cs-len-eighths len)) (nth 1 state)
+                              (nth 5 state) (nth 6 state) ladder))
      (if (not (nth 7 state))
-       (princ (strcat "\n  A ruler of nearby lengths is beside the"
-                      " drawing: click a row to take it, or type a"
-                      " length (44, 44 1/2, 3'8).")))
+       (princ (strcat "\n  A ruler of " (if ladder "the usual" "nearby")
+                      " lengths is beside the drawing: click a row to"
+                      " take it, or type a length (44, 44 1/2, 3'8).")))
      (list len (nth 1 state) (car rr) (cadr rr) (caddr rr)
-           (nth 5 state) (nth 6 state) T))))
+           (nth 5 state) (nth 6 state) T ladder))))
 
 ;; One length prompt beside the ruler in STATE, and every way of
 ;; answering it: Enter (nil back, for the caller to read as it always
@@ -1166,15 +1257,24 @@
 ;; as initget 6 used to refuse them.  Returns (VALUE STATE): the
 ;; answer, and the ruler as it now stands.
 ;;
-;; The caller SHOWS the ruler first -- (setq rl (cs-ruler-show rl
-;; last) rr (cs-ask-len prompt kws rl) v (car rr) rl (cadr rr)) --
+;; READER is the one thing a caller can add to the reading: a function
+;; of the typed string returning inches, for a spelling this tree reads
+;; somewhere and the library does not -- SPA's "600mm".  It is tried
+;; AFTER the standard spellings, so a measurement written the tree's
+;; way still reads the tree's way at a prompt that has one, and what it
+;; returns is refused on the same terms as anything else: zero and a
+;; negative are not lengths whoever read them.  nil = no such spelling,
+;; which is every caller but one.
+;;
+;; The caller SHOWS the ruler first -- (setq rl (cs-ruler-show rl last
+;; ladder) rr (cs-ask-len prompt kws rl nil) v (car rr) rl (cadr rr)) --
 ;; and that order is not a nicety: an Esc inside this prompt runs the
 ;; caller's *error*, and what that handler can take down is the ruler
 ;; the CALLER's state names.  A ruler drawn in here, in a state only
 ;; this function held, would outlive the Esc.  The caller keeps the
 ;; state between prompts and takes the ruler down with cs-ruler-off
 ;; before a prompt that does not take it and on every way out.
-(defun cs-ask-len (prompt kws state / pk v out done)
+(defun cs-ask-len (prompt kws state reader / pk v out done)
   (setq done nil out nil)
   (while (not done)
     (if kws (initget 128 kws) (initget 128))
@@ -1194,12 +1294,20 @@
             (progn
               (setq out (car v) done T)
               ;; a typed spelling picks the ruler's family -- feet typed
-              ;; means feet on the ruler -- and a change redraws it, so
-              ;; the length it stands round is forgotten here
+              ;; means feet on the ruler -- and a change relabels every
+              ;; row, so the one standing is taken down here.  Down, not
+              ;; forgotten: a ladder stands round no length, so there is
+              ;; nothing for forgetting one to redraw
               (if (not (eq (cadr v) (nth 1 state)))
-                (setq state (list nil (cadr v) (nth 2 state) (nth 3 state)
-                                  (nth 4 state) (nth 5 state) (nth 6 state)
-                                  (nth 7 state)))))
+                (setq state (cs-ruler-off
+                              (list (nth 0 state) (cadr v) (nth 2 state)
+                                    (nth 3 state) (nth 4 state) (nth 5 state)
+                                    (nth 6 state) (nth 7 state)
+                                    (nth 8 state))))))
+            (princ "\nA length must be more than zero.")))
+         ((and reader (setq v (apply reader (list pk))))
+          (if (and (numberp v) (> v 0.0))
+            (setq out v done T)
             (princ "\nA length must be more than zero.")))
          (T (cs-len-unread pk))))
       ((setq v (cs-ruler-hit pk (nth 3 state) (nth 4 state)))
@@ -1216,6 +1324,13 @@
 ;; The shared step settings, in the order the ruler reads them -- each
 ;; through the same guard every other knob is read through, so a
 ;; mistyped setting draws the default rather than nothing.
+;; Which ruler the next length prompt stands beside: the LADDER while
+;; there is no last answer, nothing once there is one.  A tape of
+;; eighths is the finer offer and wins wherever it can be built -- a
+;; flight's second tread is 24, 24 1/2, 24 -- but it has to be built
+;; round something, and the ladder is what stands there until it can be.
+(defun cs-ladder (last ladder) (if last nil ladder))
+
 (defun cs-ruler-style ()
   (list (cs-num *cs-ruler-color* 3) (cs-num *cs-ruler-current-color* 7)
         (cs-num *cs-ruler-screen-x* 0.88) (cs-num *cs-ruler-row-frac* 0.042)
@@ -1831,14 +1946,14 @@
                         (T
                          ;; Undo is the old keyword, kept as a hidden synonym;
                          ;; the length ruler stands round the last tread
-                         (setq rl  (cs-ruler-show rl lastdep)
+                         (setq rl  (cs-ruler-show rl lastdep (cs-ladder lastdep *cs-tread-ladder*))
                                rr  (cs-ask-len
                                      (strcat "\nStep " (itoa n)
                                              " - step tread (going in) ["
                                              (if lastdep "Back/Same" "Back")
                                              "] <Enter = done>: ")
                                      (if lastdep "Back Same Undo" "Back Undo")
-                                     rl)
+                                     rl nil)
                                dep (car rr)
                                rl  (cadr rr))
                          (if (= (type dep) 'STR)
@@ -1900,7 +2015,7 @@
             (T
              ;; Undo is the old keyword, kept as a hidden synonym; the
              ;; length ruler stands round the last tread
-             (setq rl  (cs-ruler-show rl lastdep)
+             (setq rl  (cs-ruler-show rl lastdep (cs-ladder lastdep *cs-tread-ladder*))
                    rr  (cs-ask-len
                          (strcat "\nStep " (itoa n) " - step tread ["
                                  (if lastdep "Back/Same" "Back")
@@ -1910,7 +2025,7 @@
                                            (rtos lastdep) ">: ")
                                    " <Enter = done>: "))
                          (if lastdep "Back Same Undo" "Back Undo")
-                         rl)
+                         rl nil)
                    dep (car rr)
                    rl  (cadr rr))
              (if (= (type dep) 'STR)
@@ -2094,7 +2209,9 @@
                       ;; gets the already-at-the-first-step feedback.  Undo is
                       ;; the old keyword, kept as a hidden synonym; the length
                       ;; ruler stands round the previous depth
-                      (setq rl (cs-ruler-show rl (car drops))
+                      (setq rl (cs-ruler-show rl (car drops)
+                                              (cs-ladder (car drops)
+                                                         *cs-drop-ladder*))
                             rr (cs-ask-len
                                  (if (zerop ix)
                                    "\nStep 1 - step depth (the drop): "
@@ -2104,7 +2221,7 @@
                                        (strcat "\nStep " (itoa (1+ ix))
                                                " - step depth [Back] <"))
                                      (rtos (car drops)) ">: "))
-                                 "Back Undo" rl)
+                                 "Back Undo" rl nil)
                             pd (car rr)
                             rl (cadr rr))
                       (cond
