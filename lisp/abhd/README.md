@@ -330,7 +330,7 @@ starts.)
 | `*PF-RULER-TICK-FRAC*` | `0.6` | The longest tick, same measure |
 | `*PF-RULER-RING-FRAC*` | `0.26` | The ring round the current row, same measure |
 | `*PF-RULER-REACH*` | `6.0` | How far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the first point of a measured length |
-| `*PF-HOP-OFF-LADDER*` | `'(6.0 48.0 6.0)` | The rungs the three hopper-offset prompts offer, as (LOW HIGH STEP) in inches — 6" to 4' by 6", the offsets a hopper is laid out to. The slope-waypoint offset beside them admits **zero**, which no length on a ruler is, so it keeps the plain typed question. `nil` leaves the three plain too |
+| `*PF-HOP-OFF-LADDER*` | `'(24.0 72.0 6.0)` | The rungs the three hopper-offset prompts offer, as (LOW HIGH STEP) in inches — 2' to 6' by 6", the offsets a hopper is laid out to. `POOL` (`pool:*hopoffset-ladder*`) and `FITABHD` (`fit:*hop-side-ladder*`, `fit:*hop-back-ladder*`) offer the same range at the same question: a hopper offset is one number whichever tool is asking for it. The slope-waypoint offset beside them admits **zero**, which no length on a ruler is, so it keeps the plain typed question. `nil` leaves the three plain too |
 
 **3. Guards** — limits that keep the maths finite and the searches
 bounded. Named so each is defined once and can be read, not because

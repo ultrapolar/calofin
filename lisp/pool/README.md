@@ -170,11 +170,17 @@ size is ringed among the rungs when there is one, Enter still takes
 it, and a size over the corner's cap is refused and asked again with
 the ruler still standing. The depth chain does the same on ladders of
 its own: C on 36"-54" by 3", D on 60"-96" by 6", C2 on the span of
-the two. Everything else POOL asks is a MEASUREMENT -- a wall, a
-diagonal, a cross dim, a hopper run -- and stays the plain typed
-question it was, there being no short list of what one comes to. The
-ruler is scratch on `POOL-RULER`, down before the next question and
-swept on every way out, Esc included.
+the two. So do the two HOPPER OFFSETS, M and K -- the gap the hopper
+leaves to the top side and to the bottom side -- on 2' to 6' by 6",
+the range `ABHD` and `FITABHD` offer at the same question; where the
+chain has worked a number out for one of them, Enter still takes it
+and it is RINGED among the rungs, so the sheet's own number and the
+sizes a hopper is usually set in by are both on screen. Everything
+else POOL asks is a MEASUREMENT -- a wall, a diagonal, a cross dim, a
+station along the pool, the hopper's own width -- and stays the plain
+typed question it was, there being no short list of what one comes
+to. The ruler is scratch on `POOL-RULER`, down before the next
+question and swept on every way out, Esc included.
 
 **`NotGiven` is built square but never drawn as a 90.** Its geometry is
 the plain sharp corner, but the sheet marks it with a circled, **boxed**
@@ -1516,6 +1522,7 @@ holds this table and the block together, so neither can drift from the other.
 | `pool:*wallheight-ladder*` | `'(36.0 54.0 3.0)` | ...and for C, the wall height |
 | `pool:*deepdepth-ladder*` | `'(60.0 96.0 6.0)` | ...and for D, the deep end |
 | `pool:*breakdepth-ladder*` | `'(36.0 96.0 6.0)` | ...and for C2, which lands between the two |
+| `pool:*hopoffset-ladder*` | `'(24.0 72.0 6.0)` | ...and for the two HOPPER OFFSETS, M and K — the gap the hopper leaves to the top side and to the bottom side. 2' to 6' by 6", which is what `ABHD` (`*PF-HOP-OFF-LADDER*`) and `FITABHD` (`fit:*hop-side-ladder*`, `fit:*hop-back-ladder*`) offer at the same question: a hopper offset is one number whichever tool is asking for it. The rest of the chain is not on it — H, G, F and E are stations ALONG the pool and L is the hopper's own width |
 
 Three kinds of thing are deliberately **not** in that block, and the
 block says so: run state (set and cleared by a run, not tuned), the

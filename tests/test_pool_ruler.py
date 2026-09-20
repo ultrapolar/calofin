@@ -394,6 +394,90 @@ def test_a_wall_length_is_still_the_plain_typed_question():
     check("...nor is a cross dim", seen["cross"] == 0, seen)
 
 
+
+
+# ---- the hopper offsets -----------------------------------------------
+#
+# M and K are the gap the hopper leaves to the top side and to the
+# bottom side, and a hopper is set in from the walls by 2' to 6' --
+# the same range ABHD and FITABHD offer at the same question.  The
+# rest of the chain beside them is measured: H, G, F and E are
+# stations ALONG the pool and L is the hopper's own width.
+
+HOP_LADDER = "'(24.0 72.0 6.0)"
+#: its nine rungs in eighths -- 2' to 6' by 6"
+RUNGS = [192, 240, 288, 336, 384, 432, 480, 528, 576]
+
+
+#: a wedge-bottom rectangle, stopping at the M / L / K chain
+def hopper(m, l, k):
+    return (["Outofsquare", "Rectangle"] + BASE
+            + [240.0, 240.0, 120.0, 120.0,
+               "Cut", 24.0, None, None, None, None, None, None,
+               "Ends", 260.0, 260.0, 260.0, 260.0,
+               "Yes", "Wedge",
+               30.0, 180.0,
+               m, l, k,
+               42.0, 72.0,
+               "No"])
+
+
+def test_the_hopper_offsets_stand_on_the_offset_ladder():
+    seen = {}
+
+    def look(label, answer):
+        def probe(vm):
+            seen[label] = sorted(int(v) for v in ruler_values(vm))
+            return answer
+        return probe
+
+    # the pool is 120 across, so the M / L / K chain totals 120: with
+    # M 36 and L 51 the chain has 33" left for K, which is NOT a rung
+    run(hopper(look("M", 36.0), look("L", 51.0), look("K", None)), "hopper")
+    check("M stands on the hopper-offset ladder", seen["M"] == RUNGS,
+          repr(seen.get("M")))
+    check("...and its suggestion, H's own 30\", IS a rung, so it is drawn"
+          " once rather than twice",
+          seen["M"].count(240) == 1 and len(seen["M"]) == len(RUNGS),
+          repr(seen.get("M")))
+    check("L is the hopper's own width, not an offset - no ruler",
+          seen["L"] == [], repr(seen.get("L")))
+    check("K stands on the same ladder, with the chain's own 33\" ringed"
+          " among the rungs",
+          seen["K"] == sorted(RUNGS + [264]), repr(seen.get("K")))
+
+
+def test_a_hopper_rung_clicked_is_the_number_typed():
+    typed = run(hopper(36.0, 51.0, None), "typed")
+    clicked = run(hopper(row_click(288, ladder=HOP_LADDER), 51.0, None),
+                  "clicked")
+    check("a rung clicked at M draws what 3'-0\" typed draws",
+          geometry(typed) == geometry(clicked))
+    check("...and it drew something", bool(geometry(typed)))
+    check("nothing of the ruler is left behind",
+          not ruler_ents(clicked) and not ruler_ents(typed))
+
+
+def test_enter_at_a_hopper_offset_still_takes_the_chain_s_own_number():
+    # K is a SUG question: its suggestion is what the chain has left,
+    # and Enter has always taken it.  The ruler must not change that
+    entered = run(hopper(36.0, 51.0, None), "entered")
+    typed = run(hopper(36.0, 51.0, 33.0), "typed")
+    check("Enter at K still takes the chain's remainder",
+          geometry(entered) == geometry(typed))
+    check("...and that run drew a pool", bool(geometry(entered)))
+
+
+def test_na_still_answers_a_hopper_offset():
+    # M is a SUG question too, so NA is on offer and means "not
+    # measured" -- a keyword the ruler prompt hands back untouched
+    vm = run(hopper("NA", 51.0, None), "NA at M")
+    check("NA still answers M", bool(geometry(vm)))
+    check("...and the run said nothing about a bad length",
+          not any("is not a length" in t for t in vm.printed),
+          repr([t for t in vm.printed if "not a length" in t][:1]))
+
+
 def main():
     print("POOL's corner-size ruler  [%s]"
           % (os.environ.get('CALOFIN_LISP_ROOT') or 'lisp/ (standalone)'))
@@ -407,6 +491,10 @@ def main():
     test_the_depths_stand_on_their_own_ladders()
     test_a_depth_rung_clicked_is_the_number_typed()
     test_a_wall_length_is_still_the_plain_typed_question()
+    test_the_hopper_offsets_stand_on_the_offset_ladder()
+    test_a_hopper_rung_clicked_is_the_number_typed()
+    test_enter_at_a_hopper_offset_still_takes_the_chain_s_own_number()
+    test_na_still_answers_a_hopper_offset()
     print()
     if failures:
         print("%d FAILED: %s" % (len(failures), ", ".join(failures)))

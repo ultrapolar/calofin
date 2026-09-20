@@ -3540,7 +3540,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091926 REV35")
+(setq pool:*version* "091926 REV36")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -3941,6 +3941,17 @@
 (setq pool:*wallheight-ladder* '(36.0 54.0 3.0))   ; C, the shallow depth
 (setq pool:*deepdepth-ladder*  '(60.0 96.0 6.0))   ; D, the deep end
 (setq pool:*breakdepth-ladder* '(36.0 96.0 6.0))   ; C2, between the two
+
+;;;  ...and the one the HOPPER OFFSETS stand on: M and K, the gap the
+;;;  hopper leaves to the top side and to the bottom side.  A hopper is
+;;;  set in from the walls by 2' to 6', which is why the same range is
+;;;  offered at the same question in ABHD (*PF-HOP-OFF-LADDER*) and in
+;;;  FITABHD (fit:*hop-side-ladder*, fit:*hop-back-ladder*) -- a hopper
+;;;  offset is one number whichever tool is asking for it.  The rest of
+;;;  the chain beside them is not on it: H, G, F and E are stations
+;;;  ALONG the pool and L is the hopper's own width, and a 40' pool's H
+;;;  has nothing to do with the gap at its side.
+(setq pool:*hopoffset-ladder* '(24.0 72.0 6.0))
 
 ;;; -------------------- run state (not tunables) ----------------------
 ;;;
@@ -4437,7 +4448,7 @@
 ;;;  A block of related measurements runs through pool:askseq so every
 ;;;  prompt after the first also offers *Back*, which re-asks the
 ;;;  previous question -- a typo no longer means Esc and start over.
-;;;  Each item: (key kind msg ents dflt skip skipmsg sug)
+;;;  Each item: (key kind msg ents dflt skip skipmsg sug ladder)
 ;;;    key   symbol the answer is stored under
 ;;;    kind  REQ  a value is required
 ;;;          NAX  NA accepted (returns nil)
@@ -4456,6 +4467,12 @@
 ;;;          Enter can answer.  A REQ or ZER question keeps its kind:
 ;;;          those two mean something about what is a valid answer,
 ;;;          not about what is offered.
+;;;    ladder optional (LOW HIGH STEP) in inches: the LENGTH RULER's
+;;;          rungs, for a question answered out of a short list rather
+;;;          than taped off the sheet.  The hopper offsets M and K hand
+;;;          one in; nothing else in a chain does, a station along the
+;;;          pool being measured like the wall it runs beside.  The
+;;;          suggestion, where there is one, is ringed among the rungs.
 
 (defun pool:sq (ans key) (cdr (assoc key ans)))
 
@@ -4664,7 +4681,18 @@
 ;; SUGR is what a suggestion does to a REQ: Enter takes the number,
 ;; but NA is still not on the table, because the answer is still one
 ;; the pool cannot be drawn without.
-(defun pool:asks (kind msg ents dflt back / v cols kw)
+;; LADDER nil is the plain typed question this has always been; a
+;; (LOW HIGH STEP) stands it beside the LENGTH RULER, which is what the
+;; two HOPPER OFFSETS hand in and no other member of a chain does -- a
+;; wall, a station along the pool and a hopper's own width are all
+;; measured, and there is no short list of what one comes to.  The
+;; suggestion, where the question has one, is RINGED among the rungs:
+;; the chain says 48 and the rungs say what a hopper is usually set in
+;; by, and the drafter is looking at both.
+;;
+;; The prompt's TEXT is built once, above the fork, so the two routes
+;; in cannot drift apart -- tests/test_pool_form.py pins this wording.
+(defun pool:asks (kind msg ents dflt back ladder / v cols kw prompt rr)
   (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (cal:osup)
@@ -4672,26 +4700,56 @@
   (setq kw (cond ((member kind '(REQ SUGR)) (if back "Back Undo" nil))
                  (back "NA Back Undo")
                  (t "NA")))
-  (if kw
-      ;; REQ always rejects zero (bit 7) - offering Back must not
-      ;; loosen what counts as a valid measurement; ZER alone admits 0
-      (initget (cond ((eq kind 'ZER) 5)
-                     ((and (member kind '(SUG SUGR)) dflt) 6)
-                     (t 7))
-               kw)
-      (initget 7))
-  (setq v (getdist
-            (strcat "\n" msg
-                    (cond ((eq kind 'REQ) "")
-                          ((eq kind 'SUGR)
-                           (if dflt (strcat " <" (rtos dflt) ">") ""))
-                          ((eq kind 'SUG)
-                           (if dflt (strcat " <" (rtos dflt) "> (or NA)")
-                               " (or NA)"))
-                          (t " (or NA if not measured)"))
-                    (if back " [Back]" "")
-                    ": ")))
-  (if lzd:ask (lzd:ask msg v) v)
+  (setq prompt (strcat "\n" msg
+                       (cond ((eq kind 'REQ) "")
+                             ((eq kind 'SUGR)
+                              (if dflt (strcat " <" (rtos dflt) ">") ""))
+                             ((eq kind 'SUG)
+                              (if dflt (strcat " <" (rtos dflt) "> (or NA)")
+                                  " (or NA)"))
+                             (t " (or NA if not measured)"))
+                       (if back " [Back]" "")
+                       ": "))
+  ;; A ZER question admits a zero and the ruler's prompt does not -- no
+  ;; length on a ruler is zero -- so a ladder handed to one is ignored
+  ;; rather than quietly tightening what the question takes.  Nothing
+  ;; hands one to a ZER today; this is what keeps that true.
+  (if (and ladder (not (eq kind 'ZER)))
+    (progn
+      (setq v nil)
+      (while (null v)
+        ;; the ruler goes up BEFORE the prompt and its state is the
+        ;; run's, not a local: an Esc in here runs c:POOL's *error*,
+        ;; and what that can take down is what c:POOL can see
+        (setq pool:*ruler*
+                (cal:ruler-show (if pool:*ruler* pool:*ruler*
+                                     (cal:ruler-new (pool:rulerlayer)
+                                                     (pool:ruler-style)))
+                                 dflt ladder)
+              rr (cal:ask-len prompt kw pool:*ruler* nil)
+              v  (car rr)
+              pool:*ruler* (cadr rr))
+        ;; Enter: takes the suggestion where initget 6 took it, and is
+        ;; refused where 7 refused it
+        (cond
+          ((and (null v) (member kind '(SUG SUGR)) dflt) (setq v dflt))
+          ((null v)
+           (princ (strcat "\nA measurement is required - type it, click"
+                          " a ruler row, or answer NA.")))))
+      ;; down before the answer is used: the question after an offset
+      ;; asks for a ruler of its own if it wants one
+      (pool:rulerkill))
+    (progn
+      (if kw
+          ;; REQ always rejects zero (bit 7) - offering Back must not
+          ;; loosen what counts as a valid measurement; ZER alone admits 0
+          (initget (cond ((eq kind 'ZER) 5)
+                         ((and (member kind '(SUG SUGR)) dflt) 6)
+                         (t 7))
+                   kw)
+          (initget 7))
+      (setq v (getdist prompt))
+      (if lzd:ask (lzd:ask msg v) v)))
   (cal:osdown)
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
@@ -4877,7 +4935,7 @@
           (setq v (if (pool:fhas (car it))
                       (pool:ftake (car it))
                       (pool:asks kind (caddr it) (cadddr it) dflt
-                                 (if (or asked bk) t nil))))
+                                 (if (or asked bk) t nil) (nth 8 it))))
           (if (eq v 'CAL-BACK)
               (if asked
                   (setq i (car asked) asked (cdr asked))
@@ -8681,12 +8739,14 @@
                                           0.5)))
                             "\nH + G + F span the main section -- E not needed."
                             '(pool:chainrest ans '(h g f) toth2))
-                      (list 'm 'SUG "M - top side to deep end" (cdr (assoc "M" pv)) '(h))
+                      (list 'm 'SUG "M - top side to deep end" (cdr (assoc "M" pv)) '(h)
+                            nil nil nil pool:*hopoffset-ladder*)
                       (list 'l 'NAX "L - deep end width" (cdr (assoc "L" pv))
                             nil nil nil '(pool:sugsym ans totv2))
                       (list 'k 'SUG "K - deep end to bottom side"
                             (cdr (assoc "K" pv)) '(m h) nil nil
-                            '(pool:chainrest ans '(m l) totv2)))))
+                            '(pool:chainrest ans '(m l) totv2)
+                            pool:*hopoffset-ladder*))))
         hraw (pool:sq ans 'h) graw (pool:sq ans 'g) fraw (pool:sq ans 'f)
         eraw (pool:sq ans 'e) mraw (pool:sq ans 'm) lraw (pool:sq ans 'l)
         kraw (pool:sq ans 'k)
@@ -8952,11 +9012,13 @@
                     (list 'f1 'NAX "F1 - right slope" (cdr (assoc "F1" pv)))
                     (list 'e1 'NAX "E1 - right end shallow flat" (cdr (assoc "E1" pv))
                           nil nil nil '(pool:chainrest ans '(e2 f2 g f1) total2))
-                    (list 'm 'NAX "M - top side to deep flat" (cdr (assoc "M" pv)))
+                    (list 'm 'NAX "M - top side to deep flat" (cdr (assoc "M" pv))
+                          nil nil nil nil pool:*hopoffset-ladder*)
                     (list 'l 'NAX "L - deep flat width" (cdr (assoc "L" pv)))
                     (list 'k 'SUG "K - deep flat to bottom side"
                           (cdr (assoc "K" pv)) '(m) nil nil
-                          '(pool:chainrest ans '(m l) wid2))))
+                          '(pool:chainrest ans '(m l) wid2)
+                          pool:*hopoffset-ladder*)))
         e2r (pool:sq ans 'e2) f2r (pool:sq ans 'f2) gr (pool:sq ans 'g)
         f1r (pool:sq ans 'f1) e1r (pool:sq ans 'e1)
         mraw (pool:sq ans 'm) lraw (pool:sq ans 'l) kraw (pool:sq ans 'k)
@@ -9278,11 +9340,13 @@
                           (list 'f 'NAX "F - hopper to slope break" (cdr (assoc "F" pv)))
                           (list 'e 'NAX "E - slope break to pool right tip" (cdr (assoc "E" pv))
                                 nil nil nil '(pool:chainrest ans '(h g f) len2))
-                          (list 'm 'SUG "M - top side to hopper" (cdr (assoc "M" pv)) '(h))
+                          (list 'm 'SUG "M - top side to hopper" (cdr (assoc "M" pv)) '(h)
+                                nil nil nil pool:*hopoffset-ladder*)
                           (list 'l 'NAX "L - hopper width" (cdr (assoc "L" pv))
                                 nil nil nil '(pool:sugsym ans totv2))
                           (list 'k 'SUG "K - hopper to bottom side" (cdr (assoc "K" pv)) '(m h)
-                                nil nil '(pool:chainrest ans '(m l) totv2))
+                                nil nil '(pool:chainrest ans '(m l) totv2)
+                                pool:*hopoffset-ladder*)
                           ;; ttc, not tt.  The hopper's straight-side CHECK
                           ;; and the PERIMETER's T are two questions on one
                           ;; run of a Roman -- rm:letters asks 'tt and then
@@ -9625,12 +9689,14 @@
                       (list (list 'f 'NAX "F - hopper to slope break" (cdr (assoc "F" pv)))
                             (list 'e 'NAX "E - slope break to right end" (cdr (assoc "E" pv))
                                   nil nil nil '(pool:chainrest ans '(h g f) toth2))
-                            (list 'm 'SUG "M - top side to hopper" (cdr (assoc "M" pv)) '(h))
+                            (list 'm 'SUG "M - top side to hopper" (cdr (assoc "M" pv)) '(h)
+                                  nil nil nil pool:*hopoffset-ladder*)
                             (list 'l 'NAX "L - hopper width" (cdr (assoc "L" pv))
                                   nil nil nil '(pool:sugsym ans totv2))
                             (list 'k 'SUG "K - hopper to bottom side"
                                   (cdr (assoc "K" pv)) '(m h) nil nil
-                                  '(pool:chainrest ans '(m l) totv2)))))
+                                  '(pool:chainrest ans '(m l) totv2)
+                                  pool:*hopoffset-ladder*))))
               hraw (pool:sq ans 'h) graw (pool:sq ans 'g)
               coraw (pool:sq ans 'co)
               w (pool:sq ans 'w) l1 (pool:sq ans 'l1) x (pool:sq ans 'x)
@@ -30682,11 +30748,15 @@
                                     ; as picking a row rather than as
                                     ; the first point of a measured
                                     ; length
-(setq *PF-HOP-OFF-LADDER* '(6.0 48.0 6.0))
+(setq *PF-HOP-OFF-LADDER* '(24.0 72.0 6.0))
                                     ; the rungs those three prompts
                                     ; offer, as (LOW HIGH STEP) in
-                                    ; inches -- 6" to 4' by 6", the
+                                    ; inches -- 2' to 6' by 6", the
                                     ; offsets a hopper is laid out to.
+                                    ; POOL and FITABHD offer the same
+                                    ; range at the same question: a
+                                    ; hopper offset is one number
+                                    ; whichever tool is asking for it.
                                     ; nil leaves them the plain typed
                                     ; questions they were
 ;; ---- end of tunables -----------------------------------------------
@@ -30697,7 +30767,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "091926 REV21") ; announced on load.  The
+(setq pf:*version*      "091926 REV22") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -75366,7 +75436,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v3.2")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.3")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -75620,8 +75690,10 @@
 ;; plain typed one it was.
 (setq fit:*brk-deep-ladder* '(48.0 144.0 12.0))  ; deep break off the wall
 (setq fit:*brk-shal-ladder* '(144.0 360.0 24.0)) ; shallow break, ditto
-(setq fit:*hop-side-ladder* '(6.0 48.0 6.0))     ; hopper in from a side
-(setq fit:*hop-back-ladder* '(6.0 48.0 6.0))     ; hopper in from the end
+;; 2' to 6' by 6" on both, which is what POOL and ABHD offer at the
+;; same question: a hopper offset is one number whichever tool asks.
+(setq fit:*hop-side-ladder* '(24.0 72.0 6.0))    ; hopper in from a side
+(setq fit:*hop-back-ladder* '(24.0 72.0 6.0))    ; hopper in from the end
 (setq fit:*tol-ladder* '(0.25 2.0 0.25))         ; the fit tolerance
 
 ;; the template wall directions, one CCW ring per type (see below)
@@ -120015,7 +120087,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.51")
+(setq *lazpanel-version* "v3.52")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -124140,7 +124212,7 @@
      ("*PF-RULER-TICK-FRAC*" "0.6" "the longest tick, same measure a fraction of the row spacing")
      ("*PF-RULER-RING-FRAC*" "0.26" "the ring round the current row, same measure a fraction of the row spacing")
      ("*PF-RULER-REACH*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
-     ("*PF-HOP-OFF-LADDER*" "'(6.0 48.0 6.0)" "the rungs those three prompts offer, as (LOW HIGH STEP) in inches -- 6\" to 4' by 6\", the offsets a hopper i..."))
+     ("*PF-HOP-OFF-LADDER*" "'(24.0 72.0 6.0)" "the rungs those three prompts offer, as (LOW HIGH STEP) in inches -- 2' to 6' by 6\", the offsets a hopper i..."))
     ("ABLOBF" "lisp/ablobf/ABLOBF.lsp"
      ("*ABL-POOL-LAYER*" "\"POOL\"" "layer the kept run ends up on - ABHD's, so the rest of the toolset can read the result reads this banner an...")
      ("*ABL-POINT-LAYER*" "\"POINTS\"" "layer whose POINTs/INSERTs are always points ABHD's, so the rest of the toolset can read the result")
@@ -124656,10 +124728,10 @@
      ("fit:*ruler-ring-frac*" "0.26" "the ring round the current row, as a fraction of the row spacing a fraction of the row spacing")
      ("fit:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
      ("fit:*brk-deep-ladder*" "'(48.0 144.0 12.0)" "deep break off the wall The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per questio...")
-     ("fit:*brk-shal-ladder*" "'(144.0 360.0 24.0)" "shallow break, ditto The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per question,...")
-     ("fit:*hop-side-ladder*" "'(6.0 48.0 6.0)" "hopper in from a side The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per question,...")
-     ("fit:*hop-back-ladder*" "'(6.0 48.0 6.0)" "hopper in from the end The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per question...")
-     ("fit:*tol-ladder*" "'(0.25 2.0 0.25)" "the fit tolerance The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per question, sin...")
+     ("fit:*brk-shal-ladder*" "'(144.0 360.0 24.0)" "shallow break, ditto 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a hopp...")
+     ("fit:*hop-side-ladder*" "'(24.0 72.0 6.0)" "hopper in from a side 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a hop...")
+     ("fit:*hop-back-ladder*" "'(24.0 72.0 6.0)" "hopper in from the end 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a ho...")
+     ("fit:*tol-ladder*" "'(0.25 2.0 0.25)" "the fit tolerance 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a hopper...")
      ("fit:*rect-dirs*" "(list 0.0 (/ pi 2.0) pi (* pi 1.5))" "the template wall directions, one CCW ring per type (see below)")
      ("fit:*grec-dirs*" "(list 0.0 (/ pi 4.0) (/ pi 2.0) (* pi 0.75) pi (* pi 1.25) (* pi 1.5) (* pi 1.75))" "the template wall directions, one CCW ring per type (see below)")
      ("fit:*l-dirs*" "(list 0.0 (/ pi 2.0) pi (* pi 1.5) pi (* pi 1.5))" "")
@@ -125196,7 +125268,8 @@
      ("pool:*cutface-ladder*" "'(3.0 24.0 3.0)" "The two LADDERS those prompts stand on, as (LOW HIGH STEP) in inches. A corner radius comes off an order sh...")
      ("pool:*wallheight-ladder*" "'(36.0 54.0 3.0)" "C, the shallow depth ...and the three the DEPTH chain stands on. A pool's depths are as short a list as its...")
      ("pool:*deepdepth-ladder*" "'(60.0 96.0 6.0)" "D, the deep end ...and the three the DEPTH chain stands on. A pool's depths are as short a list as its corn...")
-     ("pool:*breakdepth-ladder*" "'(36.0 96.0 6.0)" "C2, between the two ...and the three the DEPTH chain stands on. A pool's depths are as short a list as its..."))
+     ("pool:*breakdepth-ladder*" "'(36.0 96.0 6.0)" "C2, between the two ...and the three the DEPTH chain stands on. A pool's depths are as short a list as its...")
+     ("pool:*hopoffset-ladder*" "'(24.0 72.0 6.0)" "...and the one the HOPPER OFFSETS stand on: M and K, the gap the hopper leaves to the top side and to the b..."))
     ("POOLSIDE" "lisp/poolside/POOLSIDE.lsp"
      ("psd:*base*" "(list 0.0 0.0)" "insertion base for this run")
      ("psd:*sysold*" "nil" "the user's sysvars, pending restore")

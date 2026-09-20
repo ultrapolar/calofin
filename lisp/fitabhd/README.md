@@ -423,7 +423,8 @@ tolerance has its own eight (`fit:*ruler-layer*`, `fit:*ruler-color*`,
 `fit:*ruler-tick-frac*`, `fit:*ruler-ring-frac*`, `fit:*ruler-reach*`)
 and one LADDER per question -- `fit:*brk-deep-ladder*` (4' to 12' by a
 foot), `fit:*brk-shal-ladder*` (12' to 30' by two), `fit:*hop-side-ladder*`
-and `fit:*hop-back-ladder*` (6" to 4' by 6") and `fit:*tol-ladder*` (a
+and `fit:*hop-back-ladder*` (2' to 6' by 6", the range `POOL` and `ABHD`
+offer at the same question) and `fit:*tol-ladder*` (a
 quarter inch to two). These are the numbers a hopper is *laid out* to
 rather than lengths taped off the drawing, so the rungs stand from the
 first prompt and a click on one is the answer; everything else about

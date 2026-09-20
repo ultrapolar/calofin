@@ -141,7 +141,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.51")
+(setq *lazpanel-version* "v3.52")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -4266,7 +4266,7 @@
      ("*PF-RULER-TICK-FRAC*" "0.6" "the longest tick, same measure a fraction of the row spacing")
      ("*PF-RULER-RING-FRAC*" "0.26" "the ring round the current row, same measure a fraction of the row spacing")
      ("*PF-RULER-REACH*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
-     ("*PF-HOP-OFF-LADDER*" "'(6.0 48.0 6.0)" "the rungs those three prompts offer, as (LOW HIGH STEP) in inches -- 6\" to 4' by 6\", the offsets a hopper i..."))
+     ("*PF-HOP-OFF-LADDER*" "'(24.0 72.0 6.0)" "the rungs those three prompts offer, as (LOW HIGH STEP) in inches -- 2' to 6' by 6\", the offsets a hopper i..."))
     ("ABLOBF" "lisp/ablobf/ABLOBF.lsp"
      ("*ABL-POOL-LAYER*" "\"POOL\"" "layer the kept run ends up on - ABHD's, so the rest of the toolset can read the result reads this banner an...")
      ("*ABL-POINT-LAYER*" "\"POINTS\"" "layer whose POINTs/INSERTs are always points ABHD's, so the rest of the toolset can read the result")
@@ -4782,10 +4782,10 @@
      ("fit:*ruler-ring-frac*" "0.26" "the ring round the current row, as a fraction of the row spacing a fraction of the row spacing")
      ("fit:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
      ("fit:*brk-deep-ladder*" "'(48.0 144.0 12.0)" "deep break off the wall The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per questio...")
-     ("fit:*brk-shal-ladder*" "'(144.0 360.0 24.0)" "shallow break, ditto The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per question,...")
-     ("fit:*hop-side-ladder*" "'(6.0 48.0 6.0)" "hopper in from a side The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per question,...")
-     ("fit:*hop-back-ladder*" "'(6.0 48.0 6.0)" "hopper in from the end The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per question...")
-     ("fit:*tol-ladder*" "'(0.25 2.0 0.25)" "the fit tolerance The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per question, sin...")
+     ("fit:*brk-shal-ladder*" "'(144.0 360.0 24.0)" "shallow break, ditto 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a hopp...")
+     ("fit:*hop-side-ladder*" "'(24.0 72.0 6.0)" "hopper in from a side 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a hop...")
+     ("fit:*hop-back-ladder*" "'(24.0 72.0 6.0)" "hopper in from the end 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a ho...")
+     ("fit:*tol-ladder*" "'(0.25 2.0 0.25)" "the fit tolerance 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a hopper...")
      ("fit:*rect-dirs*" "(list 0.0 (/ pi 2.0) pi (* pi 1.5))" "the template wall directions, one CCW ring per type (see below)")
      ("fit:*grec-dirs*" "(list 0.0 (/ pi 4.0) (/ pi 2.0) (* pi 0.75) pi (* pi 1.25) (* pi 1.5) (* pi 1.75))" "the template wall directions, one CCW ring per type (see below)")
      ("fit:*l-dirs*" "(list 0.0 (/ pi 2.0) pi (* pi 1.5) pi (* pi 1.5))" "")
@@ -5322,7 +5322,8 @@
      ("pool:*cutface-ladder*" "'(3.0 24.0 3.0)" "The two LADDERS those prompts stand on, as (LOW HIGH STEP) in inches. A corner radius comes off an order sh...")
      ("pool:*wallheight-ladder*" "'(36.0 54.0 3.0)" "C, the shallow depth ...and the three the DEPTH chain stands on. A pool's depths are as short a list as its...")
      ("pool:*deepdepth-ladder*" "'(60.0 96.0 6.0)" "D, the deep end ...and the three the DEPTH chain stands on. A pool's depths are as short a list as its corn...")
-     ("pool:*breakdepth-ladder*" "'(36.0 96.0 6.0)" "C2, between the two ...and the three the DEPTH chain stands on. A pool's depths are as short a list as its..."))
+     ("pool:*breakdepth-ladder*" "'(36.0 96.0 6.0)" "C2, between the two ...and the three the DEPTH chain stands on. A pool's depths are as short a list as its...")
+     ("pool:*hopoffset-ladder*" "'(24.0 72.0 6.0)" "...and the one the HOPPER OFFSETS stand on: M and K, the gap the hopper leaves to the top side and to the b..."))
     ("POOLSIDE" "lisp/poolside/POOLSIDE.lsp"
      ("psd:*base*" "(list 0.0 0.0)" "insertion base for this run")
      ("psd:*sysold*" "nil" "the user's sysvars, pending restore")

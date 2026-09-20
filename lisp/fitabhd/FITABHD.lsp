@@ -121,7 +121,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v3.2")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.3")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -375,8 +375,10 @@
 ;; plain typed one it was.
 (setq fit:*brk-deep-ladder* '(48.0 144.0 12.0))  ; deep break off the wall
 (setq fit:*brk-shal-ladder* '(144.0 360.0 24.0)) ; shallow break, ditto
-(setq fit:*hop-side-ladder* '(6.0 48.0 6.0))     ; hopper in from a side
-(setq fit:*hop-back-ladder* '(6.0 48.0 6.0))     ; hopper in from the end
+;; 2' to 6' by 6" on both, which is what POOL and ABHD offer at the
+;; same question: a hopper offset is one number whichever tool asks.
+(setq fit:*hop-side-ladder* '(24.0 72.0 6.0))    ; hopper in from a side
+(setq fit:*hop-back-ladder* '(24.0 72.0 6.0))    ; hopper in from the end
 (setq fit:*tol-ladder* '(0.25 2.0 0.25))         ; the fit tolerance
 
 ;; the template wall directions, one CCW ring per type (see below)

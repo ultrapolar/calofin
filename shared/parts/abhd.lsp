@@ -721,11 +721,15 @@
                                     ; as picking a row rather than as
                                     ; the first point of a measured
                                     ; length
-(setq *PF-HOP-OFF-LADDER* '(6.0 48.0 6.0))
+(setq *PF-HOP-OFF-LADDER* '(24.0 72.0 6.0))
                                     ; the rungs those three prompts
                                     ; offer, as (LOW HIGH STEP) in
-                                    ; inches -- 6" to 4' by 6", the
+                                    ; inches -- 2' to 6' by 6", the
                                     ; offsets a hopper is laid out to.
+                                    ; POOL and FITABHD offer the same
+                                    ; range at the same question: a
+                                    ; hopper offset is one number
+                                    ; whichever tool is asking for it.
                                     ; nil leaves them the plain typed
                                     ; questions they were
 ;; ---- end of tunables -----------------------------------------------
@@ -736,7 +740,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "091926 REV21") ; announced on load.  The
+(setq pf:*version*      "091926 REV22") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
