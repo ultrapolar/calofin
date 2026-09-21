@@ -305,6 +305,83 @@ exit /b 1
 """
 
 
+INSTALL_CMD = r"""@echo off
+rem ---------------------------------------------------------------------
+rem  install.cmd -- put this bundle where AutoCAD looks for it.
+rem
+rem  AutoCAD finds a plugin by scanning ApplicationPlugins under APPDATA.
+rem  That folder lives inside AppData, which Windows HIDES by default,
+rem  so finding it by clicking through Explorer is harder than it should
+rem  be and is the step people get stuck on.  This copies the bundle
+rem  there and prints the path it used.
+rem
+rem  No admin rights needed: APPDATA is your own user profile.
+rem ---------------------------------------------------------------------
+setlocal
+
+set "SRC=%~dp0"
+if "%SRC:~-1%"=="\" set "SRC=%SRC:~0,-1%"
+set "TARGET=%APPDATA%\Autodesk\ApplicationPlugins"
+set "DEST=%TARGET%\Calofin.bundle"
+
+if not exist "%SRC%\PackageContents.xml" (
+  echo.
+  echo   This script has to sit INSIDE the Calofin.bundle folder, beside
+  echo   PackageContents.xml.  Unzip the archive first, open the
+  echo   Calofin.bundle folder, and run install.cmd from there.
+  echo.
+  pause
+  exit /b 1
+)
+
+if /i "%SRC%"=="%DEST%" (
+  echo.
+  echo   Already installed - this IS the installed copy:
+  echo     %DEST%
+  echo.
+  echo   Start AutoCAD and type CALVER.
+  echo.
+  pause
+  exit /b 0
+)
+
+if exist "%DEST%\PackageContents.xml" echo   Replacing the copy already in %TARGET%
+
+if not exist "%TARGET%" mkdir "%TARGET%" 2>nul
+if not exist "%TARGET%" goto :failed
+
+xcopy "%SRC%" "%DEST%" /E /I /Y /Q >nul
+if errorlevel 1 goto :failed
+
+echo.
+echo   Installed:
+echo     %DEST%
+echo.
+echo   1. Start AutoCAD and type CALVER - it lists everything that
+echo      loaded.  LAZPANEL opens the tool panel.  That is the AutoLISP
+echo      half and it needs nothing else installed.
+echo.
+echo   2. For the ribbon tab and the palette, run build-net.cmd in the
+echo      folder above - pass your AutoCAD year if it is 2025 or later,
+echo      e.g.  build-net.cmd 2025  - then restart AutoCAD.
+echo.
+pause
+exit /b 0
+
+:failed
+echo.
+echo   COULD NOT COPY.  Do it by hand - put the Calofin.bundle folder in:
+echo.
+echo     %TARGET%
+echo.
+echo   To open that folder: press Win+R, paste the line above, press
+echo   Enter.  %%APPDATA%% works there even though AppData is hidden.
+echo.
+pause
+exit /b 1
+"""
+
+
 def install_doc(dlls_present, commands):
     return """# Installing Calofin %(version)s
 
@@ -315,13 +392,21 @@ with the .NET SDK.
 
 ## 1. The tools (no build, ~2 minutes)
 
-Copy `%(bundle)s` into:
+**Double-click `install.cmd` inside `%(bundle)s`.**  It copies the
+bundle where AutoCAD looks and prints the path it used.  That is the
+whole of this step.
+
+It exists because the destination is inside `AppData`, which Windows
+hides by default, so clicking your way there is harder than it should
+be.  To do it by hand instead: press **Win+R**, paste
 
 ```
-%%APPDATA%%\\Autodesk\\ApplicationPlugins\\
+%%APPDATA%%\\Autodesk\\ApplicationPlugins
 ```
 
-so that you end up with
+and press Enter -- `%%APPDATA%%` resolves even though the folder is
+hidden.  Create `ApplicationPlugins` if it is not there yet, and copy
+`%(bundle)s` in, so that you end up with
 `%%APPDATA%%\\Autodesk\\ApplicationPlugins\\%(bundle)s\\PackageContents.xml`.
 
 Start AutoCAD.  That is all of it -- AutoCAD reads the manifest and loads
@@ -489,6 +574,7 @@ def build(with_dll=None, with_ribbon_dll=None):
     built = bool(with_dll) and bool(with_ribbon_dll)
     (root / "PackageContents.xml").write_text(manifest(built))
     (root / "build-net.cmd").write_text(BUILD_CMD)
+    (root / "install.cmd").write_text(INSTALL_CMD)
     (root / "INSTALL.md").write_text(install_doc(built, commands))
 
     zpath = DIST / ("Calofin-%s-%s.zip"
