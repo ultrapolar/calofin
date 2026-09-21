@@ -4,19 +4,31 @@
     <!-- Which AutoCAD you are building for, switchable from the command
          line so no file has to be edited:
 
-           2021-2024   -p:AcadApi=24.3.0 -p:TargetFramework=net48   (default)
+           2018-2024   -p:AcadApi=22.0.0 -p:TargetFramework=net46   (default)
+           2019-2020   -p:AcadApi=23.0.0 -p:TargetFramework=net47
+           2021-2024   -p:AcadApi=24.3.0 -p:TargetFramework=net48
            2025        -p:AcadApi=25.0.0 -p:TargetFramework=net8.0-windows
            2026        -p:AcadApi=25.1.1 -p:TargetFramework=net10.0-windows
            2027        -p:AcadApi=26.0.0 -p:TargetFramework=net10.0-windows
 
-         The pairs are not interchangeable: AutoCAD loads a plugin
-         in-process against the runtime it was built for, and each
-         AutoCAD.NET version targets exactly one. -->
-    <AcadApi Condition="'$(AcadApi)' == ''">24.3.0</AcadApi>
+         The DEFAULT is the oldest release these tools claim -- 2018,
+         which is what 41 of the .lsp headers say and what the bundle
+         manifest's SeriesMin now agrees with.  Building against the
+         oldest you support is what keeps one DLL loadable on all of
+         2018-2024; a build against 24.3.0 can reach an API that is
+         simply not in 2018 and fails at run time, where nothing points
+         at the build.  tools/check_netapi.py --refs, against the 2018
+         reference assemblies, is what says our code does not.
+
+         2025 moved to .NET Core and needs a build of its own.  The
+         pairs are not interchangeable either way: AutoCAD loads a
+         plugin in-process against the runtime it was built for, and
+         each AutoCAD.NET version targets exactly one. -->
+    <AcadApi Condition="'$(AcadApi)' == ''">22.0.0</AcadApi>
   </PropertyGroup>
 
   <PropertyGroup>
-    <TargetFramework Condition="'$(TargetFramework)' == ''">net48</TargetFramework>
+    <TargetFramework Condition="'$(TargetFramework)' == ''">net46</TargetFramework>
     <RootNamespace>Calofin.Ribbon</RootNamespace>
     <AssemblyName>CalofinRibbon</AssemblyName>
     <UseWPF>true</UseWPF>

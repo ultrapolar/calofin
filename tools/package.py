@@ -134,10 +134,19 @@ def ribbon_payload():
 def manifest(dlls_present):
     """PackageContents.xml, the file AutoCAD actually reads.
 
-    SeriesMin R23.0 is AutoCAD 2019, which is what the .lsp headers say
-    they target ("AutoCAD 2018 and later" plus the 2019 DCL behaviour the
-    forms rely on).  Platform is left as ``AutoCAD*`` so the verticals
-    load it too -- Civil 3D is where a good deal of this work happens.
+    SeriesMin R22.0 is AutoCAD **2018**, which is what the .lsp headers
+    actually say ("AutoCAD 2018 and later", in 41 of them).  It read
+    R23.0 -- 2019 -- for no reason anyone wrote down, and that is not a
+    harmless extra year of caution: AutoCAD does not warn about a
+    RuntimeRequirements it fails, it silently skips the whole component.
+    A shop on 2018 would have installed this bundle, started AutoCAD,
+    and found not one of the 94 commands, with nothing anywhere saying
+    why.  ``tools/check_netapi.py --refs`` against the 2018 reference
+    assemblies (AutoCAD.NET 22.0.0) resolves every type and member both
+    .NET surfaces call, so the floor is real and not a guess.
+
+    Platform is left as ``AutoCAD*`` so the verticals load it too --
+    Civil 3D is where a good deal of this work happens.
     """
     net = """
   <!-- THE PALETTE.  LoadOnCommandInvocation, which is what lets this
@@ -147,7 +156,7 @@ def manifest(dlls_present):
        tool in the bundle above works regardless.  Build it with
        build-net.cmd; see INSTALL.md. -->
   <Components Description="The Calofin palette (.NET, built separately)">
-    <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R23.0" />
+    <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R22.0" />
     <ComponentEntry AppName="CalofinPalette"
                     Version="%(version)s"
                     ModuleName="./Contents/net/Calofin.dll"
@@ -174,7 +183,7 @@ def manifest(dlls_present):
        the slot and AutoCAD logs the missing module once per startup -
        INSTALL.md says so.  Every AutoLISP tool is unaffected. -->
   <Components Description="The Calofin ribbon (.NET, built separately)">
-    <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R23.0" />
+    <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R22.0" />
     <ComponentEntry AppName="CalofinRibbon"
                     Version="%(version)s"
                     ModuleName="./Contents/net/CalofinRibbon.dll"
@@ -214,7 +223,7 @@ def manifest(dlls_present):
        the build is quiet inside itself - *calofin-quiet* stops 63
        greetings from scrolling past in every drawing opened. -->
   <Components Description="Calofin AutoLISP tools (%(commands)d commands)">
-    <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R23.0" />
+    <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R22.0" />
     <ComponentEntry AppName="CalofinLisp"
                     Version="%(version)s"
                     ModuleName="./Contents/lisp/LAZPASS.lsp"
@@ -256,23 +265,38 @@ rem  which is where the DLLs land and therefore where BottomCatalog and
 rem  LoadIcon look for them.  Each project's own copy step finds nothing
 rem  to do here, which is right.
 rem
-rem  WHICH AUTOCAD.  Pass the year; the default is 2024.  AutoCAD loads
-rem  a plugin in-process against the runtime it was built for, so the
-rem  pairs below are not interchangeable and a DLL built for the wrong
-rem  one does not load:
+rem  WHICH AUTOCAD.  Pass the year.  The default is 2018, the oldest
+rem  release these tools claim, and a build against it also loads on
+rem  2019-2024 -- building against the OLDEST you support is how a
+rem  plugin stays loadable on all of them.  2025 moved to .NET Core and
+rem  needs a build of its own.
 rem
-rem      build-net.cmd          2021-2024   net48            AutoCAD.NET 24.3.0
+rem      build-net.cmd          2018-2024   net46            AutoCAD.NET 22.0.0
+rem      build-net.cmd 2019     2019-2020   net47            AutoCAD.NET 23.0.0
+rem      build-net.cmd 2021     2021-2024   net48            AutoCAD.NET 24.3.0
 rem      build-net.cmd 2025     2025        net8.0-windows   AutoCAD.NET 25.0.0
 rem      build-net.cmd 2026     2026        net10.0-windows  AutoCAD.NET 25.1.1
 rem      build-net.cmd 2027     2027        net10.0-windows  AutoCAD.NET 26.0.0
 rem
-rem  2025 and later need the matching .NET SDK installed (8 or 10).
+rem  Each needs its TARGETING PACK, which the SDK does not carry: the
+rem  .NET Framework Developer Pack for that version (4.6 / 4.7 / 4.8),
+rem  or the matching .NET SDK (8 or 10) for 2025 and later.  If the
+rem  build stops on MSB3644 naming a version, that is the one to
+rem  install.  net48 also works for 2018 if 4.8 is on the machine -
+rem  .NET Framework 4.x is one in-place runtime - so that is the
+rem  fallback when only the 4.8 pack is available.
 rem ---------------------------------------------------------------------
 setlocal
 cd /d "%~dp0"
 
-set "ACADAPI=24.3.0"
-set "ACADTFM=net48"
+set "ACADAPI=22.0.0"
+set "ACADTFM=net46"
+if /i "%~1"=="2019" ( set "ACADAPI=23.0.0" & set "ACADTFM=net47" )
+if /i "%~1"=="2020" ( set "ACADAPI=23.1.0" & set "ACADTFM=net47" )
+if /i "%~1"=="2021" ( set "ACADAPI=24.3.0" & set "ACADTFM=net48" )
+if /i "%~1"=="2022" ( set "ACADAPI=24.3.0" & set "ACADTFM=net48" )
+if /i "%~1"=="2023" ( set "ACADAPI=24.3.0" & set "ACADTFM=net48" )
+if /i "%~1"=="2024" ( set "ACADAPI=24.3.0" & set "ACADTFM=net48" )
 if /i "%~1"=="2025" ( set "ACADAPI=25.0.0" & set "ACADTFM=net8.0-windows" )
 if /i "%~1"=="2026" ( set "ACADAPI=25.1.1" & set "ACADTFM=net10.0-windows" )
 if /i "%~1"=="2027" ( set "ACADAPI=26.0.0" & set "ACADTFM=net10.0-windows" )
@@ -443,20 +467,32 @@ the runtime it was built for, so a DLL built for the wrong one simply
 does not load:
 
 ```
-build-net.cmd            for AutoCAD 2021-2024   (net48)
-build-net.cmd 2025       for AutoCAD 2025        (.NET 8 SDK)
-build-net.cmd 2026       for AutoCAD 2026        (.NET 10 SDK)
-build-net.cmd 2027       for AutoCAD 2027        (.NET 10 SDK)
+build-net.cmd            AutoCAD 2018-2024  (net46, the default)
+build-net.cmd 2019       AutoCAD 2019-2020  (net47)
+build-net.cmd 2021       AutoCAD 2021-2024  (net48)
+build-net.cmd 2025       AutoCAD 2025       (.NET 8 SDK)
+build-net.cmd 2026       AutoCAD 2026       (.NET 10 SDK)
+build-net.cmd 2027       AutoCAD 2027       (.NET 10 SDK)
 ```
+
+The default builds against the **2018** API, which is the oldest these
+tools claim -- and one such build loads on 2018 through 2024, because a
+plugin built against the oldest release you support stays loadable on
+every release above it.  Only take a later line if you want the newer
+API, or if you are on 2025+.
 
 It runs `dotnet build` twice and copies `Calofin.dll` and
 `CalofinRibbon.dll` into `Contents\\net\\`, which are the slots the
 manifest already points at.  Restart AutoCAD: the **Calofin** ribbon tab
 is there by itself, and `CALOFIN` opens the palette.
 
-If the 2021-2024 build stops on **MSB3644** ("reference assemblies for
-.NETFramework,Version=v4.8 were not found"), install the .NET Framework
-4.8 **Developer Pack** -- the SDK does not carry targeting packs.
+If the build stops on **MSB3644** ("reference assemblies for
+.NETFramework,Version=vX.Y were not found"), install the .NET Framework
+**Developer Pack** for the version it names -- the SDK does not carry
+targeting packs.  If only the 4.8 pack is available, `build-net.cmd
+2021` works for AutoCAD 2018 too, as long as .NET Framework 4.8 is
+installed on the machine that will run it: 4.x is one in-place runtime,
+so a net48 assembly loads in AutoCAD 2018 perfectly well.
 
 **Until you do that**, typing `CALOFIN` reports a missing module and
 there is no ribbon tab -- the manifest names both either way, on

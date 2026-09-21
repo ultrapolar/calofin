@@ -38,17 +38,34 @@ dotnet build ui/calofin_net/Calofin.vbproj -c Release
 
 | AutoCAD | TargetFramework | AutoCAD.NET | build with |
 | --- | --- | --- | --- |
-| 2021-2024 | `net48` | `24.3.0` | (default) |
-| 2025 | `net8.0-windows` | `25.0.0` | `-p:AcadApi=25.0.0 -p:TargetFramework=net8.0-windows` |
-| 2026 | `net10.0-windows` | `25.1.1` | `-p:AcadApi=25.1.1 -p:TargetFramework=net10.0-windows` |
-| 2027 | `net10.0-windows` | `26.0.0` | `-p:AcadApi=26.0.0 -p:TargetFramework=net10.0-windows` |
+| **2018-2024** | `net46` | `22.0.0` | **(default)** |
+| 2019-2020 | `net47` | `23.0.0` | `build-net.cmd 2019` |
+| 2021-2024 | `net48` | `24.3.0` | `build-net.cmd 2021` |
+| 2025 | `net8.0-windows` | `25.0.0` | `build-net.cmd 2025` |
+| 2026 | `net10.0-windows` | `25.1.1` | `build-net.cmd 2026` |
+| 2027 | `net10.0-windows` | `26.0.0` | `build-net.cmd 2027` |
+
+**The default is the oldest release these tools claim**, and that is
+deliberate: building against the oldest you support is what keeps one
+DLL loadable on every release above it. A build against `24.3.0` can
+reach an API that is not in 2018 and fail at run time, where nothing
+points back at the build. `tools/check_netapi.py --refs`, run against
+the 2018 reference assemblies, is what says our code does not -- all 26
+types and every member resolve there.
 
 Nothing has to be edited to switch: both project files take `AcadApi`
-and `TargetFramework` from the command line, and the bundle's
-`build-net.cmd` takes the year (`build-net.cmd 2025`). The pairs are
-not interchangeable -- AutoCAD loads a plugin in-process against the
-runtime it was built for, and each `AutoCAD.NET` version targets
-exactly one.
+and `TargetFramework` from the command line (`dotnet build ...
+-p:AcadApi=25.0.0 -p:TargetFramework=net8.0-windows`), and the bundle's
+`build-net.cmd` takes the year. The pairs are not interchangeable --
+AutoCAD loads a plugin in-process against the runtime it was built for,
+and each `AutoCAD.NET` version targets exactly one.
+
+Each needs its **targeting pack**, which the SDK does not carry: the
+.NET Framework Developer Pack for 4.6 / 4.7 / 4.8, or the matching .NET
+SDK for 2025 and later. `MSB3644` naming a version is that, and names
+the one to install. `net48` also works for AutoCAD 2018 when only the
+4.8 pack is available -- .NET Framework 4.x is one in-place runtime --
+provided 4.8 is on the machine that will run it.
 
 **Two packages, not one.** `AutoCAD.NET` carries `AcMgd`, `AcCoreMgd`
 and `AdWindows`; `AcDbMgd` is in `AutoCAD.NET.Model`, which the first
