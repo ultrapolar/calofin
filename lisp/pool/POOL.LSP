@@ -124,7 +124,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091926 REV36")
+(setq pool:*version* "092126 REV37")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -2592,10 +2592,23 @@
         (distance a c) (distance b d)))
 
 ;; Cross-dim error of a quad; a nil target (NA) contributes nothing.
-(defun pool:diagerr (q dac dbd / e1 e2)
-  (setq e1 (if dac (- (distance (car q) (caddr q)) dac) 0.0)
-        e2 (if dbd (- (distance (cadr q) (cadddr q)) dbd) 0.0))
-  (+ (* e1 e1) (* e2 e2)))
+;; With BOTH cross dims NA there is no target to hold the shape to, so
+;; the two diagonals are pulled toward EACH OTHER instead -- the same
+;; squareness test a diagonal tape check makes (equal diagonals ->
+;; square).  That spreads the out-of-squareness the four sides imply
+;; across the whole quad instead of pinning corner A to exactly 90 and
+;; letting the other three corners absorb whatever is left.
+(defun pool:diagerr (q dac dbd / ac bd e1 e2)
+  (setq ac (distance (car q) (caddr q))
+        bd (distance (cadr q) (cadddr q)))
+  (cond
+    ((and (null dac) (null dbd))
+     (setq e1 (- ac bd))
+     (* e1 e1))
+    (t
+     (setq e1 (if dac (- ac dac) 0.0)
+           e2 (if dbd (- bd dbd) 0.0))
+     (+ (* e1 e1) (* e2 e2)))))
 
 ;; Quad with all four sides EXACT, parameterised by the interior angle
 ;; at corner A (four-bar linkage).  Returns (A B C D) or nil.
@@ -2627,22 +2640,22 @@
 
 ;; Best quad with sides held EXACTLY true, cross dims as close as
 ;; possible.  Coarse scan then fine refine.  Returns quad or nil.
-;; With both cross dims NA there is nothing to skew for: square up.
+;; With both cross dims NA, pool:diagerr scores the equal-diagonals
+;; test instead of a target miss, so this same scan lands on the
+;; angle at A that comes closest to squaring the WHOLE quad rather
+;; than assuming corner A alone is exactly 90.
 (defun pool:fitsides (bo tp le ri dac dbd / r1 r2 alfa)
-  (if (and (null dac) (null dbd))
-      (pool:4bar bo tp le ri (pool:d2r 90.0))
+  (setq r1 (pool:scanalfa bo tp le ri dac dbd
+                          (pool:d2r pool:*alfa-lo*) (pool:d2r pool:*alfa-hi*)
+                          (pool:d2r pool:*alfa-step*)))
+  (if r1
       (progn
-        (setq r1 (pool:scanalfa bo tp le ri dac dbd
-                                (pool:d2r pool:*alfa-lo*) (pool:d2r pool:*alfa-hi*)
-                                (pool:d2r pool:*alfa-step*)))
-        (if r1
-            (progn
-              (setq alfa (cadr r1)
-                    r2 (pool:scanalfa bo tp le ri dac dbd
-                                      (- alfa (pool:d2r pool:*alfa-fine*))
-                                      (+ alfa (pool:d2r pool:*alfa-fine*))
-                                      (pool:d2r pool:*alfa-fstep*)))
-              (car (if r2 r2 r1)))))))
+        (setq alfa (cadr r1)
+              r2 (pool:scanalfa bo tp le ri dac dbd
+                                (- alfa (pool:d2r pool:*alfa-fine*))
+                                (+ alfa (pool:d2r pool:*alfa-fine*))
+                                (pool:d2r pool:*alfa-fstep*)))
+        (car (if r2 r2 r1)))))
 
 (defun pool:setnth (lst i val / k out)
   (setq k 0 out nil)

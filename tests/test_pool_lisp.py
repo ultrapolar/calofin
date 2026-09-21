@@ -32,6 +32,12 @@ def quadmeas(q):
     return (dist(a, b), dist(d, c), dist(a, d), dist(b, c), dist(a, c), dist(b, d))
 
 def diagerr(q, dac, dbd):
+    # With BOTH cross dims NA there is no target to hold to, so the
+    # two diagonals are scored against EACH OTHER instead (the
+    # diagonal-tape squareness test) -- see pool:diagerr in POOL.LSP.
+    if dac is None and dbd is None:
+        e1 = dist(q[0], q[2]) - dist(q[1], q[3])
+        return e1 * e1
     e1 = (dist(q[0], q[2]) - dac) if dac else 0.0
     e2 = (dist(q[1], q[3]) - dbd) if dbd else 0.0
     return e1 * e1 + e2 * e2
@@ -61,8 +67,6 @@ def scanalfa(bo, tp, le, ri, dac, dbd, a0, a1, step):
     return bestq
 
 def fitsides(bo, tp, le, ri, dac, dbd):
-    if dac is None and dbd is None:
-        return fourbar(bo, tp, le, ri, 90 * D2R)
     r1 = scanalfa(bo, tp, le, ri, dac, dbd, 15 * D2R, 165 * D2R, 0.25 * D2R)
     if not r1:
         return None
@@ -2069,5 +2073,26 @@ lab1_old = cornerpoint(mquad, old, 0, 'prev')
 lab2_old = cornerpoint(mquad, old, 0, 'next')
 assert lab1_old == A and lab2_old == A and dist(lab1_old, lab2_old) < 1e-9
 print("   deep-end ties (A, F) use the real cut; dv/E correctly stay square")
+
+print("== 70. quad with both cross dims NA, uneven sides -> equalizes the "
+      "diagonals rather than pinning corner A square ==")
+# bo/tp and le/ri each differ by 4" -- a real out-of-square field call
+# with no diagonals taped.  Pinning corner A to exactly 90 (the old
+# behaviour) leaves the OTHER three corners to absorb all of that
+# unevenness; equalizing the diagonals instead spreads it out.
+bo2, tp2, le2, ri2 = 244.0, 240.0, 124.0, 120.0
+qfix = fourbar(bo2, tp2, le2, ri2, 90 * D2R)
+mfix = quadmeas(qfix)
+qeq = fitsides(bo2, tp2, le2, ri2, None, None)
+meq = quadmeas(qeq)
+print(f"   corner-A-square: AC={mfix[4]:.3f} BD={mfix[5]:.3f} "
+      f"gap={abs(mfix[4]-mfix[5]):.3f}")
+print(f"   equalized:       AC={meq[4]:.3f} BD={meq[5]:.3f} "
+      f"gap={abs(meq[4]-meq[5]):.3f}")
+assert all(abs(meq[i] - t) < 0.01 for i, t in enumerate((bo2, tp2, le2, ri2))), \
+    "sides still held exactly true"
+assert abs(meq[4] - meq[5]) < abs(mfix[4] - mfix[5]) - 0.01, \
+    "equalizing the diagonals must do better than pinning corner A"
+assert abs(meq[4] - meq[5]) < 0.05, "diagonals land essentially equal"
 
 print("\nALL CHECKS PASSED")
