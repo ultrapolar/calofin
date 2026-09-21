@@ -61,7 +61,7 @@
 ;;;  A self-contained file: it carries its own helpers.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.8")
+(setq *poolside-version* "v1.9")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -89,11 +89,11 @@
 (setq psd:*btypes*  "Normal Sport Wedge SLope MOdflat SHallow")
 (setq psd:*btshown* "Normal/Sport/Wedge/SLope/MOdflat/SHallow")
 
-;; Which of those six the bottom-type question offers on Enter.  A shop
-;; that draws Sport all day sets it here and stops typing the word;
-;; every other bottom is still one keyword away.  Any case will do --
-;; a word psd:*btypes* does not list is not one the prompt would take
-;; either, so "Normal" stands.
+;; Which of the six bottoms the bottom-type question offers on Enter.
+;; A shop that draws Sport all day sets it here and stops typing the
+;; word; every other bottom is still one keyword away.  Any case will
+;; do -- a word psd:*btypes* does not list is not one the prompt would
+;; take either, so "Normal" stands.
 (setq psd:*btype-default* "Normal")
 
 ;; Which end the mirror question offers on Enter: "No" leaves the deep
