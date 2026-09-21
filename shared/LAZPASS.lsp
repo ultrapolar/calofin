@@ -13128,7 +13128,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.8")
+(setq *poolside-version* "v1.9")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -13155,11 +13155,11 @@
 (setq psd:*btypes*  "Normal Sport Wedge SLope MOdflat SHallow")
 (setq psd:*btshown* "Normal/Sport/Wedge/SLope/MOdflat/SHallow")
 
-;; Which of those six the bottom-type question offers on Enter.  A shop
-;; that draws Sport all day sets it here and stops typing the word;
-;; every other bottom is still one keyword away.  Any case will do --
-;; a word psd:*btypes* does not list is not one the prompt would take
-;; either, so "Normal" stands.
+;; Which of the six bottoms the bottom-type question offers on Enter.
+;; A shop that draws Sport all day sets it here and stops typing the
+;; word; every other bottom is still one keyword away.  Any case will
+;; do -- a word psd:*btypes* does not list is not one the prompt would
+;; take either, so "Normal" stands.
 (setq psd:*btype-default* "Normal")
 
 ;; Which end the mirror question offers on Enter: "No" leaves the deep
@@ -120884,7 +120884,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.54")
+(setq *lazpanel-version* "v3.55")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -120946,6 +120946,23 @@
 ;; the palette has no reader for either yet.
 (setq lzp:*aliasval* "Alias")
 (setq lzp:*capval* "Caption")
+
+;; The tools a drafter who has never opened LAZHIDE starts with out of
+;; sight.  The panel shows 94 commands and most shops use a fraction of
+;; them; this is the set that is somebody else's job, a one-off, or a
+;; second spelling of a tool already on the panel, so a fresh install
+;; opens on what the shop actually draws with.  Nothing is disabled:
+;; every name here still runs when typed, still answers CALHELP, and
+;; still appears in LAZHIDE itself to be un-ticked.
+;;
+;; It applies ONLY when nothing has been stored yet.  The moment a
+;; drafter ticks or unticks anything their own list is written and this
+;; is never consulted again -- including when they untick everything,
+;; which stores lzp:*hidden-none* so that "I want none hidden" cannot
+;; be read back as "this one has not decided yet".
+(setq lzp:*hidden-default*
+  '("ABCDEF" "ALTABCDEF" "CABHD" "CONSTELLATION" "DRONE" "DRONOTE"
+    "FITABHD" "LHD" "MOHAMADDLE" "TYLERDRONESUITE" "WCALST" "XYPLOT"))
 
 ;; The longest caption LAZNAME will let a drafter set.  A ceiling, not a
 ;; preference: tools/check_dcl.py measures the SHIPPED tables and can
@@ -122377,20 +122394,40 @@
 ;;  more value, "Hidden", on lzp:*pinkey* -- though nothing on the VB
 ;;  side reads it yet.
 
-;; A name no longer on the roster is dropped on read, the same rule
-;; lzp:pins-read and lzp:recent-read already apply to their own lists.
+;; NOT A KNOB: what is stored for "this drafter wants NOTHING hidden".
+;; An empty value cannot say it -- that is what a fresh install looks
+;; like, and lzp:*hidden-default* would come back on the next load --
+;; so the empty list is written as this instead.  It is a stored value
+;; other installs have already read, not a preference: changing it
+;; would read every existing "none" as a name and hide nothing.  No
+;; command is called "-", which is the whole requirement.
+(setq lzp:*hidden-none* "-")
+
+;; NAMES that are still on the roster.  A tool renamed or retired
+;; leaves its name in a stored list and in the shipped default alike,
+;; and neither should survive it -- the same rule lzp:pins-read and
+;; lzp:recent-read already apply to their own lists.
+(defun lzp:on-roster (names)
+  (vl-remove-if-not '(lambda (n) (member n (lzp:commands))) names))
+
+;; Nothing stored yet is a fresh install, and takes the shipped set;
+;; lzp:*hidden-none* is a drafter who has decided on none.
 (defun lzp:hidden-read ( / s)
   (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* "Hidden")))
+  (if (not (and (not (vl-catch-all-error-p s)) (= (type s) 'STR)))
+    (setq s ""))
   (setq lzp:*hidden*
-    (if (and (not (vl-catch-all-error-p s)) (= (type s) 'STR) (/= s ""))
-      (vl-remove-if-not '(lambda (n) (member n (lzp:commands)))
-                        (lzp:split s ";"))))
+    (cond
+      ((= s "") (lzp:on-roster lzp:*hidden-default*))
+      ((= s lzp:*hidden-none*) nil)
+      (t (lzp:on-roster (lzp:split s ";")))))
   lzp:*hidden*)
 
 (defun lzp:hidden-write ( / s n)
   (setq s "")
   (foreach n lzp:*hidden*
     (setq s (strcat s (if (= s "") "" ";") n)))
+  (if (= s "") (setq s lzp:*hidden-none*))
   (vl-catch-all-apply 'vl-registry-write (list lzp:*pinkey* "Hidden" s))
   lzp:*hidden*)
 
@@ -122577,13 +122614,31 @@
 ;; three columns of twenty-eight is the same 1085px that stopped "Rest"
 ;; opening, on the one dialog that grows every time ANY tool is added.
 ;; Sharing the page budget means it cannot drift out of step again.
+;; NAMES in A-Z order, as a copy.  The roster's own order is the
+;; PANEL's -- by page, then by column, which is where a tool lives and
+;; how the grid is read -- and that does not change.  The two
+;; checklists are the other question: they put all 94 commands in front
+;; of a drafter at once, where the only thing being asked is "find the
+;; one I want", and hunting for it down six columns of category order
+;; is the same complaint the naming convention already earns.  Sorted
+;; on the UPCASED name so the order does not depend on a roster that is
+;; all capitals today staying that way.
+(defun lzp:ins-sorted (n lst)
+  (cond ((null lst) (list n))
+        ((< (strcase n) (strcase (car lst))) (cons n lst))
+        (t (cons (car lst) (lzp:ins-sorted n (cdr lst))))))
+
+(defun lzp:sorted (names / out n)
+  (foreach n names (setq out (lzp:ins-sorted n out)))
+  out)
+
 (defun lzp:dcl-pins ( / out col c)
   (setq out (list "lazpanel_pins : dialog {"
                   "  label = \"LazPanel  -  pinned tools\";"
                   (strcat "  : text { key = \"pinmsg\"; label = \"Ticked "
                           "tools sit in the Pinned row on every page.\"; }")
                   "  : row {"))
-  (foreach col (lzp:wrap (lzp:commands))
+  (foreach col (lzp:wrap (lzp:sorted (lzp:commands)))
     (setq out (append out (list "    : column {")))
     (foreach c col
       (setq out (append out
@@ -122610,7 +122665,7 @@
                   (strcat "  : text { key = \"hidemsg\"; label = \"Ticked "
                           "tools stop appearing anywhere on the panel.\"; }")
                   "  : row {"))
-  (foreach col (lzp:wrap (lzp:commands))
+  (foreach col (lzp:wrap (lzp:sorted (lzp:commands)))
     (setq out (append out (list "    : column {")))
     (foreach c col
       (setq out (append out
@@ -122798,7 +122853,7 @@
   (cond
     ((not (new_dialog "lazpanel_hidden" dcl)) nil)
     (t
-     (foreach n (lzp:commands)
+     (foreach n (lzp:sorted (lzp:commands))
        (set_tile (strcat "hd_" n) (if (lzp:hidden-p n) "1" "0"))
        (action_tile (strcat "hd_" n)
                     (strcat "(lzp:hide-toggle \"" n "\" $value)")))
@@ -125638,6 +125693,7 @@
      ("lzp:*pinkey*" "\"HKEY_CURRENT_USER\\\\Software\\\\Calofin\\\\LazPanel\"" "Where pins and recents live: one registry key, values \"Pins\" and \"Recent\", names joined with \";\". THE VB PA...")
      ("lzp:*aliasval*" "\"Alias\"" "The two per-user maps LAZNAME writes, on that same key. Named here rather than spelled at the call sites so...")
      ("lzp:*capval*" "\"Caption\"" "The two per-user maps LAZNAME writes, on that same key. Named here rather than spelled at the call sites so...")
+     ("lzp:*hidden-default*" "'(\"ABCDEF\" \"ALTABCDEF\" \"CABHD\" \"CONSTELLATION\" \"DRONE\" \"DRONOTE\" \"FITABHD\" \"LHD\" \"MOHAMADDLE\" \"TYLERDRONESUITE\" \"WCALST\" \"XYPLOT\")" "The tools a drafter who has never opened LAZHIDE starts with out of sight. The panel shows 94 commands and...")
      ("lzp:*capmax*" "40" "The longest caption LAZNAME will let a drafter set. A ceiling, not a preference: tools/check_dcl.py measure...")
      ("lzp:*pinbudget*" "84" "How wide, in DCL character cells, a row of pinned or recent buttons may be before the next button starts a...")
      ("lzp:*colbudget*" "16" "How many captioned buttons may stack in ONE column before a page is split into more columns. The width budg...")
@@ -126126,7 +126182,7 @@
      ("psd:*hi-col*" "1" "highlight color (red) it for the background (grey either way round), a number is used as given")
      ("psd:*btypes*" "\"Normal Sport Wedge SLope MOdflat SHallow\"" "The six bottom types, POOL's own keywords and capitalization -- the palette and the field sheets both speak...")
      ("psd:*btshown*" "\"Normal/Sport/Wedge/SLope/MOdflat/SHallow\"" "The six bottom types, POOL's own keywords and capitalization -- the palette and the field sheets both speak...")
-     ("psd:*btype-default*" "\"Normal\"" "Which of those six the bottom-type question offers on Enter. A shop that draws Sport all day sets it here a...")
+     ("psd:*btype-default*" "\"Normal\"" "Which of the six bottoms the bottom-type question offers on Enter. A shop that draws Sport all day sets it...")
      ("psd:*mirror-default*" "\"No\"" "Which end the mirror question offers on Enter: \"No\" leaves the deep end on the LEFT, the way the letters ar...")
      ("psd:*ruler-layer*" "\"POOLSIDE-RULER\"" "scratch layer the rows go on The LENGTH RULER beside the DEPTH prompts. A pool's depths are a short list: a...")
      ("psd:*ruler-color*" "3" "ACI colour of the rows you can PICK The LENGTH RULER beside the DEPTH prompts. A pool's depths are a short...")

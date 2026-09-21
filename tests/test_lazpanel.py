@@ -1037,7 +1037,13 @@ vm = stubbed()
 run(vm, 'c:LAZPANEL', 'close')
 assert not vm.globals.get('stub:*ran*'), "Close launched something"
 written = [str(l) for l in reversed(vm.globals.get('stub:*written*'))]
-assert written == dcl, "written DCL differs from lzp:dcl-lines"
+vm.loads('(setq test:*dcl2* (lzp:dcl-lines))')
+assert written == [str(l) for l in vm.globals['test:*dcl2*']], \
+    "written DCL differs from lzp:dcl-lines"
+# ...and that state is not the bare one: a fresh store hides the
+# shipped set, so the panel it drew is NOT the whole roster
+assert written != dcl, \
+    "c:LAZPANEL drew the full roster -- lzp:*hidden-default* never reached it"
 assert events(vm) == DIALOG, events(vm)
 vm.loads('(setq test:*n* (lzp:dlgname "%s"))' % GROUPS[0])
 assert str(vm.globals.get('stub:*dlgname*')) == str(vm.globals['test:*n*']), \
@@ -1061,8 +1067,15 @@ for g in GROUPS:
     assert 'tab_%s' % g in acts, "no tab callback for %s" % g
 strays = acts & (set(PANEL) - set(first))
 assert not strays, "another page's commands were bound too: %r" % sorted(strays)
-# the status line still counts the WHOLE roster, not just this page
-assert '1 of %d' % len(PANEL) in str(vm.globals.get('stub:*status*'))
+# the status line counts every tool the panel is SHOWING, not just the
+# ones on this page -- so the whole roster less whatever is hidden,
+# which on a fresh store is lzp:*hidden-default*
+vm.loads('(setq test:*vis* (length (lzp:visible)))')
+VIS = int(str(vm.globals['test:*vis*']))
+assert VIS == len(PANEL) - 12, \
+    "the shipped hidden set is %d, not 12" % (len(PANEL) - VIS)
+assert '1 of %d' % VIS in str(vm.globals.get('stub:*status*')), \
+    vm.globals.get('stub:*status*')
 disabled = set(map(str, vm.globals.get('stub:*disabled*')))
 assert disabled == set(first) - {LIVE}, disabled ^ (set(first) - {LIVE})
 assert vm.globals.get('lzp:*pick*') is None, "pick survived the run"
@@ -1086,6 +1099,12 @@ print("   only the first page's %d commands bound, only %s enabled"
 wired_anywhere, greyed_anywhere = set(), set()
 for gname in GROUPS:
     gv = stubbed()
+    # This is a LAYOUT check -- every tool on the roster has a button
+    # on some page -- so it runs as a drafter who hides nothing.  The
+    # shipped lzp:*hidden-default* would otherwise take twelve tools
+    # off the pages and mask a tool genuinely left off all of them,
+    # which is the one thing this loop exists to catch.
+    gv.loads('(defun vl-registry-read (k n) lzp:*hidden-none*)')
     gv.loads('(setq lzp:*page* "%s")' % gname)
     run(gv, 'c:LAZPANEL', 'page ' + gname)
     assert str(gv.globals.get('stub:*dlgname*')) == \
@@ -2032,10 +2051,17 @@ print("== LAZHIDE: the hide editor, end to end ==")
 HIDE = 'AUTODIM'
 
 
-def hidevm(rc, click=None, val="1", stored=""):
+def hidevm(rc, click=None, val="1", stored="-"):
     """A stubbed session whose registry holds STORED under "Hidden",
     with the hide dialog scripted to fire CLICK and then return RC (1
-    accept, 0 cancel)."""
+    accept, 0 cancel).
+
+    STORED defaults to "-", lzp:*hidden-none*: a drafter who has been
+    here and hidden nothing.  It is NOT "" -- that is a store nobody
+    has written yet, and the panel reads it as a fresh install and
+    hides lzp:*hidden-default*.  The difference between those two is
+    the whole point of the sentinel, and the cases below are about
+    what ticking does, not about what a new install starts with."""
     v = stubbed()
     v.loads('(setq t:*reg* "%s")' % stored)
     v.loads('(defun vl-registry-read (k n) t:*reg*)')
@@ -2085,7 +2111,7 @@ vm = hidevm(0, click=HIDE)
 run(vm, 'c:LAZHIDE', 'hide-cancel')
 assert not (vm.globals.get('lzp:*hidden*') or []), \
     "cancel kept the tick: %r" % vm.globals.get('lzp:*hidden*')
-assert str(vm.globals.get('t:*reg*')) == "", \
+assert str(vm.globals.get('t:*reg*')) == "-", \
     "cancel wrote to the registry: %r" % vm.globals.get('t:*reg*')
 print("   cancelling re-reads the store, so the tick is discarded")
 
@@ -2094,9 +2120,51 @@ vm = hidevm(1, click=HIDE, val="0", stored=HIDE)
 run(vm, 'c:LAZHIDE', 'hide-untick')
 assert not (vm.globals.get('lzp:*hidden*') or []), \
     "un-ticking left it hidden: %r" % vm.globals.get('lzp:*hidden*')
-assert str(vm.globals.get('t:*reg*')) == "", \
+assert str(vm.globals.get('t:*reg*')) == "-", \
     "un-ticking did not clear the store: %r" % vm.globals.get('t:*reg*')
 print("   un-ticking a hidden tool and accepting un-hides it")
+
+# THE SHIPPED SET.  A drafter who has never opened this dialog starts
+# with lzp:*hidden-default* out of sight -- the panel shows 94 tools
+# and most shops use a fraction of them.
+vm = hidevm(1, stored="")
+vm.loads('(setq t:*d* (lzp:hidden-read))')
+shipped = [str(x) for x in vm.globals['t:*d*']]
+vm.loads('(setq t:*def* lzp:*hidden-default*)')
+assert shipped == [str(x) for x in vm.globals['t:*def*']], shipped
+assert len(shipped) == 12, shipped
+assert set(shipped) <= set(PANEL), \
+    "the shipped set names a tool that is not on the roster: %r" % (
+        sorted(set(shipped) - set(PANEL)))
+print("   a store nobody has written yet starts on the shipped %d" % len(shipped))
+
+# ...and the moment they untick the lot, that is remembered as a
+# DECISION rather than read back as silence on the next load
+vm = hidevm(1, stored="")
+vm.loads('(lzp:hidden-read) (setq lzp:*hidden* nil) (lzp:hidden-write)')
+assert str(vm.globals.get('t:*reg*')) == "-", vm.globals.get('t:*reg*')
+vm.loads('(setq t:*e* (lzp:hidden-read))')
+assert not (vm.globals.get('t:*e*') or []), \
+    "unticking everything let the shipped set come back: %r" % vm.globals.get('t:*e*')
+print("   ...and unticking them all sticks: the shipped set does not return")
+
+# a name the shipped set carries that the roster has since lost is
+# dropped on read, the same rule a stored list already obeys
+vm = hidevm(1, stored="")
+vm.loads('(setq lzp:*hidden-default* (list "SPA" "NOSUCHTOOL"))')
+vm.loads('(setq t:*f* (lzp:hidden-read))')
+assert [str(x) for x in vm.globals['t:*f*']] == ["SPA"], vm.globals['t:*f*']
+print("   a retired name in the shipped set is dropped, as in a stored one")
+
+# the checklist is A-Z, so a drafter finds the tool they came for
+vm = hidevm(1)
+run(vm, 'c:LAZHIDE', 'hide-order')
+shown = [str(l) for l in reversed(vm.globals.get('stub:*written*') or [])]
+order = [l.split('"')[1] for l in shown if 'key = "hd_' in l and 'label = "' in l]
+assert order == sorted(order), \
+    "the hide checklist is not alphabetical: %r" % order[:12]
+assert len(order) == len(PANEL), len(order)
+print("   its %d toggles are in A-Z order, not page order" % len(order))
 
 # a dialog file that cannot be written, and one that cannot be loaded:
 # both are reported, and the unloadable one still deletes its temp file
