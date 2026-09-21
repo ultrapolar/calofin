@@ -2146,11 +2146,11 @@ print("   the Theme dropdown is filled and opens on the stored answer")
 
 # every role's family dropdown is filled too, Auto first and Custom
 # last, and opens on Auto when nothing is stored for it
-vm.loads('(setq t:*famlist* (cdr (assoc "inkfam_flag" stub:*lists*)))')
+vm.loads('(setq t:*famlist* (cdr (assoc "inkfam_orig" stub:*lists*)))')
 famlist = [str(x) for x in vm.globals['t:*famlist*']]
 assert famlist[0] == 'Auto' and famlist[-1].startswith('Custom'), famlist
-assert tile(vm, 'inkfam_flag') == '0', \
-    "an unset role did not open on Auto: %r" % tile(vm, 'inkfam_flag')
+assert tile(vm, 'inkfam_orig') == '0', \
+    "an unset role did not open on Auto: %r" % tile(vm, 'inkfam_orig')
 print("   every role's family dropdown is filled the same way, Auto by default")
 
 # picking Dark and accepting writes the profile AND the registry copy
@@ -2165,40 +2165,40 @@ print("   picking a theme and accepting writes the profile and the registry")
 
 # a family pick lands its preset's ACI under CalofinInk-<ROLE> -- index
 # 1 is the first preset, Red
-vm = setvm([1], click='inkfam_flag', val='1')
+vm = setvm([1], click='inkfam_orig', val='1')
 run(vm, 'c:LAZSET', 'set-ink-family')
 vm.loads('(setq t:*red* (cadr (assoc "Red" lzp:*inkpresets*)))')
-assert prof(vm, 'CalofinInk-FLAG') == str(vm.globals['t:*red*']), \
-    (prof(vm, 'CalofinInk-FLAG'), vm.globals['t:*red*'])
+assert prof(vm, 'CalofinInk-ORIG') == str(vm.globals['t:*red*']), \
+    (prof(vm, 'CalofinInk-ORIG'), vm.globals['t:*red*'])
 print("   a family pick lands its preset's ACI under CalofinInk-<ROLE>")
 
 # ...and index 0, Auto, puts that role back to auto -- the same job an
 # emptied box used to do when there was only one box
-vm = setvm([1], click='inkfam_flag', val='0', env={'CalofinInk-FLAG': '42'})
+vm = setvm([1], click='inkfam_orig', val='0', env={'CalofinInk-ORIG': '42'})
 run(vm, 'c:LAZSET', 'set-ink-clear')
-assert prof(vm, 'CalofinInk-FLAG') == '', \
-    "picking Auto did not go back to auto: %r" % prof(vm, 'CalofinInk-FLAG')
+assert prof(vm, 'CalofinInk-ORIG') == '', \
+    "picking Auto did not go back to auto: %r" % prof(vm, 'CalofinInk-ORIG')
 print("   ...and picking Auto puts the role back to auto")
 
 # the hex box snaps to the nearest recommended preset, the same mapping
 # CALSET's own command line now uses
-vm = setvm([1], click='inkhex_flag', val='fe0100')  # near-red, not exact
+vm = setvm([1], click='inkhex_orig', val='fe0100')  # near-red, not exact
 run(vm, 'c:LAZSET', 'set-ink-hex')
 vm.loads('(setq t:*near* (lzp:aci-near 254 1 0))')
-assert prof(vm, 'CalofinInk-FLAG') == str(vm.globals['t:*near*']), \
-    (prof(vm, 'CalofinInk-FLAG'), vm.globals['t:*near*'])
+assert prof(vm, 'CalofinInk-ORIG') == str(vm.globals['t:*near*']), \
+    (prof(vm, 'CalofinInk-ORIG'), vm.globals['t:*near*'])
 print("   a hex code snaps to the nearest recommended preset's ACI")
 
 # a hex box that is not a hex colour: the state line names it, OK is
 # greyed, and the value never reaches the profile
-vm = setvm([1], click='inkhex_flag', val='notacolor')
+vm = setvm([1], click='inkhex_orig', val='notacolor')
 run(vm, 'c:LAZSET', 'set-ink-bad')
-assert 'Flag' in tile(vm, 'state'), \
+assert 'Orig' in tile(vm, 'state'), \
     "the state line does not name the bad box: %r" % tile(vm, 'state')
 assert 'accept' in {str(x) for x in (vm.globals.get('stub:*disabled*') or [])}, \
     "OK was not greyed while a hex box was unreadable"
-assert prof(vm, 'CalofinInk-FLAG') == '', \
-    "a value that is not a hex colour was stored: %r" % prof(vm, 'CalofinInk-FLAG')
+assert prof(vm, 'CalofinInk-ORIG') == '', \
+    "a value that is not a hex colour was stored: %r" % prof(vm, 'CalofinInk-ORIG')
 print("   a hex box that is not a hex colour greys OK and is never written")
 
 # ...and a typo must not ERASE the override that was already there.
@@ -2207,10 +2207,10 @@ print("   a hex box that is not a hex colour greys OK and is never written")
 # lands anyway.  The write skips a box it cannot read rather than
 # clearing it, which is the difference between ignoring a typo and
 # throwing away the colour the drafter had.
-vm = setvm([1], click='inkhex_flag', val='3x', env={'CalofinInk-FLAG': '3'})
+vm = setvm([1], click='inkhex_orig', val='3x', env={'CalofinInk-ORIG': '3'})
 run(vm, 'c:LAZSET', 'set-ink-typo-keeps')
-assert prof(vm, 'CalofinInk-FLAG') == '3', \
-    "a typo erased the stored override: %r" % prof(vm, 'CalofinInk-FLAG')
+assert prof(vm, 'CalofinInk-ORIG') == '3', \
+    "a typo erased the stored override: %r" % prof(vm, 'CalofinInk-ORIG')
 print("   ...and a typo leaves the override that was already stored alone")
 
 # the accept guard itself: OK refuses while a box is unreadable, and
@@ -2218,10 +2218,10 @@ print("   ...and a typo leaves the override that was already stored alone")
 # drives lzp:set-ok directly rather than through start_dialog.
 gv = stubbed()
 gv.loads('(lzp:set-read)')
-gv.loads('(lzp:set-put "CalofinInkHex-FLAG" "3x") (setq stub:*done* nil) (lzp:set-ok)')
+gv.loads('(lzp:set-put "CalofinInkHex-ORIG" "3x") (setq stub:*done* nil) (lzp:set-ok)')
 assert gv.globals.get('stub:*done*') is None, \
     "OK closed the dialog with an unreadable hex box in it"
-gv.loads('(lzp:set-put "CalofinInkHex-FLAG" "") (lzp:set-ok)')
+gv.loads('(lzp:set-put "CalofinInkHex-ORIG" "") (lzp:set-ok)')
 assert str(gv.globals.get('stub:*done*')) == '1', \
     "OK did not go through once the box was fixed: %r" % gv.globals.get('stub:*done*')
 print("   OK re-checks rather than trusting the greying, as LAZFORM's Insert does")
@@ -2301,17 +2301,20 @@ assert any(e.startswith('delete ') for e in events(vm)), \
 print("   an unwritable or unloadable dialog is reported, and cleans up")
 
 # every key the dialog offers is one something actually reads: the two
-# folders and the theme are CALSET's own, and the eight colours are the
-# roles cal:ink resolves -- a settings surface that writes a key nothing
-# reads is worse than none, which is the rule CALSET is already held to
+# folders and the theme are CALSET's own, and the seven colours are the
+# roles cal:ink resolves for CUES -- the theme's four and the review
+# tools' three crosses; flag/arc/olap/constr/report are NOT offered,
+# because what they colour stays in the drawing and is a number in its
+# tool's block.  A settings surface that writes a key nothing reads is
+# worse than none, which is the rule CALSET is already held to
 sv = fresh()
 sv.loads('(setq t:*keys* nil)')
 sv.loads('(foreach r lzp:*inkroles*'
          ' (setq t:*keys* (cons (lzp:inkkey r) t:*keys*)))')
 inkkeys = {str(x) for x in sv.globals['t:*keys*']}
 assert inkkeys == {'CalofinInk-' + r.upper() for r in
-                   ('flag', 'arc', 'olap', 'orig', 'sugg', 'point',
-                    'constr', 'report')}, sorted(inkkeys)
+                   ('fade', 'guide', 'dim', 'hi', 'orig', 'sugg', 'point')}, \
+    sorted(inkkeys)
 setsrc = callib.read(LSP)
 for k in ('CalofinTheme', 'CalofinErrorDir', 'StockCover_Folder'):
     assert '"%s"' % k in setsrc, k
@@ -2474,20 +2477,20 @@ bv.loads('(defun vl-registry-read (k n)'
          '       ((= n "Caption") "POOL=My own pool")'
          '       (t "")))')
 bv.env['CalofinTheme'] = 'DARK'
-bv.env['CalofinInk-FLAG'] = '3'
+bv.env['CalofinInk-ORIG'] = '3'
 bv.run('c:LAZBACKUP', ['Export', 'C:\\backup.txt'])
 out = ''.join(str(p) for p in bv.printed)
-assert 'Wrote 2 names, 1 caption, 11 settings and 0 defaults of yours to C:\\backup.txt.' in out, out
+assert 'Wrote 2 names, 1 caption, 10 settings and 0 defaults of yours to C:\\backup.txt.' in out, out
 content = bv.files.get('C:\\backup.txt')
 assert content is not None, "nothing was written"
 assert content.splitlines()[0].startswith('; calofin LAZBACKUP'), content
 assert '[Alias]' in content and 'POOL=PL' in content and 'SPA=SP2' in content
 assert '[Caption]' in content and 'POOL=My own pool' in content
 assert '[Settings]' in content and 'CalofinTheme=DARK' in content
-assert 'CalofinInk-FLAG=3' in content
+assert 'CalofinInk-ORIG=3' in content
 # an unset setting still gets its line -- empty means auto, a real
 # answer, not an omission
-assert 'CalofinInk-ARC=' in content
+assert 'CalofinInk-SUGG=' in content
 print("   Export writes both name maps and every setting to one file")
 
 # a target that cannot be written is reported, not silently dropped
@@ -2509,21 +2512,29 @@ iv.files['C:\\backup.txt'] = (
     'POOL=My own pool\n'
     '[Settings]\n'
     'CalofinTheme=DARK\n'
-    'CalofinInk-FLAG=3\n'
-    'CalofinInk-ARC=notanumber\n')
+    'CalofinInk-ORIG=3\n'
+    'CalofinInk-SUGG=notanumber\n'
+    # a role an OLDER build offered: flag/arc/olap/constr/report stopped
+    # being a drafter's to colour when what they mark was found to stay
+    # in the drawing, and a backup file written before that still names
+    # them.  Refused and reported, never written as a key nothing reads
+    'CalofinInk-FLAG=42\n')
 iv.loads('(setq t:*writes* nil)')
 iv.loads('(defun vl-registry-write (k n s)'
          ' (setq t:*writes* (cons (strcat n "=" s) t:*writes*)) s)')
 iv.run('c:LAZBACKUP', ['Import', 'C:\\backup.txt'])
 out = ''.join(str(p) for p in iv.printed)
 assert '4 lines applied from C:\\backup.txt.' in out, out
-assert '2 skipped:' in out, out
+assert '3 skipped:' in out, out
 assert 'BOGUS=XX (no such command)' in out, out
-assert 'CalofinInk-ARC=notanumber (not a colour number)' in out, out
+assert 'CalofinInk-SUGG=notanumber (not a colour number)' in out, out
+assert 'CalofinInk-FLAG=42 (not a setting this build has)' in out, out
 assert iv.env.get('CalofinTheme') == 'DARK', iv.env
-assert iv.env.get('CalofinInk-FLAG') == '3', iv.env
-assert 'CalofinInk-ARC' not in iv.env, \
+assert iv.env.get('CalofinInk-ORIG') == '3', iv.env
+assert 'CalofinInk-SUGG' not in iv.env, \
     "a bad colour was written anyway: %r" % iv.env
+assert 'CalofinInk-FLAG' not in iv.env, \
+    "a retired role was written as a key nothing reads: %r" % iv.env
 writes = [str(x) for x in (iv.globals.get('t:*writes*') or [])]
 assert any(w.startswith('Alias=') and 'POOL=PL' in w for w in writes), writes
 assert any(w.startswith('Caption=') and 'POOL=My own pool' in w for w in writes), writes
@@ -2809,27 +2820,27 @@ print("   ...and CalofinErrorDir is the one LAZDIAG walks to first")
 
 print("== CALSET: Itemcolors, the per-role override cal:ink reads ==")
 vm = fresh()
-vm.run('c:CALSET', ['Itemcolors', 'Flag', '42'])
+vm.run('c:CALSET', ['Itemcolors', 'Orig', '42'])
 out = ''.join(str(p) for p in vm.printed)
-assert vm.env.get('CalofinInk-FLAG') == '42', vm.env
-assert 'Flag colour is now ACI 42' in out, out
-print("   Itemcolors -> Flag -> 42 writes CalofinInk-FLAG")
+assert vm.env.get('CalofinInk-ORIG') == '42', vm.env
+assert 'Orig colour is now ACI 42' in out, out
+print("   Itemcolors -> Orig -> 42 writes CalofinInk-ORIG")
 
 # a hex code works at the command line too, the same nearest-preset
 # mapping the LAZSET dialog's hex box uses
 vm = fresh()
-vm.run('c:CALSET', ['Itemcolors', 'Arc', '#0000FE'])  # near-blue
+vm.run('c:CALSET', ['Itemcolors', 'Guide', '#0000FE'])  # near-blue
 out = ''.join(str(p) for p in vm.printed)
 vm.loads('(setq t:*near* (lzp:aci-near 0 0 254))')
 near = str(vm.globals['t:*near*'])
-assert vm.env.get('CalofinInk-ARC') == near, (vm.env, near)
-assert ('Arc colour is now ACI %s' % near) in out, out
+assert vm.env.get('CalofinInk-GUIDE') == near, (vm.env, near)
+assert ('Guide colour is now ACI %s' % near) in out, out
 print("   ...and a hex code snaps to the nearest preset there too")
 
 vm = fresh()
-vm.env['CalofinInk-ARC'] = '99'
-vm.run('c:CALSET', ['Itemcolors', 'Arc', '.'])
-assert vm.env.get('CalofinInk-ARC') == '', vm.env
+vm.env['CalofinInk-GUIDE'] = '99'
+vm.run('c:CALSET', ['Itemcolors', 'Guide', '.'])
+assert vm.env.get('CalofinInk-GUIDE') == '', vm.env
 print("   ...and . clears one, back to cal:ink's own table")
 
 vm = fresh()
@@ -2840,9 +2851,9 @@ assert 'Unchanged' in out, out
 print("   an empty answer changes nothing")
 
 vm = fresh()
-vm.run('c:CALSET', ['Itemcolors', 'Olap', 'notanumber'])
+vm.run('c:CALSET', ['Itemcolors', 'Fade', 'notanumber'])
 out = ''.join(str(p) for p in vm.printed)
-assert 'CalofinInk-OLAP' not in vm.env, vm.env
+assert 'CalofinInk-FADE' not in vm.env, vm.env
 assert 'Not a colour number' in out, out
 print("   text that is not a colour number is refused, not written")
 
@@ -2859,6 +2870,6 @@ LIB = os.path.join(HERE, '..', 'shared', 'parts', 'CALOFIN-LIB.lsp')
 libsrc = callib.read(LIB)
 for pair in vm.globals['lzp:*inkroles*']:
     assert ("(%s . " % pair.b) in libsrc, pair.b
-print("   all eight Itemcolors roles are ones cal:ink resolves")
+print("   all seven Itemcolors roles are ones cal:ink resolves")
 
 print("ALL LAZPANEL TESTS PASSED")

@@ -178,9 +178,9 @@ exactly as given, same as `*lfc-grey-color*`.
 | Global | Default | Role | Meaning |
 | --- | --- | --- | --- |
 | `*lfc-grey-color*` | `'auto` | `fade` | ACI: everything not under review, faded (grey). `'auto` fades it the way round the drawing needs -- darker than the work on a dark background, lighter on a light one. A number is used exactly as given |
-| `*lfc-flag-color*` | `'auto` (ACI 1) | `flag` | ACI: what you answered "No" to (red) |
-| `*lfc-arc-color*` | `'auto` (ACI 6) | `arc` | ACI: arcs whose endpoints were moved (magenta) |
-| `*lfc-olap-color*` | `'auto` (ACI 4) | `olap` | ACI: merged or flagged overlapping lines (cyan) |
+| `*lfc-flag-color*` | `1` | -- | ACI: what you answered "No" to (red) |
+| `*lfc-arc-color*` | `6` | -- | ACI: arcs whose endpoints were moved (magenta) |
+| `*lfc-olap-color*` | `4` | -- | ACI: merged or flagged overlapping lines (cyan) |
 | `*lfc-orig-color*` | `'auto` (ACI 1) | `orig` | ACI: the X marking where you drew the point (red) |
 | `*lfc-sugg-color*` | `'auto` (ACI 3) | `sugg` | ACI: the + marking where LINFINCHECK would put it (green) |
 | `*lfc-point-color*` | `'auto` (ACI 2) | `point` | ACI: the crosses marking an overlap's two ends (yellow) |
@@ -190,9 +190,9 @@ exactly as given, same as `*lfc-grey-color*`.
 | Global | Default | Role | Meaning |
 | --- | --- | --- | --- |
 | `*lfc-constr-layer*` | `"LINFINCHECK-CONSTRUCTION"` | -- | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own |
-| `*lfc-constr-color*` | `'auto` (ACI 2) | `constr` | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own (yellow) |
+| `*lfc-constr-color*` | `2` | -- | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own (yellow) |
 | `*lfc-report-layer*` | `"LINFINCHECK-REPORT"` | -- | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own |
-| `*lfc-report-color*` | `'auto` (ACI 3) | `report` | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own (green) |
+| `*lfc-report-color*` | `3` | -- | The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are created on first use; the colour applies only then, so a layer already in the drawing keeps its own (green) |
 
 **How the report is sized and placed**
 

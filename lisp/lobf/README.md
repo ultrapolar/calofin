@@ -171,7 +171,7 @@ is read when the command runs, not when the file loads.
 | `lobf:*layer*` | `"LOBF"` | The layer the construction line you keep is moved to |
 | `lobf:*color*` | `4` | Its colour (ACI, cyan) -- applied when the layer is created, so a layer already in the drawing keeps its own |
 | `lobf:*preview-layer*` | `"LOBF-PREVIEW"` | The three candidates, their stalks and their numbers while you choose |
-| `lobf:*preview-color*` | `'auto` | The preview layer's colour (ACI, grey). Each candidate carries its own colour, so this is only what the layer itself is created as |
+| `lobf:*preview-color*` | `8` | The preview layer's colour (ACI, grey). Each candidate carries its own colour, so this is only what the layer itself is created as -- and a layer record stays in the drawing for everyone who opens it afterwards, so a plain number rather than a colour resolved against one drafter's screen. LAZTUNE still changes it per drafter |
 | `lobf:*ign-layer*` | `"LOBF-IGNORED"` | The ring round a point a kept fit ignores. Its own layer, so it can be frozen or erased without touching the line |
 | `lobf:*ign-color*` | `1` | Its colour (ACI, red) |
 | `lobf:*appid*` | `"LOBF"` | The xdata stamp every object LOBF draws carries. Renaming it orphans earlier runs |

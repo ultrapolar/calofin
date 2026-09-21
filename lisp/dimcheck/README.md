@@ -109,12 +109,12 @@ exactly as given, same as `*dchk-grey-color*`.
 | Global | Default | Role | Meaning |
 | --- | --- | --- | --- |
 | `*dchk-grey-color*` | `'auto` | `fade` | Everything not under review, faded. `'auto` fades it the way round the drawing needs -- darker than the work on a dark background, lighter on a light one. A number is used exactly as given |
-| `*dchk-flag-color*` | `'auto` (ACI 1) | `flag` | Dimensions you answered "No" to, and the report's attention lines |
-| `*dchk-arc-color*` | `'auto` (ACI 6) | `arc` | Arcs whose endpoints were moved |
-| `*dchk-olap-color*` | `'auto` (ACI 4) | `olap` | Merged or flagged overlapping lines |
+| `*dchk-flag-color*` | `1` | -- | Dimensions you answered "No" to, and the report's attention lines |
+| `*dchk-arc-color*` | `6` | -- | Arcs whose endpoints were moved |
+| `*dchk-olap-color*` | `4` | -- | Merged or flagged overlapping lines |
 | `*dchk-orig-color*` / `*dchk-sugg-color*` | `'auto` (ACI 1 / 3) | `orig` / `sugg` | The X where you drew the point, the + where DIMCHECK would put it |
 | `*dchk-point-color*` | `'auto` (ACI 2) | `point` | The crosses marking an overlap's two ends |
-| `*dchk-constr-color*` / `*dchk-report-color*` | `'auto` (ACI 2 / 3) | `constr` / `report` | The colour each layer is created with (an existing layer keeps its own) |
+| `*dchk-constr-color*` / `*dchk-report-color*` | `2` / `3` | -- | The colour each layer is created with (an existing layer keeps its own) |
 
 **The two layers**
 

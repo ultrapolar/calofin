@@ -229,7 +229,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v9.0")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v9.1")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -264,11 +264,14 @@
 (setq oasis:*dimlayer*   "DIMENSION")  ; every dimension, both drawings
 (setq oasis:*dimcolor*   2)
 (setq oasis:*guidelayer* "POOL-GUIDE") ; the dashed circles, box and labels
-(setq oasis:*guidecolor* 'auto)        ; 'auto picks it for the background:
-                                       ; 8 on a light one, a lighter grey on
-                                       ; a dark one, where 8 is very nearly
-                                       ; the background itself.  A number is
-                                       ; used exactly as given
+(setq oasis:*guidecolor* 8)            ; grey.  The layer record outlives
+                                       ; the command, and the check drawing's
+                                       ; dashed box and centre marks stay in
+                                       ; the drawing ByLayer on it, so a
+                                       ; NUMBER rather than 'auto: one colour
+                                       ; for everyone who opens the file, not
+                                       ; one drafter's theme.  LAZTUNE can
+                                       ; still change it
 (setq oasis:*hicolor*    1)            ; red: the part being asked about
 
 ;; Two styles, because the two drawings are read differently: the pool
@@ -3329,8 +3332,7 @@
          (command "_.UNDO" "_Begin")
          (setq undo-open T)))
      (cal:ensure-layer oasis:*poollayer* oasis:*poolcolor*)
-     (cal:ensure-layer oasis:*guidelayer*
-                        (cal:ink oasis:*guidecolor* 'guide))
+     (cal:ensure-layer oasis:*guidelayer* oasis:*guidecolor*)
      (cal:ensure-layer oasis:*dimlayer* oasis:*dimcolor*)
 
      ;; -- which shape, where it goes, and then the eight measurements,

@@ -558,26 +558,56 @@ LINFINCHECK each carried as a separate hardcoded copy before `cal:ink`
 grew a table for them. None of these vary with dark/light the way the
 first four do (they are the same ordinary ACI colours the review tools
 have always drawn in), so there is no dark/light/unmeasured spread to
-resolve -- `'auto` just answers the number the tool always drew, unless
-a drafter has overridden it:
+resolve -- `'auto` just answers the number the tool always drew.
+
+**Which kind a knob may be is decided by how long what it colours
+LASTS.** A knob resolved through `ink` is a knob one drafter retunes to
+suit their own screen, and that is only ever right for a CUE --
+something the command draws and takes away again: the faded work round
+a review, a guide outline, a `grdraw` cross, a chart tile. Whatever is
+still there when the command returns belongs to the DRAWING, and a
+drawing is opened by more than one person -- the dimension a review
+leaves flagged for the next pass, the report text, and above all a
+LAYER TABLE RECORD, written once when the tool finds the layer missing
+and colouring everything ByLayer on it from then on. Those take a
+plain ACI NUMBER. They are still knobs: a shop edits one line, and a
+drafter sets their own through `LAZTUNE`, which is a decision about
+the drawing rather than about a screen.
 
 ```lisp
-(setq tool:*flag-color* 'auto)   ; ACI: what a "No" answer marks (red)
+(setq tool:*grey-color* 'auto)   ; the review grey -- a cue, put back
+                                 ; on both paths, so 'auto
+(setq tool:*flag-color* 1)       ; ACI: what a "No" answer marks, and
+                                 ; it STAYS until RESCUE or U -- so a
+                                 ; number, not this drafter's theme
+(setq tool:*report-color* 3)     ; ACI the report LAYER is created with
 ...
-(tool:set-color ent (tool:ink tool:*flag-color* 'flag))
+(tool:set-color ent (tool:ink tool:*grey-color* 'fade))
+(tool:set-color ent tool:*flag-color*)
+(tool:ensure-layer tool:*report-layer* tool:*report-color*)
 ```
 
-Every role -- the four screen-aware ones and the eight item-type ones
-alike -- can be overridden without touching source, one role at a
-time, through `CalofinInk-<ROLE>` in the AutoCAD profile (the role
-name, uppercased): `cal:inkoverride` (`tool:inkoverride` in the
-standalone copy) reads it and wins over the table when it is set, but
-never over a knob left as a plain number. `CALSET`'s `Itemcolors` menu
-is what writes it; nothing hand-edits the profile. A tool growing a new
-item-type colour reuses an existing role, or adds one to this table
-(and to `cal:inkoverride`'s role list, and to `CALSET`'s `Itemcolors`
-keyword set and `lzp:*inkroles*`) rather than inventing a fifth kind of
-knob.
+`tools/check_color.py` holds both halves: an `ink` call may not be an
+argument of a call that makes a layer, and a knob that colours a layer
+has to be a number where its block sets it. CONSTELLATION, LOBF, OASIS
+and the three review tools each had it the other way round until it
+did.
+
+A cue role -- `fade`, `guide`, `dim`, `hi`, and the review tools'
+`orig`, `sugg`, `point` crosses -- can be overridden without touching
+source, one role at a time, through `CalofinInk-<ROLE>` in the AutoCAD
+profile (the role name, uppercased): `cal:inkoverride`
+(`tool:inkoverride` in the standalone copy) reads it and wins over the
+table when it is set, but never over a knob left as a plain number.
+`CALSET`'s `Itemcolors` menu and `LAZSET`'s Item colours box write it,
+both off `lzp:*inkroles*`; nothing hand-edits the profile. `cal:ink`
+still resolves `flag`, `arc`, `olap`, `constr` and `report` -- the
+table did not shrink -- but nothing asks it to any more, and the
+roster a drafter is offered no longer lists them. A tool growing a new
+CUE colour reuses an existing role, or adds one to the table (and to
+`cal:inkoverride`'s role list, and to `lzp:*inkroles*`) rather than
+inventing a fifth kind of knob; a new colour that stays in the drawing
+is simply a number.
 
 **Namespace.** Every helper and global carries the file's unique
 prefix, colon-separated: `tool:helper-name`, globals with earmuffs

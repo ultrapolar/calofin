@@ -827,6 +827,15 @@ _vm = _scan_with('(setq *cchk-flag-color* 4)')
 assert '{\\C4;' in '\n'.join(report_texts(_vm)), report_texts(_vm)[0][:200]
 print("   *cchk-flag-color*: the report's attention runs follow the knob")
 
+# ...and NOT the drafter's Item colours: the flag lands on a drafter's
+# own dimension and in the report, both of which stay in the drawing,
+# so it is a number the theme cannot reach -- CalofinInk-FLAG set to 42
+# still writes red
+_vm = _scan_with('(setenv "CalofinInk-FLAG" "42")')
+_txt = '\n'.join(report_texts(_vm))
+assert '{\\C1;' in _txt and '{\\C42;' not in _txt, _txt[:200]
+print("   ...and a CalofinInk-FLAG override does not: what stays in the drawing is a number")
+
 _vm = _scan_with('(setq *cchk-green-scale* 0.5)')
 assert '{\\H0.5000x;' in '\n'.join(report_texts(_vm)), report_texts(_vm)[0][:200]
 print("   *cchk-green-scale*: the all-clear runs are written at the new size")

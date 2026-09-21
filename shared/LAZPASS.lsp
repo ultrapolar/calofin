@@ -18917,7 +18917,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v9.0")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v9.1")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -18952,11 +18952,14 @@
 (setq oasis:*dimlayer*   "DIMENSION")  ; every dimension, both drawings
 (setq oasis:*dimcolor*   2)
 (setq oasis:*guidelayer* "POOL-GUIDE") ; the dashed circles, box and labels
-(setq oasis:*guidecolor* 'auto)        ; 'auto picks it for the background:
-                                       ; 8 on a light one, a lighter grey on
-                                       ; a dark one, where 8 is very nearly
-                                       ; the background itself.  A number is
-                                       ; used exactly as given
+(setq oasis:*guidecolor* 8)            ; grey.  The layer record outlives
+                                       ; the command, and the check drawing's
+                                       ; dashed box and centre marks stay in
+                                       ; the drawing ByLayer on it, so a
+                                       ; NUMBER rather than 'auto: one colour
+                                       ; for everyone who opens the file, not
+                                       ; one drafter's theme.  LAZTUNE can
+                                       ; still change it
 (setq oasis:*hicolor*    1)            ; red: the part being asked about
 
 ;; Two styles, because the two drawings are read differently: the pool
@@ -22017,8 +22020,7 @@
          (command "_.UNDO" "_Begin")
          (setq undo-open T)))
      (cal:ensure-layer oasis:*poollayer* oasis:*poolcolor*)
-     (cal:ensure-layer oasis:*guidelayer*
-                        (cal:ink oasis:*guidecolor* 'guide))
+     (cal:ensure-layer oasis:*guidelayer* oasis:*guidecolor*)
      (cal:ensure-layer oasis:*dimlayer* oasis:*dimcolor*)
 
      ;; -- which shape, where it goes, and then the eight measurements,
@@ -43535,7 +43537,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *lobf-version* "v1.2")
+(setq *lobf-version* "v1.3")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value LOBF reads that someone might want to
@@ -43611,11 +43613,15 @@
 (setq lobf:*layer*         "LOBF")           ; the construction line kept
 (setq lobf:*color*         4)                ; ACI (cyan)
 (setq lobf:*preview-layer* "LOBF-PREVIEW")   ; the three candidates
-(setq lobf:*preview-color* 'auto)            ; ACI (grey) -- each XLINE
-                                             ; carries its own colour.
-                                             ; 'auto picks the grey for
-                                             ; the background; a number
-                                             ; is used exactly as given
+(setq lobf:*preview-color* 8)                ; ACI (grey).  Only the
+                                             ; LAYER's colour: each XLINE
+                                             ; carries its own.  A layer
+                                             ; record outlives the command,
+                                             ; so a NUMBER rather than
+                                             ; 'auto -- one colour for
+                                             ; everyone who opens the file,
+                                             ; not one drafter's theme.
+                                             ; LAZTUNE can still change it
 (setq lobf:*ign-layer*     "LOBF-IGNORED")   ; ring round a set-aside point
 (setq lobf:*ign-color*     1)                ; ACI (red)
 (setq lobf:*appid*         "LOBF")           ; renaming this orphans
@@ -44225,8 +44231,7 @@
                      " give a direction - there is no line in them."))
       nil)
     (progn
-      (cal:ensure-layer lobf:*preview-layer*
-                         (cal:ink lobf:*preview-color* 'guide))
+      (cal:ensure-layer lobf:*preview-layer* lobf:*preview-color*)
       ;; sized to the run the points cover, so the labels read at any
       ;; scale the sheet is drawn at
       (setq run (lobf:runlen pts (lobf:cand-org (car cands))
@@ -61595,7 +61600,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.20")
+(setq *cchk-version* "v1.21")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -61772,14 +61777,24 @@
                                    ; 8 recedes on the first and is one of the
                                    ; most prominent things on screen on the
                                    ; second.  A number is used exactly as given
-;; The six below are 'auto too -- they do not vary with the screen the
+;; These three STAY IN THE DRAWING: a dimension answered "No" wears the
+;; flag colour, a moved arc and a merged line theirs, until a rerun,
+;; COVERCHECKRESCUE or U puts them back, and the report's attention
+;; lines carry the flag colour as MTEXT colour codes.  A mark that
+;; outlives the command is part of the drawing, not a cue on the
+;; screen, so these are NUMBERS -- the same colour for everyone who
+;; opens the file, never one drafter's Item colours.  Change them here,
+;; or per drafter through LAZTUNE, where the change is a decision about
+;; the drawing; a number is used exactly as given.
+(setq *cchk-flag-color*    1)       ; ACI: what you answered "No" to (red)
+(setq *cchk-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
+(setq *cchk-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
+;; The three crosses are 'auto: they do not vary with the screen the
 ;; way *cchk-grey-color* does, but 'auto routes them through cchk:ink's
-;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
-;; in the profile) can override without touching source.  A number is
-;; still used exactly as given.
-(setq *cchk-flag-color*    'auto)   ; ACI: what you answered "No" to (red)
-(setq *cchk-arc-color*     'auto)   ; ACI: arcs whose endpoints were moved (magenta)
-(setq *cchk-olap-color*    'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+;; item-type table, which LAZSET's Item colours (CalofinInk-<ROLE> in
+;; the profile) can override without touching source -- and they are
+;; drawn with grdraw and gone at the next redraw, which is what makes
+;; them a drafter's own to colour.  A number is still used as given.
 (setq *cchk-orig-color*    'auto)   ; ACI: the X marking where you drew the point (red)
 (setq *cchk-sugg-color*    'auto)   ; ACI: the + marking where COVERCHECK would put it (green)
 (setq *cchk-point-color*   'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
@@ -61793,11 +61808,12 @@
 ;; The construction XLINE through a moved dimension's original points,
 ;; and the report MTEXT.  Both layers are created on first use; the
 ;; colour applies only then, so a layer already in the drawing keeps
-;; its own.
+;; its own.  A layer record outlives every command, so the colours are
+;; NUMBERS, for the reason the marks above are.
 (setq *cchk-constr-layer*  "COVERCHECK-CONSTRUCTION")
-(setq *cchk-constr-color*  'auto)   ; ACI (yellow)
+(setq *cchk-constr-color*  2)       ; ACI (yellow)
 (setq *cchk-report-layer*  "COVERCHECK-REPORT")
-(setq *cchk-report-color*  'auto)   ; ACI (green)
+(setq *cchk-report-color*  3)       ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -62549,7 +62565,7 @@
                           minx miny maxx maxy
                           / mainl diml l pr nred nmain ndim nlin grps grp
                             ref h ins ins2 txt right)
-  (cal:ensure-layer *cchk-report-layer* (cal:ink *cchk-report-color* 'report))
+  (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
   (foreach l lines
     (if (cchk:dimline-p l)
       (setq diml (cons l diml))
@@ -64722,8 +64738,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (cal:ensure-layer *cchk-constr-layer* (cal:ink *cchk-constr-color* 'constr))
-        (cal:ensure-layer *cchk-report-layer* (cal:ink *cchk-report-color* 'report))
+        (cal:ensure-layer *cchk-constr-layer* *cchk-constr-color*)
+        (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -65089,7 +65105,7 @@
      ;; a rerun's leftover report/marker entities (e.g. suggested-pad
      ;; circles) must not pollute this scan's own attachment checks -
      ;; clear them before anything is collected, not after
-     (cal:ensure-layer *cchk-report-layer* (cal:ink *cchk-report-color* 'report))
+     (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
      (cchk:clear-old)
      (setq i 0 nd 0 ndbad 0 na 0 nabad 0 ndanch 0)
      (repeat (sslength ss)
@@ -68343,7 +68359,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.21")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.22")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -68434,14 +68450,24 @@
                                   ; 8 recedes on the first and is one of the
                                   ; most prominent things on screen on the
                                   ; second.  A number is used exactly as given
-;; The six below are 'auto too -- they do not vary with the screen the
+;; These three STAY IN THE DRAWING: a dimension answered "No" wears the
+;; flag colour, a moved arc and a merged line theirs, until a rerun,
+;; DIMCHECKRESCUE or U puts them back, and the report's attention lines
+;; carry the flag colour as MTEXT colour codes.  A mark that outlives
+;; the command is part of the drawing, not a cue on the screen, so
+;; these are NUMBERS -- the same colour for everyone who opens the
+;; file, never one drafter's Item colours.  Change them here, or per
+;; drafter through LAZTUNE, where the change is a decision about the
+;; drawing; a number is used exactly as given.
+(setq *dchk-flag-color*   1)       ; ACI: dimensions you answered "No" to (red)
+(setq *dchk-arc-color*    6)       ; ACI: arcs whose endpoints were moved (magenta)
+(setq *dchk-olap-color*   4)       ; ACI: merged or flagged overlapping lines (cyan)
+;; The three crosses are 'auto: they do not vary with the screen the
 ;; way *dchk-grey-color* does, but 'auto routes them through dchk:ink's
-;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
-;; in the profile) can override without touching source.  A number is
-;; still used exactly as given.
-(setq *dchk-flag-color*   'auto)   ; ACI: dimensions you answered "No" to (red)
-(setq *dchk-arc-color*    'auto)   ; ACI: arcs whose endpoints were moved (magenta)
-(setq *dchk-olap-color*   'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+;; item-type table, which LAZSET's Item colours (CalofinInk-<ROLE> in
+;; the profile) can override without touching source -- and they are
+;; drawn with grdraw and gone at the next redraw, which is what makes
+;; them a drafter's own to colour.  A number is still used as given.
 (setq *dchk-orig-color*   'auto)   ; ACI: the X marking where you drew the point (red)
 (setq *dchk-sugg-color*   'auto)   ; ACI: the + marking where DIMCHECK would put it (green)
 (setq *dchk-point-color*  'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
@@ -68457,9 +68483,9 @@
 ;; colour applies only then, so a layer already in the drawing keeps
 ;; its own.
 (setq *dchk-constr-layer* "DIMCHECK-CONSTRUCTION")
-(setq *dchk-constr-color* 'auto)   ; ACI (yellow)
+(setq *dchk-constr-color* 2)       ; ACI (yellow)
 (setq *dchk-report-layer* "DIMCHECK-REPORT")
-(setq *dchk-report-color* 'auto)   ; ACI (green)
+(setq *dchk-report-color* 3)       ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -69699,8 +69725,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (cal:ensure-layer *dchk-constr-layer* (cal:ink *dchk-constr-color* 'constr))
-        (cal:ensure-layer *dchk-report-layer* (cal:ink *dchk-report-color* 'report))
+        (cal:ensure-layer *dchk-constr-layer* *dchk-constr-color*)
+        (cal:ensure-layer *dchk-report-layer* *dchk-report-color*)
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -70176,7 +70202,7 @@
                          lines)))
 
      ;; --- report (the only thing DIMSCAN writes) ------------------
-     (cal:ensure-layer *dchk-report-layer* (cal:ink *dchk-report-color* 'report))
+     (cal:ensure-layer *dchk-report-layer* *dchk-report-color*)
      (dchk:clear-old)
      (setq hdr (list
                  (cons (strcat "Dimensions scanned: " (itoa nd) " ("
@@ -70476,7 +70502,7 @@
         (cond
           ((= sstep 1)
            (if (cal:ask-yn "\n  Drop that list into the drawing as a reference sheet?" "Yes")
-             (progn (cal:ensure-layer *dchk-report-layer* (cal:ink *dchk-report-color* 'report))
+             (progn (cal:ensure-layer *dchk-report-layer* *dchk-report-color*)
                     (setq sstep 2))
              (setq sstep 4)))
           ((= sstep 2)
@@ -81589,7 +81615,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.17")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.18")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -81753,14 +81779,24 @@
                                   ; 8 recedes on the first and is one of the
                                   ; most prominent things on screen on the
                                   ; second.  A number is used exactly as given
-;; The six below are 'auto too -- they do not vary with the screen the
+;; These three STAY IN THE DRAWING: a dimension answered "No" wears the
+;; flag colour, a moved arc and a merged line theirs, until a rerun,
+;; LINFINCHECKRESCUE or U puts them back, and the report's attention
+;; lines carry the flag colour as MTEXT colour codes.  A mark that
+;; outlives the command is part of the drawing, not a cue on the
+;; screen, so these are NUMBERS -- the same colour for everyone who
+;; opens the file, never one drafter's Item colours.  Change them here,
+;; or per drafter through LAZTUNE, where the change is a decision about
+;; the drawing; a number is used exactly as given.
+(setq *lfc-flag-color*    1)       ; ACI: what you answered "No" to (red)
+(setq *lfc-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
+(setq *lfc-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
+;; The three crosses are 'auto: they do not vary with the screen the
 ;; way *lfc-grey-color* does, but 'auto routes them through lfc:ink's
-;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
-;; in the profile) can override without touching source.  A number is
-;; still used exactly as given.
-(setq *lfc-flag-color*    'auto)   ; ACI: what you answered "No" to (red)
-(setq *lfc-arc-color*     'auto)   ; ACI: arcs whose endpoints were moved (magenta)
-(setq *lfc-olap-color*    'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+;; item-type table, which LAZSET's Item colours (CalofinInk-<ROLE> in
+;; the profile) can override without touching source -- and they are
+;; drawn with grdraw and gone at the next redraw, which is what makes
+;; them a drafter's own to colour.  A number is still used as given.
 (setq *lfc-orig-color*    'auto)   ; ACI: the X marking where you drew the point (red)
 (setq *lfc-sugg-color*    'auto)   ; ACI: the + marking where LINFINCHECK would put it (green)
 (setq *lfc-point-color*   'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
@@ -81774,11 +81810,12 @@
 ;; The construction XLINE through a moved dimension's original points,
 ;; and the report MTEXT.  Both layers are created on first use; the
 ;; colour applies only then, so a layer already in the drawing keeps
-;; its own.
+;; its own.  A layer record outlives every command, so the colours are
+;; NUMBERS, for the reason the marks above are.
 (setq *lfc-constr-layer*  "LINFINCHECK-CONSTRUCTION")
-(setq *lfc-constr-color*  'auto)   ; ACI (yellow)
+(setq *lfc-constr-color*  2)       ; ACI (yellow)
 (setq *lfc-report-layer*  "LINFINCHECK-REPORT")
-(setq *lfc-report-color*  'auto)   ; ACI (green)
+(setq *lfc-report-color*  3)       ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -82433,7 +82470,7 @@
                          minx miny maxx maxy
                          / mainl diml l pr nred nmain ndim nlin grps grp
                            ref h ins ins2 txt right)
-  (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
+  (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
   (foreach l lines
     (if (lfc:dimline-p l)
       (setq diml (cons l diml))
@@ -84132,8 +84169,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (cal:ensure-layer *lfc-constr-layer* (cal:ink *lfc-constr-color* 'constr))
-        (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
+        (cal:ensure-layer *lfc-constr-layer* *lfc-constr-color*)
+        (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -85400,7 +85437,7 @@
      (setq bordsum (lfc:border-verdict bordbb))
 
      ;; --- report (the only thing the scan writes) --------------------
-     (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
+     (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
      (lfc:clear-old)
      (setq dhdr (if lite
                   nil
@@ -85794,7 +85831,7 @@
         (cond
           ((= sstep 1)
            (if (cal:ask-yn "\n  Drop that list into the drawing as a reference sheet?" "Yes")
-             (progn (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
+             (progn (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
                     (setq sstep 2))
              (setq sstep 4)))
           ((= sstep 2)
@@ -110198,7 +110235,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.6")
+(setq *constellation-version* "v1.7")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -110236,8 +110273,12 @@
 ;; 6 magenta, 7 white, 8 grey.  Grey for the frame and cyan for the
 ;; legend, so neither competes with the result; the result itself lands
 ;; in the point and dimension colours the rest of the toolkit uses.
-(setq cst:*space-color*   'auto)  ; 'auto picks the grey for the
-                                  ; background; a number as given
+(setq cst:*space-color*   8)      ; grey.  The space rectangle is part
+                                  ; of the output and its layer outlives
+                                  ; the command, so a NUMBER, never
+                                  ; 'auto: one colour for everyone who
+                                  ; opens the file, not one drafter's
+                                  ; theme.  LAZTUNE can still change it
 (setq cst:*guide-color*   4)
 (setq cst:*outline-color* 3)
 (setq cst:*dim-color*     2)
@@ -111386,8 +111427,7 @@
 
 (defun cst:preview (n w h base / pts i p r th lab)
   (cst:unpreview)
-  (cal:ensure-layer cst:*space-layer*
-                    (cal:ink cst:*space-color* 'guide))
+  (cal:ensure-layer cst:*space-layer* cst:*space-color*)
   (cal:ensure-layer cst:*guide-layer* cst:*guide-color*)
   (setq r   (cst:dotr w h)
         th  (cst:texth w h)
@@ -111762,8 +111802,7 @@
 ;; they are not part of the drawing to be swept and a redraw must not
 ;; keep re-announcing them.
 (defun cst:draw (pts n w h base chart arcs outline / mark th i p)
-  (cal:ensure-layer cst:*space-layer*
-                    (cal:ink cst:*space-color* 'guide))
+  (cal:ensure-layer cst:*space-layer* cst:*space-color*)
   (cal:ensure-layer cst:*point-layer* cst:*point-color*)
   (cal:ensure-layer cst:*dim-layer* cst:*dim-color*)
   (if outline (cal:ensure-layer cst:*outline-layer* cst:*outline-color*))
@@ -116743,7 +116782,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.40")
+(setq *lazpanel-version* "v3.41")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -119533,22 +119572,31 @@
      ""
      "the folder STOCKCOVER reads its stock drawings from -- the key STOCKCOVER-CFG writes when you browse to one.  Empty = the setting at the top of STOCKCOVER.lsp")))
 
-;; The eight ITEM-TYPE roles cal:ink resolves for COVERCHECK, DIMCHECK
-;; and LINFINCHECK -- generalized off the six colours plus the two
-;; layer colours those three tools used to carry as separate hardcoded
-;; copies.  Keyed by the Itemcolors keyword -> the role cal:ink takes,
-;; which is also the CalofinInk-<ROLE> profile key (uppercased) an
-;; override lives under.  One list so Itemcolors and lzp:setshow read
-;; the same roster instead of two that can drift apart.
+;; The roles a drafter may colour: every one of them a CUE that is gone
+;; when the command returns.  fade, guide, dim and hi are the theme's
+;; four -- the faded work round a review, a guide outline, a chart
+;; tile's dimensions and its active box -- and orig, sugg and point are
+;; the review tools' grdraw crosses, cleared at the next redraw.  Keyed
+;; by the Itemcolors keyword -> the role cal:ink takes, which is also
+;; the CalofinInk-<ROLE> profile key (uppercased) an override lives
+;; under.  One list so Itemcolors, lzp:setshow and the LAZSET dialog
+;; read the same roster instead of three that can drift apart.
+;;
+;; NOT here, on purpose: flag, arc, olap, constr and report.  cal:ink
+;; still resolves them, but what they colour STAYS IN THE DRAWING -- a
+;; dimension answered "No", a moved arc, a merged line, the report
+;; text, two layer records -- and a drawing is opened by more than one
+;; drafter.  So those are plain numbers in each tool's own block
+;; (LAZTUNE changes them per drafter, as a decision about the drawing),
+;; and an Item colour never reaches them.
 (setq lzp:*inkroles*
-  '(("Flag"   . "flag")
-    ("Arc"    . "arc")
-    ("Olap"   . "olap")
+  '(("Fade"   . "fade")
+    ("Guide"  . "guide")
+    ("Dim"    . "dim")
+    ("Hi"     . "hi")
     ("Orig"   . "orig")
     ("Sugg"   . "sugg")
-    ("Point"  . "point")
-    ("Constr" . "constr")
-    ("Report" . "report")))
+    ("Point"  . "point")))
 
 ;; The dropdown's recommended presets, so a drafter picks a colour
 ;; family by name instead of guessing an ACI number.  Each entry is
@@ -119630,10 +119678,12 @@
                                        (strcat "(unset -- " (cadr r) ")"))
                    "\n      " (caddr r))))
   (princ (strcat "\n  Item colours (CALSET Itemcolors; CalofinInk-<ROLE> in"
-                 "\n      the profile) -- COVERCHECK/DIMCHECK/LINFINCHECK's"
-                 "\n      flag/arc/olap/orig/sugg/point/constr/report, each"
-                 "\n      auto (the shared table in CALOFIN-LIB.lsp's"
-                 "\n      cal:ink) unless overridden below:"))
+                 "\n      the profile) -- the cues a tool draws and takes"
+                 "\n      away again: fade/guide/dim/hi, and the review"
+                 "\n      tools' orig/sugg/point crosses, each auto (the"
+                 "\n      shared table in CALOFIN-LIB.lsp's cal:ink) unless"
+                 "\n      overridden below.  What stays in the drawing is"
+                 "\n      a number in its tool's own block, never these:"))
   (foreach r lzp:*inkroles*
     (setq v (getenv (strcat "CalofinInk-" (strcase (cdr r)))))
     (princ (strcat "\n      " (car r) ": "
@@ -119672,13 +119722,13 @@
                   ((= pick "Stockdir") "StockCover_Folder")))
   (cond
     ((= pick "Itemcolors")
-     ;; a second keyword picks WHICH of the eight roles, then the same
+     ;; a second keyword picks WHICH of the seven roles, then the same
      ;; getstring/Back/"." shape as Errordir and Stockdir below sets its
      ;; CalofinInk-<ROLE> override -- Undo is accepted everywhere Back
      ;; is, unlisted (STANDARDS 1)
-     (initget "Flag Arc Olap Orig Sugg Point Constr Report Back Undo")
+     (initget "Fade Guide Dim Hi Orig Sugg Point Back Undo")
      (setq role (getkword
-                  "\nWhich item colour [Flag/Arc/Olap/Orig/Sugg/Point/Constr/Report/Back] <Back>: "))
+                  "\nWhich item colour [Fade/Guide/Dim/Hi/Orig/Sugg/Point/Back] <Back>: "))
      (if lzd:ask (lzd:ask "Which item colour?" role) role)
      (setq role (if role role "Back"))
      (cond
@@ -119960,8 +120010,8 @@
                           " background and AutoCAD's own theme\"; }")
                   "  }"
                   "  : boxed_row {"
-                  (strcat "    label = \"Item colours - COVERCHECK, DIMCHECK"
-                          " and LINFINCHECK; a family, a hex code, or empty"
+                  (strcat "    label = \"Item colours - the cues a tool draws"
+                          " and takes away; a family, a hex code, or empty"
                           " for auto\";")))
   ;; three to a column, so the box is a block rather than one tall
   ;; stack; each role is a family dropdown beside its hex box, in a row
@@ -120923,11 +120973,11 @@
      ("cst:*outline-layer*" "\"CONSTELLATION\"" "the ring through A B C ... The layer each part of the result lands on. Point one at a layer the office alre...")
      ("cst:*dim-layer*" "\"DIMENSION\"" "as AUTODIM and WCALST The layer each part of the result lands on. Point one at a layer the office already u...")
      ("cst:*point-layer*" "\"POINTS\"" "as ABCDEF and XYPLOT The layer each part of the result lands on. Point one at a layer the office already us...")
-     ("cst:*space-color*" "'auto" "'auto picks the grey for the background; a number as given The ACI colour each of those layers is CREATED w...")
-     ("cst:*guide-color*" "4" "background; a number as given")
-     ("cst:*outline-color*" "3" "background; a number as given")
-     ("cst:*dim-color*" "2" "background; a number as given")
-     ("cst:*point-color*" "2" "background; a number as given")
+     ("cst:*space-color*" "8" "grey. The space rectangle is part of the output and its layer outlives the command, so a NUMBER, never 'aut...")
+     ("cst:*guide-color*" "4" "of the output and its layer outlives the command, so a NUMBER, never 'auto: one colour for everyone who ope...")
+     ("cst:*outline-color*" "3" "of the output and its layer outlives the command, so a NUMBER, never 'auto: one colour for everyone who ope...")
+     ("cst:*dim-color*" "2" "of the output and its layer outlives the command, so a NUMBER, never 'auto: one colour for everyone who ope...")
+     ("cst:*point-color*" "2" "of the output and its layer outlives the command, so a NUMBER, never 'auto: one colour for everyone who ope...")
      ("cst:*point-block*" "\"ab_pt\"" "ABCDEF's survey block and its attribute tag. Move either and ABHD, CABHD, ABFIND, LHD and BPCALLOUT stop re...")
      ("cst:*point-tag*" "\"number\"" "ABCDEF's survey block and its attribute tag. Move either and ABHD, CABHD, ABFIND, LHD and BPCALLOUT stop re...")
      ("cst:*letters*" "\"ABCDEFGHIJKLMNOPQRSTUVWXYZ\"" "The labels, in the order they are handed out clockwise. Shortening the string lowers the ceiling below with...")
@@ -120994,16 +121044,16 @@
      ("*cchk-row-band*" "0.05" "fraction of the selection's height Within a style, dimensions are reviewed row by row. Two dimensions count...")
      ("*cchk-row-flat*" "1.0" "...and the band for a selection with no height Within a style, dimensions are reviewed row by row. Two dime...")
      ("*cchk-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
-     ("*cchk-flag-color*" "'auto" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
-     ("*cchk-arc-color*" "'auto" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
-     ("*cchk-olap-color*" "'auto" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
-     ("*cchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) 'auto fades it the way round the drawing needs -- darker...")
-     ("*cchk-sugg-color*" "'auto" "ACI: the + marking where COVERCHECK would put it (green) 'auto fades it the way round the drawing needs --...")
-     ("*cchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) 'auto fades it the way round the drawing needs -- d...")
+     ("*cchk-flag-color*" "1" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
+     ("*cchk-arc-color*" "6" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
+     ("*cchk-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) The three crosses are 'auto: they do not vary with the scre...")
+     ("*cchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) The three crosses are 'auto: they do not vary with the sc...")
+     ("*cchk-sugg-color*" "'auto" "ACI: the + marking where COVERCHECK would put it (green) The three crosses are 'auto: they do not vary with...")
+     ("*cchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) The three crosses are 'auto: they do not vary with...")
      ("*cchk-constr-layer*" "\"COVERCHECK-CONSTRUCTION\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*cchk-constr-color*" "'auto" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*cchk-constr-color*" "2" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*cchk-report-layer*" "\"COVERCHECK-REPORT\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*cchk-report-color*" "'auto" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*cchk-report-color*" "3" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*cchk-green-scale*" "0.75" "All-clear lines are written at this fraction of the height the red attention lines get, so problems stand o...")
      ("*cchk-report-chars*" "45.0" "Report column width, in text heights.")
      ("*cchk-report-wide*" "0.25" "The report is scaled to the drawing: its text height is chosen so the whole report is about as tall as the...")
@@ -121045,16 +121095,16 @@
      ("*dchk-row-band*" "0.05" "fraction of the selection's height Within a style, dimensions are reviewed row by row. Two dimensions count...")
      ("*dchk-row-flat*" "1.0" "...and the band for a selection with no height Within a style, dimensions are reviewed row by row. Two dime...")
      ("*dchk-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
-     ("*dchk-flag-color*" "'auto" "ACI: dimensions you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than th...")
-     ("*dchk-arc-color*" "'auto" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
-     ("*dchk-olap-color*" "'auto" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
-     ("*dchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) 'auto fades it the way round the drawing needs -- darker...")
-     ("*dchk-sugg-color*" "'auto" "ACI: the + marking where DIMCHECK would put it (green) 'auto fades it the way round the drawing needs -- da...")
-     ("*dchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) 'auto fades it the way round the drawing needs -- d...")
+     ("*dchk-flag-color*" "1" "ACI: dimensions you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than th...")
+     ("*dchk-arc-color*" "6" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
+     ("*dchk-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) The three crosses are 'auto: they do not vary with the scre...")
+     ("*dchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) The three crosses are 'auto: they do not vary with the sc...")
+     ("*dchk-sugg-color*" "'auto" "ACI: the + marking where DIMCHECK would put it (green) The three crosses are 'auto: they do not vary with t...")
+     ("*dchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) The three crosses are 'auto: they do not vary with...")
      ("*dchk-constr-layer*" "\"DIMCHECK-CONSTRUCTION\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*dchk-constr-color*" "'auto" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*dchk-constr-color*" "2" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*dchk-report-layer*" "\"DIMCHECK-REPORT\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*dchk-report-color*" "'auto" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*dchk-report-color*" "3" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*dchk-green-scale*" "0.75" "All-clear lines are written at this fraction of the height the red attention lines get, so problems stand o...")
      ("*dchk-report-chars*" "45.0" "Report column width, in text heights.")
      ("*dchk-sheet-chars*" "70.0" "...and the width of TUTORIALDIMCHECK's reference sheet, which is prose rather than a column of findings and...")
@@ -121353,16 +121403,16 @@
      ("*lfc-row-band*" "0.05" "fraction of the selection's height Within a style, dimensions are reviewed row by row. Two dimensions count...")
      ("*lfc-row-flat*" "1.0" "...and the band for a selection with no height Within a style, dimensions are reviewed row by row. Two dime...")
      ("*lfc-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
-     ("*lfc-flag-color*" "'auto" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
-     ("*lfc-arc-color*" "'auto" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
-     ("*lfc-olap-color*" "'auto" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
-     ("*lfc-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) 'auto fades it the way round the drawing needs -- darker...")
-     ("*lfc-sugg-color*" "'auto" "ACI: the + marking where LINFINCHECK would put it (green) 'auto fades it the way round the drawing needs --...")
-     ("*lfc-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) 'auto fades it the way round the drawing needs -- d...")
+     ("*lfc-flag-color*" "1" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
+     ("*lfc-arc-color*" "6" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
+     ("*lfc-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) The three crosses are 'auto: they do not vary with the scre...")
+     ("*lfc-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) The three crosses are 'auto: they do not vary with the sc...")
+     ("*lfc-sugg-color*" "'auto" "ACI: the + marking where LINFINCHECK would put it (green) The three crosses are 'auto: they do not vary wit...")
+     ("*lfc-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) The three crosses are 'auto: they do not vary with...")
      ("*lfc-constr-layer*" "\"LINFINCHECK-CONSTRUCTION\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*lfc-constr-color*" "'auto" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*lfc-constr-color*" "2" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*lfc-report-layer*" "\"LINFINCHECK-REPORT\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*lfc-report-color*" "'auto" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*lfc-report-color*" "3" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*lfc-green-scale*" "0.75" "All-clear lines are written at this fraction of the height the red attention lines get, so problems stand o...")
      ("*lfc-report-chars*" "45.0" "Report column width, in text heights, and the width of the tutorial's reference sheet, which is prose rathe...")
      ("*lfc-sheet-chars*" "70.0" "Report column width, in text heights, and the width of the tutorial's reference sheet, which is prose rathe...")
@@ -121412,10 +121462,10 @@
      ("lobf:*layer*" "\"LOBF\"" "the construction line kept The three layers LOBF writes on, created on first use. PREVIEW holds the three c...")
      ("lobf:*color*" "4" "ACI (cyan) The three layers LOBF writes on, created on first use. PREVIEW holds the three candidates and th...")
      ("lobf:*preview-layer*" "\"LOBF-PREVIEW\"" "the three candidates The three layers LOBF writes on, created on first use. PREVIEW holds the three candida...")
-     ("lobf:*preview-color*" "'auto" "ACI (grey) -- each XLINE carries its own colour. 'auto picks the grey for the background; a number is used...")
-     ("lobf:*ign-layer*" "\"LOBF-IGNORED\"" "ring round a set-aside point carries its own colour. 'auto picks the grey for the background; a number is u...")
-     ("lobf:*ign-color*" "1" "ACI (red) carries its own colour. 'auto picks the grey for the background; a number is used exactly as given")
-     ("lobf:*appid*" "\"LOBF\"" "renaming this orphans earlier runs carries its own colour. 'auto picks the grey for the background; a numbe...")
+     ("lobf:*preview-color*" "8" "ACI (grey). Only the LAYER's colour: each XLINE carries its own. A layer record outlives the command, so a...")
+     ("lobf:*ign-layer*" "\"LOBF-IGNORED\"" "ring round a set-aside point LAYER's colour: each XLINE carries its own. A layer record outlives the comman...")
+     ("lobf:*ign-color*" "1" "ACI (red) LAYER's colour: each XLINE carries its own. A layer record outlives the command, so a NUMBER rath...")
+     ("lobf:*appid*" "\"LOBF\"" "renaming this orphans earlier runs LAYER's colour: each XLINE carries its own. A layer record outlives the...")
      ("lobf:*fit-colors*" "'(3 2 6)" "ACI: green, yellow, magenta The colour each candidate is previewed in, fit 1 first. These are what the on-s...")
      ("lobf:*label-div*" "40.0" "Label sizing, all as fractions of the run the points cover. DIV sets the text height (a bigger number is sm...")
      ("lobf:*label-gap*" "0.08" "Label sizing, all as fractions of the run the points cover. DIV sets the text height (a bigger number is sm...")
@@ -121446,8 +121496,8 @@
      ("oasis:*dimlayer*" "\"DIMENSION\"" "every dimension, both drawings The three layers, created if the drawing has not got them and thawed, unlock...")
      ("oasis:*dimcolor*" "2" "The three layers, created if the drawing has not got them and thawed, unlocked and switched back on if it h...")
      ("oasis:*guidelayer*" "\"POOL-GUIDE\"" "the dashed circles, box and labels The three layers, created if the drawing has not got them and thawed, un...")
-     ("oasis:*guidecolor*" "'auto" "'auto picks it for the background: 8 on a light one, a lighter grey on a dark one, where 8 is very nearly t...")
-     ("oasis:*hicolor*" "1" "red: the part being asked about 8 on a light one, a lighter grey on a dark one, where 8 is very nearly the...")
+     ("oasis:*guidecolor*" "8" "grey. The layer record outlives the command, and the check drawing's dashed box and centre marks stay in th...")
+     ("oasis:*hicolor*" "1" "red: the part being asked about the command, and the check drawing's dashed box and centre marks stay in th...")
      ("oasis:*dimstyle*" "\"Standard\"" "the pool's own dims Two styles, because the two drawings are read differently: the pool itself is a plan an...")
      ("oasis:*crossstyle*" "\"CROSS DIMENSIONS\"" "the check drawing's Two styles, because the two drawings are read differently: the pool itself is a plan an...")
      ("oasis:*checkgap*" "4.0" "How far to the right of the pool the check drawing sits, measured from the pool's own right-hand bound, as...")

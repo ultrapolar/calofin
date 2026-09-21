@@ -274,7 +274,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.17")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.18")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -539,14 +539,24 @@
                                   ; 8 recedes on the first and is one of the
                                   ; most prominent things on screen on the
                                   ; second.  A number is used exactly as given
-;; The six below are 'auto too -- they do not vary with the screen the
+;; These three STAY IN THE DRAWING: a dimension answered "No" wears the
+;; flag colour, a moved arc and a merged line theirs, until a rerun,
+;; LINFINCHECKRESCUE or U puts them back, and the report's attention
+;; lines carry the flag colour as MTEXT colour codes.  A mark that
+;; outlives the command is part of the drawing, not a cue on the
+;; screen, so these are NUMBERS -- the same colour for everyone who
+;; opens the file, never one drafter's Item colours.  Change them here,
+;; or per drafter through LAZTUNE, where the change is a decision about
+;; the drawing; a number is used exactly as given.
+(setq *lfc-flag-color*    1)       ; ACI: what you answered "No" to (red)
+(setq *lfc-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
+(setq *lfc-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
+;; The three crosses are 'auto: they do not vary with the screen the
 ;; way *lfc-grey-color* does, but 'auto routes them through lfc:ink's
-;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
-;; in the profile) can override without touching source.  A number is
-;; still used exactly as given.
-(setq *lfc-flag-color*    'auto)   ; ACI: what you answered "No" to (red)
-(setq *lfc-arc-color*     'auto)   ; ACI: arcs whose endpoints were moved (magenta)
-(setq *lfc-olap-color*    'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+;; item-type table, which LAZSET's Item colours (CalofinInk-<ROLE> in
+;; the profile) can override without touching source -- and they are
+;; drawn with grdraw and gone at the next redraw, which is what makes
+;; them a drafter's own to colour.  A number is still used as given.
 (setq *lfc-orig-color*    'auto)   ; ACI: the X marking where you drew the point (red)
 (setq *lfc-sugg-color*    'auto)   ; ACI: the + marking where LINFINCHECK would put it (green)
 (setq *lfc-point-color*   'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
@@ -560,11 +570,12 @@
 ;; The construction XLINE through a moved dimension's original points,
 ;; and the report MTEXT.  Both layers are created on first use; the
 ;; colour applies only then, so a layer already in the drawing keeps
-;; its own.
+;; its own.  A layer record outlives every command, so the colours are
+;; NUMBERS, for the reason the marks above are.
 (setq *lfc-constr-layer*  "LINFINCHECK-CONSTRUCTION")
-(setq *lfc-constr-color*  'auto)   ; ACI (yellow)
+(setq *lfc-constr-color*  2)       ; ACI (yellow)
 (setq *lfc-report-layer*  "LINFINCHECK-REPORT")
-(setq *lfc-report-color*  'auto)   ; ACI (green)
+(setq *lfc-report-color*  3)       ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -1309,7 +1320,7 @@
                          minx miny maxx maxy
                          / mainl diml l pr nred nmain ndim nlin grps grp
                            ref h ins ins2 txt right)
-  (lfc:ensure-layer *lfc-report-layer* (lfc:ink *lfc-report-color* 'report))
+  (lfc:ensure-layer *lfc-report-layer* *lfc-report-color*)
   (foreach l lines
     (if (lfc:dimline-p l)
       (setq diml (cons l diml))
@@ -3055,8 +3066,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (lfc:ensure-layer *lfc-constr-layer* (lfc:ink *lfc-constr-color* 'constr))
-        (lfc:ensure-layer *lfc-report-layer* (lfc:ink *lfc-report-color* 'report))
+        (lfc:ensure-layer *lfc-constr-layer* *lfc-constr-color*)
+        (lfc:ensure-layer *lfc-report-layer* *lfc-report-color*)
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -4321,7 +4332,7 @@
      (setq bordsum (lfc:border-verdict bordbb))
 
      ;; --- report (the only thing the scan writes) --------------------
-     (lfc:ensure-layer *lfc-report-layer* (lfc:ink *lfc-report-color* 'report))
+     (lfc:ensure-layer *lfc-report-layer* *lfc-report-color*)
      (lfc:clear-old)
      (setq dhdr (if lite
                   nil
@@ -4715,7 +4726,7 @@
         (cond
           ((= sstep 1)
            (if (lfc:ask-yn "\n  Drop that list into the drawing as a reference sheet?")
-             (progn (lfc:ensure-layer *lfc-report-layer* (lfc:ink *lfc-report-color* 'report))
+             (progn (lfc:ensure-layer *lfc-report-layer* *lfc-report-color*)
                     (setq sstep 2))
              (setq sstep 4)))
           ((= sstep 2)

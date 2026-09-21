@@ -241,7 +241,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.20")
+(setq *cchk-version* "v1.21")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -418,14 +418,24 @@
                                    ; 8 recedes on the first and is one of the
                                    ; most prominent things on screen on the
                                    ; second.  A number is used exactly as given
-;; The six below are 'auto too -- they do not vary with the screen the
+;; These three STAY IN THE DRAWING: a dimension answered "No" wears the
+;; flag colour, a moved arc and a merged line theirs, until a rerun,
+;; COVERCHECKRESCUE or U puts them back, and the report's attention
+;; lines carry the flag colour as MTEXT colour codes.  A mark that
+;; outlives the command is part of the drawing, not a cue on the
+;; screen, so these are NUMBERS -- the same colour for everyone who
+;; opens the file, never one drafter's Item colours.  Change them here,
+;; or per drafter through LAZTUNE, where the change is a decision about
+;; the drawing; a number is used exactly as given.
+(setq *cchk-flag-color*    1)       ; ACI: what you answered "No" to (red)
+(setq *cchk-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
+(setq *cchk-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
+;; The three crosses are 'auto: they do not vary with the screen the
 ;; way *cchk-grey-color* does, but 'auto routes them through cchk:ink's
-;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
-;; in the profile) can override without touching source.  A number is
-;; still used exactly as given.
-(setq *cchk-flag-color*    'auto)   ; ACI: what you answered "No" to (red)
-(setq *cchk-arc-color*     'auto)   ; ACI: arcs whose endpoints were moved (magenta)
-(setq *cchk-olap-color*    'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+;; item-type table, which LAZSET's Item colours (CalofinInk-<ROLE> in
+;; the profile) can override without touching source -- and they are
+;; drawn with grdraw and gone at the next redraw, which is what makes
+;; them a drafter's own to colour.  A number is still used as given.
 (setq *cchk-orig-color*    'auto)   ; ACI: the X marking where you drew the point (red)
 (setq *cchk-sugg-color*    'auto)   ; ACI: the + marking where COVERCHECK would put it (green)
 (setq *cchk-point-color*   'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
@@ -439,11 +449,12 @@
 ;; The construction XLINE through a moved dimension's original points,
 ;; and the report MTEXT.  Both layers are created on first use; the
 ;; colour applies only then, so a layer already in the drawing keeps
-;; its own.
+;; its own.  A layer record outlives every command, so the colours are
+;; NUMBERS, for the reason the marks above are.
 (setq *cchk-constr-layer*  "COVERCHECK-CONSTRUCTION")
-(setq *cchk-constr-color*  'auto)   ; ACI (yellow)
+(setq *cchk-constr-color*  2)       ; ACI (yellow)
 (setq *cchk-report-layer*  "COVERCHECK-REPORT")
-(setq *cchk-report-color*  'auto)   ; ACI (green)
+(setq *cchk-report-color*  3)       ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -1195,7 +1206,7 @@
                           minx miny maxx maxy
                           / mainl diml l pr nred nmain ndim nlin grps grp
                             ref h ins ins2 txt right)
-  (cal:ensure-layer *cchk-report-layer* (cal:ink *cchk-report-color* 'report))
+  (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
   (foreach l lines
     (if (cchk:dimline-p l)
       (setq diml (cons l diml))
@@ -3368,8 +3379,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (cal:ensure-layer *cchk-constr-layer* (cal:ink *cchk-constr-color* 'constr))
-        (cal:ensure-layer *cchk-report-layer* (cal:ink *cchk-report-color* 'report))
+        (cal:ensure-layer *cchk-constr-layer* *cchk-constr-color*)
+        (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -3735,7 +3746,7 @@
      ;; a rerun's leftover report/marker entities (e.g. suggested-pad
      ;; circles) must not pollute this scan's own attachment checks -
      ;; clear them before anything is collected, not after
-     (cal:ensure-layer *cchk-report-layer* (cal:ink *cchk-report-color* 'report))
+     (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
      (cchk:clear-old)
      (setq i 0 nd 0 ndbad 0 na 0 nabad 0 ndanch 0)
      (repeat (sslength ss)

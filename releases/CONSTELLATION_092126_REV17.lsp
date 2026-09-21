@@ -89,7 +89,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.6")
+(setq *constellation-version* "v1.7")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -127,8 +127,12 @@
 ;; 6 magenta, 7 white, 8 grey.  Grey for the frame and cyan for the
 ;; legend, so neither competes with the result; the result itself lands
 ;; in the point and dimension colours the rest of the toolkit uses.
-(setq cst:*space-color*   'auto)  ; 'auto picks the grey for the
-                                  ; background; a number as given
+(setq cst:*space-color*   8)      ; grey.  The space rectangle is part
+                                  ; of the output and its layer outlives
+                                  ; the command, so a NUMBER, never
+                                  ; 'auto: one colour for everyone who
+                                  ; opens the file, not one drafter's
+                                  ; theme.  LAZTUNE can still change it
 (setq cst:*guide-color*   4)
 (setq cst:*outline-color* 3)
 (setq cst:*dim-color*     2)
@@ -1551,8 +1555,7 @@
 
 (defun cst:preview (n w h base / pts i p r th lab)
   (cst:unpreview)
-  (cst:ensure-layer cst:*space-layer*
-                    (cst:ink cst:*space-color* 'guide))
+  (cst:ensure-layer cst:*space-layer* cst:*space-color*)
   (cst:ensure-layer cst:*guide-layer* cst:*guide-color*)
   (setq r   (cst:dotr w h)
         th  (cst:texth w h)
@@ -1927,8 +1930,7 @@
 ;; they are not part of the drawing to be swept and a redraw must not
 ;; keep re-announcing them.
 (defun cst:draw (pts n w h base chart arcs outline / mark th i p)
-  (cst:ensure-layer cst:*space-layer*
-                    (cst:ink cst:*space-color* 'guide))
+  (cst:ensure-layer cst:*space-layer* cst:*space-color*)
   (cst:ensure-layer cst:*point-layer* cst:*point-color*)
   (cst:ensure-layer cst:*dim-layer* cst:*dim-color*)
   (if outline (cst:ensure-layer cst:*outline-layer* cst:*outline-color*))

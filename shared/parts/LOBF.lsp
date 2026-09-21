@@ -66,7 +66,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *lobf-version* "v1.2")
+(setq *lobf-version* "v1.3")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value LOBF reads that someone might want to
@@ -142,11 +142,15 @@
 (setq lobf:*layer*         "LOBF")           ; the construction line kept
 (setq lobf:*color*         4)                ; ACI (cyan)
 (setq lobf:*preview-layer* "LOBF-PREVIEW")   ; the three candidates
-(setq lobf:*preview-color* 'auto)            ; ACI (grey) -- each XLINE
-                                             ; carries its own colour.
-                                             ; 'auto picks the grey for
-                                             ; the background; a number
-                                             ; is used exactly as given
+(setq lobf:*preview-color* 8)                ; ACI (grey).  Only the
+                                             ; LAYER's colour: each XLINE
+                                             ; carries its own.  A layer
+                                             ; record outlives the command,
+                                             ; so a NUMBER rather than
+                                             ; 'auto -- one colour for
+                                             ; everyone who opens the file,
+                                             ; not one drafter's theme.
+                                             ; LAZTUNE can still change it
 (setq lobf:*ign-layer*     "LOBF-IGNORED")   ; ring round a set-aside point
 (setq lobf:*ign-color*     1)                ; ACI (red)
 (setq lobf:*appid*         "LOBF")           ; renaming this orphans
@@ -756,8 +760,7 @@
                      " give a direction - there is no line in them."))
       nil)
     (progn
-      (cal:ensure-layer lobf:*preview-layer*
-                         (cal:ink lobf:*preview-color* 'guide))
+      (cal:ensure-layer lobf:*preview-layer* lobf:*preview-color*)
       ;; sized to the run the points cover, so the labels read at any
       ;; scale the sheet is drawn at
       (setq run (lobf:runlen pts (lobf:cand-org (car cands))

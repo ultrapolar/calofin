@@ -29,21 +29,40 @@ a move.  The tier-wide set of saved names is an approximation that can
 only ever make the check more lenient, never fail a restore that is
 really there.
 
+A SECOND rule lives here, about the other direction: what calofin's
+own colour settings may reach.  A theme colour (a knob set to 'auto,
+resolved by ``<pfx>:ink`` per role) is for a CUE -- the faded work
+round a review, a guide outline, a chart tile -- something the command
+draws and takes away again, which is why one drafter may colour it to
+suit their screen.  A LAYER TABLE RECORD is not that: it is written
+once, when the tool finds the layer missing, and it stays in the
+drawing for everyone who opens the file afterwards, colouring
+everything ByLayer on it.  A drafter's dark-background grey has no
+business travelling to the next person that way.  So an ink call may
+not be an argument to a call that makes a layer, and the colour a
+layer is created with is a plain NUMBER -- still a knob, still
+retunable per drafter through LAZTUNE, but never resolved against one
+screen.  CONSTELLATION, LOBF, OASIS and the three review tools each
+did it the other way round until this check.
+
     python3 tools/check_color.py [--tier lisp|shared|releases|both|all]
     python3 tools/check_color.py --list
 
 Exit 0 when every command that moves either sysvar puts it back on
-both paths, 1 otherwise.
+both paths and no layer record takes a resolved ink colour, 1
+otherwise.
 """
 
 import argparse
 import pathlib
+import re
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import check_osnap as co  # noqa: E402
+import knobs  # noqa: E402
 from callib import LISP_DIR, PARTS_DIR, RELEASES_DIR, decomment, lsp_files  # noqa: E402
 
 #: the drafter's own environment: what a line drawn after the command
@@ -136,6 +155,83 @@ def unmoved(tier, var, named):
             scope = co.reach(co.called(dmap[cmd][0]), tier.dmap) | {cmd}
             if (scope & savers) and not (scope & tier.muters):
                 out.append((path, cmd))
+    return out
+
+
+#: ``cchk:ink`` / ``cal:ink`` -- the helper that resolves a role
+INK_RE = re.compile(r"^(?:[a-z][a-z0-9]*:)?ink$")
+#: a call that MAKES a layer record.  Both spellings in the tree:
+#: ``pool:layer`` and everyone else's ``<pfx>:ensure-layer``.
+LAYER_RE = re.compile(r"^(?:[a-z][a-z0-9]*:)?(?:ensure-layer|layer)$")
+
+
+def layer_ink(paths):
+    """[(path, layer call, ink call)] -- every resolved ink colour handed
+    to a call that makes a LAYER RECORD.
+
+    The record outlives the command that wrote it, so the colour in it
+    is one drafter's theme imposed on everyone who opens the drawing
+    afterwards.  Syntactic on purpose: it does not matter what the knob
+    happens to hold today, because a knob is one edit away from 'auto
+    and the call site is where the intent is readable."""
+    out = []
+    for path in paths:
+        text = decomment(path.read_text(encoding="utf-8", errors="replace"))
+        for form in co.sexp(text):
+            for f in co.walk(form):
+                if not isinstance(f, list):
+                    continue
+                h = co.head(f)
+                if not h or not LAYER_RE.match(h):
+                    continue
+                for arg in f[1:]:
+                    if not isinstance(arg, list):
+                        continue
+                    ah = co.head(arg)
+                    if ah and INK_RE.match(ah):
+                        knob = arg[1] if len(arg) > 1 and co.is_sym(arg[1]) \
+                            else "?"
+                        out.append((path, h, "(%s %s ...)" % (ah, knob)))
+    return out
+
+
+#: a plain ACI number, which is what a layer record may be created with
+NUM_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
+
+
+def layer_knob(paths):
+    """[(path, layer call, knob, literal)] -- every layer created with a
+    knob whose block value is not a number.
+
+    The companion to layer_ink: dropping the ink call from the call site
+    is only half of it, because the knob itself is one edit from 'auto
+    and the call site would still read innocently.  A knob that colours
+    a layer is read out of its own tunables block (tools/knobs.py, the
+    same catalog LAZTUNE offers) and has to be a number there.  A colour
+    arg that is a literal, or a local the block does not name, is left
+    alone -- this can only ever be lenient, never a false failure."""
+    out = []
+    for path in paths:
+        try:
+            block = dict((n, lit) for n, lit, _ in knobs.knobs_of(path))
+        except Exception:
+            continue
+        if not block:
+            continue
+        text = decomment(path.read_text(encoding="utf-8", errors="replace"))
+        for form in co.sexp(text):
+            for f in co.walk(form):
+                if not isinstance(f, list) or len(f) < 3:
+                    continue
+                h = co.head(f)
+                if not h or not LAYER_RE.match(h):
+                    continue
+                arg = f[2]
+                if not co.is_sym(arg):
+                    continue
+                lit = block.get(arg)
+                if lit is not None and not NUM_RE.match(lit):
+                    out.append((path, h, arg, lit))
     return out
 
 
@@ -234,10 +330,28 @@ def main(argv=None):
                              "yes" if r["mutes"] else "no",
                              "yes" if r["exit"] else "NO",
                              "yes" if r["handled"] else "NO"))
+        for path, layerfn, knob, lit in layer_knob(paths):
+            problems.append(
+                "%s: %s creates a layer in %s, which its block sets to %s "
+                "-- a layer record outlives the command and colours "
+                "everything ByLayer on it for everyone who opens the "
+                "drawing, so that knob is a plain ACI number, never a "
+                "colour resolved against one drafter's screen."
+                % (co.rel(path), layerfn, knob, lit))
+        for path, layerfn, ink in layer_ink(paths):
+            problems.append(
+                "%s: %s is handed %s -- a LAYER RECORD outlives the command "
+                "that makes it and colours everything ByLayer on it for "
+                "everyone who opens the drawing, so the colour a layer is "
+                "created with is a plain number, not one drafter's resolved "
+                "theme.  Set the knob to the ACI it resolves to today and "
+                "leave the call site alone; LAZTUNE still retunes it."
+                % (co.rel(path), layerfn, ink))
         if not a.list and not problems:
             print("check_color: %s -- %d command-sysvar pair%s move CECOLOR "
                   "or CLAYER, every one put back on both the clean and the "
-                  "failed path, ahead of anything that can throw"
+                  "failed path, ahead of anything that can throw; no layer "
+                  "record takes a resolved ink colour"
                   % (label, moved, "" if moved == 1 else "s"))
     for p in problems:
         print("check_color: " + p)
