@@ -7,15 +7,18 @@ Two kinds, and the difference is what the ribbon is for:
   the picture on a panel header, so the row of panels reads as five
   different things before anyone reads a caption;
 * **one per FEATURED routine** (``tools/gen_ui_data.py``'s ``FEATURED``)
-  -- the large buttons.  A ribbon is only faster than a list where a
-  drafter can reach a tool by SHAPE without reading, and that is a thing
-  you learn about tools you run often.  Drawing a glyph for all 67
-  buttons would spend the distinction it is made of; the rest are text
-  buttons, which is what most of AutoCAD's own ribbon is.
+  -- the routines with a picture of their own, whether they wear it on a
+  full-height button (32, with the command under it) or on an ordinary
+  row (16, beside the name).  A ribbon is only faster than a list where
+  a drafter can reach a tool by SHAPE without reading, and that is a
+  thing you learn about tools you run often.  Drawing a glyph for all 67
+  buttons would spend the distinction it is made of; the rest are plain
+  text buttons, which is what most of AutoCAD's own ribbon is.
 
 **Two sizes, because the ribbon asks for two.**  ``LargeImage`` is the
-32x32 on a large button's face; ``Image`` is the 16x16 the same command
-wears when the panel is squeezed into its collapsed drop-down.  Handing
+32x32 on a large button's face; ``Image`` is the 16x16 a small button
+wears beside its name, and the same command wears when a panel is
+squeezed into its collapsed drop-down.  Handing
 one 32x32 to both slots -- which this file used to do -- makes WPF
 downscale hard-edged pixel art by half, and hard-edged pixel art is the
 worst thing there is to downscale.  So every glyph is drawn on a 32-unit
@@ -874,7 +877,7 @@ def wanted():
     for cat in CATEGORIES:
         for size in SIZES:
             out[category_path(cat, size)] = category_png(cat, size)
-    for cat, cmd in featured():
+    for cat, cmd, _size in featured():
         for size in SIZES:
             out[command_path(cmd, size)] = command_png(cmd, cat, size)
     return out
@@ -886,14 +889,14 @@ def check():
     """Problems as a list of strings, empty when the tree is current."""
     problems = []
 
-    missing_glyph = sorted({c for _cat, c in featured()} - set(DESIGN))
+    missing_glyph = sorted({c for _cat, c, _z in featured()} - set(DESIGN))
     if missing_glyph:
         problems.append(
             "FEATURED names %d routine(s) with no glyph in DESIGN: %s\n"
             "  A large ribbon button with no picture on it is the one "
             "thing this file exists to prevent."
             % (len(missing_glyph), ", ".join(missing_glyph)))
-    spare_glyph = sorted(set(DESIGN) - {c for _cat, c in featured()})
+    spare_glyph = sorted(set(DESIGN) - {c for _cat, c, _z in featured()})
     if spare_glyph:
         problems.append(
             "DESIGN draws %d routine(s) that are not FEATURED: %s\n"

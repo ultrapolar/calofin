@@ -431,12 +431,13 @@ that list: `ui/calofin_net/Generated/CommandCatalog.g.vb` is written
 from `lzp:*captions*` and `lzp:*groups*` by `tools/gen_ui_data.py`, so
 a tool that is on the panel is in the palette by construction. The
 same generator writes the ribbon's `CommandCatalog.g.cs` from the same
-tables, so it is on the ribbon by construction too -- as a small text
+tables, so it is on the ribbon by construction too -- as a plain text
 button, unless its name is added to `gen_ui_data.FEATURED`, the
-editorial list of routines that get a LARGE ribbon button. A name
-there needs a glyph in `gen_ribbon_icons.DESIGN`: `make check` fails
-until it has one, and fails the other way too on a glyph no button
-shows. Never
+editorial table of routines that get a GLYPH of their own, with
+`LARGE` (full height, the glyph at 32) or `SMALL` (an ordinary row,
+the glyph at 16 beside the name) against it. A name there needs a
+glyph in `gen_ribbon_icons.DESIGN`: `make check` fails until it has
+one, and fails the other way too on a glyph no button shows. Never
 hand-edit it — and the same goes for `ChartCatalog.g.vb`, which
 `tools/gen_ui_charts.py` writes from the three chart tables. Change a
 chart in `LAZFORM`/`LAZSPA`/`LAZSTEP` and re-run that generator in the
@@ -558,7 +559,9 @@ python3 tools/gen_ui_charts.py   # the same for the palette's chart
                                  # chart tables
 python3 tools/gen_ribbon_icons.py# the ribbon's 82 icons: one per category
             [--check] [--prune]  # and one per FEATURED routine, at 16 and
-                                 # 32, drawn with zlib and struct alone.
+                                 # 32 -- both drawn, since a small button
+                                 # wears the 16 beside its name, with
+                                 # zlib and struct alone.
                                  # --check fails on a stale one the way a
                                  # stale twin does, and on an ORPHAN - a
                                  # picture for a routine that is no longer

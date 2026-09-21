@@ -3,8 +3,8 @@
 ``tools/gen_ribbon_icons.py`` draws ``ui/calofin_ribbon/icons/*.png``
 with nothing but ``zlib`` and ``struct`` -- no imaging library -- in two
 kinds and two sizes: one per LAZPANEL category, and one per FEATURED
-routine, at 16 (the collapsed panel's drop-down) and 32 (the face of a
-large button).
+routine, at 16 (a small button's row, and the collapsed panel's
+drop-down) and 32 (the face of a large button).
 
 This holds the tree to five things nothing else can see:
 
@@ -15,8 +15,9 @@ This holds the tree to five things nothing else can see:
 2. ``DESIGN`` and ``FEATURED`` name the same routines.  These are two
    editorial lists in two files, which is a drift machine unless
    something holds them together -- and the drift is silent both ways:
-   a featured routine with no glyph ships a blank large button, a glyph
-   with no button is drawn every run and never seen.
+   a featured routine with no glyph ships a button asking for a picture
+   nobody drew, a glyph with no button is drawn every run and never
+   seen.
 3. Every file is a well-formed PNG of the size its name claims.
 4. **No two icons are the same picture.**  The whole argument for
    spending 36 glyphs is that a drafter can tell them apart; two
@@ -51,7 +52,7 @@ def check(label, cond, detail=''):
         FAILS.append(label)
 
 
-FEATURED = [cmd for _cat, cmd in gen_ui_data.featured()]
+FEATURED = [cmd for _cat, cmd, _size in gen_ui_data.featured()]
 CS = read(ROOT / "ui" / "calofin_ribbon" / "RibbonExtensionApplication.cs")
 
 
@@ -87,9 +88,9 @@ check("every glyph belongs to a FEATURED routine", not no_button,
 # featured() itself refuses a name that is not the FACE of a button --
 # a variant riding in a dropdown would have an icon nothing shows.
 # Prove it still refuses rather than trusting the docstring.
-saved = set(gen_ui_data.FEATURED)
+saved = dict(gen_ui_data.FEATURED)
 try:
-    gen_ui_data.FEATURED = saved | {"POOLCOVER"}
+    gen_ui_data.FEATURED = dict(saved, POOLCOVER=gen_ui_data.LARGE)
     try:
         gen_ui_data.featured()
         bites = False
@@ -98,6 +99,19 @@ try:
 finally:
     gen_ui_data.FEATURED = saved
 check("featuring a dropdown variant is refused", bites)
+
+# ...and a size that is neither, which would reach the C# as a button
+# with no size at all.
+try:
+    gen_ui_data.FEATURED = dict(saved, POOL="huge")
+    try:
+        gen_ui_data.featured()
+        sized = False
+    except SystemExit:
+        sized = True
+finally:
+    gen_ui_data.FEATURED = saved
+check("a size that is neither large nor small is refused", sized)
 
 
 print("== 3. every file is a well-formed PNG of the size it claims ==")
@@ -154,7 +168,7 @@ check("rendering twice is byte-identical",
       all(gri.category_png(c, s) == gri.category_png(c, s)
           for c in cr.CATEGORIES for s in gri.SIZES)
       and all(gri.command_png(c, cat, s) == gri.command_png(c, cat, s)
-              for cat, c in gen_ui_data.featured() for s in gri.SIZES))
+              for cat, c, _z in gen_ui_data.featured() for s in gri.SIZES))
 
 
 print()

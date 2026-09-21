@@ -84,33 +84,39 @@ def cs_entries(block):
             for m in CS_ENTRY.finditer(block)]
 
 
-CS_FEATURED = re.compile(r",\s*(true|false)\),\s*$")
+CS_FLAGS = re.compile(r",\s*(true|false),\s*(true|false)\),\s*$")
+
+
+def flags(m):
+    """(HasIcon, IsLarge), or None where the line carried neither."""
+    return None if m is None else (m.group(1) == "true",
+                                   m.group(2) == "true")
 
 
 def items(block):
-    """[(primary, [variant, ...], featured)] out of one panel's Items.
+    """[(primary, [variant, ...], (hasicon, islarge))] out of a panel.
 
     Read a line at a time rather than with one big regex: a plain item
-    is a single line ending in ``new Entry[0], <flag>)``, a family opens
-    with ``new[]`` and closes on its own ``}, <flag>),``, and a pattern
-    spanning newlines happily swallows the plain item that follows a
-    family."""
+    is a single line ending in ``new Entry[0], <flags>)``, a family
+    opens with ``new[]`` and closes on its own ``}, <flags>),``, and a
+    pattern spanning newlines happily swallows the plain item that
+    follows a family."""
     out = []
     open_item = None
     for line in block.splitlines():
         text = line.strip()
-        flag = CS_FEATURED.search(text)
+        got = CS_FLAGS.search(text)
         if text.startswith("new Item("):
             face = cs_entries(line)
             open_item = [face[0], [], None]
             out.append(open_item)
             if "new Entry[0]" in text:
-                open_item[2] = flag and flag.group(1) == "true"
+                open_item[2] = flags(got)
                 open_item = None
         elif open_item is not None and text.startswith("new Entry("):
             open_item[1].extend(cs_entries(line))
         elif open_item is not None and text.startswith("}"):
-            open_item[2] = flag and flag.group(1) == "true"
+            open_item[2] = flags(got)
             open_item = None
     return [tuple(i) for i in out]
 
@@ -208,26 +214,38 @@ check("every blurb in the file is the one blurbs.txt (or the caption) gives",
 check("a blurb is never empty", all(b.strip() for _, _, b in all_entries))
 
 
-print("== 4. the large buttons are the FEATURED ones ==")
+print("== 4. the icons and the sizes are FEATURED's own ==")
 
-# IsFeatured is the button SIZE, and it decides whether
-# gen_ribbon_icons.py drew a glyph for the routine at all.  A flag that
-# disagreed with FEATURED would be a large button with no picture on it
-# (or a glyph drawn every run and never shown) -- and neither looks like
-# a failure from the outside, which is why it is checked from the
-# emitted FILE rather than by asking the generator what it emits.
-flagged = sorted(primary[0] for group in PANELS.values()
-                 for primary, _v, feat in group if feat)
-check("%d of the %d buttons are large"
-      % (len(flagged), sum(len(v) for v in PANELS.values())),
-      flagged == sorted(gen_ui_data.FEATURED),
-      repr(sorted(set(flagged) ^ set(gen_ui_data.FEATURED))))
-check("every button carries a flag either way",
-      all(feat is not None for group in PANELS.values()
-          for _p, _v, feat in group))
+# HasIcon decides whether gen_ribbon_icons.py drew a glyph at all, and
+# IsLarge how big a button wears it.  A flag disagreeing with FEATURED
+# is a button asking for a picture nobody drew, or a glyph drawn every
+# run and never shown -- and neither looks like a failure from the
+# outside, which is why this is read out of the emitted FILE rather than
+# by asking the generator what it emits.
+iconed = sorted(primary[0] for group in PANELS.values()
+                for primary, _v, f in group if f and f[0])
+large = sorted(primary[0] for group in PANELS.values()
+               for primary, _v, f in group if f and f[1])
+want_large = sorted(c for c, z in gen_ui_data.FEATURED.items()
+                    if z == gen_ui_data.LARGE)
+
+check("%d of the %d buttons carry a glyph"
+      % (len(iconed), sum(len(v) for v in PANELS.values())),
+      iconed == sorted(gen_ui_data.FEATURED),
+      repr(sorted(set(iconed) ^ set(gen_ui_data.FEATURED))))
+check("%d of those %d are large" % (len(large), len(iconed)),
+      large == want_large, repr(sorted(set(large) ^ set(want_large))))
+
+# The invariant the two bools have to keep: you cannot show a picture
+# at 32 that was never drawn.
+check("every large button has a glyph", set(large) <= set(iconed),
+      repr(sorted(set(large) - set(iconed))))
+check("every button carries both flags",
+      all(f is not None for group in PANELS.values()
+          for _p, _v, f in group))
 
 # A variant cannot be featured on its own: it has no button of its own
-# to be large, and gen_ui_data.featured() refuses to name one.
+# to carry a glyph, and gen_ui_data.featured() refuses to name one.
 check("no dropdown variant is flagged",
       not (set(gen_ui_data.FEATURED) &
            {v[0] for group in PANELS.values()

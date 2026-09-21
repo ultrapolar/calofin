@@ -34,14 +34,14 @@ Those go on one split button -- the primary on the face, the rest one
 click down, which is what AutoCAD's own flyouts are for. 94 commands
 become 67 buttons, and every one of the 94 is still reachable:
 
-| Panel | Commands | Buttons | Large | Small |
-| --- | --- | --- | --- | --- |
-| Layout | 37 | 26 | 10 | 16 |
-| Points | 15 | 13 | 3 | 10 |
-| Dimensions | 12 | 10 | 5 | 5 |
-| Converters | 8 | 4 | 4 | 0 |
-| Checking | 22 | 14 | 14 | 0 |
-| **total** | **94** | **67** | **36** | **31** |
+| Panel | Commands | Buttons | Large | Small, with a glyph | Small, text |
+| --- | --- | --- | --- | --- | --- |
+| Layout | 37 | 26 | 10 | 0 | 16 |
+| Points | 15 | 13 | 3 | 0 | 10 |
+| Dimensions | 12 | 10 | 5 | 0 | 5 |
+| Converters | 8 | 4 | 4 | 0 | 0 |
+| Checking | 22 | 14 | 0 | 14 | 0 |
+| **total** | **94** | **67** | **22** | **14** | **31** |
 
 **Which is a variant of which is derived, not typed.** `variant_of` in
 `tools/gen_ui_data.py` reads it off the roster with affix rules --
@@ -72,10 +72,12 @@ every command in a category appears exactly once across its buttons --
 on a face or in a dropdown -- and pins each family as the editorial
 claim it is, rather than by asking the rules again.
 
-## Two button sizes, and why not one
+## Which routines get a picture, and how big
 
-**Thirty-six routines get a large button with a glyph of their own.
-The other thirty-one get a small button with their name on it.**
+**Thirty-six routines have a glyph of their own. The other thirty-one
+are plain text buttons.** That is the first decision, and it is
+editorial: `gen_ui_data.FEATURED`, the shop's own answer to "which ones
+do you actually run".
 
 What a ribbon can do that the palette cannot is let a drafter reach a
 tool by SHAPE, without reading -- and that only works for a tool they
@@ -83,16 +85,33 @@ run often enough to learn the shape of. Drawing a glyph for all 67
 buttons would spend the distinction it is made of: 67 pictures nobody
 can tell apart is the same failure as one picture repeated 67 times,
 which is what this surface shipped with when every button wore its
-category's icon. So the list is short and editorial --
-`gen_ui_data.FEATURED`, the shop's own answer to "which ones do you
-actually run" -- and everything else is a text button, which is what
-most of AutoCAD's own ribbon is made of anyway.
+category's icon.
 
-`FEATURED` is guarded twice, in `gen_ui_data.featured()`: a name there
-must be a real command on the panel, and it must be a **primary** --
-the face of its own button, not a variant riding in a dropdown. A
-featured variant would have a glyph drawn for it that no button ever
-shows, and nothing would look wrong.
+**How big a button wears it is a separate decision**, and `FEATURED`
+carries it as the value against each name:
+
+- `LARGE` -- full height, the glyph at 32 with the command under it.
+  Twenty-two of them: the pool and spa layouts, the step shapes, the
+  survey point work, the callouts and the stamp, the four converters.
+- `SMALL` -- an ordinary row, the glyph at 16 beside the name.
+  Fourteen: all of **Checking**. Fourteen large buttons made it the
+  widest panel on the tab at 1120px, which is a lot of strip to spend
+  on the things you run after the drawing is done. They keep their
+  pictures -- a review pass is still easier to find by shape than by
+  reading -- on a row a third the height, and the panel came to 554px.
+
+So a small button comes in two kinds: with a glyph where one was drawn
+(Checking) and plain text where none was (everywhere else). No panel
+mixes them, because Checking is the only panel whose routines are all
+featured.
+
+`FEATURED` is guarded three ways, in `gen_ui_data.featured()`: a name
+there must be a real command on the panel; it must be a **primary** --
+the face of its own button, not a variant riding in a dropdown, since a
+glyph drawn for a variant is one no button ever shows; and its size
+must be one of the two. `tests/test_ribbon_catalog.py` adds the
+invariant the two emitted flags have to keep: **every large button has
+a glyph**, because you cannot show at 32 a picture nobody drew.
 
 **The face says the COMMAND, not the caption.** A ribbon button is
 about a word wide and LAZPANEL's captions are sentences: "Pool from a
@@ -132,14 +151,14 @@ python3 tools/gen_ribbon_icons.py --prune   # ...and delete orphans
 **Two kinds.** One per category, for the panel header -- a floor plan
 for Layout, a scatter of points for Points, a dimension line for
 Dimensions, two arrows chasing each other for Converters, a checkmark
-for Checking -- and one per FEATURED routine, for the face of its large
-button. A routine's icon takes its **category's colours**, so a panel
-reads as one family and the glyph is what distinguishes a tool inside
-it.
+for Checking -- and one per FEATURED routine. A routine's icon takes
+its **category's colours**, so a panel reads as one family and the
+glyph is what distinguishes a tool inside it.
 
 **Two sizes, because the ribbon asks for two.** `LargeImage` is the
-32x32 on a large button's face; `Image` is the 16x16 the same command
-wears when the panel is squeezed into its collapsed drop-down. Handing
+32x32 on a large button's face; `Image` is the 16x16 a small button
+wears beside its name, and the one the same command wears when a panel
+is squeezed into its collapsed drop-down. Handing
 one 32x32 to both slots -- which this file used to do -- makes WPF
 downscale hard-edged pixel art by half, and hard-edged pixel art is the
 worst thing there is to downscale. So every glyph is drawn on a 32-unit
@@ -153,8 +172,11 @@ a small icon is not a small picture of the big one.
 for a review pass, chasing arrows for a converter -- and the subject
 says what it acts on. At 16 the badge is dropped and the subject takes
 the whole field: a checkmark in the six pixels a 16x16 icon can spare
-for a corner is noise, and the small icon is only ever seen in the
-collapsed drop-down, where the command's name is written beside it.
+for a corner is noise. Checking's fourteen are the icons this matters
+most for, since 16 is the size they are normally seen at -- and they
+carry it, because the subject alone tells them apart (the test asserts
+it) and they are all the panel's one teal, which says "a check" more
+plainly than a tick a drafter cannot resolve.
 
 **The four converters wear their own initials** -- XFT, SO, VS, G2M --
 over the chasing arrows, in a 3x5 bitmap font. A format is a name
@@ -210,10 +232,10 @@ python3 tools/gen_ui_data.py --check   # are they both current?  make check runs
 
 **Never hand-edit `Generated/CommandCatalog.g.cs` or `icons/`.** Add a
 tool the same way as always: put it on `LAZPANEL`, write its blurb in
-`blurbs.txt`, and re-run the generator. To give it a large button, add
-its name to `gen_ui_data.FEATURED` and a glyph to
-`gen_ribbon_icons.DESIGN` -- `make check` fails until both are there,
-in either direction.
+`blurbs.txt`, and re-run the generator. To give it a picture, add its name
+to `gen_ui_data.FEATURED` with a size (`LARGE` or `SMALL`) and a glyph
+to `gen_ribbon_icons.DESIGN` -- `make check` fails until both are
+there, in either direction.
 
 ## The tab puts itself back
 
@@ -326,10 +348,12 @@ prove any of it:
    is the part the source got wrong once; `RibbonRowPanel`,
    `RibbonRowBreak` and how `RibbonPanelSource.Items` lays out across
    the panel are all taken on faith until a build says otherwise.
-3. Confirm a large button shows its 32x32 glyph and a small one shows
-   text only, and that the **tooltip** carries the command name, the
-   caption and the blurb -- `RibbonToolTip`'s `Command` / `Title` /
-   `Content` are the other unverified API surface here.
+3. Confirm a large button shows its 32x32 glyph with the command under
+   it, that **Checking**'s rows show their 16x16 glyph beside the name,
+   and that every other small button is text only. Then confirm the
+   **tooltip** carries the command name, the caption and the blurb --
+   `RibbonToolTip`'s `Command` / `Title` / `Content` are the other
+   unverified API surface here.
 4. Click a button and confirm it runs the command exactly as typing it
    would -- `POOL`, say, should start prompting the way it does from
    the command line or from the palette.

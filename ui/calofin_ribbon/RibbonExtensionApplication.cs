@@ -161,14 +161,16 @@ namespace Calofin.Ribbon
         }
 
         /// <summary>
-        /// One panel.  The FEATURED routines take large buttons with a
-        /// glyph of their own and lead the panel; the rest follow as
-        /// small text buttons, three to a column.
+        /// One panel.  The large routines lead it, full height, with
+        /// their glyph at 32 and the command under it; the rest follow
+        /// three to a column, wearing the same glyph at 16 beside the
+        /// name where one was drawn for them and plain text where none
+        /// was.
         ///
-        /// Which are featured is not decided here -- it is
-        /// Item.IsFeatured, out of gen_ui_data.FEATURED, the same list
-        /// gen_ribbon_icons.py draws from, so a large button and the
-        /// picture on it cannot come apart.
+        /// Neither is decided here -- Item.IsLarge and Item.HasIcon come
+        /// off gen_ui_data.FEATURED, the same table gen_ribbon_icons.py
+        /// draws from, so a button and the picture on it cannot come
+        /// apart.
         /// </summary>
         private static RibbonPanel BuildPanel(
             string category, CommandCatalog.Item[] items)
@@ -186,9 +188,9 @@ namespace Calofin.Ribbon
 
             foreach (CommandCatalog.Item item in items)
             {
-                if (item.IsFeatured)
+                if (item.IsLarge)
                 {
-                    source.Items.Add(BuildItem(item, large: true));
+                    source.Items.Add(BuildItem(item));
                 }
             }
 
@@ -201,7 +203,7 @@ namespace Calofin.Ribbon
             int inColumn = 0;
             foreach (CommandCatalog.Item item in items)
             {
-                if (item.IsFeatured)
+                if (item.IsLarge)
                 {
                     continue;
                 }
@@ -214,7 +216,7 @@ namespace Calofin.Ribbon
                 {
                     column.Items.Add(new RibbonRowBreak());
                 }
-                column.Items.Add(BuildItem(item, large: false));
+                column.Items.Add(BuildItem(item));
                 if (++inColumn == RowsPerColumn)
                 {
                     source.Items.Add(column);
@@ -231,13 +233,13 @@ namespace Calofin.Ribbon
 
         /// <summary>A routine's button: plain when it has no variants,
         /// a split button carrying them when it has.</summary>
-        private static RibbonItem BuildItem(
-            CommandCatalog.Item item, bool large)
+        private static RibbonItem BuildItem(CommandCatalog.Item item)
         {
             // Only a featured routine has a glyph of its own, and its
             // variants share it: POOLCOVER is POOL with one answer
             // changed, so POOL's picture is the right picture for it.
-            string stem = item.IsFeatured
+            bool large = item.IsLarge;
+            string stem = item.HasIcon
                 ? "cmd-" + item.Primary.Command.ToLowerInvariant()
                 : null;
             BitmapImage small = stem == null ? null : LoadIcon(stem + "-16.png");

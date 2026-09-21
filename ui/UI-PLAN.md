@@ -800,15 +800,29 @@ caption is the tooltip's title.
 **Every button wore its category's icon**, so 26 Layout buttons were
 26 copies of the same blue floor plan. That is the same failure as no
 icon at all, and it costs panel width to say nothing. So: **36 FEATURED
-routines take a large button with a glyph of their own, and the other
-31 are text buttons.** A ribbon is only faster than a list where a
-drafter reaches by SHAPE without reading, and that is a thing you learn
-about tools you run -- drawing all 67 would spend the distinction it is
-made of. The list is the shop's own answer to which ones they run, and
-it lives in `gen_ui_data.FEATURED` beside `NAMED_VARIANTS`, as the
-editorial claim it is; `featured()` refuses a name that is not a real
-command, and refuses one that is a variant riding in a dropdown, whose
-glyph no button would ever show.
+routines have a glyph of their own, and the other 31 are plain text
+buttons.** A ribbon is only faster than a list where a drafter reaches
+by SHAPE without reading, and that is a thing you learn about tools you
+run -- drawing all 67 would spend the distinction it is made of. The
+list is the shop's own answer to which ones they run, and it lives in
+`gen_ui_data.FEATURED` beside `NAMED_VARIANTS`, as the editorial claim
+it is; `featured()` refuses a name that is not a real command, and
+refuses one that is a variant riding in a dropdown, whose glyph no
+button would ever show.
+
+**How big a button wears its glyph is a second, separate decision**,
+and it is the value against each name in that table. Twenty-two are
+`LARGE` -- full height, the glyph at 32 with the command under it.
+Fourteen are `SMALL`, an ordinary row with the glyph at 16 beside the
+name, and they are all of Checking: fourteen large buttons made it the
+widest panel on the tab at 1120px, which is a lot of strip to spend on
+the things you run after the drawing is done. Keeping the pictures and
+shrinking the buttons took that panel to 554px without giving up a
+single shape, which is the whole reason the two decisions are separate
+rather than one flag. The invariant the emitted pair has to keep is
+that **every large button has a glyph** -- you cannot show at 32 a
+picture nobody drew -- and `test_ribbon_catalog.py` asserts it off the
+emitted file.
 
 **The icons are drawn at two sizes now, not one scaled twice.**
 `LargeImage` is 32, `Image` is the 16 a collapsed panel's drop-down
