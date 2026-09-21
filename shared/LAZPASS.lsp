@@ -13128,7 +13128,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.7")
+(setq *poolside-version* "v1.8")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -13154,6 +13154,19 @@
 ;; them differently would be a second vocabulary for one question.
 (setq psd:*btypes*  "Normal Sport Wedge SLope MOdflat SHallow")
 (setq psd:*btshown* "Normal/Sport/Wedge/SLope/MOdflat/SHallow")
+
+;; Which of those six the bottom-type question offers on Enter.  A shop
+;; that draws Sport all day sets it here and stops typing the word;
+;; every other bottom is still one keyword away.  Any case will do --
+;; a word psd:*btypes* does not list is not one the prompt would take
+;; either, so "Normal" stands.
+(setq psd:*btype-default* "Normal")
+
+;; Which end the mirror question offers on Enter: "No" leaves the deep
+;; end on the LEFT, the way the letters are measured, and "Yes" offers
+;; the section swapped end for end instead, for a shop whose sheets
+;; read the other way round.  Either case; anything else leaves "No".
+(setq psd:*mirror-default* "No")
 
 ;; The LENGTH RULER beside the DEPTH prompts.  A pool's depths are a
 ;; short list: a wall is built to a handful of heights, a deep end to a
@@ -13444,6 +13457,16 @@
         (setq w (strcat w c)))
     (setq i (1+ i)))
   out)
+
+;; The canonical spelling a KNOB's word stands for in the space-
+;; separated list KWS, in any case, or nil for anything that is not one
+;; of them -- a word, a number, nil.  The keyword knobs in the block at
+;; the top are read through this: psd:askkw hands a default straight
+;; back on Enter without checking it, so a word typed into a settings
+;; box that the prompt would refuse must not reach the chain table
+;; spelled its own way, and the caller falls back to the shipped one.
+(defun psd:kwknob (v kws)
+  (if (= (type v) 'STR) (psd:fkword v kws)))
 
 ;; The form's keyword for KEY against the live list KWS: the canonical
 ;; keyword, DFLT when the form said nil (what Enter means at every
@@ -13851,7 +13874,7 @@
 
 (defun c:POOLSIDE ( / *error* undo-open style base total doff th chain pv ans
                       wh dp c2 runs cv fixed sta segs mir sgn i s p q
-                      maxd ydim odl xc xd xb y m fv)
+                      maxd ydim odl xc xd xb y m fv bdflt mdflt)
 
   (defun *error* (msg)
     (if (and msg
@@ -13890,13 +13913,18 @@
   ;; of every measurement, so they are asked as a chain: Back at the
   ;; base point re-asks the type, which is the answer the rest of the
   ;; run is shaped by
+  ;;
+  ;; what Enter answers the bottom-type question with, read through
+  ;; psd:kwknob so a knob the prompt would refuse leaves the shipped
+  ;; "Normal" standing rather than reaching the chain table unspelled
+  (setq bdflt (or (psd:kwknob psd:*btype-default* psd:*btypes*) "Normal"))
   (setq base 'RETRY)
   (while (eq base 'RETRY)
     ;; the form can name the bottom; anything psd:*btypes* does not
     ;; list falls through to the prompt rather than being forced in
     (if (null (setq style (psd:fkw 'style psd:*btypes* "Normal")))
       (setq style (cal:askkw "Bottom type" psd:*btypes* psd:*btshown*
-                             "Normal" nil)))
+                             bdflt nil)))
     ;; the base point is picked with the user's own snaps still live;
     ;; only afterwards do snaps drop for the command-fed drawing work.
     ;; It is the top LEFT of the section -- the waterline at the left
@@ -13964,11 +13992,15 @@
   ;; measured; mirroring swaps the section end for end and the run
   ;; dimensions with it, so the letters keep meaning what they meant
   ;; the form can answer it too, as the same Yes or No a click on the
-  ;; bracket would send; anything else falls through to the prompt
-  (setq fv  (psd:fkw 'mirror "Yes No" "No")
+  ;; bracket would send; anything else falls through to the prompt,
+  ;; where psd:*mirror-default* is what Enter means -- read through
+  ;; psd:kwknob on the same terms, so a knob that is not one of the two
+  ;; words leaves "No" standing
+  (setq mdflt (or (psd:kwknob psd:*mirror-default* "Yes No") "No")
+        fv  (psd:fkw 'mirror "Yes No" "No")
         mir (if fv
                 (= fv "Yes")
-                (cal:askyn "Put the deep end on the RIGHT?" "No" nil))
+                (cal:askyn "Put the deep end on the RIGHT?" mdflt nil))
         sgn (if mir -1.0 1.0)
         sta (psd:stations style runs wh dp c2)
         segs (psd:segs chain fixed))
@@ -15417,7 +15449,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091926 REV26")
+(setq spa:*version* "092126 REV27")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -15778,6 +15810,60 @@
 ;;;  beside it.
 (setq spa:*radius-ladder* '(3.0 18.0 3.0))
 (setq spa:*cutface-ladder* '(3.0 18.0 3.0))
+
+;; ---- what the questions offer on Enter
+;;;
+;;;  The Enter answer on the questions that ship with one.  A knob here
+;;;  changes only what Enter MEANS: the wording, the bracketed keywords
+;;;  and the order they are offered in are STANDARDS section 2's and do
+;;;  not move, and every word stays typeable at the prompt.  A value
+;;;  that is not one of that question's own words is ignored and the
+;;;  shipped answer stands, so a settings box cannot leave a prompt
+;;;  offering a default it would refuse.
+
+;; What Enter means at the offer of the SECOND outline -- "Yes" goes on
+;; to draw the other one (the cover size after a water's edge, or the
+;; reverse), "No" leaves the outline already drawn standing alone and
+;; ends the round.  A shop that draws one outline and stops sets "No"
+;; and stops typing it; both words are still offered either way.
+(setq spa:*second-default* "Yes")
+
+;; What Enter means at "Take it from" -- "Offset" builds that second
+;; outline by lapping the one already drawn, "Dims" asks for its own
+;; measurements instead.  A shop whose covers are measured separately
+;; rather than lapped sets "Dims" and answers one question less.
+(setq spa:*method-default* "Offset")
+
+;; What Enter means at "Is there a spillaway" -- "No" ends the round of
+;; spillaways, "Yes" opens another one.  A shop whose spas nearly
+;; always carry one sets "Yes" and types No to finish instead, which is
+;; the same round with the tapping the other way about.
+(setq spa:*spill-default* "No")
+
+;; What Enter means at a spillaway's location -- "Wall" centres it on a
+;; wall and asks which wall, "Corner" asks which corner and how far
+;; along to keep clear of the hinges.  The two answers ask different
+;; follow-ups, so this decides which of them Enter walks into.
+(setq spa:*spillloc-default* "Wall")
+
+;; What Enter means at "Auto-hinge the cover" -- "Yes" goes on to the
+;; spillaways and lays the fold hinges out itself, "No" draws the
+;; outlines and their dimensions and leaves the cover unhinged.  A shop
+;; that hinges by hand sets "No" and is never asked the spillaways.
+(setq spa:*autohinge-default* "Yes")
+
+;; What the FIRST corner's treatment question offers on Enter, before
+;; there is a previous answer to reuse: "" asks cold, or one of the
+;; four words -- "Square", "Radius", "Cut", "NotGiven" -- in any case.
+;; Every corner after the first offers the answer before it, as it
+;; always has; this only decides where that chain starts.
+(setq spa:*treat-default* "")
+
+;; What Enter means at "Are all four corners the same?" -- "Yes" buys
+;; ONE round of treatment questions for all four, "No" walks A, B, C
+;; and D with A's answer autofilling the rest.  A shop whose spas
+;; differ corner to corner sets "No" and starts at corner A.
+(setq spa:*samecorners-default* "Yes")
 
 ;;; -------------------- run state (not tunables) ----------------------
 ;;;
@@ -16532,6 +16618,17 @@
   (mapcar '(lambda (e c) (spa:setcol e c)) ents cols)
   (if (eq out 'SPA-NA) nil out))
 
+;; The canonical spelling S stands for among KWS, in any case, or nil
+;; for anything that is not one of them -- what a tunable default is
+;; read through before it reaches a question, since spa:askkw hands a
+;; default straight back on Enter without checking it, and "radius"
+;; typed into a settings box must not reach the corner table unspelled.
+(defun spa:kw-canon (s kws / u out w)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w kws
+    (if (= u (strcase w)) (setq out w)))
+  out)
+
 ;; Millimetres, typed with the unit on the number: 600mm, 600 MM,
 ;; 1524.5mm.  The drawing is in inches, so the value is converted.
 ;; Returns the distance in inches, or nil when the text is not that --
@@ -17003,10 +17100,18 @@
   (if (= "Yes" (spa:askkwf 'second
                            (strcat "Draw the " (spa:modeword (spa:othermode))
                                    " as well")
-                           "Yes No" "Yes/No" "Yes" nil))
+                           "Yes No" "Yes/No"
+                           (or (spa:kw-canon spa:*second-default*
+                                             '("Yes" "No"))
+                               "Yes")
+                           nil))
       (if (eq 'CAL-BACK
               (setq v (spa:askkwf 'method "Take it from" "Offset Dims"
-                                  "Offset/Dims" "Offset" t)))
+                                  "Offset/Dims"
+                                  (or (spa:kw-canon spa:*method-default*
+                                                    '("Offset" "Dims"))
+                                      "Offset")
+                                  t)))
           (spa:askother2)
           v)))
 
@@ -17470,7 +17575,9 @@
   (setq spills nil done nil)
   (princ "\n(a spillaway is named on the spa AS MEASURED; the drawing may be turned to clear it)")
   (while (not done)
-    (setq v (cal:askkw "Is there a spillaway" "Yes No" "Yes/No" "No"
+    (setq v (cal:askkw "Is there a spillaway" "Yes No" "Yes/No"
+                       (or (spa:kw-canon spa:*spill-default* '("Yes" "No"))
+                           "No")
                        (if spills t nil)))
     (cond
       ;; Back from the top question: drop the last spillaway and re-ask
@@ -17491,7 +17598,11 @@
             ;; "(centred)" note lives in the question (STANDARDS 1)
             (setq loc (cal:askkw
                         "Spillaway location (a wall one is centred on it)"
-                        "Corner Wall" "Corner/Wall" "Wall" t))
+                        "Corner Wall" "Corner/Wall"
+                        (or (spa:kw-canon spa:*spillloc-default*
+                                          '("Corner" "Wall"))
+                            "Wall")
+                        t))
             (setq stage (if (eq loc 'CAL-BACK) nil 1)))
            ((= stage 1)
             (if (= loc "Corner")
@@ -17786,7 +17897,11 @@
   (setq spa:*spills* nil
         spa:*hingeon*
         (= "Yes" (spa:askkwf 'autohinge "Auto-hinge the cover"
-                             "Yes No" "Yes/No" "Yes" nil)))
+                             "Yes No" "Yes/No"
+                             (or (spa:kw-canon spa:*autohinge-default*
+                                               '("Yes" "No"))
+                                 "Yes")
+                             nil)))
   (if spa:*hingeon*
       (setq spa:*spills* (spa:askspill)))
   spa:*hingeon*)
@@ -18155,7 +18270,7 @@
 ;; too-large answers are re-asked.  Returns (type size) or CAL-BACK.
 (defun spa:askcorner (label dflty dfltsz ents maxsb back / ty sz cols sb e
                                                             dsz out fk fty fsz
-                                                            lad)
+                                                            lad tyd)
   ;; A form can answer this corner: <stem>-ty carries the treatment,
   ;; <stem>-sz the radius or diagonal face.  Both are consumed NOW,
   ;; valid or not -- consume-once is what keeps Back from deadlocking,
@@ -18183,6 +18298,12 @@
                   (setq fsz nil))))))
   (setq cols (mapcar 'spa:getcol ents))
   (foreach e ents (spa:setcol e spa:*hi-col*))
+  ;; the answer before this one is what Enter reuses; the first corner
+  ;; has none, and offers spa:*treat-default* instead when it is set
+  (setq tyd (if dflty
+                dflty
+                (spa:kw-canon spa:*treat-default*
+                              '("Square" "Radius" "Cut" "NotGiven"))))
   (while (null out)
     (cal:osup)
     ;; the form's treatment stands in for the question ONCE -- a Back
@@ -18193,7 +18314,7 @@
     (setq ty (if fty fty
                  (cal:askkw (strcat "How should " label " be treated?")
                             "Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL"
-                            "Square/Radius/Cut/NotGiven" dflty back))
+                            "Square/Radius/Cut/NotGiven" tyd back))
           fty nil)
     (cal:osdown)
     (setq ty (cond ((equal ty "NG") "NotGiven")
@@ -18324,7 +18445,11 @@
       (setq same (if (and (not (spa:fhas 'samecorners)) (spa:fpercorner))
                      "No"
                      (spa:askkwf 'samecorners "Are all four corners the same?"
-                                 "Yes No" "Yes/No" "Yes" t)))
+                                 "Yes No" "Yes/No"
+                                 (or (spa:kw-canon spa:*samecorners-default*
+                                                   '("Yes" "No"))
+                                     "Yes")
+                                 t)))
       (cond
         ((eq same 'CAL-BACK) (setq back t done t))
         ;; ---- one round.  Every corner letter on the guide lights up,
@@ -20140,11 +20265,14 @@
 (setq oasis:*dimlayer*   "DIMENSION")  ; every dimension, both drawings
 (setq oasis:*dimcolor*   2)
 (setq oasis:*guidelayer* "POOL-GUIDE") ; the dashed circles, box and labels
-(setq oasis:*guidecolor* 'auto)        ; 'auto picks it for the background:
-                                       ; 8 on a light one, a lighter grey on
-                                       ; a dark one, where 8 is very nearly
-                                       ; the background itself.  A number is
-                                       ; used exactly as given
+(setq oasis:*guidecolor* 8)            ; grey.  The layer record outlives
+                                       ; the command, and the check drawing's
+                                       ; dashed box and centre marks stay in
+                                       ; the drawing ByLayer on it, so a
+                                       ; NUMBER rather than 'auto: one colour
+                                       ; for everyone who opens the file, not
+                                       ; one drafter's theme.  LAZTUNE can
+                                       ; still change it
 (setq oasis:*hicolor*    1)            ; red: the part being asked about
 
 ;; Two styles, because the two drawings are read differently: the pool
@@ -23382,8 +23510,7 @@
          (command "_.UNDO" "_Begin")
          (setq undo-open T)))
      (cal:ensure-layer oasis:*poollayer* oasis:*poolcolor*)
-     (cal:ensure-layer oasis:*guidelayer*
-                        (cal:ink oasis:*guidecolor* 'guide))
+     (cal:ensure-layer oasis:*guidelayer* oasis:*guidecolor*)
      (cal:ensure-layer oasis:*dimlayer* oasis:*dimcolor*)
 
      ;; -- which shape, where it goes, and then the eight measurements,
@@ -45078,7 +45205,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *lobf-version* "v1.2")
+(setq *lobf-version* "v1.3")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value LOBF reads that someone might want to
@@ -45154,11 +45281,15 @@
 (setq lobf:*layer*         "LOBF")           ; the construction line kept
 (setq lobf:*color*         4)                ; ACI (cyan)
 (setq lobf:*preview-layer* "LOBF-PREVIEW")   ; the three candidates
-(setq lobf:*preview-color* 'auto)            ; ACI (grey) -- each XLINE
-                                             ; carries its own colour.
-                                             ; 'auto picks the grey for
-                                             ; the background; a number
-                                             ; is used exactly as given
+(setq lobf:*preview-color* 8)                ; ACI (grey).  Only the
+                                             ; LAYER's colour: each XLINE
+                                             ; carries its own.  A layer
+                                             ; record outlives the command,
+                                             ; so a NUMBER rather than
+                                             ; 'auto -- one colour for
+                                             ; everyone who opens the file,
+                                             ; not one drafter's theme.
+                                             ; LAZTUNE can still change it
 (setq lobf:*ign-layer*     "LOBF-IGNORED")   ; ring round a set-aside point
 (setq lobf:*ign-color*     1)                ; ACI (red)
 (setq lobf:*appid*         "LOBF")           ; renaming this orphans
@@ -45768,8 +45899,7 @@
                      " give a direction - there is no line in them."))
       nil)
     (progn
-      (cal:ensure-layer lobf:*preview-layer*
-                         (cal:ink lobf:*preview-color* 'guide))
+      (cal:ensure-layer lobf:*preview-layer* lobf:*preview-color*)
       ;; sized to the run the points cover, so the labels read at any
       ;; scale the sheet is drawn at
       (setq run (lobf:runlen pts (lobf:cand-org (car cands))
@@ -64148,7 +64278,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.20")
+(setq *cchk-version* "v1.21")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -64325,14 +64455,24 @@
                                    ; 8 recedes on the first and is one of the
                                    ; most prominent things on screen on the
                                    ; second.  A number is used exactly as given
-;; The six below are 'auto too -- they do not vary with the screen the
+;; These three STAY IN THE DRAWING: a dimension answered "No" wears the
+;; flag colour, a moved arc and a merged line theirs, until a rerun,
+;; COVERCHECKRESCUE or U puts them back, and the report's attention
+;; lines carry the flag colour as MTEXT colour codes.  A mark that
+;; outlives the command is part of the drawing, not a cue on the
+;; screen, so these are NUMBERS -- the same colour for everyone who
+;; opens the file, never one drafter's Item colours.  Change them here,
+;; or per drafter through LAZTUNE, where the change is a decision about
+;; the drawing; a number is used exactly as given.
+(setq *cchk-flag-color*    1)       ; ACI: what you answered "No" to (red)
+(setq *cchk-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
+(setq *cchk-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
+;; The three crosses are 'auto: they do not vary with the screen the
 ;; way *cchk-grey-color* does, but 'auto routes them through cchk:ink's
-;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
-;; in the profile) can override without touching source.  A number is
-;; still used exactly as given.
-(setq *cchk-flag-color*    'auto)   ; ACI: what you answered "No" to (red)
-(setq *cchk-arc-color*     'auto)   ; ACI: arcs whose endpoints were moved (magenta)
-(setq *cchk-olap-color*    'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+;; item-type table, which LAZSET's Item colours (CalofinInk-<ROLE> in
+;; the profile) can override without touching source -- and they are
+;; drawn with grdraw and gone at the next redraw, which is what makes
+;; them a drafter's own to colour.  A number is still used as given.
 (setq *cchk-orig-color*    'auto)   ; ACI: the X marking where you drew the point (red)
 (setq *cchk-sugg-color*    'auto)   ; ACI: the + marking where COVERCHECK would put it (green)
 (setq *cchk-point-color*   'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
@@ -64346,11 +64486,12 @@
 ;; The construction XLINE through a moved dimension's original points,
 ;; and the report MTEXT.  Both layers are created on first use; the
 ;; colour applies only then, so a layer already in the drawing keeps
-;; its own.
+;; its own.  A layer record outlives every command, so the colours are
+;; NUMBERS, for the reason the marks above are.
 (setq *cchk-constr-layer*  "COVERCHECK-CONSTRUCTION")
-(setq *cchk-constr-color*  'auto)   ; ACI (yellow)
+(setq *cchk-constr-color*  2)       ; ACI (yellow)
 (setq *cchk-report-layer*  "COVERCHECK-REPORT")
-(setq *cchk-report-color*  'auto)   ; ACI (green)
+(setq *cchk-report-color*  3)       ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -65102,7 +65243,7 @@
                           minx miny maxx maxy
                           / mainl diml l pr nred nmain ndim nlin grps grp
                             ref h ins ins2 txt right)
-  (cal:ensure-layer *cchk-report-layer* (cal:ink *cchk-report-color* 'report))
+  (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
   (foreach l lines
     (if (cchk:dimline-p l)
       (setq diml (cons l diml))
@@ -67275,8 +67416,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (cal:ensure-layer *cchk-constr-layer* (cal:ink *cchk-constr-color* 'constr))
-        (cal:ensure-layer *cchk-report-layer* (cal:ink *cchk-report-color* 'report))
+        (cal:ensure-layer *cchk-constr-layer* *cchk-constr-color*)
+        (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -67642,7 +67783,7 @@
      ;; a rerun's leftover report/marker entities (e.g. suggested-pad
      ;; circles) must not pollute this scan's own attachment checks -
      ;; clear them before anything is collected, not after
-     (cal:ensure-layer *cchk-report-layer* (cal:ink *cchk-report-color* 'report))
+     (cal:ensure-layer *cchk-report-layer* *cchk-report-color*)
      (cchk:clear-old)
      (setq i 0 nd 0 ndbad 0 na 0 nabad 0 ndanch 0)
      (repeat (sslength ss)
@@ -70896,7 +71037,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.21")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.22")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -70987,14 +71128,24 @@
                                   ; 8 recedes on the first and is one of the
                                   ; most prominent things on screen on the
                                   ; second.  A number is used exactly as given
-;; The six below are 'auto too -- they do not vary with the screen the
+;; These three STAY IN THE DRAWING: a dimension answered "No" wears the
+;; flag colour, a moved arc and a merged line theirs, until a rerun,
+;; DIMCHECKRESCUE or U puts them back, and the report's attention lines
+;; carry the flag colour as MTEXT colour codes.  A mark that outlives
+;; the command is part of the drawing, not a cue on the screen, so
+;; these are NUMBERS -- the same colour for everyone who opens the
+;; file, never one drafter's Item colours.  Change them here, or per
+;; drafter through LAZTUNE, where the change is a decision about the
+;; drawing; a number is used exactly as given.
+(setq *dchk-flag-color*   1)       ; ACI: dimensions you answered "No" to (red)
+(setq *dchk-arc-color*    6)       ; ACI: arcs whose endpoints were moved (magenta)
+(setq *dchk-olap-color*   4)       ; ACI: merged or flagged overlapping lines (cyan)
+;; The three crosses are 'auto: they do not vary with the screen the
 ;; way *dchk-grey-color* does, but 'auto routes them through dchk:ink's
-;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
-;; in the profile) can override without touching source.  A number is
-;; still used exactly as given.
-(setq *dchk-flag-color*   'auto)   ; ACI: dimensions you answered "No" to (red)
-(setq *dchk-arc-color*    'auto)   ; ACI: arcs whose endpoints were moved (magenta)
-(setq *dchk-olap-color*   'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+;; item-type table, which LAZSET's Item colours (CalofinInk-<ROLE> in
+;; the profile) can override without touching source -- and they are
+;; drawn with grdraw and gone at the next redraw, which is what makes
+;; them a drafter's own to colour.  A number is still used as given.
 (setq *dchk-orig-color*   'auto)   ; ACI: the X marking where you drew the point (red)
 (setq *dchk-sugg-color*   'auto)   ; ACI: the + marking where DIMCHECK would put it (green)
 (setq *dchk-point-color*  'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
@@ -71010,9 +71161,9 @@
 ;; colour applies only then, so a layer already in the drawing keeps
 ;; its own.
 (setq *dchk-constr-layer* "DIMCHECK-CONSTRUCTION")
-(setq *dchk-constr-color* 'auto)   ; ACI (yellow)
+(setq *dchk-constr-color* 2)       ; ACI (yellow)
 (setq *dchk-report-layer* "DIMCHECK-REPORT")
-(setq *dchk-report-color* 'auto)   ; ACI (green)
+(setq *dchk-report-color* 3)       ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -72252,8 +72403,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (cal:ensure-layer *dchk-constr-layer* (cal:ink *dchk-constr-color* 'constr))
-        (cal:ensure-layer *dchk-report-layer* (cal:ink *dchk-report-color* 'report))
+        (cal:ensure-layer *dchk-constr-layer* *dchk-constr-color*)
+        (cal:ensure-layer *dchk-report-layer* *dchk-report-color*)
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -72729,7 +72880,7 @@
                          lines)))
 
      ;; --- report (the only thing DIMSCAN writes) ------------------
-     (cal:ensure-layer *dchk-report-layer* (cal:ink *dchk-report-color* 'report))
+     (cal:ensure-layer *dchk-report-layer* *dchk-report-color*)
      (dchk:clear-old)
      (setq hdr (list
                  (cons (strcat "Dimensions scanned: " (itoa nd) " ("
@@ -73029,7 +73180,7 @@
         (cond
           ((= sstep 1)
            (if (cal:ask-yn "\n  Drop that list into the drawing as a reference sheet?" "Yes")
-             (progn (cal:ensure-layer *dchk-report-layer* (cal:ink *dchk-report-color* 'report))
+             (progn (cal:ensure-layer *dchk-report-layer* *dchk-report-color*)
                     (setq sstep 2))
              (setq sstep 4)))
           ((= sstep 2)
@@ -84317,7 +84468,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.17")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.18")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -84481,14 +84632,24 @@
                                   ; 8 recedes on the first and is one of the
                                   ; most prominent things on screen on the
                                   ; second.  A number is used exactly as given
-;; The six below are 'auto too -- they do not vary with the screen the
+;; These three STAY IN THE DRAWING: a dimension answered "No" wears the
+;; flag colour, a moved arc and a merged line theirs, until a rerun,
+;; LINFINCHECKRESCUE or U puts them back, and the report's attention
+;; lines carry the flag colour as MTEXT colour codes.  A mark that
+;; outlives the command is part of the drawing, not a cue on the
+;; screen, so these are NUMBERS -- the same colour for everyone who
+;; opens the file, never one drafter's Item colours.  Change them here,
+;; or per drafter through LAZTUNE, where the change is a decision about
+;; the drawing; a number is used exactly as given.
+(setq *lfc-flag-color*    1)       ; ACI: what you answered "No" to (red)
+(setq *lfc-arc-color*     6)       ; ACI: arcs whose endpoints were moved (magenta)
+(setq *lfc-olap-color*    4)       ; ACI: merged or flagged overlapping lines (cyan)
+;; The three crosses are 'auto: they do not vary with the screen the
 ;; way *lfc-grey-color* does, but 'auto routes them through lfc:ink's
-;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
-;; in the profile) can override without touching source.  A number is
-;; still used exactly as given.
-(setq *lfc-flag-color*    'auto)   ; ACI: what you answered "No" to (red)
-(setq *lfc-arc-color*     'auto)   ; ACI: arcs whose endpoints were moved (magenta)
-(setq *lfc-olap-color*    'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+;; item-type table, which LAZSET's Item colours (CalofinInk-<ROLE> in
+;; the profile) can override without touching source -- and they are
+;; drawn with grdraw and gone at the next redraw, which is what makes
+;; them a drafter's own to colour.  A number is still used as given.
 (setq *lfc-orig-color*    'auto)   ; ACI: the X marking where you drew the point (red)
 (setq *lfc-sugg-color*    'auto)   ; ACI: the + marking where LINFINCHECK would put it (green)
 (setq *lfc-point-color*   'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
@@ -84502,11 +84663,12 @@
 ;; The construction XLINE through a moved dimension's original points,
 ;; and the report MTEXT.  Both layers are created on first use; the
 ;; colour applies only then, so a layer already in the drawing keeps
-;; its own.
+;; its own.  A layer record outlives every command, so the colours are
+;; NUMBERS, for the reason the marks above are.
 (setq *lfc-constr-layer*  "LINFINCHECK-CONSTRUCTION")
-(setq *lfc-constr-color*  'auto)   ; ACI (yellow)
+(setq *lfc-constr-color*  2)       ; ACI (yellow)
 (setq *lfc-report-layer*  "LINFINCHECK-REPORT")
-(setq *lfc-report-color*  'auto)   ; ACI (green)
+(setq *lfc-report-color*  3)       ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -85161,7 +85323,7 @@
                          minx miny maxx maxy
                          / mainl diml l pr nred nmain ndim nlin grps grp
                            ref h ins ins2 txt right)
-  (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
+  (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
   (foreach l lines
     (if (lfc:dimline-p l)
       (setq diml (cons l diml))
@@ -86860,8 +87022,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (cal:ensure-layer *lfc-constr-layer* (cal:ink *lfc-constr-color* 'constr))
-        (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
+        (cal:ensure-layer *lfc-constr-layer* *lfc-constr-color*)
+        (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -88128,7 +88290,7 @@
      (setq bordsum (lfc:border-verdict bordbb))
 
      ;; --- report (the only thing the scan writes) --------------------
-     (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
+     (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
      (lfc:clear-old)
      (setq dhdr (if lite
                   nil
@@ -88522,7 +88684,7 @@
         (cond
           ((= sstep 1)
            (if (cal:ask-yn "\n  Drop that list into the drawing as a reference sheet?" "Yes")
-             (progn (cal:ensure-layer *lfc-report-layer* (cal:ink *lfc-report-color* 'report))
+             (progn (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
                     (setq sstep 2))
              (setq sstep 4)))
           ((= sstep 2)
@@ -94790,7 +94952,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.19")
+(setq *perp-version* "v0.20")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -94825,6 +94987,38 @@
                                     ; row spacings, a click still counts
                                     ; as picking a row rather than as the
                                     ; first point of a measured length
+
+;; Which answer the "Split the ... evenly, half at each end?" question
+;; takes on Enter when a width change has to be shared out: "Yes" puts
+;; half of the difference at each end, "No" goes on to ask how much of
+;; it the START end takes.  Both words are still offered and either can
+;; still be typed -- this only decides what tapping Enter means.
+;; Anything that is neither word is ignored and "Yes" stands.
+(setq perp:*split-default* "Yes")
+
+;; Which answer the boundary's "stop at the boundary, or run out to
+;; meet it?" question takes on Enter: "Limit" caps a length that would
+;; carry a point past the boundary, "Meet" runs every offset out to it
+;; without asking a length at all.  Both keywords are still offered and
+;; either can still be typed.  Anything that is neither is ignored and
+;; "Limit" stands.
+(setq perp:*bound-default* "Limit")
+
+;; What the FIRST round's "how should the points be joined?" question
+;; offers on Enter, before there is a round behind it to reuse:
+;; "Straight", "Arcs" or "Mixed", in any case.  Every round after the
+;; first offers the answer before it, as it always has; this only
+;; decides where that chain starts.  Anything that is none of the three
+;; is ignored and "Straight" stands.
+(setq perp:*join-default* "Straight")
+
+;; Which of the two dimension styles the closing question takes on
+;; Enter -- "STandard" (STANDARD INCHES) or "SIde" (SIDE STANDARD), in
+;; any case.  A shop whose work is mostly side dimensions stops
+;; re-typing SIde at every run; the question is asked in the same words
+;; either way and both keywords are still offered.  Anything that is
+;; neither keyword is ignored and "STandard" stands.
+(setq perp:*dimstyle-default* "STandard")
 
 ;;; -------------------- the length ruler --------------------------------
 ;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
@@ -94885,6 +95079,36 @@
   (list perp:*ruler-color* perp:*ruler-current-color* perp:*ruler-screen-x*
         perp:*ruler-row-frac* perp:*ruler-txt-frac* perp:*ruler-tick-frac*
         perp:*ruler-ring-frac* perp:*ruler-reach*))
+
+;; The canonical spelling S stands for among KWS, in any case, or nil
+;; for anything that is not one of them -- what a tunable default is
+;; read through before it reaches a question, since Enter hands a
+;; default straight back without checking it, and "side" typed into a
+;; settings box must not reach the style table unspelled.
+(defun perp:kw-canon (s kws / u out w)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w kws
+    (if (= u (strcase w)) (setq out w)))
+  out)
+
+;; The Enter answer each of the four question knobs names, canonicalised
+;; -- or the word the file ships with, when the override is none of the
+;; keywords the question offers.  One reader per knob, so the global is
+;; read in exactly one place and the question itself takes a word it can
+;; use.
+(defun perp:split-dflt ()
+  (cond ((perp:kw-canon perp:*split-default* '("Yes" "No"))) ("Yes")))
+
+(defun perp:bound-dflt ()
+  (cond ((perp:kw-canon perp:*bound-default* '("Limit" "Meet"))) ("Limit")))
+
+(defun perp:join-dflt ()
+  (cond ((perp:kw-canon perp:*join-default* '("Straight" "Arcs" "Mixed")))
+        ("Straight")))
+
+(defun perp:dimstyle-dflt ()
+  (cond ((perp:kw-canon perp:*dimstyle-default* '("STandard" "SIde")))
+        ("STandard")))
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -95218,7 +95442,8 @@
 ;;   2  the amount (or the new width itself)
 ;;   3  split it evenly, half at each end?
 ;;   4  how much of it at the START end -- the rest goes on at FINISH
-(defun perp:ask-width (lbl d back / kws step kind ans v w diff frac out)
+(defun perp:ask-width (lbl d back / kws step kind ans v w diff frac out
+                       sdflt)
   (princ (strcat "\n" lbl ", end to end: " (rtos d) "."))
   (setq kws "Grew Shrank New Unchanged" step 1 out nil w nil frac 0.5)
   (while (and (> step 0) (< step 5))
@@ -95271,11 +95496,13 @@
       ;; --- 3. half at each end, or not?
       ((= step 3)
        (setq diff (abs (- w d)))
+       (setq sdflt (perp:split-dflt))
        (initget "Yes No Back Undo")
        (setq ans (getkword (strcat "\nSplit the " (rtos diff)
                                    " evenly, half at each end?"
-                                   " [Yes/No/Back] <Yes>: ")))
+                                   " [Yes/No/Back] <" sdflt ">: ")))
        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
+       (if (null ans) (setq ans sdflt))  ; Enter = the knob's word
        (cond
          ((member ans '("Back" "Undo"))
           (princ "\nStepping back one question.")
@@ -95510,7 +95737,7 @@
                     len lastLen i base np again ans iter p e
                     join lastJoin kws nseg picks reply tangs plEnt
                     wOld wNew wres mid fac qstep arrow bnd bmode cap over
-                    rstep askd tgt)
+                    rstep askd tgt bdflt dsdflt)
 
   ;; erase one temporary entity and forget it
   (defun perp:kill (e)
@@ -95782,7 +96009,7 @@
   ;; exactly as it did before there was one.  A boundary then gets one
   ;; more question -- a limit the offsets stop at, or the line every one
   ;; of them runs out to meet -- and Back there re-opens the selection.
-  (setq qstep 1 bnd nil bmode nil)
+  (setq qstep 1 bnd nil bmode nil bdflt (perp:bound-dflt))
   (while (< qstep 3)
     (cond
       ((= qstep 1)
@@ -95813,14 +96040,14 @@
        (initget "Limit Meet Back Undo")
        (setq bmode (getkword (strcat "\nDo the offsets stop at the boundary,"
                                      " or run out to meet it?"
-                                     " [Limit/Meet/Back] <Limit>: ")))
+                                     " [Limit/Meet/Back] <" bdflt ">: ")))
        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") bmode) bmode)
        (cond
          ((member bmode '("Back" "Undo"))
           (princ "\nStepping back one question.")
           (setq qstep 1))
          (t
-          (if (null bmode) (setq bmode "Limit"))
+          (if (null bmode) (setq bmode bdflt))
           (setq qstep 3))))))
   (if bnd
     (princ (strcat "\nBoundary set: "
@@ -95837,6 +96064,9 @@
         again "Yes"
         iter  0
         total 0)
+  ;; the closing style question's Enter answer, read through the
+  ;; canonicaliser so a misspelled override cannot reach the style table
+  (setq dsdflt (perp:dimstyle-dflt))
 
   (while (equal again "Yes")
     (setq iter (1+ iter) rstep 1)
@@ -95983,17 +96213,18 @@
                    (setq i (1+ i)))))))))
 
         ;; --- straight lines, arcs, or both -----------------------------
-        ;; Straight is what this routine has always drawn and stays the
-        ;; opening default; Arcs curves every segment; Mixed asks which
-        ;; segment numbers to curve and leaves the rest as lines.  Two
-        ;; points make one segment with no neighbouring point to take a
-        ;; curvature from, so below three points there is nothing to ask.
-        ;; The answer carries across rounds as the offered default.
+        ;; Straight is what this routine has always drawn and is the
+        ;; opening default perp:*join-default* ships; Arcs curves every
+        ;; segment; Mixed asks which segment numbers to curve and leaves
+        ;; the rest as lines.  Two points make one segment with no
+        ;; neighbouring point to take a curvature from, so below three
+        ;; points there is nothing to ask.  The answer carries across
+        ;; rounds as the offered default.
         ((= rstep 3)
          (setq nseg  (1- n)
                kws   "Straight Arcs Mixed"
                picks nil)
-         (if (null lastJoin) (setq lastJoin "Straight"))
+         (if (null lastJoin) (setq lastJoin (perp:join-dflt)))
          (if (< n 3)
            (progn
              (princ "\nTwo points make one straight segment - nothing to curve.")
@@ -96163,8 +96394,10 @@
         (progn
           (initget "STandard SIde Back Undo")
           (setq ans (getkword (strcat "\nDimension style - STANDARD INCHES or "
-                                      "SIDE STANDARD? [STandard/SIde/Back] <STandard>: ")))
+                                      "SIDE STANDARD? [STandard/SIde/Back] <"
+                                      dsdflt ">: ")))
           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
+          (if (null ans) (setq ans dsdflt))  ; Enter = the knob's word
           (if (member ans '("Back" "Undo"))
             (progn (princ "\nStepping back one question.")
                    (setq again 'RETRY)))))))
@@ -96454,7 +96687,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.19")
+(setq *cperp-version* "v0.20")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -96489,6 +96722,30 @@
                                     ; row spacings, a click still counts
                                     ; as picking a row rather than as the
                                     ; first point of a measured length
+
+;; Which answer the "Split the ... evenly, half at each end?" question
+;; takes on Enter when a width change has to be shared out: "Yes" puts
+;; half of the difference at each end, "No" goes on to ask how much of
+;; it the START end takes.  Both words are still offered and either can
+;; still be typed -- this only decides what tapping Enter means.
+;; Anything that is neither word is ignored and "Yes" stands.
+(setq cperp:*split-default* "Yes")
+
+;; Which answer the boundary's "stop at the boundary, or run out to
+;; meet it?" question takes on Enter: "Limit" caps a length that would
+;; carry a point past the boundary, "Meet" runs every offset out to it
+;; without asking a length at all.  Both keywords are still offered and
+;; either can still be typed.  Anything that is neither is ignored and
+;; "Limit" stands.
+(setq cperp:*boundary-default* "Limit")
+
+;; Which of the two dimension styles the closing question takes on
+;; Enter -- "STandard" (STANDARD INCHES) or "SIde" (SIDE STANDARD), in
+;; any case.  A shop whose work is mostly side dimensions stops
+;; re-typing SIde at every run; the question is asked in the same words
+;; either way and both keywords are still offered.  Anything that is
+;; neither keyword is ignored and "STandard" stands.
+(setq cperp:*dimstyle-default* "STandard")
 
 ;;; -------------------- the length ruler --------------------------------
 ;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
@@ -96549,6 +96806,33 @@
   (list cperp:*ruler-color* cperp:*ruler-current-color* cperp:*ruler-screen-x*
         cperp:*ruler-row-frac* cperp:*ruler-txt-frac* cperp:*ruler-tick-frac*
         cperp:*ruler-ring-frac* cperp:*ruler-reach*))
+
+;; The canonical spelling S stands for among KWS, in any case, or nil
+;; for anything that is not one of them -- what a tunable default is
+;; read through before it reaches a question, since Enter hands a
+;; default straight back without checking it, and "side" typed into a
+;; settings box must not reach the style table unspelled.
+(defun cperp:kw-canon (s kws / u out w)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w kws
+    (if (= u (strcase w)) (setq out w)))
+  out)
+
+;; The Enter answer each of the three question knobs names, canonicalised
+;; -- or the word the file ships with, when the override is none of the
+;; keywords the question offers.  One reader per knob, so the global is
+;; read in exactly one place and the question itself takes a word it can
+;; use.
+(defun cperp:split-dflt ()
+  (cond ((cperp:kw-canon cperp:*split-default* '("Yes" "No"))) ("Yes")))
+
+(defun cperp:boundary-dflt ()
+  (cond ((cperp:kw-canon cperp:*boundary-default* '("Limit" "Meet")))
+        ("Limit")))
+
+(defun cperp:dimstyle-dflt ()
+  (cond ((cperp:kw-canon cperp:*dimstyle-default* '("STandard" "SIde")))
+        ("STandard")))
 
 ;; --- generic helpers -------------------------------------------------
 
@@ -96699,7 +96983,8 @@
 ;;   2  the amount (or the new width itself)
 ;;   3  split it evenly, half at each end?
 ;;   4  how much of it at the START end -- the rest goes on at FINISH
-(defun cperp:ask-width (lbl d back / kws step kind ans v w diff frac out)
+(defun cperp:ask-width (lbl d back / kws step kind ans v w diff frac out
+                        sdflt)
   (princ (strcat "\n" lbl ", end to end: " (rtos d) "."))
   (setq kws "Grew Shrank New Unchanged" step 1 out nil w nil frac 0.5)
   (while (and (> step 0) (< step 5))
@@ -96752,11 +97037,13 @@
       ;; --- 3. half at each end, or not?
       ((= step 3)
        (setq diff (abs (- w d)))
+       (setq sdflt (cperp:split-dflt))
        (initget "Yes No Back Undo")
        (setq ans (getkword (strcat "\nSplit the " (rtos diff)
                                    " evenly, half at each end?"
-                                   " [Yes/No/Back] <Yes>: ")))
+                                   " [Yes/No/Back] <" sdflt ">: ")))
        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
+       (if (null ans) (setq ans sdflt))  ; Enter = the knob's word
        (cond
          ((member ans '("Back" "Undo"))
           (princ "\nStepping back one question.")
@@ -96999,7 +97286,7 @@
                      tangs tg guideEnts total len lastLen i base np again
                      ans iter plt p e
                      wOld wNew wres mid fac qstep arrow bnd bmode cap over
-                     rstep askd tgt)
+                     rstep askd tgt bdflt dsdflt)
 
   ;; erase one temporary entity and forget it
   (defun cperp:kill (e)
@@ -97267,7 +97554,7 @@
   ;; exactly as it did before there was one.  A boundary then gets one
   ;; more question -- a limit the offsets stop at, or the line every one
   ;; of them runs out to meet -- and Back there re-opens the selection.
-  (setq qstep 1 bnd nil bmode nil)
+  (setq qstep 1 bnd nil bmode nil bdflt (cperp:boundary-dflt))
   (while (< qstep 3)
     (cond
       ((= qstep 1)
@@ -97298,14 +97585,14 @@
        (initget "Limit Meet Back Undo")
        (setq bmode (getkword (strcat "\nDo the offsets stop at the boundary,"
                                      " or run out to meet it?"
-                                     " [Limit/Meet/Back] <Limit>: ")))
+                                     " [Limit/Meet/Back] <" bdflt ">: ")))
        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") bmode) bmode)
        (cond
          ((member bmode '("Back" "Undo"))
           (princ "\nStepping back one question.")
           (setq qstep 1))
          (t
-          (if (null bmode) (setq bmode "Limit"))
+          (if (null bmode) (setq bmode bdflt))
           (setq qstep 3))))))
   (if bnd
     (princ (strcat "\nBoundary set: "
@@ -97324,6 +97611,9 @@
         again  "Yes"
         iter   0
         total  0)
+  ;; the closing style question's Enter answer, read through the
+  ;; canonicaliser so a misspelled override cannot reach the style table
+  (setq dsdflt (cperp:dimstyle-dflt))
 
   (while (equal again "Yes")
     (setq iter (1+ iter) rstep 1)
@@ -97599,8 +97889,10 @@
         (progn
           (initget "STandard SIde Back Undo")
           (setq ans (getkword (strcat "\nDimension style - STANDARD INCHES or "
-                                      "SIDE STANDARD? [STandard/SIde/Back] <STandard>: ")))
+                                      "SIDE STANDARD? [STandard/SIde/Back] <"
+                                      dsdflt ">: ")))
           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
+          (if (null ans) (setq ans dsdflt))  ; Enter = the knob's word
           (if (member ans '("Back" "Undo"))
             (progn (princ "\nStepping back one question.")
                    (setq again 'RETRY)))))))
@@ -98753,7 +99045,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.7")
+(setq *perpmark-version* "v1.8")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -98769,6 +99061,15 @@
 ;; rather than one that recedes into it.
 (setq pm:*markcolor* 1)
 
+;; Which answer step 4's "Draw a polyline through the marks?" question
+;; takes on Enter: "Yes" joins the marks up and goes on to the ends and
+;; the dimensions, "No" stops the round there and leaves every circle
+;; and line standing on the marks layer.  Both words are still offered
+;; and either can still be typed -- this only decides what tapping
+;; Enter means.  Anything that is neither word is ignored and "Yes"
+;; stands.
+(setq pm:*join-default* "Yes")
+
 ;; Layer and creation colour for the dimensions step 6 leaves behind.
 (setq pm:*dimlayer* "DIMENSION")
 (setq pm:*dimcolor* 7)
@@ -98781,6 +99082,13 @@
 ;; drawing that has neither keeps its current style and is told so.
 (setq pm:*dimstyle-std*  "STANDARD INCHES")
 (setq pm:*dimstyle-side* "SIDE STANDARD")
+
+;; Which of the two styles above step 6's question takes on Enter --
+;; "STandard" or "SIde", in any case.  A shop whose work is mostly side
+;; dimensions stops re-typing SIde at every run; the question is asked
+;; in the same words either way and both keywords are still offered.
+;; Anything that is neither keyword is ignored and "STandard" stands.
+(setq pm:*dimstyle-default* "STandard")
 
 ;; What counts as a survey point.  The classifier is the one BPCALLOUT,
 ;; CDCALLOUT, ABFIND and LHD share: change it in all of them or the
@@ -99330,6 +99638,18 @@
 ;;;  standalone file loads alone -- see STANDARDS.md section 4.
 ;;;  Back sentinel: CAL-BACK.
 ;;; ----------------------------------------------------------------------
+
+;; The canonical spelling S stands for among KWS, in any case, or nil
+;; for anything that is not one of them -- what a tunable default is
+;; read through before it reaches a question, since the ask helpers
+;; hand a default straight back on Enter without checking it, and
+;; "side" typed into a settings box must not reach the style table
+;; unspelled.
+(defun pm:kw-canon (s kws / u out w)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w kws
+    (if (= u (strcase w)) (setq out w)))
+  out)
 
 ;; A PLACE, in the current UCS -- the centre click, and nothing else in
 ;; this command.  Always required: Enter re-asks.  Returns the point or
@@ -99930,7 +100250,10 @@
 
       ;; --- 4. join them up? -------------------------------------------
       ((= stage 4)
-       (setq ans (cal:askyn "Draw a polyline through the marks?" "Yes" T))
+       (setq ans (cal:askyn "Draw a polyline through the marks?"
+                           (or (pm:kw-canon pm:*join-default* '("Yes" "No"))
+                               "Yes")
+                           T))
        (cond
          ((eq ans 'CAL-BACK) (setq stage 3))
          ((null ans)
@@ -100015,7 +100338,11 @@
          (t
           (setq ans (cal:askkw (strcat "Dimension style - " pm:*dimstyle-std*
                                       " or " pm:*dimstyle-side* "?")
-                              "STandard SIde" "STandard/SIde" "STandard" T))
+                              "STandard SIde" "STandard/SIde"
+                              (or (pm:kw-canon pm:*dimstyle-default*
+                                               '("STandard" "SIde"))
+                                  "STandard")
+                              T))
           (cond
             ((eq ans 'CAL-BACK) (setq stage (if wayasked 7 6)))
             (t (setq sty   (if (= ans "SIde") pm:*dimstyle-side*
@@ -113833,8 +114160,12 @@
 ;; 6 magenta, 7 white, 8 grey.  Grey for the frame and cyan for the
 ;; legend, so neither competes with the result; the result itself lands
 ;; in the point and dimension colours the rest of the toolkit uses.
-(setq cst:*space-color*   'auto)  ; 'auto picks the grey for the
-                                  ; background; a number as given
+(setq cst:*space-color*   8)      ; grey.  The space rectangle is part
+                                  ; of the output and its layer outlives
+                                  ; the command, so a NUMBER, never
+                                  ; 'auto: one colour for everyone who
+                                  ; opens the file, not one drafter's
+                                  ; theme.  LAZTUNE can still change it
 (setq cst:*guide-color*   4)
 (setq cst:*outline-color* 3)
 (setq cst:*dim-color*     2)
@@ -115180,8 +115511,7 @@
 
 (defun cst:preview (n w h base / pts i p r th lab)
   (cst:unpreview)
-  (cal:ensure-layer cst:*space-layer*
-                    (cal:ink cst:*space-color* 'guide))
+  (cal:ensure-layer cst:*space-layer* cst:*space-color*)
   (cal:ensure-layer cst:*guide-layer* cst:*guide-color*)
   (setq r   (cst:dotr w h)
         th  (cst:texth w h)
@@ -115559,8 +115889,7 @@
 ;; they are not part of the drawing to be swept and a redraw must not
 ;; keep re-announcing them.
 (defun cst:draw (pts n w h base chart arcs outline / mark th i p)
-  (cal:ensure-layer cst:*space-layer*
-                    (cal:ink cst:*space-color* 'guide))
+  (cal:ensure-layer cst:*space-layer* cst:*space-color*)
   (cal:ensure-layer cst:*point-layer* cst:*point-color*)
   (cal:ensure-layer cst:*dim-layer* cst:*dim-color*)
   (if outline (cal:ensure-layer cst:*outline-layer* cst:*outline-color*))
@@ -120555,7 +120884,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.52")
+(setq *lazpanel-version* "v3.54")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -123537,22 +123866,31 @@
      ""
      "the folder STOCKCOVER reads its stock drawings from -- the key STOCKCOVER-CFG writes when you browse to one.  Empty = the setting at the top of STOCKCOVER.lsp")))
 
-;; The eight ITEM-TYPE roles cal:ink resolves for COVERCHECK, DIMCHECK
-;; and LINFINCHECK -- generalized off the six colours plus the two
-;; layer colours those three tools used to carry as separate hardcoded
-;; copies.  Keyed by the Itemcolors keyword -> the role cal:ink takes,
-;; which is also the CalofinInk-<ROLE> profile key (uppercased) an
-;; override lives under.  One list so Itemcolors and lzp:setshow read
-;; the same roster instead of two that can drift apart.
+;; The roles a drafter may colour: every one of them a CUE that is gone
+;; when the command returns.  fade, guide, dim and hi are the theme's
+;; four -- the faded work round a review, a guide outline, a chart
+;; tile's dimensions and its active box -- and orig, sugg and point are
+;; the review tools' grdraw crosses, cleared at the next redraw.  Keyed
+;; by the Itemcolors keyword -> the role cal:ink takes, which is also
+;; the CalofinInk-<ROLE> profile key (uppercased) an override lives
+;; under.  One list so Itemcolors, lzp:setshow and the LAZSET dialog
+;; read the same roster instead of three that can drift apart.
+;;
+;; NOT here, on purpose: flag, arc, olap, constr and report.  cal:ink
+;; still resolves them, but what they colour STAYS IN THE DRAWING -- a
+;; dimension answered "No", a moved arc, a merged line, the report
+;; text, two layer records -- and a drawing is opened by more than one
+;; drafter.  So those are plain numbers in each tool's own block
+;; (LAZTUNE changes them per drafter, as a decision about the drawing),
+;; and an Item colour never reaches them.
 (setq lzp:*inkroles*
-  '(("Flag"   . "flag")
-    ("Arc"    . "arc")
-    ("Olap"   . "olap")
+  '(("Fade"   . "fade")
+    ("Guide"  . "guide")
+    ("Dim"    . "dim")
+    ("Hi"     . "hi")
     ("Orig"   . "orig")
     ("Sugg"   . "sugg")
-    ("Point"  . "point")
-    ("Constr" . "constr")
-    ("Report" . "report")))
+    ("Point"  . "point")))
 
 ;; The dropdown's recommended presets, so a drafter picks a colour
 ;; family by name instead of guessing an ACI number.  Each entry is
@@ -123634,10 +123972,12 @@
                                        (strcat "(unset -- " (cadr r) ")"))
                    "\n      " (caddr r))))
   (princ (strcat "\n  Item colours (CALSET Itemcolors; CalofinInk-<ROLE> in"
-                 "\n      the profile) -- COVERCHECK/DIMCHECK/LINFINCHECK's"
-                 "\n      flag/arc/olap/orig/sugg/point/constr/report, each"
-                 "\n      auto (the shared table in CALOFIN-LIB.lsp's"
-                 "\n      cal:ink) unless overridden below:"))
+                 "\n      the profile) -- the cues a tool draws and takes"
+                 "\n      away again: fade/guide/dim/hi, and the review"
+                 "\n      tools' orig/sugg/point crosses, each auto (the"
+                 "\n      shared table in CALOFIN-LIB.lsp's cal:ink) unless"
+                 "\n      overridden below.  What stays in the drawing is"
+                 "\n      a number in its tool's own block, never these:"))
   (foreach r lzp:*inkroles*
     (setq v (getenv (strcat "CalofinInk-" (strcase (cdr r)))))
     (princ (strcat "\n      " (car r) ": "
@@ -123676,13 +124016,13 @@
                   ((= pick "Stockdir") "StockCover_Folder")))
   (cond
     ((= pick "Itemcolors")
-     ;; a second keyword picks WHICH of the eight roles, then the same
+     ;; a second keyword picks WHICH of the seven roles, then the same
      ;; getstring/Back/"." shape as Errordir and Stockdir below sets its
      ;; CalofinInk-<ROLE> override -- Undo is accepted everywhere Back
      ;; is, unlisted (STANDARDS 1)
-     (initget "Flag Arc Olap Orig Sugg Point Constr Report Back Undo")
+     (initget "Fade Guide Dim Hi Orig Sugg Point Back Undo")
      (setq role (getkword
-                  "\nWhich item colour [Flag/Arc/Olap/Orig/Sugg/Point/Constr/Report/Back] <Back>: "))
+                  "\nWhich item colour [Fade/Guide/Dim/Hi/Orig/Sugg/Point/Back] <Back>: "))
      (if lzd:ask (lzd:ask "Which item colour?" role) role)
      (setq role (if role role "Back"))
      (cond
@@ -123964,8 +124304,8 @@
                           " background and AutoCAD's own theme\"; }")
                   "  }"
                   "  : boxed_row {"
-                  (strcat "    label = \"Item colours - COVERCHECK, DIMCHECK"
-                          " and LINFINCHECK; a family, a hex code, or empty"
+                  (strcat "    label = \"Item colours - the cues a tool draws"
+                          " and takes away; a family, a hex code, or empty"
                           " for auto\";")))
   ;; three to a column, so the box is a block rather than one tall
   ;; stack; each role is a family dropdown beside its hex box, in a row
@@ -124937,11 +125277,11 @@
      ("cst:*outline-layer*" "\"CONSTELLATION\"" "the ring through A B C ... The layer each part of the result lands on. Point one at a layer the office alre...")
      ("cst:*dim-layer*" "\"DIMENSION\"" "as AUTODIM and WCALST The layer each part of the result lands on. Point one at a layer the office already u...")
      ("cst:*point-layer*" "\"POINTS\"" "as ABCDEF and XYPLOT The layer each part of the result lands on. Point one at a layer the office already us...")
-     ("cst:*space-color*" "'auto" "'auto picks the grey for the background; a number as given The ACI colour each of those layers is CREATED w...")
-     ("cst:*guide-color*" "4" "background; a number as given")
-     ("cst:*outline-color*" "3" "background; a number as given")
-     ("cst:*dim-color*" "2" "background; a number as given")
-     ("cst:*point-color*" "2" "background; a number as given")
+     ("cst:*space-color*" "8" "grey. The space rectangle is part of the output and its layer outlives the command, so a NUMBER, never 'aut...")
+     ("cst:*guide-color*" "4" "of the output and its layer outlives the command, so a NUMBER, never 'auto: one colour for everyone who ope...")
+     ("cst:*outline-color*" "3" "of the output and its layer outlives the command, so a NUMBER, never 'auto: one colour for everyone who ope...")
+     ("cst:*dim-color*" "2" "of the output and its layer outlives the command, so a NUMBER, never 'auto: one colour for everyone who ope...")
+     ("cst:*point-color*" "2" "of the output and its layer outlives the command, so a NUMBER, never 'auto: one colour for everyone who ope...")
      ("cst:*point-block*" "\"ab_pt\"" "ABCDEF's survey block and its attribute tag. Move either and ABHD, CABHD, ABFIND, LHD and BPCALLOUT stop re...")
      ("cst:*point-tag*" "\"number\"" "ABCDEF's survey block and its attribute tag. Move either and ABHD, CABHD, ABFIND, LHD and BPCALLOUT stop re...")
      ("cst:*letters*" "\"ABCDEFGHIJKLMNOPQRSTUVWXYZ\"" "The labels, in the order they are handed out clockwise. Shortening the string lowers the ceiling below with...")
@@ -124980,6 +125320,34 @@
      ("cst:*ruler-ring-frac*" "0.26" "the ring round the current row, as a fraction of the row spacing a fraction of the row spacing")
      ("cst:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
      ("cst:*radius-ladder*" "'(24.0 240.0 12.0)" "The LADDER it stands on, as (LOW HIGH STEP) in inches: the radii a curved wall is drawn to, 2' to 20' by a..."))
+    ("CORNERSTP" "lisp/cornerstp/CORNERSTP.lsp"
+     ("*cs-width-tol*" "nil" "Step width tolerance, in drawing units: a step whose requested width is within this of the wall opening it...")
+     ("*cs-tol-inch*" "0.125" "What that tolerance is in INCHES when it is derived - the shop reads it as 1/8\". Raise it to let a wider mi...")
+     ("*cs-depth-dimstyle*" "\"STANDARD INCHES\"" "Dim style for the step-tread dims - the side profile's depth dims use it too. A style the drawing does not...")
+     ("*cs-width-dimstyle*" "\"SIDE STANDARD\"" "Dim style for the step-width dims, with the same fallback.")
+     ("*cs-dim-layer*" "nil" "Layer the dimensions are drawn on. nil = the current layer; a layer that is missing, off, frozen or locked...")
+     ("*cs-dim-offset*" "2.0" "How far the step-tread dim chain stands off the run's axis, in TEXT HEIGHTS - so it tracks DIMSCALE (or the...")
+     ("*cs-dim-nest*" "1.5" "How far a step-width dim sits behind the corner, in text heights, on top of half that step's own width. The...")
+     ("*cs-chain-frac*" "0.2" "CORNERSTP only. The tread chain also clears this fraction of the first step's width, so a wide run does not...")
+     ("*cs-parallel-tol*" "1.0" "CORNERSTP only. How close to parallel, in DEGREES, the two selected walls may be before the run says the co...")
+     ("*cs-profile-dimgap*" "nil" "How far the side profile's dims stand off the flight, in drawing units, on top of the clearance the geometr...")
+     ("*cs-profile-gap-txt*" "4.0" "The two terms of that default: text heights, and a fraction of the widest tread in the flight. Keeping both...")
+     ("*cs-profile-gap-tread*" "0.75" "")
+     ("*cs-ruler-color*" "3" "The LENGTH RULER beside the step tread and step depth prompts: from the second answer on, DIMSTAMP's ruler...")
+     ("*cs-ruler-current-color*" "7" "")
+     ("*cs-ruler-screen-x*" "0.88" "Where the spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach...")
+     ("*cs-ruler-row-frac*" "0.042" "One row's share of the view's height - the ruler's size knob - then the biggest label, the longest tick and...")
+     ("*cs-ruler-txt-frac*" "0.5" "")
+     ("*cs-ruler-tick-frac*" "0.6" "")
+     ("*cs-ruler-ring-frac*" "0.26" "")
+     ("*cs-ruler-reach*" "6.0" "How far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
+     ("*cs-tread-ladder*" "'(6.0 36.0 6.0)" "The two LADDERS those prompts stand on before there is a last answer to build a tape round -- and beside it...")
+     ("*cs-drop-ladder*" "'(6.0 12.0 1.0)" ""))
+    ("NORMIESTEP" "lisp/cornerstp/NORMIESTEP.lsp"
+     ("*cs-join-fuzz*" "nil" "NORMIESTEP only. How far apart two ends may be, in drawing units, and still count as JOINED when the parts...")
+     ("*cs-mark-dimstyle*" "\"STANDARD INCHES\"" "Dim style for the CORNER MARK (STANDARDS.md section 2). The sample sheet carries the mark at two sizes and...")
+     ("*cs-mark-r*" "0.5" "Radius of the circle that mark is drawn on, in TEXT HEIGHTS - so it tracks DIMSCALE (or the annotation scal...")
+     ("*cs-sq90-deg*" "20.0" "How far off 90 a corner may sit, in DEGREES, and still be marked \"90%%d\". The mark ASSERTS a right angle, s..."))
     ("COVERCHECK" "lisp/covercheck/covercheck.lsp"
      ("*cchk-pool-layer*" "\"POOL\"" "The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these ar...")
      ("*cchk-cover-layer*" "\"COVER\"" "The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these ar...")
@@ -125018,16 +125386,16 @@
      ("*cchk-row-band*" "0.05" "fraction of the selection's height Within a style, dimensions are reviewed row by row. Two dimensions count...")
      ("*cchk-row-flat*" "1.0" "...and the band for a selection with no height Within a style, dimensions are reviewed row by row. Two dime...")
      ("*cchk-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
-     ("*cchk-flag-color*" "'auto" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
-     ("*cchk-arc-color*" "'auto" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
-     ("*cchk-olap-color*" "'auto" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
-     ("*cchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) 'auto fades it the way round the drawing needs -- darker...")
-     ("*cchk-sugg-color*" "'auto" "ACI: the + marking where COVERCHECK would put it (green) 'auto fades it the way round the drawing needs --...")
-     ("*cchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) 'auto fades it the way round the drawing needs -- d...")
+     ("*cchk-flag-color*" "1" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
+     ("*cchk-arc-color*" "6" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
+     ("*cchk-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) The three crosses are 'auto: they do not vary with the scre...")
+     ("*cchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) The three crosses are 'auto: they do not vary with the sc...")
+     ("*cchk-sugg-color*" "'auto" "ACI: the + marking where COVERCHECK would put it (green) The three crosses are 'auto: they do not vary with...")
+     ("*cchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) The three crosses are 'auto: they do not vary with...")
      ("*cchk-constr-layer*" "\"COVERCHECK-CONSTRUCTION\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*cchk-constr-color*" "'auto" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*cchk-constr-color*" "2" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*cchk-report-layer*" "\"COVERCHECK-REPORT\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*cchk-report-color*" "'auto" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*cchk-report-color*" "3" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*cchk-green-scale*" "0.75" "All-clear lines are written at this fraction of the height the red attention lines get, so problems stand o...")
      ("*cchk-report-chars*" "45.0" "Report column width, in text heights.")
      ("*cchk-report-wide*" "0.25" "The report is scaled to the drawing: its text height is chosen so the whole report is about as tall as the...")
@@ -125069,16 +125437,16 @@
      ("*dchk-row-band*" "0.05" "fraction of the selection's height Within a style, dimensions are reviewed row by row. Two dimensions count...")
      ("*dchk-row-flat*" "1.0" "...and the band for a selection with no height Within a style, dimensions are reviewed row by row. Two dime...")
      ("*dchk-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
-     ("*dchk-flag-color*" "'auto" "ACI: dimensions you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than th...")
-     ("*dchk-arc-color*" "'auto" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
-     ("*dchk-olap-color*" "'auto" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
-     ("*dchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) 'auto fades it the way round the drawing needs -- darker...")
-     ("*dchk-sugg-color*" "'auto" "ACI: the + marking where DIMCHECK would put it (green) 'auto fades it the way round the drawing needs -- da...")
-     ("*dchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) 'auto fades it the way round the drawing needs -- d...")
+     ("*dchk-flag-color*" "1" "ACI: dimensions you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than th...")
+     ("*dchk-arc-color*" "6" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
+     ("*dchk-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) The three crosses are 'auto: they do not vary with the scre...")
+     ("*dchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) The three crosses are 'auto: they do not vary with the sc...")
+     ("*dchk-sugg-color*" "'auto" "ACI: the + marking where DIMCHECK would put it (green) The three crosses are 'auto: they do not vary with t...")
+     ("*dchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) The three crosses are 'auto: they do not vary with...")
      ("*dchk-constr-layer*" "\"DIMCHECK-CONSTRUCTION\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*dchk-constr-color*" "'auto" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*dchk-constr-color*" "2" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*dchk-report-layer*" "\"DIMCHECK-REPORT\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*dchk-report-color*" "'auto" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*dchk-report-color*" "3" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*dchk-green-scale*" "0.75" "All-clear lines are written at this fraction of the height the red attention lines get, so problems stand o...")
      ("*dchk-report-chars*" "45.0" "Report column width, in text heights.")
      ("*dchk-sheet-chars*" "70.0" "...and the width of TUTORIALDIMCHECK's reference sheet, which is prose rather than a column of findings and...")
@@ -125406,16 +125774,16 @@
      ("*lfc-row-band*" "0.05" "fraction of the selection's height Within a style, dimensions are reviewed row by row. Two dimensions count...")
      ("*lfc-row-flat*" "1.0" "...and the band for a selection with no height Within a style, dimensions are reviewed row by row. Two dime...")
      ("*lfc-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
-     ("*lfc-flag-color*" "'auto" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
-     ("*lfc-arc-color*" "'auto" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
-     ("*lfc-olap-color*" "'auto" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
-     ("*lfc-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) 'auto fades it the way round the drawing needs -- darker...")
-     ("*lfc-sugg-color*" "'auto" "ACI: the + marking where LINFINCHECK would put it (green) 'auto fades it the way round the drawing needs --...")
-     ("*lfc-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) 'auto fades it the way round the drawing needs -- d...")
+     ("*lfc-flag-color*" "1" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
+     ("*lfc-arc-color*" "6" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
+     ("*lfc-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) The three crosses are 'auto: they do not vary with the scre...")
+     ("*lfc-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) The three crosses are 'auto: they do not vary with the sc...")
+     ("*lfc-sugg-color*" "'auto" "ACI: the + marking where LINFINCHECK would put it (green) The three crosses are 'auto: they do not vary wit...")
+     ("*lfc-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) The three crosses are 'auto: they do not vary with...")
      ("*lfc-constr-layer*" "\"LINFINCHECK-CONSTRUCTION\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*lfc-constr-color*" "'auto" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*lfc-constr-color*" "2" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*lfc-report-layer*" "\"LINFINCHECK-REPORT\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*lfc-report-color*" "'auto" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*lfc-report-color*" "3" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*lfc-green-scale*" "0.75" "All-clear lines are written at this fraction of the height the red attention lines get, so problems stand o...")
      ("*lfc-report-chars*" "45.0" "Report column width, in text heights, and the width of the tutorial's reference sheet, which is prose rathe...")
      ("*lfc-sheet-chars*" "70.0" "Report column width, in text heights, and the width of the tutorial's reference sheet, which is prose rathe...")
@@ -125466,10 +125834,10 @@
      ("lobf:*layer*" "\"LOBF\"" "the construction line kept The three layers LOBF writes on, created on first use. PREVIEW holds the three c...")
      ("lobf:*color*" "4" "ACI (cyan) The three layers LOBF writes on, created on first use. PREVIEW holds the three candidates and th...")
      ("lobf:*preview-layer*" "\"LOBF-PREVIEW\"" "the three candidates The three layers LOBF writes on, created on first use. PREVIEW holds the three candida...")
-     ("lobf:*preview-color*" "'auto" "ACI (grey) -- each XLINE carries its own colour. 'auto picks the grey for the background; a number is used...")
-     ("lobf:*ign-layer*" "\"LOBF-IGNORED\"" "ring round a set-aside point carries its own colour. 'auto picks the grey for the background; a number is u...")
-     ("lobf:*ign-color*" "1" "ACI (red) carries its own colour. 'auto picks the grey for the background; a number is used exactly as given")
-     ("lobf:*appid*" "\"LOBF\"" "renaming this orphans earlier runs carries its own colour. 'auto picks the grey for the background; a numbe...")
+     ("lobf:*preview-color*" "8" "ACI (grey). Only the LAYER's colour: each XLINE carries its own. A layer record outlives the command, so a...")
+     ("lobf:*ign-layer*" "\"LOBF-IGNORED\"" "ring round a set-aside point LAYER's colour: each XLINE carries its own. A layer record outlives the comman...")
+     ("lobf:*ign-color*" "1" "ACI (red) LAYER's colour: each XLINE carries its own. A layer record outlives the command, so a NUMBER rath...")
+     ("lobf:*appid*" "\"LOBF\"" "renaming this orphans earlier runs LAYER's colour: each XLINE carries its own. A layer record outlives the...")
      ("lobf:*fit-colors*" "'(3 2 6)" "ACI: green, yellow, magenta The colour each candidate is previewed in, fit 1 first. These are what the on-s...")
      ("lobf:*label-div*" "40.0" "Label sizing, all as fractions of the run the points cover. DIV sets the text height (a bigger number is sm...")
      ("lobf:*label-gap*" "0.08" "Label sizing, all as fractions of the run the points cover. DIV sets the text height (a bigger number is sm...")
@@ -125500,8 +125868,8 @@
      ("oasis:*dimlayer*" "\"DIMENSION\"" "every dimension, both drawings The three layers, created if the drawing has not got them and thawed, unlock...")
      ("oasis:*dimcolor*" "2" "The three layers, created if the drawing has not got them and thawed, unlocked and switched back on if it h...")
      ("oasis:*guidelayer*" "\"POOL-GUIDE\"" "the dashed circles, box and labels The three layers, created if the drawing has not got them and thawed, un...")
-     ("oasis:*guidecolor*" "'auto" "'auto picks it for the background: 8 on a light one, a lighter grey on a dark one, where 8 is very nearly t...")
-     ("oasis:*hicolor*" "1" "red: the part being asked about 8 on a light one, a lighter grey on a dark one, where 8 is very nearly the...")
+     ("oasis:*guidecolor*" "8" "grey. The layer record outlives the command, and the check drawing's dashed box and centre marks stay in th...")
+     ("oasis:*hicolor*" "1" "red: the part being asked about the command, and the check drawing's dashed box and centre marks stay in th...")
      ("oasis:*dimstyle*" "\"Standard\"" "the pool's own dims Two styles, because the two drawings are read differently: the pool itself is a plan an...")
      ("oasis:*crossstyle*" "\"CROSS DIMENSIONS\"" "the check drawing's Two styles, because the two drawings are read differently: the pool itself is a plan an...")
      ("oasis:*checkgap*" "4.0" "How far to the right of the pool the check drawing sits, measured from the pool's own right-hand bound, as...")
@@ -125586,7 +125954,7 @@
      ("*paddle-arrow*" "36.0" "Length of that arrow, tail to tip, in drawing units. Its head is a third of that long and three times as wi...")
      ("*paddle-demo-layer*" "\"PADDLE-DEMO\"" "--- TUTORIALPADDLE --- Layer the tutorial draws its labelled sample perimeter on, and the colour index it i...")
      ("*paddle-demo-color*" "3" "--- TUTORIALPADDLE --- Layer the tutorial draws its labelled sample perimeter on, and the colour index it i..."))
-    ("CPERP_POINTS" "lisp/perp_points/cperp_points.lsp"
+    ("CPERPPTS" "lisp/perp_points/cperp_points.lsp"
      ("cperp:*ruler-color*" "3" "ACI colour of the rows you can PICK, carried on the entities themselves -------------------- tunables -----...")
      ("cperp:*ruler-current-color*" "7" "ACI colour of the ringed CURRENT row -- the last length -- so it reads apart from the options; 7 is AutoCAD...")
      ("cperp:*ruler-screen-x*" "0.88" "where the spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach...")
@@ -125594,8 +125962,11 @@
      ("cperp:*ruler-txt-frac*" "0.5" "the biggest row label's height, as a fraction of the row spacing height -- the ruler's size knob")
      ("cperp:*ruler-tick-frac*" "0.6" "the longest tick, same measure a fraction of the row spacing")
      ("cperp:*ruler-ring-frac*" "0.26" "the ring round the current row, as a fraction of the row spacing a fraction of the row spacing")
-     ("cperp:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir..."))
-    ("PERP_POINTS" "lisp/perp_points/perp_points.lsp"
+     ("cperp:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
+     ("cperp:*split-default*" "\"Yes\"" "Which answer the \"Split the ... evenly, half at each end?\" question takes on Enter when a width change has...")
+     ("cperp:*boundary-default*" "\"Limit\"" "Which answer the boundary's \"stop at the boundary, or run out to meet it?\" question takes on Enter: \"Limit\"...")
+     ("cperp:*dimstyle-default*" "\"STandard\"" "Which of the two dimension styles the closing question takes on Enter -- \"STandard\" (STANDARD INCHES) or \"S..."))
+    ("PERPPTS" "lisp/perp_points/perp_points.lsp"
      ("perp:*ruler-color*" "3" "ACI colour of the rows you can PICK, carried on the entities themselves -------------------- tunables -----...")
      ("perp:*ruler-current-color*" "7" "ACI colour of the ringed CURRENT row -- the last length -- so it reads apart from the options; 7 is AutoCAD...")
      ("perp:*ruler-screen-x*" "0.88" "where the spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach...")
@@ -125603,14 +125974,20 @@
      ("perp:*ruler-txt-frac*" "0.5" "the biggest row label's height, as a fraction of the row spacing height -- the ruler's size knob")
      ("perp:*ruler-tick-frac*" "0.6" "the longest tick, same measure a fraction of the row spacing")
      ("perp:*ruler-ring-frac*" "0.26" "the ring round the current row, as a fraction of the row spacing a fraction of the row spacing")
-     ("perp:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir..."))
+     ("perp:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
+     ("perp:*split-default*" "\"Yes\"" "Which answer the \"Split the ... evenly, half at each end?\" question takes on Enter when a width change has...")
+     ("perp:*bound-default*" "\"Limit\"" "Which answer the boundary's \"stop at the boundary, or run out to meet it?\" question takes on Enter: \"Limit\"...")
+     ("perp:*join-default*" "\"Straight\"" "What the FIRST round's \"how should the points be joined?\" question offers on Enter, before there is a round...")
+     ("perp:*dimstyle-default*" "\"STandard\"" "Which of the two dimension styles the closing question takes on Enter -- \"STandard\" (STANDARD INCHES) or \"S..."))
     ("PERPMARK" "lisp/perpmark/PERPMARK.lsp"
      ("pm:*marklayer*" "\"PERPMARK\"" "Layer the circles and the perpendicular lines are drawn on. Change it to put the run's working marks somewh...")
      ("pm:*markcolor*" "1" "ACI colour that layer is CREATED with, on a drawing that lacks it. A number, not 'auto: these marks are the...")
+     ("pm:*join-default*" "\"Yes\"" "Which answer step 4's \"Draw a polyline through the marks?\" question takes on Enter: \"Yes\" joins the marks u...")
      ("pm:*dimlayer*" "\"DIMENSION\"" "Layer and creation colour for the dimensions step 6 leaves behind.")
      ("pm:*dimcolor*" "7" "Layer and creation colour for the dimensions step 6 leaves behind.")
      ("pm:*dimstyle-std*" "\"STANDARD INCHES\"" "The two dimension styles step 6 offers, and their order in the question: STandard is the Enter answer. PERP...")
      ("pm:*dimstyle-side*" "\"SIDE STANDARD\"" "The two dimension styles step 6 offers, and their order in the question: STandard is the Enter answer. PERP...")
+     ("pm:*dimstyle-default*" "\"STandard\"" "Which of the two styles above step 6's question takes on Enter -- \"STandard\" or \"SIde\", in any case. A shop...")
      ("pm:*point-block*" "\"ab_pt\"" "block name whose INSERTs mark points wherever they sit What counts as a survey point. The classifier is the...")
      ("pm:*point-layer*" "\"POINTS\"" "layer whose POINTs and INSERTs are always points, whatever block points wherever they sit")
      ("pm:*pt-tag*" "\"number\"" "attribute tag on the point block naming the point. A block without it lends its first attribute that reads...")
@@ -125749,6 +126126,8 @@
      ("psd:*hi-col*" "1" "highlight color (red) it for the background (grey either way round), a number is used as given")
      ("psd:*btypes*" "\"Normal Sport Wedge SLope MOdflat SHallow\"" "The six bottom types, POOL's own keywords and capitalization -- the palette and the field sheets both speak...")
      ("psd:*btshown*" "\"Normal/Sport/Wedge/SLope/MOdflat/SHallow\"" "The six bottom types, POOL's own keywords and capitalization -- the palette and the field sheets both speak...")
+     ("psd:*btype-default*" "\"Normal\"" "Which of those six the bottom-type question offers on Enter. A shop that draws Sport all day sets it here a...")
+     ("psd:*mirror-default*" "\"No\"" "Which end the mirror question offers on Enter: \"No\" leaves the deep end on the LEFT, the way the letters ar...")
      ("psd:*ruler-layer*" "\"POOLSIDE-RULER\"" "scratch layer the rows go on The LENGTH RULER beside the DEPTH prompts. A pool's depths are a short list: a...")
      ("psd:*ruler-color*" "3" "ACI colour of the rows you can PICK The LENGTH RULER beside the DEPTH prompts. A pool's depths are a short...")
      ("psd:*ruler-current-color*" "7" "ACI colour of the ringed CURRENT row; 7 is AutoCAD's black/white swap The LENGTH RULER beside the DEPTH pro...")
@@ -125897,7 +126276,14 @@
      ("spa:*ruler-ring-frac*" "0.26" "the ring round the current row, as a fraction of the row spacing a fraction of the row spacing")
      ("spa:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
      ("spa:*radius-ladder*" "'(3.0 18.0 3.0)" "The two LADDERS those prompts stand on, as (LOW HIGH STEP) in inches. A spa is a small shape and its corner...")
-     ("spa:*cutface-ladder*" "'(3.0 18.0 3.0)" "The two LADDERS those prompts stand on, as (LOW HIGH STEP) in inches. A spa is a small shape and its corner..."))
+     ("spa:*cutface-ladder*" "'(3.0 18.0 3.0)" "The two LADDERS those prompts stand on, as (LOW HIGH STEP) in inches. A spa is a small shape and its corner...")
+     ("spa:*second-default*" "\"Yes\"" "What Enter means at the offer of the SECOND outline -- \"Yes\" goes on to draw the other one (the cover size...")
+     ("spa:*method-default*" "\"Offset\"" "What Enter means at \"Take it from\" -- \"Offset\" builds that second outline by lapping the one already drawn,...")
+     ("spa:*spill-default*" "\"No\"" "What Enter means at \"Is there a spillaway\" -- \"No\" ends the round of spillaways, \"Yes\" opens another one. A...")
+     ("spa:*spillloc-default*" "\"Wall\"" "What Enter means at a spillaway's location -- \"Wall\" centres it on a wall and asks which wall, \"Corner\" ask...")
+     ("spa:*autohinge-default*" "\"Yes\"" "What Enter means at \"Auto-hinge the cover\" -- \"Yes\" goes on to the spillaways and lays the fold hinges out...")
+     ("spa:*treat-default*" "\"\"" "What the FIRST corner's treatment question offers on Enter, before there is a previous answer to reuse: \"\"...")
+     ("spa:*samecorners-default*" "\"Yes\"" "What Enter means at \"Are all four corners the same?\" -- \"Yes\" buys ONE round of treatment questions for all..."))
     ("SPACHECK" "lisp/spacheck/SPACHECK.lsp"
      ("spachk:*lay-cover*" "\"COVER\"" "the cover outline and the hinges Layers SPA draws on -- the audit is only as right as these are.")
      ("spachk:*lay-water*" "\"POOL\"" "the water's edge outline Layers SPA draws on -- the audit is only as right as these are.")

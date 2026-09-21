@@ -211,10 +211,12 @@ At the top of the file, between the version banner and the first
 | --- | --- | --- |
 | `pm:*marklayer*` | `"PERPMARK"` | Puts the circles and the perpendicular lines on a different layer -- one a plot style already hides, say |
 | `pm:*markcolor*` | `1` | The ACI that layer is CREATED with, on a drawing that lacks it. A number, not `'auto`: these marks are the measurement record and are meant to be seen, not to recede |
+| `pm:*join-default*` | `"Yes"` | Which answer step 4's "Draw a polyline through the marks?" takes on Enter -- `"Yes"` joins the marks up and goes on to the ends and the dimensions, `"No"` stops the round there and leaves every circle and line standing on the marks layer. Both words are still offered and either can still be typed; anything that is neither is ignored and `Yes` stands |
 | `pm:*dimlayer*` | `"DIMENSION"` | Where the dimensions land |
 | `pm:*dimcolor*` | `7` | The ACI that layer is created with |
 | `pm:*dimstyle-std*` | `"STANDARD INCHES"` | The style the `STandard` answer draws in -- the Enter answer. The question is built from this name, so renaming it renames what the prompt offers; the KEYWORD stays `STandard`, which is the vocabulary all three perp tools share |
 | `pm:*dimstyle-side*` | `"SIDE STANDARD"` | The same for the `SIde` answer. A drawing that has neither style keeps its current one and is told so |
+| `pm:*dimstyle-default*` | `"STandard"` | Which of the two styles step 6's question takes on Enter -- `STandard` or `SIde`, in any case. A shop whose work is mostly side dimensions stops re-typing SIde at every run; the question is asked in the same words either way and both keywords are still offered, and anything that is neither is ignored and `STandard` stands |
 | `pm:*point-block*` | `"ab_pt"` | The block whose INSERTs are survey points wherever they sit. Shared with `BPCALLOUT`, `CDCALLOUT`, `ABFIND` and `LHD` -- change it in all of them or the tools disagree about what the drawing holds |
 | `pm:*point-layer*` | `"POINTS"` | The layer whose POINTs and INSERTs are survey points whatever block they are |
 | `pm:*pt-tag*` | `"number"` | The attribute tag that names a point. A block without it lends its first attribute that reads as a number instead |

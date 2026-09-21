@@ -144,6 +144,8 @@ puts your setting back.
 | Global | Default | What it does |
 | --- | --- | --- |
 | `psd:*pv-col*` / `psd:*pvx-col*` / `psd:*hi-col*` | `'auto` / `7` / `1` | guide outline, guide tie, and the highlight on the tie being asked |
+| `psd:*btype-default*` | `"Normal"` | Which of the six bottoms the bottom-type question offers on Enter. A shop that draws Sport all day sets it here and stops typing the word; every other bottom is still one keyword away. Any case will do -- a word `psd:*btypes*` does not list is not one the prompt would take either, so `Normal` stands |
+| `psd:*mirror-default*` | `"No"` | Which end the mirror question offers on Enter: `No` leaves the deep end on the LEFT, the way the letters are measured, and `Yes` offers the section swapped end for end instead, for a shop whose sheets read the other way round. Either case; anything else leaves `No` |
 | `psd:*ruler-layer*` | `"POOLSIDE-RULER"` | Scratch layer the length ruler's rows are drawn on, made if missing. A layer of its own is what lets a drafter turn the ruler off without turning anything of the section off with it |
 | `psd:*ruler-color*` | `3` | ACI colour of the ruler's rows -- the ones you can pick |
 | `psd:*ruler-current-color*` | `7` | ACI colour of its ringed current row, so it reads apart from the options; 7 is AutoCAD's black/white swap |

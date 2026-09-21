@@ -341,7 +341,7 @@ bouncing back in front of the error you are trying to read.
 **The Options button.** Beside Close, on every page including Find, an
 `Options...` button opens `LAZSET` -- the settings as a **dialog**, with
 the theme on a dropdown, a family dropdown and a hex box for each of
-the eight item colours, the two folders, and a way into the hidden
+the seven item colours, the two folders, and a way into the hidden
 list, all in front of you at once. It is wired exactly like a grid
 button -- the same full teardown before anything runs -- but the pick
 it sends is a sentinel `c:LAZPANEL` reads itself: settings are not on
@@ -444,6 +444,11 @@ write to or read from.
 `COMMAND=value` line each, then `[Settings]` -- `CalofinTheme`,
 `CalofinErrorDir`, `StockCover_Folder` and one `CalofinInk-<ROLE>` per
 item colour, empty meaning auto exactly as it does everywhere else.
+A file written by a build that offered more roles than this one does
+imports without complaint and says which lines it would not take: the
+five roles that stopped being a drafter's to colour (`flag`, `arc`,
+`olap`, `constr`, `report`) are reported as settings this build does
+not have, rather than written as keys nothing reads.
 `Import` reads one back and applies every line it can: a name and a
 caption are checked the same way typing them into `LAZNAME` would
 check them, a colour the same way `LAZSET`'s own hex box would, and a

@@ -668,7 +668,7 @@ really has, and a knob added beside the code that reads it fails.
 | `oasis:*dimlayer*` | `"DIMENSION"` | Layer every dimension goes on |
 | `oasis:*dimcolor*` | `2` | Colour it is created with |
 | `oasis:*guidelayer*` | `"POOL-GUIDE"` | Layer the dashed circles, the box and the `?` labels go on |
-| `oasis:*guidecolor*` | `'auto` | Colour it is created with. `'auto` picks the grey for the background it will be seen against -- 8 on a light one, lighter on a dark one, where 8 is very nearly the background itself. A number is used exactly as given |
+| `oasis:*guidecolor*` | `8` | Colour the guide layer is created with (grey). A plain number rather than `'auto`: the layer record outlives the command, and the check drawing's dashed envelope box and centre marks stay in the drawing ByLayer on it, so one drafter's screen does not decide what the next person sees. LAZTUNE still changes it per drafter |
 | `oasis:*hicolor*` | `1` | Colour (red) the circle being asked about is drawn in. Forced every time, so it reads as the answer being asked for rather than as part of the drawing |
 | `oasis:*dimstyle*` | `"Standard"` | Style the pool's own dims are drawn in |
 | `oasis:*crossstyle*` | `"CROSS DIMENSIONS"` | Style the check drawing's are drawn in |

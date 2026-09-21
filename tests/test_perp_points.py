@@ -1432,7 +1432,16 @@ def test_cperppts_boundary_is_optional_and_wired_through():
         # the mode question sits right after it, in the standard's words
         assert '(initget "Limit Meet Back Undo")' in code, \
             "the boundary mode is Limit or Meet, with Back to the selection"
-        assert "[Limit/Meet/Back] <Limit>: " in code, "Enter must mean Limit"
+        # the Enter answer is a knob now, so the prompt shows the knob's
+        # word and the null answer is filled from the same local -- and
+        # the shipped word is still Limit, so Enter still means Limit
+        assert '[Limit/Meet/Back] <" bdflt ">: ' in code, \
+            "the prompt must show the boundary knob's word as its default"
+        assert "(if (null bmode) (setq bmode bdflt))" in code, \
+            "Enter must be filled from the same word the prompt showed"
+        assert re.search(r'\(setq %s:\*bound(?:ary)?-default\* "Limit"\)'
+                         % prefix, code), \
+            "the boundary knob must still ship Limit"
         loop = code[code.index("(setq newPts '()"):]
         cap = loop.index("(%s:capdist bnd base" % prefix)
         ask2 = loop.index("(%s:ask-len" % prefix)
@@ -2328,12 +2337,12 @@ def test_both_routines_ask_the_new_questions_in_the_same_words():
     both files, keyword lists included."""
     a, b = load(PERP_LSP), load(CPERP_LSP)
     for text in ('" evenly, half at each end?"',
-                 '" [Yes/No/Back] <Yes>: "',
+                 '" [Yes/No/Back] <" sdflt ">: "',
                  '" at the START end (the arrowed end)?"',
                  '(initget 5 "Back Undo")',
                  '(initget "Limit Meet Back Undo")',
                  '"\\nDo the offsets stop at the boundary,"',
-                 '" [Limit/Meet/Back] <Limit>: "',
+                 '" [Limit/Meet/Back] <" bdflt ">: "',
                  '"\\nSelect a boundary for the offsets [None] <None>: "',
                  '"\\nClick to pick direction / offset side [Back]: "',
                  '" runs out to the boundary: "',
@@ -2341,6 +2350,14 @@ def test_both_routines_ask_the_new_questions_in_the_same_words():
                  '(initget "Back Undo")'):
         assert text in a, ("perp_points.lsp lacks", text)
         assert text in b, ("cperp_points.lsp lacks", text)
+    # what those two questions take on Enter is a knob in each file
+    # now, and both files still ship the same pair of words
+    for code, pre in ((a, "perp"), (b, "cperp")):
+        assert '(setq %s:*split-default* "Yes")' % pre in code, \
+            "the split question must still ship Yes"
+        assert re.search(r'\(setq %s:\*bound(?:ary)?-default\* "Limit"\)'
+                         % pre, code), \
+            "the boundary question must still ship Limit"
     # the click comes before the width question in both, and the width
     # helper is handed the Back it can offer there and not at a round
     for code, pre in ((a, "perp"), (b, "cperp")):

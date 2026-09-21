@@ -733,6 +733,13 @@ holds this table and the block together, so neither can drift from the other.
 | `spa:*ruler-reach*` | `6.0` | How far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the first point of a measured length |
 | `spa:*radius-ladder*` | `'(3.0 18.0 3.0)` | The rungs the corner RADIUS prompt offers, as (LOW HIGH STEP) in inches -- 3" to 1'-6" by 3", one size down from POOL's, a spa being the smaller shape. `nil` leaves the prompt the plain typed one, with no ruler |
 | `spa:*cutface-ladder*` | `'(3.0 18.0 3.0)` | The same for the DIAGONAL's cut face |
+| `spa:*second-default*` | `"Yes"` | What Enter means at the offer of the SECOND outline -- `Yes` goes on to draw the other one (the cover size after a water's edge, or the reverse), `No` leaves the outline already drawn standing alone. A shop that draws one outline and stops sets `No` and stops typing it |
+| `spa:*method-default*` | `"Offset"` | What Enter means at "Take it from" -- `Offset` builds that second outline by lapping the one already drawn, `Dims` asks for its own measurements instead |
+| `spa:*spill-default*` | `"No"` | What Enter means at "Is there a spillaway" -- `No` ends the round of spillaways, `Yes` opens another one. A shop whose spas nearly always carry one sets `Yes` and types No to finish instead |
+| `spa:*spillloc-default*` | `"Wall"` | What Enter means at a spillaway's location -- `Wall` centres it on a wall and asks which wall, `Corner` asks which corner and how far along to keep clear of the hinges |
+| `spa:*autohinge-default*` | `"Yes"` | What Enter means at "Auto-hinge the cover" -- `Yes` goes on to the spillaways and lays the fold hinges out itself, `No` draws the outlines and their dimensions and leaves the cover unhinged |
+| `spa:*treat-default*` | `""` | What the FIRST corner's treatment question offers on Enter, before there is a previous answer to reuse: `""` asks cold, or one of the four words -- `Square`, `Radius`, `Cut`, `NotGiven` -- in any case. Every corner after the first offers the answer before it, as it always has |
+| `spa:*samecorners-default*` | `"Yes"` | What Enter means at "Are all four corners the same?" -- `Yes` buys ONE round of treatment questions for all four, `No` walks A, B, C and D with A's answer autofilling the rest |
 
 Not in that block, on purpose: run state (the which-outline switch, the
 guide's entity list), the octagon's edge table (that is shape

@@ -64,7 +64,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.7")
+(setq *poolside-version* "v1.8")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -90,6 +90,19 @@
 ;; them differently would be a second vocabulary for one question.
 (setq psd:*btypes*  "Normal Sport Wedge SLope MOdflat SHallow")
 (setq psd:*btshown* "Normal/Sport/Wedge/SLope/MOdflat/SHallow")
+
+;; Which of those six the bottom-type question offers on Enter.  A shop
+;; that draws Sport all day sets it here and stops typing the word;
+;; every other bottom is still one keyword away.  Any case will do --
+;; a word psd:*btypes* does not list is not one the prompt would take
+;; either, so "Normal" stands.
+(setq psd:*btype-default* "Normal")
+
+;; Which end the mirror question offers on Enter: "No" leaves the deep
+;; end on the LEFT, the way the letters are measured, and "Yes" offers
+;; the section swapped end for end instead, for a shop whose sheets
+;; read the other way round.  Either case; anything else leaves "No".
+(setq psd:*mirror-default* "No")
 
 ;; The LENGTH RULER beside the DEPTH prompts.  A pool's depths are a
 ;; short list: a wall is built to a handful of heights, a deep end to a
@@ -380,6 +393,16 @@
         (setq w (strcat w c)))
     (setq i (1+ i)))
   out)
+
+;; The canonical spelling a KNOB's word stands for in the space-
+;; separated list KWS, in any case, or nil for anything that is not one
+;; of them -- a word, a number, nil.  The keyword knobs in the block at
+;; the top are read through this: psd:askkw hands a default straight
+;; back on Enter without checking it, so a word typed into a settings
+;; box that the prompt would refuse must not reach the chain table
+;; spelled its own way, and the caller falls back to the shipped one.
+(defun psd:kwknob (v kws)
+  (if (= (type v) 'STR) (psd:fkword v kws)))
 
 ;; The form's keyword for KEY against the live list KWS: the canonical
 ;; keyword, DFLT when the form said nil (what Enter means at every
@@ -787,7 +810,7 @@
 
 (defun c:POOLSIDE ( / *error* undo-open style base total doff th chain pv ans
                       wh dp c2 runs cv fixed sta segs mir sgn i s p q
-                      maxd ydim odl xc xd xb y m fv)
+                      maxd ydim odl xc xd xb y m fv bdflt mdflt)
 
   (defun *error* (msg)
     (if (and msg
@@ -826,13 +849,18 @@
   ;; of every measurement, so they are asked as a chain: Back at the
   ;; base point re-asks the type, which is the answer the rest of the
   ;; run is shaped by
+  ;;
+  ;; what Enter answers the bottom-type question with, read through
+  ;; psd:kwknob so a knob the prompt would refuse leaves the shipped
+  ;; "Normal" standing rather than reaching the chain table unspelled
+  (setq bdflt (or (psd:kwknob psd:*btype-default* psd:*btypes*) "Normal"))
   (setq base 'RETRY)
   (while (eq base 'RETRY)
     ;; the form can name the bottom; anything psd:*btypes* does not
     ;; list falls through to the prompt rather than being forced in
     (if (null (setq style (psd:fkw 'style psd:*btypes* "Normal")))
       (setq style (cal:askkw "Bottom type" psd:*btypes* psd:*btshown*
-                             "Normal" nil)))
+                             bdflt nil)))
     ;; the base point is picked with the user's own snaps still live;
     ;; only afterwards do snaps drop for the command-fed drawing work.
     ;; It is the top LEFT of the section -- the waterline at the left
@@ -900,11 +928,15 @@
   ;; measured; mirroring swaps the section end for end and the run
   ;; dimensions with it, so the letters keep meaning what they meant
   ;; the form can answer it too, as the same Yes or No a click on the
-  ;; bracket would send; anything else falls through to the prompt
-  (setq fv  (psd:fkw 'mirror "Yes No" "No")
+  ;; bracket would send; anything else falls through to the prompt,
+  ;; where psd:*mirror-default* is what Enter means -- read through
+  ;; psd:kwknob on the same terms, so a knob that is not one of the two
+  ;; words leaves "No" standing
+  (setq mdflt (or (psd:kwknob psd:*mirror-default* "Yes No") "No")
+        fv  (psd:fkw 'mirror "Yes No" "No")
         mir (if fv
                 (= fv "Yes")
-                (cal:askyn "Put the deep end on the RIGHT?" "No" nil))
+                (cal:askyn "Put the deep end on the RIGHT?" mdflt nil))
         sgn (if mir -1.0 1.0)
         sta (psd:stations style runs wh dp c2)
         segs (psd:segs chain fixed))

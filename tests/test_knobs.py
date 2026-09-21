@@ -146,6 +146,46 @@ for rel in ('lisp/cdcreate/CDCREATE.lsp', 'lisp/honefillet/HONEFILLET.lsp',
           head == ';;; -------------------- tunables'
           and src_.find(';;;  Tunables') < src_.find(head), repr(head))
 
+print("== 5. the guarded spelling, and a knob shared between files ==")
+# The three step routines share ONE set of settings: each declares a
+# knob only if no sibling already has, (if (not (boundp '*cs-x*)) (setq
+# *cs-x* ...)), so whichever file loads first wins and a value the
+# drafter set before loading stands.  That is a knob like any other --
+# a literal, explained, at the top of the file -- and 67 of them were
+# invisible to LAZTUNE while the catalog read bare setqs only.
+STEP = ['lisp/cornerstp/CORNERSTP.lsp', 'lisp/cornerstp/HEMISTEP.lsp',
+        'lisp/cornerstp/NORMIESTEP.lsp']
+per = dict((f, knobs.knobs_of(ROOT / f)) for f in STEP)
+for f in STEP:
+    check("%s: %d guarded knobs read" % (f.split('/')[-1], len(per[f])),
+          len(per[f]) >= 20, repr(len(per[f])))
+check("the step family's dim styles are among them",
+      {'*cs-depth-dimstyle*', '*cs-width-dimstyle*'}
+      <= {n for n, _, _ in per[STEP[0]]})
+# ...and every literal survives intact: the ladder knobs are quoted
+# lists, and a guard's own closing paren is not part of the value
+bad = [(f, n, lit) for f in STEP for n, lit, _ in per[f]
+       if lit.count('(') != lit.count(')')]
+check("every guarded literal is balanced", not bad, repr(bad[:3]))
+check("a ladder knob keeps its list",
+      [lit for n, lit, _ in per[STEP[0]] if n == '*cs-tread-ladder*']
+      == ["'(6.0 36.0 6.0)"],
+      repr([lit for n, lit, _ in per[STEP[0]] if n == '*cs-tread-ladder*']))
+# the CATALOG carries each shared name once, under the first file that
+# declares it -- the override is keyed by the name alone, so three
+# copies would offer one setting under three tools
+bycat = {}
+for rel, ks in cat:
+    for n, _, _ in ks:
+        bycat.setdefault(n, []).append(rel)
+shared = [n for n, _, _ in per[STEP[1]]]
+check("%d knobs HEMISTEP shares are catalogued once each" % len(shared),
+      all(len(bycat.get(n, [])) == 1 for n in shared),
+      repr([(n, bycat.get(n)) for n in shared if len(bycat.get(n, [])) != 1][:3]))
+check("...under the first file that declares them",
+      all(bycat.get(n, [None])[0] == STEP[0]
+          for n in shared if n in {x for x, _, _ in per[STEP[0]]}))
+
 print("== 3. one name, one knob ==")
 
 names = [str(e[0]) for t in table for e in t[2:]]

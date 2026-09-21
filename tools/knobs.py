@@ -57,6 +57,26 @@ RULE = re.compile(r'\n;;; -{3,}|\n;;; ={3,}')
 #: discipline covers all three
 NAME = r'(?:[a-z0-9]+:\*[a-z0-9-]+\*|\*[a-z][a-z0-9-]+\*)'
 SETQ = re.compile(r'^\(setq (' + NAME + r')\s', re.M | re.I)
+#: the GUARDED spelling: the three step routines share one set of
+#: settings, so each declares a knob only if no sibling already has --
+#: ``(if (not (boundp '*cs-x*)) (setq *cs-x* 0.125))``.  It is a knob
+#: like any other (a literal, explained, at the top of the file); it
+#: simply cannot be a bare setq without the first file loaded winning
+#: over a value the drafter set before loading.  Read here, and
+#: catalogued ONCE -- see catalog().
+GUARD = re.compile(r'^\(if \(not \(boundp \'(' + NAME + r')\)\) \(setq \1\s',
+                   re.M | re.I)
+
+
+def knob_starts(block):
+    """[(offset of the (setq ...), name it guards or None)] for every
+    knob declaration in BLOCK, in the order they are written."""
+    out = [(m.start(), None) for m in SETQ.finditer(block)]
+    for m in GUARD.finditer(block):
+        i = block.find('(setq ', m.start())
+        if i > 0:
+            out.append((i, m.group(1)))
+    return sorted(out)
 
 
 def _block_at(src, m):
@@ -68,7 +88,8 @@ def _block_at(src, m):
         e = RULE.search(src, m.end())
     j = e.start() if e else src.find('\n(defun ', i)
     block = src[i:j] if j > 0 else src[i:]
-    if not SETQ.search(block) and e and not EXPLICIT.match(src, e.start()):
+    if not (SETQ.search(block) or GUARD.search(block)) and e \
+            and not EXPLICIT.match(src, e.start()):
         # STOCKCOVER rules its header prose off with a bare line and
         # puts the knobs UNDER it: read on to the next rule or defun
         k = j + 1
@@ -97,7 +118,8 @@ def block_of(src):
         # Every pair of a setq counts -- AUTOBEAD's one setq names its
         # banner first and its knobs after it
         if any('version' not in name.lower()
-               for n in SETQ.finditer(block) for name, _ in pairs_of(block, n)):
+               for off, _ in knob_starts(block)
+               for name, _ in pairs_of(block, off)):
             return block, m.group(0).strip()
     return None, None
 
@@ -165,9 +187,11 @@ def tokens(text):
 
 def pairs_of(block, m):
     """[(name, literal)] a (setq ...) at M sets -- one per pair, since a
-    setq may set several: (setq *x-record* t *x-app* "X")."""
-    end = sexp_end(block, m.start())
-    inner = block[m.start() + len('(setq '):end - 1]
+    setq may set several: (setq *x-record* t *x-app* "X").  M is a match
+    or a plain offset."""
+    start = m if isinstance(m, int) else m.start()
+    end = sexp_end(block, start)
+    inner = block[start + len('(setq '):end - 1]
     toks = tokens(inner)
     out = []
     for k in range(0, len(toks) - 1, 2):
@@ -218,10 +242,12 @@ def knobs_of(path):
         starts[pos] = n
         pos += len(ln) + 1
     out = []
-    for m in SETQ.finditer(block):
-        li = starts.get(block.rfind('\n', 0, m.start()) + 1, 0)
+    for off, guarded in knob_starts(block):
+        # a guarded knob's comment sits over the (if ...), not the (setq
+        anchor = block.rfind('\n(if ', 0, off) + 1 if guarded else off
+        li = starts.get(block.rfind('\n', 0, anchor) + 1, 0)
         why = why_of(lines, li)
-        for name, lit in pairs_of(block, m):
+        for name, lit in pairs_of(block, off):
             if 'version' in name.lower():
                 continue                  # a banner, not a setting
             out.append((name, lit, why))
@@ -233,10 +259,19 @@ def catalog(lisp_dir=LISP_DIR):
     for every file with a block, in path order; files with none are
     left out."""
     out = []
+    seen = set()
     for p in lsp_files(lisp_dir):
         if 'standards_checker' in p.parts or 'lisplab' in p.parts:
             continue
-        ks = knobs_of(p)
+        # A knob SHARED between files -- the step routines' *cs-* set,
+        # declared in all three under the boundp guard -- is one knob a
+        # drafter sets once, and the override is keyed by its name
+        # alone, so it is catalogued under the first file that declares
+        # it and skipped in the rest.  Listing it three times would
+        # offer the same setting under three tools and fail the
+        # uniqueness that keying by name depends on.
+        ks = [k for k in knobs_of(p) if k[0].lower() not in seen]
+        seen.update(k[0].lower() for k in ks)
         if ks:
             out.append((str(p.relative_to(ROOT)), ks))
     return out

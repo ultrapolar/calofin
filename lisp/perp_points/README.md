@@ -194,7 +194,10 @@ The hint line saying it is there is printed once a run.
 ## Tunables
 
 All at the top of each file, one `setq` a line, in the `perp:` /
-`cperp:` namespace (the two blocks are the same knobs):
+`cperp:` namespace. The two blocks hold the same knobs, bar the two
+rows that name their prefix: the boundary default is spelled
+`perp:*bound-default*` on one side and `cperp:*boundary-default*` on
+the other, and only PERPPTS asks how the points are joined:
 
 | Knob | Default | What moves when you change it |
 | --- | --- | --- |
@@ -206,6 +209,10 @@ All at the top of each file, one `setq` a line, in the `perp:` /
 | `*ruler-tick-frac*` | `0.6` | the longest tick, same measure |
 | `*ruler-ring-frac*` | `0.26` | the ring round the current row, same measure |
 | `*ruler-reach*` | `6.0` | how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the first point of a measured length |
+| `*split-default*` | `"Yes"` | which answer the "Split the ... evenly, half at each end?" question takes on Enter when a width change has to be shared out -- `"Yes"` puts half of the difference at each end, `"No"` goes on to ask how much of it the START end takes. Both words are still offered and either can still be typed; anything that is neither is ignored and `Yes` stands |
+| `perp:*bound-default*` / `cperp:*boundary-default*` | `"Limit"` | which answer the boundary's "stop at the boundary, or run out to meet it?" question takes on Enter -- `"Limit"` caps a length that would carry a point past the boundary, `"Meet"` runs every offset out to it without asking a length at all. Both keywords are still offered and either can still be typed; anything that is neither is ignored and `Limit` stands |
+| `perp:*join-default*` (PERPPTS only) | `"Straight"` | what the FIRST round's "how should the points be joined?" question offers on Enter, before there is a round behind it to reuse -- `Straight`, `Arcs` or `Mixed`, in any case. Every round after the first offers the answer before it, as it always has; this only decides where that chain starts, and anything that is none of the three is ignored and `Straight` stands |
+| `*dimstyle-default*` | `"STandard"` | which of the two dimension styles the closing question takes on Enter -- `STandard` (STANDARD INCHES) or `SIde` (SIDE STANDARD), in any case. A shop whose work is mostly side dimensions stops re-typing SIde at every run; the question is asked in the same words either way and both keywords are still offered, and anything that is neither is ignored and `STandard` stands |
 
 ## Assumptions
 
@@ -220,8 +227,10 @@ All at the top of each file, one `setq` a line, in the `perp:` /
 * A boundary is only read, never moved or changed, and the ray cast at
   it lives and dies inside the probe -- nothing is left in the drawing.
   The object being offset from cannot be its own boundary.
-* Every length is typed (or clicked) per point; the only tunables are
-  the ruler's, in the table below.
+* Every length is typed (or clicked) per point; no length has a
+  default. What a question takes on Enter -- the split, the boundary
+  mode, the join and the dimension style -- is a knob in the Tunables
+  table above, and so is everything the ruler draws.
 
 ## Notes & limitations
 

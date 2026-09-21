@@ -138,7 +138,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.52")
+(setq *lazpanel-version* "v3.54")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -3136,22 +3136,31 @@
      ""
      "the folder STOCKCOVER reads its stock drawings from -- the key STOCKCOVER-CFG writes when you browse to one.  Empty = the setting at the top of STOCKCOVER.lsp")))
 
-;; The eight ITEM-TYPE roles cal:ink resolves for COVERCHECK, DIMCHECK
-;; and LINFINCHECK -- generalized off the six colours plus the two
-;; layer colours those three tools used to carry as separate hardcoded
-;; copies.  Keyed by the Itemcolors keyword -> the role cal:ink takes,
-;; which is also the CalofinInk-<ROLE> profile key (uppercased) an
-;; override lives under.  One list so Itemcolors and lzp:setshow read
-;; the same roster instead of two that can drift apart.
+;; The roles a drafter may colour: every one of them a CUE that is gone
+;; when the command returns.  fade, guide, dim and hi are the theme's
+;; four -- the faded work round a review, a guide outline, a chart
+;; tile's dimensions and its active box -- and orig, sugg and point are
+;; the review tools' grdraw crosses, cleared at the next redraw.  Keyed
+;; by the Itemcolors keyword -> the role cal:ink takes, which is also
+;; the CalofinInk-<ROLE> profile key (uppercased) an override lives
+;; under.  One list so Itemcolors, lzp:setshow and the LAZSET dialog
+;; read the same roster instead of three that can drift apart.
+;;
+;; NOT here, on purpose: flag, arc, olap, constr and report.  cal:ink
+;; still resolves them, but what they colour STAYS IN THE DRAWING -- a
+;; dimension answered "No", a moved arc, a merged line, the report
+;; text, two layer records -- and a drawing is opened by more than one
+;; drafter.  So those are plain numbers in each tool's own block
+;; (LAZTUNE changes them per drafter, as a decision about the drawing),
+;; and an Item colour never reaches them.
 (setq lzp:*inkroles*
-  '(("Flag"   . "flag")
-    ("Arc"    . "arc")
-    ("Olap"   . "olap")
+  '(("Fade"   . "fade")
+    ("Guide"  . "guide")
+    ("Dim"    . "dim")
+    ("Hi"     . "hi")
     ("Orig"   . "orig")
     ("Sugg"   . "sugg")
-    ("Point"  . "point")
-    ("Constr" . "constr")
-    ("Report" . "report")))
+    ("Point"  . "point")))
 
 ;; The dropdown's recommended presets, so a drafter picks a colour
 ;; family by name instead of guessing an ACI number.  Each entry is
@@ -3233,10 +3242,12 @@
                                        (strcat "(unset -- " (cadr r) ")"))
                    "\n      " (caddr r))))
   (princ (strcat "\n  Item colours (CALSET Itemcolors; CalofinInk-<ROLE> in"
-                 "\n      the profile) -- COVERCHECK/DIMCHECK/LINFINCHECK's"
-                 "\n      flag/arc/olap/orig/sugg/point/constr/report, each"
-                 "\n      auto (the shared table in CALOFIN-LIB.lsp's"
-                 "\n      cal:ink) unless overridden below:"))
+                 "\n      the profile) -- the cues a tool draws and takes"
+                 "\n      away again: fade/guide/dim/hi, and the review"
+                 "\n      tools' orig/sugg/point crosses, each auto (the"
+                 "\n      shared table in CALOFIN-LIB.lsp's cal:ink) unless"
+                 "\n      overridden below.  What stays in the drawing is"
+                 "\n      a number in its tool's own block, never these:"))
   (foreach r lzp:*inkroles*
     (setq v (getenv (strcat "CalofinInk-" (strcase (cdr r)))))
     (princ (strcat "\n      " (car r) ": "
@@ -3275,13 +3286,13 @@
                   ((= pick "Stockdir") "StockCover_Folder")))
   (cond
     ((= pick "Itemcolors")
-     ;; a second keyword picks WHICH of the eight roles, then the same
+     ;; a second keyword picks WHICH of the seven roles, then the same
      ;; getstring/Back/"." shape as Errordir and Stockdir below sets its
      ;; CalofinInk-<ROLE> override -- Undo is accepted everywhere Back
      ;; is, unlisted (STANDARDS 1)
-     (initget "Flag Arc Olap Orig Sugg Point Constr Report Back Undo")
+     (initget "Fade Guide Dim Hi Orig Sugg Point Back Undo")
      (setq role (getkword
-                  "\nWhich item colour [Flag/Arc/Olap/Orig/Sugg/Point/Constr/Report/Back] <Back>: "))
+                  "\nWhich item colour [Fade/Guide/Dim/Hi/Orig/Sugg/Point/Back] <Back>: "))
      (if lzd:ask (lzd:ask "Which item colour?" role) role)
      (setq role (if role role "Back"))
      (cond
@@ -3563,8 +3574,8 @@
                           " background and AutoCAD's own theme\"; }")
                   "  }"
                   "  : boxed_row {"
-                  (strcat "    label = \"Item colours - COVERCHECK, DIMCHECK"
-                          " and LINFINCHECK; a family, a hex code, or empty"
+                  (strcat "    label = \"Item colours - the cues a tool draws"
+                          " and takes away; a family, a hex code, or empty"
                           " for auto\";")))
   ;; three to a column, so the box is a block rather than one tall
   ;; stack; each role is a family dropdown beside its hex box, in a row
@@ -4536,11 +4547,11 @@
      ("cst:*outline-layer*" "\"CONSTELLATION\"" "the ring through A B C ... The layer each part of the result lands on. Point one at a layer the office alre...")
      ("cst:*dim-layer*" "\"DIMENSION\"" "as AUTODIM and WCALST The layer each part of the result lands on. Point one at a layer the office already u...")
      ("cst:*point-layer*" "\"POINTS\"" "as ABCDEF and XYPLOT The layer each part of the result lands on. Point one at a layer the office already us...")
-     ("cst:*space-color*" "'auto" "'auto picks the grey for the background; a number as given The ACI colour each of those layers is CREATED w...")
-     ("cst:*guide-color*" "4" "background; a number as given")
-     ("cst:*outline-color*" "3" "background; a number as given")
-     ("cst:*dim-color*" "2" "background; a number as given")
-     ("cst:*point-color*" "2" "background; a number as given")
+     ("cst:*space-color*" "8" "grey. The space rectangle is part of the output and its layer outlives the command, so a NUMBER, never 'aut...")
+     ("cst:*guide-color*" "4" "of the output and its layer outlives the command, so a NUMBER, never 'auto: one colour for everyone who ope...")
+     ("cst:*outline-color*" "3" "of the output and its layer outlives the command, so a NUMBER, never 'auto: one colour for everyone who ope...")
+     ("cst:*dim-color*" "2" "of the output and its layer outlives the command, so a NUMBER, never 'auto: one colour for everyone who ope...")
+     ("cst:*point-color*" "2" "of the output and its layer outlives the command, so a NUMBER, never 'auto: one colour for everyone who ope...")
      ("cst:*point-block*" "\"ab_pt\"" "ABCDEF's survey block and its attribute tag. Move either and ABHD, CABHD, ABFIND, LHD and BPCALLOUT stop re...")
      ("cst:*point-tag*" "\"number\"" "ABCDEF's survey block and its attribute tag. Move either and ABHD, CABHD, ABFIND, LHD and BPCALLOUT stop re...")
      ("cst:*letters*" "\"ABCDEFGHIJKLMNOPQRSTUVWXYZ\"" "The labels, in the order they are handed out clockwise. Shortening the string lowers the ceiling below with...")
@@ -4579,6 +4590,34 @@
      ("cst:*ruler-ring-frac*" "0.26" "the ring round the current row, as a fraction of the row spacing a fraction of the row spacing")
      ("cst:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
      ("cst:*radius-ladder*" "'(24.0 240.0 12.0)" "The LADDER it stands on, as (LOW HIGH STEP) in inches: the radii a curved wall is drawn to, 2' to 20' by a..."))
+    ("CORNERSTP" "lisp/cornerstp/CORNERSTP.lsp"
+     ("*cs-width-tol*" "nil" "Step width tolerance, in drawing units: a step whose requested width is within this of the wall opening it...")
+     ("*cs-tol-inch*" "0.125" "What that tolerance is in INCHES when it is derived - the shop reads it as 1/8\". Raise it to let a wider mi...")
+     ("*cs-depth-dimstyle*" "\"STANDARD INCHES\"" "Dim style for the step-tread dims - the side profile's depth dims use it too. A style the drawing does not...")
+     ("*cs-width-dimstyle*" "\"SIDE STANDARD\"" "Dim style for the step-width dims, with the same fallback.")
+     ("*cs-dim-layer*" "nil" "Layer the dimensions are drawn on. nil = the current layer; a layer that is missing, off, frozen or locked...")
+     ("*cs-dim-offset*" "2.0" "How far the step-tread dim chain stands off the run's axis, in TEXT HEIGHTS - so it tracks DIMSCALE (or the...")
+     ("*cs-dim-nest*" "1.5" "How far a step-width dim sits behind the corner, in text heights, on top of half that step's own width. The...")
+     ("*cs-chain-frac*" "0.2" "CORNERSTP only. The tread chain also clears this fraction of the first step's width, so a wide run does not...")
+     ("*cs-parallel-tol*" "1.0" "CORNERSTP only. How close to parallel, in DEGREES, the two selected walls may be before the run says the co...")
+     ("*cs-profile-dimgap*" "nil" "How far the side profile's dims stand off the flight, in drawing units, on top of the clearance the geometr...")
+     ("*cs-profile-gap-txt*" "4.0" "The two terms of that default: text heights, and a fraction of the widest tread in the flight. Keeping both...")
+     ("*cs-profile-gap-tread*" "0.75" "")
+     ("*cs-ruler-color*" "3" "The LENGTH RULER beside the step tread and step depth prompts: from the second answer on, DIMSTAMP's ruler...")
+     ("*cs-ruler-current-color*" "7" "")
+     ("*cs-ruler-screen-x*" "0.88" "Where the spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach...")
+     ("*cs-ruler-row-frac*" "0.042" "One row's share of the view's height - the ruler's size knob - then the biggest label, the longest tick and...")
+     ("*cs-ruler-txt-frac*" "0.5" "")
+     ("*cs-ruler-tick-frac*" "0.6" "")
+     ("*cs-ruler-ring-frac*" "0.26" "")
+     ("*cs-ruler-reach*" "6.0" "How far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
+     ("*cs-tread-ladder*" "'(6.0 36.0 6.0)" "The two LADDERS those prompts stand on before there is a last answer to build a tape round -- and beside it...")
+     ("*cs-drop-ladder*" "'(6.0 12.0 1.0)" ""))
+    ("NORMIESTEP" "lisp/cornerstp/NORMIESTEP.lsp"
+     ("*cs-join-fuzz*" "nil" "NORMIESTEP only. How far apart two ends may be, in drawing units, and still count as JOINED when the parts...")
+     ("*cs-mark-dimstyle*" "\"STANDARD INCHES\"" "Dim style for the CORNER MARK (STANDARDS.md section 2). The sample sheet carries the mark at two sizes and...")
+     ("*cs-mark-r*" "0.5" "Radius of the circle that mark is drawn on, in TEXT HEIGHTS - so it tracks DIMSCALE (or the annotation scal...")
+     ("*cs-sq90-deg*" "20.0" "How far off 90 a corner may sit, in DEGREES, and still be marked \"90%%d\". The mark ASSERTS a right angle, s..."))
     ("COVERCHECK" "lisp/covercheck/covercheck.lsp"
      ("*cchk-pool-layer*" "\"POOL\"" "The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these ar...")
      ("*cchk-cover-layer*" "\"COVER\"" "The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these ar...")
@@ -4617,16 +4656,16 @@
      ("*cchk-row-band*" "0.05" "fraction of the selection's height Within a style, dimensions are reviewed row by row. Two dimensions count...")
      ("*cchk-row-flat*" "1.0" "...and the band for a selection with no height Within a style, dimensions are reviewed row by row. Two dime...")
      ("*cchk-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
-     ("*cchk-flag-color*" "'auto" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
-     ("*cchk-arc-color*" "'auto" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
-     ("*cchk-olap-color*" "'auto" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
-     ("*cchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) 'auto fades it the way round the drawing needs -- darker...")
-     ("*cchk-sugg-color*" "'auto" "ACI: the + marking where COVERCHECK would put it (green) 'auto fades it the way round the drawing needs --...")
-     ("*cchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) 'auto fades it the way round the drawing needs -- d...")
+     ("*cchk-flag-color*" "1" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
+     ("*cchk-arc-color*" "6" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
+     ("*cchk-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) The three crosses are 'auto: they do not vary with the scre...")
+     ("*cchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) The three crosses are 'auto: they do not vary with the sc...")
+     ("*cchk-sugg-color*" "'auto" "ACI: the + marking where COVERCHECK would put it (green) The three crosses are 'auto: they do not vary with...")
+     ("*cchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) The three crosses are 'auto: they do not vary with...")
      ("*cchk-constr-layer*" "\"COVERCHECK-CONSTRUCTION\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*cchk-constr-color*" "'auto" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*cchk-constr-color*" "2" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*cchk-report-layer*" "\"COVERCHECK-REPORT\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*cchk-report-color*" "'auto" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*cchk-report-color*" "3" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*cchk-green-scale*" "0.75" "All-clear lines are written at this fraction of the height the red attention lines get, so problems stand o...")
      ("*cchk-report-chars*" "45.0" "Report column width, in text heights.")
      ("*cchk-report-wide*" "0.25" "The report is scaled to the drawing: its text height is chosen so the whole report is about as tall as the...")
@@ -4668,16 +4707,16 @@
      ("*dchk-row-band*" "0.05" "fraction of the selection's height Within a style, dimensions are reviewed row by row. Two dimensions count...")
      ("*dchk-row-flat*" "1.0" "...and the band for a selection with no height Within a style, dimensions are reviewed row by row. Two dime...")
      ("*dchk-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
-     ("*dchk-flag-color*" "'auto" "ACI: dimensions you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than th...")
-     ("*dchk-arc-color*" "'auto" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
-     ("*dchk-olap-color*" "'auto" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
-     ("*dchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) 'auto fades it the way round the drawing needs -- darker...")
-     ("*dchk-sugg-color*" "'auto" "ACI: the + marking where DIMCHECK would put it (green) 'auto fades it the way round the drawing needs -- da...")
-     ("*dchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) 'auto fades it the way round the drawing needs -- d...")
+     ("*dchk-flag-color*" "1" "ACI: dimensions you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than th...")
+     ("*dchk-arc-color*" "6" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
+     ("*dchk-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) The three crosses are 'auto: they do not vary with the scre...")
+     ("*dchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) The three crosses are 'auto: they do not vary with the sc...")
+     ("*dchk-sugg-color*" "'auto" "ACI: the + marking where DIMCHECK would put it (green) The three crosses are 'auto: they do not vary with t...")
+     ("*dchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) The three crosses are 'auto: they do not vary with...")
      ("*dchk-constr-layer*" "\"DIMCHECK-CONSTRUCTION\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*dchk-constr-color*" "'auto" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*dchk-constr-color*" "2" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*dchk-report-layer*" "\"DIMCHECK-REPORT\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*dchk-report-color*" "'auto" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*dchk-report-color*" "3" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*dchk-green-scale*" "0.75" "All-clear lines are written at this fraction of the height the red attention lines get, so problems stand o...")
      ("*dchk-report-chars*" "45.0" "Report column width, in text heights.")
      ("*dchk-sheet-chars*" "70.0" "...and the width of TUTORIALDIMCHECK's reference sheet, which is prose rather than a column of findings and...")
@@ -5005,16 +5044,16 @@
      ("*lfc-row-band*" "0.05" "fraction of the selection's height Within a style, dimensions are reviewed row by row. Two dimensions count...")
      ("*lfc-row-flat*" "1.0" "...and the band for a selection with no height Within a style, dimensions are reviewed row by row. Two dime...")
      ("*lfc-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
-     ("*lfc-flag-color*" "'auto" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
-     ("*lfc-arc-color*" "'auto" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
-     ("*lfc-olap-color*" "'auto" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
-     ("*lfc-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) 'auto fades it the way round the drawing needs -- darker...")
-     ("*lfc-sugg-color*" "'auto" "ACI: the + marking where LINFINCHECK would put it (green) 'auto fades it the way round the drawing needs --...")
-     ("*lfc-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) 'auto fades it the way round the drawing needs -- d...")
+     ("*lfc-flag-color*" "1" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
+     ("*lfc-arc-color*" "6" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
+     ("*lfc-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) The three crosses are 'auto: they do not vary with the scre...")
+     ("*lfc-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) The three crosses are 'auto: they do not vary with the sc...")
+     ("*lfc-sugg-color*" "'auto" "ACI: the + marking where LINFINCHECK would put it (green) The three crosses are 'auto: they do not vary wit...")
+     ("*lfc-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) The three crosses are 'auto: they do not vary with...")
      ("*lfc-constr-layer*" "\"LINFINCHECK-CONSTRUCTION\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*lfc-constr-color*" "'auto" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*lfc-constr-color*" "2" "ACI (yellow) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*lfc-report-layer*" "\"LINFINCHECK-REPORT\"" "The construction XLINE through a moved dimension's original points, and the report MTEXT. Both layers are c...")
-     ("*lfc-report-color*" "'auto" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
+     ("*lfc-report-color*" "3" "ACI (green) The construction XLINE through a moved dimension's original points, and the report MTEXT. Both...")
      ("*lfc-green-scale*" "0.75" "All-clear lines are written at this fraction of the height the red attention lines get, so problems stand o...")
      ("*lfc-report-chars*" "45.0" "Report column width, in text heights, and the width of the tutorial's reference sheet, which is prose rathe...")
      ("*lfc-sheet-chars*" "70.0" "Report column width, in text heights, and the width of the tutorial's reference sheet, which is prose rathe...")
@@ -5065,10 +5104,10 @@
      ("lobf:*layer*" "\"LOBF\"" "the construction line kept The three layers LOBF writes on, created on first use. PREVIEW holds the three c...")
      ("lobf:*color*" "4" "ACI (cyan) The three layers LOBF writes on, created on first use. PREVIEW holds the three candidates and th...")
      ("lobf:*preview-layer*" "\"LOBF-PREVIEW\"" "the three candidates The three layers LOBF writes on, created on first use. PREVIEW holds the three candida...")
-     ("lobf:*preview-color*" "'auto" "ACI (grey) -- each XLINE carries its own colour. 'auto picks the grey for the background; a number is used...")
-     ("lobf:*ign-layer*" "\"LOBF-IGNORED\"" "ring round a set-aside point carries its own colour. 'auto picks the grey for the background; a number is u...")
-     ("lobf:*ign-color*" "1" "ACI (red) carries its own colour. 'auto picks the grey for the background; a number is used exactly as given")
-     ("lobf:*appid*" "\"LOBF\"" "renaming this orphans earlier runs carries its own colour. 'auto picks the grey for the background; a numbe...")
+     ("lobf:*preview-color*" "8" "ACI (grey). Only the LAYER's colour: each XLINE carries its own. A layer record outlives the command, so a...")
+     ("lobf:*ign-layer*" "\"LOBF-IGNORED\"" "ring round a set-aside point LAYER's colour: each XLINE carries its own. A layer record outlives the comman...")
+     ("lobf:*ign-color*" "1" "ACI (red) LAYER's colour: each XLINE carries its own. A layer record outlives the command, so a NUMBER rath...")
+     ("lobf:*appid*" "\"LOBF\"" "renaming this orphans earlier runs LAYER's colour: each XLINE carries its own. A layer record outlives the...")
      ("lobf:*fit-colors*" "'(3 2 6)" "ACI: green, yellow, magenta The colour each candidate is previewed in, fit 1 first. These are what the on-s...")
      ("lobf:*label-div*" "40.0" "Label sizing, all as fractions of the run the points cover. DIV sets the text height (a bigger number is sm...")
      ("lobf:*label-gap*" "0.08" "Label sizing, all as fractions of the run the points cover. DIV sets the text height (a bigger number is sm...")
@@ -5099,8 +5138,8 @@
      ("oasis:*dimlayer*" "\"DIMENSION\"" "every dimension, both drawings The three layers, created if the drawing has not got them and thawed, unlock...")
      ("oasis:*dimcolor*" "2" "The three layers, created if the drawing has not got them and thawed, unlocked and switched back on if it h...")
      ("oasis:*guidelayer*" "\"POOL-GUIDE\"" "the dashed circles, box and labels The three layers, created if the drawing has not got them and thawed, un...")
-     ("oasis:*guidecolor*" "'auto" "'auto picks it for the background: 8 on a light one, a lighter grey on a dark one, where 8 is very nearly t...")
-     ("oasis:*hicolor*" "1" "red: the part being asked about 8 on a light one, a lighter grey on a dark one, where 8 is very nearly the...")
+     ("oasis:*guidecolor*" "8" "grey. The layer record outlives the command, and the check drawing's dashed box and centre marks stay in th...")
+     ("oasis:*hicolor*" "1" "red: the part being asked about the command, and the check drawing's dashed box and centre marks stay in th...")
      ("oasis:*dimstyle*" "\"Standard\"" "the pool's own dims Two styles, because the two drawings are read differently: the pool itself is a plan an...")
      ("oasis:*crossstyle*" "\"CROSS DIMENSIONS\"" "the check drawing's Two styles, because the two drawings are read differently: the pool itself is a plan an...")
      ("oasis:*checkgap*" "4.0" "How far to the right of the pool the check drawing sits, measured from the pool's own right-hand bound, as...")
@@ -5185,7 +5224,7 @@
      ("*paddle-arrow*" "36.0" "Length of that arrow, tail to tip, in drawing units. Its head is a third of that long and three times as wi...")
      ("*paddle-demo-layer*" "\"PADDLE-DEMO\"" "--- TUTORIALPADDLE --- Layer the tutorial draws its labelled sample perimeter on, and the colour index it i...")
      ("*paddle-demo-color*" "3" "--- TUTORIALPADDLE --- Layer the tutorial draws its labelled sample perimeter on, and the colour index it i..."))
-    ("CPERP_POINTS" "lisp/perp_points/cperp_points.lsp"
+    ("CPERPPTS" "lisp/perp_points/cperp_points.lsp"
      ("cperp:*ruler-color*" "3" "ACI colour of the rows you can PICK, carried on the entities themselves -------------------- tunables -----...")
      ("cperp:*ruler-current-color*" "7" "ACI colour of the ringed CURRENT row -- the last length -- so it reads apart from the options; 7 is AutoCAD...")
      ("cperp:*ruler-screen-x*" "0.88" "where the spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach...")
@@ -5193,8 +5232,11 @@
      ("cperp:*ruler-txt-frac*" "0.5" "the biggest row label's height, as a fraction of the row spacing height -- the ruler's size knob")
      ("cperp:*ruler-tick-frac*" "0.6" "the longest tick, same measure a fraction of the row spacing")
      ("cperp:*ruler-ring-frac*" "0.26" "the ring round the current row, as a fraction of the row spacing a fraction of the row spacing")
-     ("cperp:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir..."))
-    ("PERP_POINTS" "lisp/perp_points/perp_points.lsp"
+     ("cperp:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
+     ("cperp:*split-default*" "\"Yes\"" "Which answer the \"Split the ... evenly, half at each end?\" question takes on Enter when a width change has...")
+     ("cperp:*boundary-default*" "\"Limit\"" "Which answer the boundary's \"stop at the boundary, or run out to meet it?\" question takes on Enter: \"Limit\"...")
+     ("cperp:*dimstyle-default*" "\"STandard\"" "Which of the two dimension styles the closing question takes on Enter -- \"STandard\" (STANDARD INCHES) or \"S..."))
+    ("PERPPTS" "lisp/perp_points/perp_points.lsp"
      ("perp:*ruler-color*" "3" "ACI colour of the rows you can PICK, carried on the entities themselves -------------------- tunables -----...")
      ("perp:*ruler-current-color*" "7" "ACI colour of the ringed CURRENT row -- the last length -- so it reads apart from the options; 7 is AutoCAD...")
      ("perp:*ruler-screen-x*" "0.88" "where the spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach...")
@@ -5202,14 +5244,20 @@
      ("perp:*ruler-txt-frac*" "0.5" "the biggest row label's height, as a fraction of the row spacing height -- the ruler's size knob")
      ("perp:*ruler-tick-frac*" "0.6" "the longest tick, same measure a fraction of the row spacing")
      ("perp:*ruler-ring-frac*" "0.26" "the ring round the current row, as a fraction of the row spacing a fraction of the row spacing")
-     ("perp:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir..."))
+     ("perp:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
+     ("perp:*split-default*" "\"Yes\"" "Which answer the \"Split the ... evenly, half at each end?\" question takes on Enter when a width change has...")
+     ("perp:*bound-default*" "\"Limit\"" "Which answer the boundary's \"stop at the boundary, or run out to meet it?\" question takes on Enter: \"Limit\"...")
+     ("perp:*join-default*" "\"Straight\"" "What the FIRST round's \"how should the points be joined?\" question offers on Enter, before there is a round...")
+     ("perp:*dimstyle-default*" "\"STandard\"" "Which of the two dimension styles the closing question takes on Enter -- \"STandard\" (STANDARD INCHES) or \"S..."))
     ("PERPMARK" "lisp/perpmark/PERPMARK.lsp"
      ("pm:*marklayer*" "\"PERPMARK\"" "Layer the circles and the perpendicular lines are drawn on. Change it to put the run's working marks somewh...")
      ("pm:*markcolor*" "1" "ACI colour that layer is CREATED with, on a drawing that lacks it. A number, not 'auto: these marks are the...")
+     ("pm:*join-default*" "\"Yes\"" "Which answer step 4's \"Draw a polyline through the marks?\" question takes on Enter: \"Yes\" joins the marks u...")
      ("pm:*dimlayer*" "\"DIMENSION\"" "Layer and creation colour for the dimensions step 6 leaves behind.")
      ("pm:*dimcolor*" "7" "Layer and creation colour for the dimensions step 6 leaves behind.")
      ("pm:*dimstyle-std*" "\"STANDARD INCHES\"" "The two dimension styles step 6 offers, and their order in the question: STandard is the Enter answer. PERP...")
      ("pm:*dimstyle-side*" "\"SIDE STANDARD\"" "The two dimension styles step 6 offers, and their order in the question: STandard is the Enter answer. PERP...")
+     ("pm:*dimstyle-default*" "\"STandard\"" "Which of the two styles above step 6's question takes on Enter -- \"STandard\" or \"SIde\", in any case. A shop...")
      ("pm:*point-block*" "\"ab_pt\"" "block name whose INSERTs mark points wherever they sit What counts as a survey point. The classifier is the...")
      ("pm:*point-layer*" "\"POINTS\"" "layer whose POINTs and INSERTs are always points, whatever block points wherever they sit")
      ("pm:*pt-tag*" "\"number\"" "attribute tag on the point block naming the point. A block without it lends its first attribute that reads...")
@@ -5348,6 +5396,8 @@
      ("psd:*hi-col*" "1" "highlight color (red) it for the background (grey either way round), a number is used as given")
      ("psd:*btypes*" "\"Normal Sport Wedge SLope MOdflat SHallow\"" "The six bottom types, POOL's own keywords and capitalization -- the palette and the field sheets both speak...")
      ("psd:*btshown*" "\"Normal/Sport/Wedge/SLope/MOdflat/SHallow\"" "The six bottom types, POOL's own keywords and capitalization -- the palette and the field sheets both speak...")
+     ("psd:*btype-default*" "\"Normal\"" "Which of those six the bottom-type question offers on Enter. A shop that draws Sport all day sets it here a...")
+     ("psd:*mirror-default*" "\"No\"" "Which end the mirror question offers on Enter: \"No\" leaves the deep end on the LEFT, the way the letters ar...")
      ("psd:*ruler-layer*" "\"POOLSIDE-RULER\"" "scratch layer the rows go on The LENGTH RULER beside the DEPTH prompts. A pool's depths are a short list: a...")
      ("psd:*ruler-color*" "3" "ACI colour of the rows you can PICK The LENGTH RULER beside the DEPTH prompts. A pool's depths are a short...")
      ("psd:*ruler-current-color*" "7" "ACI colour of the ringed CURRENT row; 7 is AutoCAD's black/white swap The LENGTH RULER beside the DEPTH pro...")
@@ -5496,7 +5546,14 @@
      ("spa:*ruler-ring-frac*" "0.26" "the ring round the current row, as a fraction of the row spacing a fraction of the row spacing")
      ("spa:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
      ("spa:*radius-ladder*" "'(3.0 18.0 3.0)" "The two LADDERS those prompts stand on, as (LOW HIGH STEP) in inches. A spa is a small shape and its corner...")
-     ("spa:*cutface-ladder*" "'(3.0 18.0 3.0)" "The two LADDERS those prompts stand on, as (LOW HIGH STEP) in inches. A spa is a small shape and its corner..."))
+     ("spa:*cutface-ladder*" "'(3.0 18.0 3.0)" "The two LADDERS those prompts stand on, as (LOW HIGH STEP) in inches. A spa is a small shape and its corner...")
+     ("spa:*second-default*" "\"Yes\"" "What Enter means at the offer of the SECOND outline -- \"Yes\" goes on to draw the other one (the cover size...")
+     ("spa:*method-default*" "\"Offset\"" "What Enter means at \"Take it from\" -- \"Offset\" builds that second outline by lapping the one already drawn,...")
+     ("spa:*spill-default*" "\"No\"" "What Enter means at \"Is there a spillaway\" -- \"No\" ends the round of spillaways, \"Yes\" opens another one. A...")
+     ("spa:*spillloc-default*" "\"Wall\"" "What Enter means at a spillaway's location -- \"Wall\" centres it on a wall and asks which wall, \"Corner\" ask...")
+     ("spa:*autohinge-default*" "\"Yes\"" "What Enter means at \"Auto-hinge the cover\" -- \"Yes\" goes on to the spillaways and lays the fold hinges out...")
+     ("spa:*treat-default*" "\"\"" "What the FIRST corner's treatment question offers on Enter, before there is a previous answer to reuse: \"\"...")
+     ("spa:*samecorners-default*" "\"Yes\"" "What Enter means at \"Are all four corners the same?\" -- \"Yes\" buys ONE round of treatment questions for all..."))
     ("SPACHECK" "lisp/spacheck/SPACHECK.lsp"
      ("spachk:*lay-cover*" "\"COVER\"" "the cover outline and the hinges Layers SPA draws on -- the audit is only as right as these are.")
      ("spachk:*lay-water*" "\"POOL\"" "the water's edge outline Layers SPA draws on -- the audit is only as right as these are.")

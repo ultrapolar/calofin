@@ -316,6 +316,20 @@ trip. `tests/test_theme.py` pins the table and holds all fifteen
 copies against the library's; `CALSET` writes the `CalofinTheme`
 override for a drafter whose screen the measurement gets wrong.
 
+**...but only for a colour the command takes away again.** `'auto` is
+one drafter's screen, and a drawing is opened by more than one person.
+So a knob resolved through `ink` colours a CUE -- the review grey, a
+guide outline, a `grdraw` cross, a chart tile -- and anything still in
+the drawing when the command returns takes a plain ACI NUMBER instead:
+the dimension a review leaves flagged, the report text, and every
+LAYER RECORD, which is written once and colours everything ByLayer on
+it thereafter. Both stay knobs, so `LAZTUNE` retunes either per
+drafter. `tools/check_color.py` fails an `ink` call handed to a
+layer-making call, and a layer knob that is not a number.
+CONSTELLATION, LOBF, OASIS and the three review tools each had it the
+other way round, so a shop's own drawings carried whichever grey the
+drafter who first ran the tool happened to be looking at.
+
 ### The drafter's object snaps
 
 **A tool that mutes OSMODE gives it back on every path out.** Most of
@@ -498,7 +512,16 @@ python3 tools/check_color.py     # the drafter's CURRENT COLOUR and CURRENT
                                  # drafter's on every clean exit).  What
                                  # calofin colours -- its cues, its own
                                  # layers -- stays calofin's; what the
-                                 # drafter draws next stays theirs
+                                 # drafter draws next stays theirs.
+                                 # AND: a theme colour reaches a CUE
+                                 # only.  An ink call may not be an
+                                 # argument of a call that makes a
+                                 # LAYER, and a knob that colours one
+                                 # is a plain number where its block
+                                 # sets it -- a layer record outlives
+                                 # the command and colours everything
+                                 # ByLayer on it for whoever opens the
+                                 # drawing next
 python3 tools/probe_report.py    # not a check: replays a failure report in
                    REPORT.dxf    # the VM and varies its inputs one at a
                                  # time, to say which one the failure is

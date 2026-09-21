@@ -1,41 +1,40 @@
-;;; perp_points.lsp  --  AutoCAD 2018 (AutoLISP)
+;;; cperp_points.lsp  --  AutoCAD 2018 (AutoLISP)
 ;;;
-;;; Command: PERPPTS
+;;; Command: CPERPPTS   ("C" for curved)
 ;;;
-;;; Splits a selected line into N equally-spaced points (both endpoints
-;;; included), then for each division point creates a new point offset
-;;; perpendicular to the line by a user-supplied length.  The new points
-;;; are joined with a polyline -- straight segments, arcs, or a mix of
-;;; the two -- and an aligned dimension is drawn from each new point
-;;; back to its base point on the line.
+;;; The curved-geometry companion to PERPPTS (perp_points.lsp).  Same
+;;; workflow and same pipeline, but the offsets are taken perpendicular
+;;; to the TANGENT of the curve rather than to a straight line, so arcs,
+;;; bulged polylines and splines can be offset with a different length
+;;; at every point.
 ;;;
-;;; The routine then offers to REPEAT on the polyline it just created:
-;;; you are asked again for a number of points, which are spaced equally
-;;; ALONG the new polyline; each is offset by a user length to build the
-;;; next polyline.  The offset direction -- and therefore every dimension
-;;; -- stays perpendicular to the ORIGINAL line, not to the new polyline,
-;;; so all offsets accumulate in one consistent direction.  Repeat as
-;;; many times as you like.
+;;; Works on anything AutoCAD treats as a curve: LWPOLYLINE (including
+;;; arc/bulge segments), POLYLINE, LINE, ARC, ELLIPSE and SPLINE.
 ;;;
-;;; Every line the routine draws is offered the same width correction
-;;; the selected one is: a course comes out only as wide as the typed
-;;; offsets add up to, and the round after it measures along it.
+;;; The offset points are joined into a single LWPOLYLINE whose
+;;; segments are ARCS (bulges), each arc matched to the curve's tangent
+;;; direction at its start point.  The result is a smooth POLYLINE
+;;; curve passing exactly through every offset point -- a real
+;;; lightweight polyline, never a spline and never a curve-fit heavy
+;;; polyline.
+;;;
+;;; Points are spaced by true arc length along the curve, so spacing
+;;; stays even through curved segments instead of bunching up.
 ;;;
 ;;; Workflow
-;;;   1. Select a LINE (a polyline is also accepted, so work started in
-;;;      an earlier session can be resumed).
+;;;   1. Select a curve (open, i.e. not a closed loop).
 ;;;   2. Click a point to set the direction:
-;;;        - the line end nearest the click becomes START, the far end
+;;;        - the curve end nearest the click becomes START, the far end
 ;;;          FINISH, fixing the order the lengths are entered in; a red
 ;;;          arrow marks START for the whole run;
-;;;        - the side of the line the click lands on is the side the new
-;;;          points are offset toward.
+;;;        - the side of the curve the click lands on is the side the
+;;;          new points are offset toward.
 ;;;   3. Say whether the overall width has changed: Grew, Shrank, New
 ;;;      or Unchanged.  The width meant is the distance straight across,
-;;;      end to end, not the length of the object.  The change is split
+;;;      end to end, not the length of the curve.  The change is split
 ;;;      evenly, half at each end, unless you say otherwise -- then you
 ;;;      give the amount at the START end (the arrowed one) and the rest
-;;;      goes on at FINISH -- and the line in the drawing is resized to
+;;;      goes on at FINISH -- and the curve in the drawing is resized to
 ;;;      match.
 ;;;   4. Optionally select a BOUNDARY for the offsets -- a property line,
 ;;;      a house wall, a deck edge already drawn -- and say whether the
@@ -54,28 +53,15 @@
 ;;;      drawing: the eighths for an inch either side of the last
 ;;;      length, and a click on a row IS the length for this point --
 ;;;      see "The length ruler" below.
-;;;   7. Say how the points are joined: Straight (every segment a
-;;;      line, which is what the routine has always drawn), Arcs (every
-;;;      segment an arc), or Mixed, which then asks which segment
-;;;      numbers are arcs -- "1 3-5" -- and leaves the rest straight.
-;;;      The question is only asked once there are three points or
-;;;      more, and the answer becomes the default for the next round.
-;;;   8. Say whether the overall width of the line just drawn has
+;;;   7. Say whether the overall width of the curve just drawn has
 ;;;      changed -- step 3's question, asked of the course this round
 ;;;      built.  It is resized the same way, split the same way, before
 ;;;      anything is measured off it.
-;;;   9. Choose whether to repeat on the new polyline.  If so, enter a
+;;;   8. Choose whether to repeat on the new polyline.  If so, enter a
 ;;;      new point count and repeat from step 6 with the new polyline as
 ;;;      the path.
-;;;  10. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
+;;;   9. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
 ;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
-;;;
-;;; The offset side is fixed once from the direction click in step 2 and
-;;; reused for every round, so all offsets stay on the same side of the
-;;; original line and every dimension stays perpendicular to it -- until
-;;; a round corrects its width at step 8, which moves its new points
-;;; along the resized line and leaves that round's dimensions reading
-;;; the corrected drawing instead.
 ;;;
 ;;; Steps 1 to 4 are one chain: Back at the click re-opens the
 ;;; selection, Back at the width question re-opens the click, and Back
@@ -83,10 +69,51 @@
 ;;; boundary selection itself offers no Back, because the resize step 3
 ;;; made is already in the drawing by then.
 ;;;
+;;; The boundary
+;;;   A wall is not always free to run as far as the tape says: there
+;;;   is a property line, a house, a deck edge already drawn, and the
+;;;   course being built has to answer to it.  Step 4 takes that object
+;;;   once, and then asks which of two things it is.
+;;;
+;;;   Limit: the boundary is the most any offset may reach.  At each
+;;;   point a ray is cast from the base point along the offset normal
+;;;   and the nearest crossing ahead of it is that point's maximum --
+;;;   per point, not one number for the run, because a boundary at an
+;;;   angle to the curve is nearer at one end than at the other.  The
+;;;   length prompt names it, M (Max) takes it exactly, and a longer
+;;;   length is brought back to it and said so; the number typed is
+;;;   still what Enter repeats at the next point, since the tape has
+;;;   not changed, only where this one point may reach.
+;;;
+;;;   Meet: the boundary is where every offset ENDS.  A point with the
+;;;   boundary ahead of it is placed on the boundary and dimensioned to
+;;;   it, and no length is asked -- the offset is the distance to the
+;;;   boundary along that point's own normal and nothing else.  Back at
+;;;   a length that IS asked steps back to the last length typed, taking
+;;;   every point that ran out to the boundary in between with it, and
+;;;   to the count question when nothing was typed in front of it.
+;;;
+;;;   Either way, where the ray never meets the boundary -- it is behind
+;;;   the offset side, or stops short of that end of the run -- the
+;;;   point has no maximum and no landing, and the prompt is the one it
+;;;   always was (Meet says "no boundary ahead" so the silence is not
+;;;   mistaken for a landing).  A boundary covering part of a run
+;;;   answers for the part it covers.
+;;;
+;;;   Two things neither mode is.  It holds the measured POINTS at or
+;;;   inside the boundary, and the arcs between them are fitted to the
+;;;   curve's tangents: where a boundary bends away between two points,
+;;;   the arc joining them can still bow past it, and the answer is a
+;;;   point there rather than a different arc.  And it is not re-applied
+;;;   by the width correction at step 7, which scales the whole curve:
+;;;   that is the drafter's own measurement and is not second-guessed,
+;;;   but a correction that carries points past a Limit boundary, or
+;;;   off a Meet one, says how many.
+;;;
 ;;; The overall width
 ;;;   Walls get re-measured, and the number that comes back is the
-;;;   distance straight across, end to end.  That is what steps 3 and 8
-;;;   ask for -- never the developed length of the OBJECT, which on
+;;;   distance straight across, end to end.  That is what steps 3 and 7
+;;;   ask for -- never the developed length of the CURVE, which on
 ;;;   anything bowed runs further than the width it spans.  Grew and
 ;;;   Shrank take the difference, New takes the width itself, and
 ;;;   Unchanged (the default, and Enter) leaves everything exactly as it
@@ -103,97 +130,57 @@
 ;;;   refused.  Growing and shrinking are handled alike: the amount is
 ;;;   what each end moves by, outward or inward.
 ;;;
-;;;   A new width is made true by scaling the object about a point on
+;;;   A new width is made true by scaling the curve about a point on
 ;;;   the line through its two ends: the midpoint for an even split,
 ;;;   nearer START the more of the change goes to FINISH, and ON an end
 ;;;   when that end holds still.  One uniform scale, whatever the split,
-;;;   so the shape between the ends is carried along unchanged in
-;;;   proportion.  The object in the drawing is resized too, not just
-;;;   the numbers behind it: the offsets and their dimensions are
-;;;   measured off it, so leaving it at the old width would put every
-;;;   base point somewhere the drawing says nothing is.  The base points
-;;;   and dimensions then follow the resized object, since they are
-;;;   spaced along it after the resize.  The whole thing sits inside the
-;;;   command's undo group, so one U puts the width back.
+;;;   so the curve keeps its shape: an arc stays that arc, scaled.  The
+;;;   curve in the drawing is resized too, not just the numbers behind
+;;;   it -- the offsets and their dimensions are measured off it, so
+;;;   leaving it at the old width would put every base point somewhere
+;;;   the drawing says nothing is.  The base points and dimensions then
+;;;   follow the resized curve, since they are spaced along it after the
+;;;   resize.  The whole thing sits inside the command's undo group, so
+;;;   one U puts the width back.
 ;;;
-;;;   Every line gets that question, not just the one selected: each
+;;;   Every curve gets that question, not just the one selected: each
 ;;;   round draws the next course out, and a course is re-measured the
-;;;   same way the first one was.  A line the routine draws is only ever
-;;;   as wide as the typed offsets add up to, so ends measured a little
-;;;   long or a little short leave it that much wide or narrow -- and
-;;;   the next round spaces its base points along it, which is the same
-;;;   reason step 3 resizes the selected object rather than only
-;;;   remembering a number.  Step 8 asks after the polyline is drawn,
-;;;   because that is when there is a width to compare against, and
-;;;   before its dimensions are recorded: a round that corrects its
-;;;   width has its new points moved with the line, so each dimension
-;;;   reads the distance the corrected drawing really has rather than
-;;;   the length that was typed into it.  A resize the drawing will not
-;;;   take stops step 3 -- nothing is drawn yet, so re-running costs a
-;;;   click -- but at step 8 it leaves the line at the width it drew and
-;;;   says so, because whole rounds of typed lengths sit behind it.
+;;;   same way the first one was.  A curve the routine draws is only
+;;;   ever as wide as the typed offsets add up to, so ends measured a
+;;;   little long or a little short leave it that much wide or narrow --
+;;;   and the next round spaces its base points along it and reads its
+;;;   tangents, which is the same reason step 3 resizes the selected
+;;;   curve rather than only remembering a number.  Step 7 asks after
+;;;   the polyline is drawn, because that is when there is a width to
+;;;   compare against, and before its dimensions are recorded: a round
+;;;   that corrects its width has its new points moved with the curve,
+;;;   so each dimension reads the distance the corrected drawing really
+;;;   has rather than the length that was typed into it.  A resize the
+;;;   drawing will not take stops step 3 -- nothing is drawn yet, so
+;;;   re-running costs a click -- but at step 7 it leaves the curve at
+;;;   the width it drew and says so, because whole rounds of typed
+;;;   lengths sit behind it.
 ;;;
-;;; The boundary
-;;;   A wall is not always free to run as far as the tape says: there
-;;;   is a property line, a house, a deck edge already drawn, and the
-;;;   course being built has to answer to it.  Step 4 takes that object
-;;;   once, and then asks which of two things it is.
+;;; How the offset direction is found
+;;;   Every round works from the NEWEST curve.  Round 1 offsets from the
+;;;   selected curve; each later round offsets from the arc polyline
+;;;   the previous round built.  Each base point sits on that
+;;;   newest curve, and its offset runs along the normal of the curve's
+;;;   tangent underneath it -- so both the offset and its dimension read
+;;;   perpendicular to the line the point actually sits on, and each
+;;;   round follows the shape its predecessor took.  A round that
+;;;   corrects its width at step 7 is the one exception: the correction
+;;;   moves its new points along the resized curve, and that round's
+;;;   dimensions read the corrected drawing instead.
 ;;;
-;;;   Limit: the boundary is the most any offset may reach.  At each
-;;;   point a ray is cast from the base point along the offset normal
-;;;   and the nearest crossing ahead of it is that point's maximum --
-;;;   per point, not one number for the run, because a boundary at an
-;;;   angle to the line is nearer at one end than at the other.  The
-;;;   length prompt names it, M (Max) takes it exactly, and a longer
-;;;   length is brought back to it and said so; the number typed is
-;;;   still what Enter repeats at the next point, since the tape has
-;;;   not changed, only where this one point may reach.
-;;;
-;;;   Meet: the boundary is where every offset ENDS.  A point with the
-;;;   boundary ahead of it is placed on the boundary and dimensioned to
-;;;   it, and no length is asked -- the offset is the distance to the
-;;;   boundary and nothing else.  Back at a length that IS asked steps
-;;;   back to the last length typed, taking every point that ran out to
-;;;   the boundary in between with it, and to the count question when
-;;;   nothing was typed in front of it.
-;;;
-;;;   Either way, where the ray never meets the boundary -- it is behind
-;;;   the offset side, or stops short of that end of the run -- the
-;;;   point has no maximum and no landing, and the prompt is the one it
-;;;   always was (Meet says "no boundary ahead" so the silence is not
-;;;   mistaken for a landing).  A boundary covering part of a run
-;;;   answers for the part it covers.
-;;;
-;;;   Two things neither mode is.  It holds the measured POINTS at or
-;;;   inside the boundary, and an arc segment between two of them is
-;;;   fitted to the points' own curvature: where a boundary bends away
-;;;   between two points the arc can still bow past it, and the answer
-;;;   is a point there rather than a different arc.  And it is not
-;;;   re-applied by the width correction at step 8, which scales the
-;;;   whole line: that is the drafter's own measurement and is not
-;;;   second-guessed, but a correction that carries points past a Limit
-;;;   boundary, or off a Meet one, says how many.
-;;;
-;;; Straight lines, arcs, or both
-;;;   A measured wall is rarely all one or all the other: a radiused
-;;;   stretch reads as an arc, a straight run reads as a line, and one
-;;;   profile often needs both -- which is why step 6 asks instead of
-;;;   assuming.  An arc segment is a bulge written onto the same
-;;;   LWPOLYLINE, so whatever the answer the round produces one
-;;;   editable polyline through the measured points: never a spline and
-;;;   never a curve-fit heavy polyline.  Every point takes a direction
-;;;   from the circle through it and its two neighbours, and a segment
-;;;   is bent to the angle its two ends agree on, so points taken off a
-;;;   real radius come back as that radius and every arc still passes
-;;;   exactly through the two points it joins.
-;;;   Once a round has drawn arcs, the next round spaces its base
-;;;   points along the drawn curve rather than along the chords -- the
-;;;   arcs bow away from their chords, so chord spacing would put the
-;;;   base points off the polyline they are dimensioned from.
+;;;   Which side is used is fixed once, from the direction click,
+;;;   relative to the direction of travel (START -> FINISH), so every
+;;;   point in every round offsets to the same side however the curves
+;;;   bend.
 ;;;
 ;;; Properties
 ;;;   * The offset polylines take the layer, colour, linetype, lineweight
-;;;     and linetype scale of the object they were offset from.
+;;;     and linetype scale of the curve they were offset from.
 ;;;   * The dimensions go on the DIMENSIONS layer (created if missing)
 ;;;     and use the dimension style picked in step 9 when the drawing
 ;;;     has it; otherwise the current style is used and a note is
@@ -238,9 +225,15 @@
 ;;;     guides and closes the UNDO group.
 ;;;   * Bad input re-prompts instead of aborting the command; zero and
 ;;;     negative lengths are rejected, as is a direction click that lands
-;;;     on the line itself (where "which side" would be ambiguous).
+;;;     on the curve itself (where "which side" would be ambiguous).
 ;;;   * All geometry is handled in the current UCS, so the command works
 ;;;     in a rotated or shifted UCS.
+;;;
+;;; Note: on a tight concave bend, normals converge and large offsets
+;;; can make the new curve cross itself -- inherent to offsetting along
+;;; normals, not a fault of the routine.  The arc segments pass exactly
+;;; through every offset point, so each dimension's endpoint lies on
+;;; the new curve.
 ;;;
 ;;; License: GPL-3.0-or-later
 ;;; ---------------------------------------------------------------------
@@ -249,7 +242,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.19")
+(setq *cperp-version* "v0.20")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -261,29 +254,53 @@
 ;; over and over.  Scratch geometry on the guide layer, swept away with
 ;; the rest of the guides.  Every size is a fraction of the current
 ;; view, so the ruler reads the same at any zoom.
-(setq perp:*ruler-color* 3)          ; ACI colour of the rows you can PICK,
+(setq cperp:*ruler-color* 3)          ; ACI colour of the rows you can PICK,
                                     ; carried on the entities themselves
-(setq perp:*ruler-current-color* 7)  ; ACI colour of the ringed CURRENT
+(setq cperp:*ruler-current-color* 7)  ; ACI colour of the ringed CURRENT
                                     ; row -- the last length -- so it
                                     ; reads apart from the options; 7 is
                                     ; AutoCAD's black/white swap
-(setq perp:*ruler-screen-x* 0.88)    ; where the spine sits across the
+(setq cperp:*ruler-screen-x* 0.88)    ; where the spine sits across the
                                     ; view, as a fraction of its width
                                     ; in from the left; past 0.5 the rows
                                     ; reach left, short of it they reach
                                     ; right, so the ruler is always inside
                                     ; the view
-(setq perp:*ruler-row-frac* 0.042)   ; one row's share of the view's
+(setq cperp:*ruler-row-frac* 0.042)   ; one row's share of the view's
                                     ; height -- the ruler's size knob
-(setq perp:*ruler-txt-frac* 0.5)     ; the biggest row label's height, as
+(setq cperp:*ruler-txt-frac* 0.5)     ; the biggest row label's height, as
                                     ; a fraction of the row spacing
-(setq perp:*ruler-tick-frac* 0.6)    ; the longest tick, same measure
-(setq perp:*ruler-ring-frac* 0.26)   ; the ring round the current row, as
+(setq cperp:*ruler-tick-frac* 0.6)    ; the longest tick, same measure
+(setq cperp:*ruler-ring-frac* 0.26)   ; the ring round the current row, as
                                     ; a fraction of the row spacing
-(setq perp:*ruler-reach* 6.0)        ; how far inboard of the spine, in
+(setq cperp:*ruler-reach* 6.0)        ; how far inboard of the spine, in
                                     ; row spacings, a click still counts
                                     ; as picking a row rather than as the
                                     ; first point of a measured length
+
+;; Which answer the "Split the ... evenly, half at each end?" question
+;; takes on Enter when a width change has to be shared out: "Yes" puts
+;; half of the difference at each end, "No" goes on to ask how much of
+;; it the START end takes.  Both words are still offered and either can
+;; still be typed -- this only decides what tapping Enter means.
+;; Anything that is neither word is ignored and "Yes" stands.
+(setq cperp:*split-default* "Yes")
+
+;; Which answer the boundary's "stop at the boundary, or run out to
+;; meet it?" question takes on Enter: "Limit" caps a length that would
+;; carry a point past the boundary, "Meet" runs every offset out to it
+;; without asking a length at all.  Both keywords are still offered and
+;; either can still be typed.  Anything that is neither is ignored and
+;; "Limit" stands.
+(setq cperp:*boundary-default* "Limit")
+
+;; Which of the two dimension styles the closing question takes on
+;; Enter -- "STandard" (STANDARD INCHES) or "SIde" (SIDE STANDARD), in
+;; any case.  A shop whose work is mostly side dimensions stops
+;; re-typing SIde at every run; the question is asked in the same words
+;; either way and both keywords are still offered.  Anything that is
+;; neither keyword is ignored and "STandard" stands.
+(setq cperp:*dimstyle-default* "STandard")
 
 ;;; -------------------- the length ruler --------------------------------
 ;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
@@ -338,17 +355,17 @@
 ;;;  steps in eighths of one, which is what a tape reads in.
 
 ;; T when C is 0-9.
-(defun perp:len-digit-p (c)
+(defun cperp:len-digit-p (c)
   (and (>= (ascii c) 48) (<= (ascii c) 57)))
 
 ;; T when S reads as a plain decimal number: digits, at most one dot,
 ;; at least one digit, nothing else.
-(defun perp:len-num-p (s / i n c dots digits ok)
+(defun cperp:len-num-p (s / i n c dots digits ok)
   (setq n (strlen s) i 1 dots 0 digits 0 ok T)
   (while (and ok (<= i n))
     (setq c (substr s i 1))
     (cond
-      ((perp:len-digit-p c) (setq digits (1+ digits)))
+      ((cperp:len-digit-p c) (setq digits (1+ digits)))
       ((= c ".") (setq dots (1+ dots)))
       (T (setq ok nil)))
     (setq i (1+ i)))
@@ -357,7 +374,7 @@
 ;; S cut on spaces, tabs and dashes, empty pieces dropped -- the
 ;; separators an inches part is written with, so "4 1/2" and "4-1/2"
 ;; come apart the same way.  It cuts a keyword list the same way.
-(defun perp:len-split (s / i n c buf out)
+(defun cperp:len-split (s / i n c buf out)
   (setq n (strlen s) i 1 buf "" out nil)
   (while (<= i n)
     (setq c (substr s i 1))
@@ -372,23 +389,23 @@
 
 ;; One token of an inches part -- a decimal number, or a fraction N/D
 ;; -- as a number of inches.  nil when it is neither.
-(defun perp:len-token (tok / slash n d)
+(defun cperp:len-token (tok / slash n d)
   (if (setq slash (vl-string-search "/" tok))
     (progn
       (setq n (substr tok 1 slash)
             d (substr tok (+ slash 2)))
-      (if (and (perp:len-num-p n) (perp:len-num-p d) (/= (atof d) 0.0))
+      (if (and (cperp:len-num-p n) (cperp:len-num-p d) (/= (atof d) 0.0))
         (/ (atof n) (atof d))))
-    (if (perp:len-num-p tok) (atof tok))))
+    (if (cperp:len-num-p tok) (atof tok))))
 
 ;; The inches part of a measurement as a number of inches: every token
 ;; added up, so "4", "4.5", "4 1/2", "4-1/2" and "1/2" all read.  An
 ;; empty part is 0, which is how 4' reads as 4'-0".  nil when any
 ;; token is neither a number nor a fraction.
-(defun perp:len-inches (s / toks total v tk)
-  (setq toks (perp:len-split s) total 0.0)
+(defun cperp:len-inches (s / toks total v tk)
+  (setq toks (cperp:len-split s) total 0.0)
   (foreach tk toks
-    (if (and total (setq v (perp:len-token tk)))
+    (if (and total (setq v (cperp:len-token tk)))
       (setq total (+ total v))
       (setq total nil)))
   total)
@@ -401,7 +418,7 @@
 ;; optional, inches may be decimal, and a fraction may be spaced or
 ;; dashed -- 44, 44.5, 44 1/2, 4'4.5 and 4'-4 1/2" all read.  nil when
 ;; the text is not a measurement at all.
-(defun perp:parse-len (s / n apos feetstr rest hasfeet feet inch)
+(defun cperp:parse-len (s / n apos feetstr rest hasfeet feet inch)
   (setq s (vl-string-trim " \t" s)
         n (strlen s))
   (cond
@@ -414,17 +431,17 @@
     (progn
       (setq feetstr (vl-string-trim " \t" (substr s 1 apos))
             rest    (vl-string-trim " \t-" (substr s (+ apos 2))))
-      (if (perp:len-num-p feetstr)
+      (if (cperp:len-num-p feetstr)
         (setq feet (atof feetstr) hasfeet T)
         (setq rest nil)))
     (setq rest (vl-string-trim " \t" s)))
-  (setq inch (if rest (perp:len-inches rest)))
+  (setq inch (if rest (cperp:len-inches rest)))
   (if (and inch (or hasfeet (/= rest "")))
     (list (+ (* feet 12.0) inch) hasfeet)))
 
 ;; INCHES to the nearest eighth, as an integer count of eighths -- the
 ;; unit the ruler is built in.
-(defun perp:len-eighths (inches)
+(defun cperp:len-eighths (inches)
   (fix (+ 0.5 (* 8.0 inches))))
 
 ;; Spell TOTAL-EIGHTHS out as text, in the HASFEET family.  STACKED nil
@@ -432,7 +449,7 @@
 ;; STACKED T is the DRAWN one, the fraction stacked through AutoCAD's
 ;; \S code at the size of the text around it, for a ruler label and
 ;; nothing else.
-(defun perp:spell-len (total-eighths hasfeet stacked / feet remain whole f8
+(defun cperp:spell-len (total-eighths hasfeet stacked / feet remain whole f8
                          g num den fr)
   (if hasfeet
     (setq feet   (/ total-eighths 96)
@@ -457,7 +474,7 @@
 ;; What to say when something typed is not a length at all.  The
 ;; examples are the lazy spellings on purpose: the ones worth showing
 ;; are the ones that save keystrokes.
-(defun perp:len-unread (v)
+(defun cperp:len-unread (v)
   (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44 1/2,"
                  " 4'4.5 or 4'-4 1/2\".")))
 
@@ -465,7 +482,7 @@
 ;; falls in -- 'jump for a whole inch, 'half/'quarter/'eighth for the
 ;; finer steps, biggest to smallest; a row's tick length and text
 ;; height read off it.
-(defun perp:ruler-tier (offset / a m)
+(defun cperp:ruler-tier (offset / a m)
   (setq a (abs offset) m (rem a 8))
   (cond
     ((= m 0) 'jump)
@@ -477,11 +494,11 @@
 ;; for a whole inch either side, and with feet in play the 2" and 3"
 ;; jumps beyond that as well.  A row at or below zero is dropped.
 ;; Unsorted -- the ruler sorts once it also has the current row.
-(defun perp:ruler-rows (total-eighths hasfeet / out i off)
+(defun cperp:ruler-rows (total-eighths hasfeet / out i off)
   (setq out nil i 1)
   (while (<= i 8)
-    (setq out (cons (list (- total-eighths i) (perp:ruler-tier i)) out))
-    (setq out (cons (list (+ total-eighths i) (perp:ruler-tier i)) out))
+    (setq out (cons (list (- total-eighths i) (cperp:ruler-tier i)) out))
+    (setq out (cons (list (+ total-eighths i) (cperp:ruler-tier i)) out))
     (setq i (1+ i)))
   (if hasfeet
     (progn
@@ -498,7 +515,7 @@
 ;; deepest mark, a half foot the next, a quarter foot after that, and
 ;; everything else is a plain rung.  That is where a tape's deep marks
 ;; are, so a ladder of radii reads as a ruler and not as a list.
-(defun perp:ladder-tier (eighths)
+(defun cperp:ladder-tier (eighths)
   (cond
     ((= 0 (rem eighths 96)) 'jump)        ; a whole foot
     ((= 0 (rem eighths 48)) 'half)        ; a half foot
@@ -512,33 +529,33 @@
 ;; A ladder is a KNOB, and a knob is whatever a drafter left in it -- a
 ;; string, two numbers where three were wanted, a step of zero.  So the
 ;; shape is read here rather than trusted: anything that is not three
-;; numbers with a positive step has no rungs, and perp:ruler-show reads
+;; numbers with a positive step has no rungs, and cperp:ruler-show reads
 ;; that as no ladder.  A settings line typed wrong costs the ruler, not
 ;; the command.  Unsorted -- the ruler sorts once it also has the
 ;; current row.
-(defun perp:ladder-rows (ladder / lo hi step v out)
+(defun cperp:ladder-rows (ladder / lo hi step v out)
   (setq out nil)
   (if (and (= (type ladder) 'LIST) (= 3 (length ladder))
            (numberp (car ladder)) (numberp (cadr ladder))
            (numberp (caddr ladder)) (> (caddr ladder) 0.0))
     (progn
-      (setq lo   (perp:len-eighths (car ladder))
-            hi   (perp:len-eighths (cadr ladder))
-            step (perp:len-eighths (caddr ladder))
+      (setq lo   (cperp:len-eighths (car ladder))
+            hi   (cperp:len-eighths (cadr ladder))
+            step (cperp:len-eighths (caddr ladder))
             v    lo)
       (if (> step 0)
         (while (<= v hi)
-          (if (> v 0) (setq out (cons (list v (perp:ladder-tier v)) out)))
+          (if (> v 0) (setq out (cons (list v (cperp:ladder-tier v)) out)))
           (setq v (+ v step))))))
   out)
 
 ;; Ascending by value -- the comparator the ruler sorts rows with.
-(defun perp:ruler-val-lt (a b) (< (car a) (car b)))
+(defun cperp:ruler-val-lt (a b) (< (car a) (car b)))
 
 ;; What the screen is showing, as (LEFT BOTTOM WIDTH HEIGHT) in drawing
 ;; units: VIEWSIZE is the view's height and SCREENSIZE its aspect.
 ;; This is what pins the ruler to the same strip of screen at any zoom.
-(defun perp:ruler-view ( / ctr vh ss aspect vw)
+(defun cperp:ruler-view ( / ctr vh ss aspect vw)
   (setq ctr (getvar "VIEWCTR")
         vh  (getvar "VIEWSIZE")
         ss  (getvar "SCREENSIZE"))
@@ -552,12 +569,12 @@
 ;; Which way a row reaches from a spine pinned SCREEN-X of the way
 ;; across the view: always toward the middle, so a ruler pinned near an
 ;; edge is never drawn past it.  1.0 toward higher x, -1.0 lower.
-(defun perp:ruler-dir (screen-x)
+(defun cperp:ruler-dir (screen-x)
   (if (> screen-x 0.5) -1.0 1.0))
 
 ;; Label height for a row of this TIER, against a row spacing of GAP,
 ;; the biggest label being FRAC of the spacing.
-(defun perp:ruler-hgt (tier gap frac / base)
+(defun cperp:ruler-hgt (tier gap frac / base)
   (setq base (* gap frac))
   (cond
     ((eq tier 'half) (* base 0.8))
@@ -566,7 +583,7 @@
     (T base)))                     ; 'current and 'jump
 
 ;; Tick length for a row of this TIER, same measure.
-(defun perp:ruler-tick (tier gap frac / base)
+(defun cperp:ruler-tick (tier gap frac / base)
   (setq base (* gap frac))
   (cond
     ((eq tier 'half) (* base 0.75))
@@ -575,14 +592,14 @@
     (T base)))                     ; 'current and 'jump
 
 ;; A ruler stroke from (X1 Y1) to (X2 Y2) on LAY in ACI colour COL.
-(defun perp:ruler-line (x1 y1 x2 y2 lay col)
+(defun cperp:ruler-line (x1 y1 x2 y2 lay col)
   (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity") (cons 8 lay)
                   (cons 62 col) '(100 . "AcDbLine")
                   (cons 10 (list x1 y1 0.0))
                   (cons 11 (list x2 y2 0.0)))))
 
 ;; The ring that marks the current row.
-(defun perp:ruler-ring (x y r lay col)
+(defun cperp:ruler-ring (x y r lay col)
   (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity") (cons 8 lay)
                   (cons 62 col) '(100 . "AcDbCircle")
                   (cons 10 (list x y 0.0)) (cons 40 r))))
@@ -590,7 +607,7 @@
 ;; A ruler label: one unwrapped MTEXT of height HGT at PT in the
 ;; current text style, attached top left (ATT 1) or top right (3) so
 ;; it grows away from the spine.
-(defun perp:ruler-label (pt hgt str lay col att)
+(defun cperp:ruler-label (pt hgt str lay col att)
   (entmakex (list '(0 . "MTEXT") '(100 . "AcDbEntity") (cons 8 lay)
                   (cons 62 col) '(100 . "AcDbMText")
                   (cons 10 (list (car pt) (cadr pt) 0.0))
@@ -610,23 +627,23 @@
 ;; is ringed once rather than drawn twice.
 ;; Returns (ENTS BOX ROWS): the entities drawn, BOX as (XMIN XMAX YTOL)
 ;; for the hit test, and ROWS as (EIGHTHS ROW-Y) pairs.
-(defun perp:draw-ruler (total-eighths hasfeet lay style ladder / rows n i row
+(defun cperp:draw-ruler (total-eighths hasfeet lay style ladder / rows n i row
                           val tier y hgt tl spx ents result view vx vy vw vh
                           gap base rcol dir far near)
   (setq rows (if ladder
                (vl-remove-if '(lambda (pr) (equal (car pr) total-eighths))
-                             (perp:ladder-rows ladder))
-               (perp:ruler-rows total-eighths hasfeet)))
+                             (cperp:ladder-rows ladder))
+               (cperp:ruler-rows total-eighths hasfeet)))
   (if total-eighths
     (setq rows (cons (list total-eighths 'current) rows)))
-  (setq rows (vl-sort rows 'perp:ruler-val-lt))
-  (setq view (perp:ruler-view)
+  (setq rows (vl-sort rows 'cperp:ruler-val-lt))
+  (setq view (cperp:ruler-view)
         vx   (car view)  vy (cadr view)
         vw   (caddr view) vh (cadddr view))
   (setq n    (length rows)
         gap  (* vh (nth 3 style))
         spx  (+ vx (* vw (nth 2 style)))
-        dir  (perp:ruler-dir (nth 2 style))   ; rows run inward
+        dir  (cperp:ruler-dir (nth 2 style))   ; rows run inward
         base (- (+ vy (/ vh 2.0)) (* gap (/ (- n 1) 2.0)))
         i    0
         ents nil
@@ -634,26 +651,26 @@
   (foreach row rows
     (setq val  (car row) tier (cadr row))
     (setq y    (+ base (* i gap))
-          hgt  (perp:ruler-hgt tier gap (nth 4 style))
-          tl   (perp:ruler-tick tier gap (nth 5 style))
+          hgt  (cperp:ruler-hgt tier gap (nth 4 style))
+          tl   (cperp:ruler-tick tier gap (nth 5 style))
           rcol (if (eq tier 'current) (nth 1 style) (nth 0 style)))
-    (setq ents (cons (perp:ruler-line spx y (+ spx (* dir tl)) y lay rcol)
+    (setq ents (cons (cperp:ruler-line spx y (+ spx (* dir tl)) y lay rcol)
                      ents))
     ;; half a label's height above the tick puts it astride its own
     ;; row, and the attachment turns with the row: a label on a row
     ;; that reaches left is hung by its RIGHT edge, so it grows away
     ;; from the spine rather than back across it
-    (setq ents (cons (perp:ruler-label (list (+ spx (* dir (+ tl (* gap 0.35))))
+    (setq ents (cons (cperp:ruler-label (list (+ spx (* dir (+ tl (* gap 0.35))))
                                             (+ y (/ hgt 2.0)))
-                                      hgt (perp:spell-len val hasfeet T)
+                                      hgt (cperp:spell-len val hasfeet T)
                                       lay rcol (if (< dir 0.0) 3 1))
                      ents))
     (if (eq tier 'current)
-      (setq ents (cons (perp:ruler-ring spx y (* gap (nth 6 style)) lay rcol)
+      (setq ents (cons (cperp:ruler-ring spx y (* gap (nth 6 style)) lay rcol)
                        ents)))
     (setq result (cons (list val y) result))
     (setq i (1+ i)))
-  (setq ents (cons (perp:ruler-line spx base spx (+ base (* (- n 1) gap))
+  (setq ents (cons (cperp:ruler-line spx base spx (+ base (* (- n 1) gap))
                                    lay (nth 0 style))
                    ents))
   ;; the strip a click counts as a pick in: the reach on the side the
@@ -667,7 +684,7 @@
 ;; The row (if any) that PT lands on: inside the ruler's strip in X and
 ;; close enough in Y to one of ROWS.  Returns the row's EIGHTHS, or nil
 ;; when PT is empty space.
-(defun perp:ruler-hit (pt box rows / r best bd d)
+(defun cperp:ruler-hit (pt box rows / r best bd d)
   (setq best nil bd nil)
   (if (and box (>= (car pt) (car box)) (<= (car pt) (cadr box)))
     (foreach r rows
@@ -677,14 +694,14 @@
   best)
 
 ;; A ruler that is not up yet, to draw on LAY in STYLE.
-(defun perp:ruler-new (lay style)
+(defun cperp:ruler-new (lay style)
   (list nil nil nil nil nil lay style nil nil))
 
 ;; The ruler taken down: its entities erased and forgotten.  The family
 ;; and the hint flag are kept, since neither is about what is drawn; the
 ;; ladder is not, since it is what the next prompt asks for and the next
 ;; prompt says so itself.
-(defun perp:ruler-off (state / e)
+(defun cperp:ruler-off (state / e)
   (foreach e (nth 2 state) (if (and e (entget e)) (entdel e)))
   (list nil (nth 1 state) nil nil nil (nth 5 state) (nth 6 state)
         (nth 7 state) nil))
@@ -698,17 +715,17 @@
 ;; what is drawn, not what it stands round: a ladder with no answer yet
 ;; stands round nothing and is up all the same.
 ;; The one-line hint is said the first time a run draws one.
-(defun perp:ruler-show (state len ladder / rr)
+(defun cperp:ruler-show (state len ladder / rr)
   ;; a ladder nothing can be built out of is no ladder at all, and is
   ;; dropped here rather than drawn as an empty one
-  (if (and ladder (null (perp:ladder-rows ladder))) (setq ladder nil))
+  (if (and ladder (null (cperp:ladder-rows ladder))) (setq ladder nil))
   (cond
-    ((and (null len) (null ladder)) (perp:ruler-off state))
+    ((and (null len) (null ladder)) (cperp:ruler-off state))
     ((and (nth 2 state) (equal (nth 0 state) len)
           (equal (nth 8 state) ladder)) state)
     (T
-     (setq state (perp:ruler-off state))
-     (setq rr (perp:draw-ruler (if len (perp:len-eighths len)) (nth 1 state)
+     (setq state (cperp:ruler-off state))
+     (setq rr (cperp:draw-ruler (if len (cperp:len-eighths len)) (nth 1 state)
                               (nth 5 state) (nth 6 state) ladder))
      (if (not (nth 7 state))
        (princ (strcat "\n  A ruler of " (if ladder "the usual" "nearby")
@@ -720,7 +737,7 @@
 ;; One length prompt beside the ruler in STATE, and every way of
 ;; answering it: Enter (nil back, for the caller to read as it always
 ;; did), a keyword out of KWS (handed back as the keyword), a typed
-;; measurement in any spelling perp:parse-len reads, a click on a ruler
+;; measurement in any spelling cperp:parse-len reads, a click on a ruler
 ;; row (that row's value), or a click on empty space, which is the
 ;; first of two points to measure the length between.  Zero, a
 ;; negative and text that is not a length are refused and asked again,
@@ -736,15 +753,15 @@
 ;; negative are not lengths whoever read them.  nil = no such spelling,
 ;; which is every caller but one.
 ;;
-;; The caller SHOWS the ruler first -- (setq rl (perp:ruler-show rl last
-;; ladder) rr (perp:ask-len prompt kws rl nil) v (car rr) rl (cadr rr)) --
+;; The caller SHOWS the ruler first -- (setq rl (cperp:ruler-show rl last
+;; ladder) rr (cperp:ask-len prompt kws rl nil) v (car rr) rl (cadr rr)) --
 ;; and that order is not a nicety: an Esc inside this prompt runs the
 ;; caller's *error*, and what that handler can take down is the ruler
 ;; the CALLER's state names.  A ruler drawn in here, in a state only
 ;; this function held, would outlive the Esc.  The caller keeps the
-;; state between prompts and takes the ruler down with perp:ruler-off
+;; state between prompts and takes the ruler down with cperp:ruler-off
 ;; before a prompt that does not take it and on every way out.
-(defun perp:ask-len (prompt kws state reader / pk v out done)
+(defun cperp:ask-len (prompt kws state reader / pk v out done)
   (setq done nil out nil)
   (while (not done)
     (if kws (initget 128 kws) (initget 128))
@@ -754,12 +771,12 @@
       ((null pk) (setq done T))
       ((= (type pk) 'STR)
        (cond
-         ((member pk (perp:len-split (if kws kws ""))) (setq out pk done T))
+         ((member pk (cperp:len-split (if kws kws ""))) (setq out pk done T))
          ;; a leading minus is refused here, since the reader treats a
          ;; dash as the separator in 4-1/2 and would read -5 as 5
          ((= (substr (vl-string-trim " \t" pk) 1 1) "-")
           (princ "\nA length must be more than zero."))
-         ((setq v (perp:parse-len pk))
+         ((setq v (cperp:parse-len pk))
           (if (> (car v) 0.0)
             (progn
               (setq out (car v) done T)
@@ -769,7 +786,7 @@
               ;; forgotten: a ladder stands round no length, so there is
               ;; nothing for forgetting one to redraw
               (if (not (eq (cadr v) (nth 1 state)))
-                (setq state (perp:ruler-off
+                (setq state (cperp:ruler-off
                               (list (nth 0 state) (cadr v) (nth 2 state)
                                     (nth 3 state) (nth 4 state) (nth 5 state)
                                     (nth 6 state) (nth 7 state)
@@ -779,8 +796,8 @@
           (if (and (numberp v) (> v 0.0))
             (setq out v done T)
             (princ "\nA length must be more than zero.")))
-         (T (perp:len-unread pk))))
-      ((setq v (perp:ruler-hit pk (nth 3 state) (nth 4 state)))
+         (T (cperp:len-unread pk))))
+      ((setq v (cperp:ruler-hit pk (nth 3 state) (nth 4 state)))
        (setq out (/ v 8.0) done T))
       (T
        (setq v (getdist pk "\nSecond point of the length: "))
@@ -792,101 +809,43 @@
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; This file's knobs, in the order the ruler reads them.
-(defun perp:ruler-style ()
-  (list perp:*ruler-color* perp:*ruler-current-color* perp:*ruler-screen-x*
-        perp:*ruler-row-frac* perp:*ruler-txt-frac* perp:*ruler-tick-frac*
-        perp:*ruler-ring-frac* perp:*ruler-reach*))
+(defun cperp:ruler-style ()
+  (list cperp:*ruler-color* cperp:*ruler-current-color* cperp:*ruler-screen-x*
+        cperp:*ruler-row-frac* cperp:*ruler-txt-frac* cperp:*ruler-tick-frac*
+        cperp:*ruler-ring-frac* cperp:*ruler-reach*))
 
-;; --- geometry helpers ------------------------------------------------
+;; The canonical spelling S stands for among KWS, in any case, or nil
+;; for anything that is not one of them -- what a tunable default is
+;; read through before it reaches a question, since Enter hands a
+;; default straight back without checking it, and "side" typed into a
+;; settings box must not reach the style table unspelled.
+(defun cperp:kw-canon (s kws / u out w)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w kws
+    (if (= u (strcase w)) (setq out w)))
+  out)
 
-;; linear interpolation between two 3D points at parameter tt (0..1)
-(defun perp:lerp (a b tt)
-  (list (+ (car a)   (* tt (- (car b)   (car a))))
-        (+ (cadr a)  (* tt (- (cadr b)  (cadr a))))
-        (+ (caddr a) (* tt (- (caddr b) (caddr a))))))
+;; The Enter answer each of the three question knobs names, canonicalised
+;; -- or the word the file ships with, when the override is none of the
+;; keywords the question offers.  One reader per knob, so the global is
+;; read in exactly one place and the question itself takes a word it can
+;; use.
+(defun cperp:split-dflt ()
+  (cond ((cperp:kw-canon cperp:*split-default* '("Yes" "No"))) ("Yes")))
 
-;; total length of a polyline given as a list of points
-(defun perp:pathlen (pts / total i)
-  (setq total 0.0 i 0)
-  (while (< (1+ i) (length pts))
-    (setq total (+ total (distance (nth i pts) (nth (1+ i) pts)))
-          i     (1+ i)))
-  total)
+(defun cperp:boundary-dflt ()
+  (cond ((cperp:kw-canon cperp:*boundary-default* '("Limit" "Meet")))
+        ("Limit")))
 
-;; point at arc-length distance d along the polyline pts
-(defun perp:pt-at (pts d / i a b segd res)
-  (cond
-    ((<= d 0.0) (car pts))
-    (t
-     (setq i 0 res nil)
-     (while (and (null res) (< (1+ i) (length pts)))
-       (setq a    (nth i pts)
-             b    (nth (1+ i) pts)
-             segd (distance a b))
-       (if (<= d segd)
-         (setq res (perp:lerp a b (if (> segd 1e-12) (/ d segd) 0.0)))
-         (setq d (- d segd) i (1+ i))))
-     (if res res (last pts)))))
+(defun cperp:dimstyle-dflt ()
+  (cond ((cperp:kw-canon cperp:*dimstyle-default* '("STandard" "SIde")))
+        ("STandard")))
 
-;; n points equally spaced by arc length along the polyline pts
-;; (both endpoints included)
-(defun perp:sample (pts n / total i out)
-  (setq total (perp:pathlen pts) out '() i 0)
-  (while (< i n)
-    (setq out (cons (perp:pt-at pts
-                                (if (> n 1)
-                                  (* (/ (float i) (float (1- n))) total)
-                                  0.0))
-                    out)
-          i   (1+ i)))
-  (reverse out))
-
-;; drop consecutive duplicate points (a polyline may carry them)
-(defun perp:dedupe (pts / out)
-  (setq out (list (car pts)))
-  (foreach p (cdr pts)
-    (if (> (distance p (car out)) 1e-10)
-      (setq out (cons p out))))
-  (reverse out))
-
-;; vertices of a LINE / LWPOLYLINE / POLYLINE, in the current UCS.
-;; Returns nil for anything else.
-(defun perp:verts (e / d et el pts sub sd flg)
-  (setq d  (entget e)
-        et (cdr (assoc 0 d)))
-  (cond
-    ;; LINE group 10/11 are WCS
-    ((= et "LINE")
-     (list (trans (cdr (assoc 10 d)) 0 1)
-           (trans (cdr (assoc 11 d)) 0 1)))
-    ;; LWPOLYLINE group 10 are OCS 2D points at elevation 38
-    ((= et "LWPOLYLINE")
-     (setq el  (cond ((cdr (assoc 38 d))) (0.0))
-           pts '())
-     (foreach x d
-       (if (= 10 (car x))
-         (setq pts (cons (trans (list (cadr x) (caddr x) el) e 1) pts))))
-     (reverse pts))
-    ;; heavy POLYLINE: walk the VERTEX entities, OCS points
-    ((= et "POLYLINE")
-     (setq pts '() sub (entnext e))
-     (while (and sub
-                 (setq sd (entget sub))
-                 (/= "SEQEND" (cdr (assoc 0 sd))))
-       (setq flg (cond ((cdr (assoc 70 sd))) (0)))
-       ;; skip spline-frame control points and mesh vertices
-       (if (and (= "VERTEX" (cdr (assoc 0 sd)))
-                (zerop (logand 16 flg))
-                (zerop (logand 64 flg)))
-         (setq pts (cons (trans (cdr (assoc 10 sd)) e 1) pts)))
-       (setq sub (entnext sub)))
-     (reverse pts))
-    (t nil)))
+;; --- generic helpers -------------------------------------------------
 
 ;; colour of an entity as a CECOLOR string ("BYLAYER", "3", "12,34,56")
-(defun perp:color (d / c tc)
+(defun cperp:color (d / c tc)
   (cond
-    ;; 24-bit true colour packed into one integer
     ((setq tc (cdr (assoc 420 d)))
      (strcat (itoa (logand (lsh tc -16) 255)) ","
              (itoa (logand (lsh tc -8) 255)) ","
@@ -894,7 +853,6 @@
     ((setq c (cdr (assoc 62 d)))
      (cond ((= c 0) "BYBLOCK")
            ((= c 256) "BYLAYER")
-           ;; a negative index means the layer is off; the colour still applies
            (t (itoa (abs c)))))
     (t "BYLAYER")))
 
@@ -905,7 +863,7 @@
 ;; changed.  (The canonical body of STANDARDS section 5; the grouped
 ;; build swaps this whole helper for cal:ensure-layer, which has
 ;; announced all along - this is the standalone tier catching up.)
-(defun perp:layer (name color / rec ed flags col fixed)
+(defun cperp:layer (name color / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
     (entmake (list '(0 . "LAYER")
                    '(100 . "AcDbSymbolTableRecord")
@@ -933,225 +891,110 @@
                          " result is visible."))))))
   name)
 
-;; --- arcs through the points -----------------------------------------
-;; Straight segments need nothing: PLINE already draws them.  An arc
-;; segment is a bulge (group 42) written onto the same LWPOLYLINE, so
-;; the round's output is one polyline either way.  Each vertex is given
-;; a travel tangent, read off the circle through it and its two
-;; neighbours, and each segment is then bent to the angle its two ends
-;; agree on.  Points sampled off a real radius therefore reproduce that
-;; radius exactly, every arc passes through both of its own points, and
-;; a run of points reversed end for end draws the same curve.
+;; --- curve helpers ---------------------------------------------------
+;; vlax-curve-* works on any curve entity and always speaks WCS, so the
+;; results are converted into the current UCS as they come back.
 
-;; centre of the circle through three points (plan view, z taken from
-;; p1); nil when the three are collinear.  Matches cal:circumcenter.
-(defun perp:circumcenter (p1 p2 p3 / ax ay bx by cx cy d)
-  (setq ax (car p1) ay (cadr p1)
-        bx (car p2) by (cadr p2)
-        cx (car p3) cy (cadr p3)
-        d  (* 2.0 (+ (* ax (- by cy)) (* bx (- cy ay)) (* cx (- ay by)))))
-  (if (> (abs d) 1e-12)
-    (list (/ (+ (* (+ (* ax ax) (* ay ay)) (- by cy))
-                (* (+ (* bx bx) (* by by)) (- cy ay))
-                (* (+ (* cx cx) (* cy cy)) (- ay by)))
-             d)
-          (/ (+ (* (+ (* ax ax) (* ay ay)) (- cx bx))
-                (* (+ (* bx bx) (* by by)) (- ax cx))
-                (* (+ (* cx cx) (* cy cy)) (- bx ax)))
-             d)
-          (caddr p1))))
+;; is this entity something AutoCAD can measure along?
+(defun cperp:curve-p (e / r)
+  (setq r (vl-catch-all-apply 'vlax-curve-getEndParam (list e)))
+  (and r (not (vl-catch-all-error-p r))))
 
-;; Unit tangent at pt for the circle centred on ctr, turned to face the
-;; way the polyline travels (toward nxt).  nil when there is no circle
-;; or pt sits on its centre -- both mean "draw this segment straight".
-(defun perp:tan-at (pt ctr nxt / tx ty l)
-  (if (null ctr)
-    nil
-    (progn
-      ;; the radius turned 90 degrees is the tangent
-      (setq tx (- (cadr ctr) (cadr pt))
-            ty (- (car pt)   (car ctr))
-            l  (sqrt (+ (* tx tx) (* ty ty))))
-      (if (< l 1e-12)
-        nil
-        (progn
-          (setq tx (/ tx l) ty (/ ty l))
-          (if (< (+ (* tx (- (car nxt)  (car pt)))
-                    (* ty (- (cadr nxt) (cadr pt))))
-                 0.0)
-            (setq tx (- tx) ty (- ty)))
-          (list tx ty))))))
+;; total length of the curve
+(defun cperp:curvelen (crv)
+  (vlax-curve-getDistAtParam crv (vlax-curve-getEndParam crv)))
 
-;; the point one more step along from a to b -- b's own heading, for the
-;; last vertex, which has nothing in front of it to face
-(defun perp:ahead (a b)
-  (list (- (* 2.0 (car b))  (car a))
-        (- (* 2.0 (cadr b)) (cadr a))
-        (caddr b)))
+;; point at arc-length distance d along the curve, in the current UCS
+(defun cperp:pt-at-dist (crv d tot / p)
+  (setq d (cond ((< d 0.0) 0.0) ((> d tot) tot) (t d)))
+  (if (setq p (vlax-curve-getPointAtDist crv d))
+    (trans p 0 1)))
 
-;; Travel tangent at EVERY vertex, in travel order.  An interior vertex
-;; takes its direction from the circle through it and its two
-;; neighbours; the two end vertices borrow the circle of the triple they
-;; sit in.  nil where that circle does not exist -- collinear
-;; neighbours, or fewer than three points -- which is how "nothing to
-;; curve to" is carried through the rest of the fit.
-(defun perp:tangents (pts / n i a p1 p2 p3 nxt ctr out)
-  (setq n (length pts) out '() i 0)
-  (if (>= n 3)
-    (while (< i n)
-      ;; a is the first of the three points whose circle points this
-      ;; vertex: itself and its neighbours, or the end triple it sits in
-      (setq a   (cond ((= i 0) 0) ((= i (1- n)) (- n 3)) (t (1- i)))
-            p1  (nth a pts)
-            p2  (nth (1+ a) pts)
-            p3  (nth (+ a 2) pts)
-            ctr (perp:circumcenter p1 p2 p3)
-            ;; the last vertex has nothing in front of it to face, so it
-            ;; takes its heading from the point before it
-            nxt (if (= i (1- n))
-                  (perp:ahead (nth (- n 2) pts) (nth (1- n) pts))
-                  (nth (1+ i) pts))
-            out (cons (perp:tan-at (nth i pts) ctr nxt) out)
-            i   (1+ i))))
+;; n points equally spaced by arc length along the curve, START first.
+;; rev traverses the curve from its far end.
+(defun cperp:curve-pts (crv n rev / tot i d out)
+  (setq tot (cperp:curvelen crv) out '() i 0)
+  (while (< i n)
+    (setq d (* (/ (float i) (float (1- n))) tot))
+    (if rev (setq d (- tot d)))
+    (setq out (cons (cperp:pt-at-dist crv d tot) out)
+          i   (1+ i)))
   (reverse out))
 
-;; signed angle from vector u to vector v, -pi..pi
-(defun perp:vang (u v)
-  (atan (- (* (car u) (cadr v)) (* (cadr u) (car v)))
-        (+ (* (car u) (car v))  (* (cadr u) (cadr v)))))
+;; Unit tangent of the curve (current UCS) at the point of the curve
+;; closest to pt, as a 2D (x y) vector.  rev flips it so the tangent
+;; follows the direction of travel when the curve is being traversed
+;; from its far end.  Returns nil at a cusp.
+(defun cperp:tangent (crv pt rev / w p prm d dx dy dl)
+  (setq w   (trans pt 1 0)
+        p   (vlax-curve-getClosestPointTo crv w))
+  (if (null p)
+    nil
+    (progn
+      (setq prm (vlax-curve-getParamAtPoint crv p))
+      ;; floating point can put the projected point a hair off the curve
+      (if (null prm)
+        (setq prm (vlax-curve-getParamAtDist
+                    crv (vlax-curve-getDistAtPoint crv p))))
+      (if (null prm)
+        nil
+        (progn
+          ;; a derivative is a direction, so transform it as a displacement
+          (setq d  (trans (vlax-curve-getFirstDeriv crv prm) 0 1 T)
+                dx (car d)
+                dy (cadr d)
+                dl (sqrt (+ (* dx dx) (* dy dy))))
+          (if (< dl 1e-12)
+            nil
+            (progn
+              (if rev (setq dx (- dx) dy (- dy)))
+              (list (/ dx dl) (/ dy dl)))))))))
 
-;; Bulge of the arc from a to b, given the travel tangents at a and at
-;; b: tan(alpha/2), where alpha is half the arc's included angle.  Each
-;; end asks for an alpha of its own -- the angle from a's tangent to the
-;; chord, and from the chord to b's tangent -- and the two agree exactly
-;; when the points came off a real circle, so a sampled arc is returned
-;; unchanged.  Where they disagree the average is taken, which keeps the
-;; fit symmetric: reverse the run of points and every bulge does no more
-;; than change sign.  Straight (bulge 0) when neither end has a tangent,
-;; which is the middle of a straight run, or when there is no chord.
-(defun perp:bulge (ta tb a b / cx cy n alpha lim)
-  (setq cx (- (car b)  (car a))
-        cy (- (cadr b) (cadr a))
-        alpha 0.0
-        n     0)
-  (cond
-    ((< (sqrt (+ (* cx cx) (* cy cy))) 1e-12) 0.0)
-    (t
-     (if ta (setq alpha (+ alpha (perp:vang ta (list cx cy))) n (1+ n)))
-     (if tb (setq alpha (+ alpha (perp:vang (list cx cy) tb)) n (1+ n)))
-     (cond
-       ((= n 0) 0.0)
-       (t
-        (setq alpha (/ alpha (float n)))
-        ;; a chord folding back on a tangent would blow the bulge up
-        ;; toward infinity; cap the included angle at ~342 degrees
-        (setq lim 2.98)
-        (if (> alpha lim)     (setq alpha lim))
-        (if (< alpha (- lim)) (setq alpha (- lim)))
-        (/ (sin (/ alpha 2.0)) (cos (/ alpha 2.0))))))))
+;; Bulge of the arc from a to b whose tangent at a is tg: tan(alpha/2)
+;; where alpha is the signed angle from the tangent to the chord (the
+;; arc's included angle is 2*alpha).  Sampling a circle this way
+;; reproduces the circle exactly.  Falls back to a straight segment
+;; (bulge 0) when there is no tangent or no chord.
+(defun cperp:bulge (tg a b / cx cy dot crs alpha lim)
+  (setq cx (- (car b) (car a))
+        cy (- (cadr b) (cadr a)))
+  (if (or (null tg)
+          (< (sqrt (+ (* cx cx) (* cy cy))) 1e-12))
+    0.0
+    (progn
+      (setq dot   (+ (* (car tg) cx) (* (cadr tg) cy))
+            crs   (- (* (car tg) cy) (* (cadr tg) cx))
+            alpha (atan crs dot))
+      ;; a chord folding back on the tangent would blow the bulge up
+      ;; toward infinity; cap the included angle at ~342 degrees
+      (setq lim 2.98)
+      (if (> alpha lim)     (setq alpha lim))
+      (if (< alpha (- lim)) (setq alpha (- lim)))
+      (/ (sin (/ alpha 2.0)) (cos (/ alpha 2.0))))))
 
-;; Write the bulges onto the straight LWPOLYLINE en drawn through pts.
-;; tangs holds one tangent per vertex.  Segment i (numbered from 1) is
-;; arced when picks is nil -- every segment -- or when its number is in
-;; picks; the rest are written straight, so one call covers an all-arc
-;; round and a mixed one alike.  The entity stays an LWPOLYLINE: only
-;; bulges are written, and the vertices are left where they were
-;; measured.
-(defun perp:arcs (en pts tangs picks / d out g i b)
+;; Turn the straight LWPOLYLINE en (drawn through pts, whose travel
+;; tangents are tangs) into an arc polyline: every segment becomes an
+;; arc matched to the tangent at its start point.  The entity stays an
+;; LWPOLYLINE -- only bulge values are written.
+(defun cperp:arcs (en pts tangs / d out g i b)
   (setq d (entget en) out '() i 0)
   (foreach g d
     (cond
       ((= 42 (car g)))                       ; drop existing bulges
       ((= 10 (car g))
-       (setq b (if (and (< (1+ i) (length pts))
-                        (or (null picks) (member (1+ i) picks)))
-                 (perp:bulge (nth i tangs) (nth (1+ i) tangs)
-                             (nth i pts) (nth (1+ i) pts))
+       (setq b (if (< (1+ i) (length pts))
+                 (cperp:bulge (nth i tangs) (nth i pts) (nth (1+ i) pts))
                  0.0))
        (setq out (cons (cons 42 b) (cons g out))
              i   (1+ i)))
       (t (setq out (cons g out)))))
   (entmod (reverse out)))
 
-;; n points equally spaced by TRUE arc length along an existing polyline
-;; entity, in the current UCS (both endpoints included).  This is what a
-;; round after an arc round measures along: perp:sample walks the chords
-;; between the points, which is the same thing only while the segments
-;; are straight.  nil if the entity cannot be measured, so the caller
-;; can fall back to the chords.
-(defun perp:ent-pts (en n / tot i d p out ok)
-  (setq tot (vlax-curve-getDistAtParam en (vlax-curve-getEndParam en))
-        out '() i 0 ok T)
-  (while (and ok (< i n))
-    (setq d (if (> n 1) (* (/ (float i) (float (1- n))) tot) 0.0))
-    (if (> d tot) (setq d tot))
-    (if (setq p (vlax-curve-getPointAtDist en d))
-      (setq out (cons (trans p 0 1) out)
-            i   (1+ i))
-      (setq ok nil)))
-  (if ok (reverse out)))
-
-;; --- reading a typed segment list ------------------------------------
-
-;; T when s is one or more digits and nothing else.
-(defun perp:digits-p (s / i n ok)
-  (setq n (strlen s) i 1 ok (> n 0))
-  (while (and ok (<= i n))
-    (if (null (member (substr s i 1)
-                      '("0" "1" "2" "3" "4" "5" "6" "7" "8" "9")))
-      (setq ok nil))
-    (setq i (1+ i)))
-  ok)
-
-;; "3" -> (3 3), "3-5" -> (3 5), anything else -> nil.
-(defun perp:range (tok / i n p lft rgt)
-  (setq n (strlen tok) i 1 p nil)
-  (while (and (null p) (<= i n))
-    (if (= "-" (substr tok i 1)) (setq p i))
-    (setq i (1+ i)))
-  (cond
-    ((null p)
-     (if (perp:digits-p tok) (list (atoi tok) (atoi tok))))
-    (t
-     (setq lft (substr tok 1 (1- p))
-           rgt (substr tok (1+ p)))
-     (if (and (perp:digits-p lft) (perp:digits-p rgt))
-       (list (atoi lft) (atoi rgt))))))
-
-;; Read a typed segment list -- "1 3-5, 8" -- into a list of segment
-;; numbers.  Spaces and commas both separate.  Returns nil for an empty
-;; answer, a malformed token or a number outside 1..maxn, so a bad
-;; answer re-asks instead of quietly drawing the wrong thing.
-(defun perp:parse-segs (s maxn / i n ch tok toks out bad r a b)
-  (setq n (strlen s) i 1 tok "" toks '())
-  (while (<= i n)
-    (setq ch (substr s i 1))
-    (if (or (= ch " ") (= ch ","))
-      (progn
-        (if (/= tok "") (setq toks (cons tok toks)))
-        (setq tok ""))
-      (setq tok (strcat tok ch)))
-    (setq i (1+ i)))
-  (if (/= tok "") (setq toks (cons tok toks)))
-  (setq out '() bad (null toks))
-  (foreach tok toks
-    (setq r (perp:range tok))
-    (if (null r)
-      (setq bad T)
-      (progn
-        (setq a (car r) b (cadr r))
-        (if (or (< a 1) (> b maxn) (> a b))
-          (setq bad T)
-          (while (<= a b)
-            (if (not (member a out)) (setq out (cons a out)))
-            (setq a (1+ a)))))))
-  (if bad nil out))
-
 ;; --- the overall width -----------------------------------------------
 ;; Widths get re-measured, and the number that comes back is the
 ;; distance straight across, end to end -- NOT the developed length of
 ;; the object on the drawing, which on anything bowed is the longer of
-;; the two.  Making that width true is one scale of the whole object
+;; the two.  Making that width true is one scale of the whole curve
 ;; about a point on the line through its two ends: the shape between
 ;; them is carried along, the direction of travel and the offset side
 ;; are left alone, and WHERE on that line the centre sits is what
@@ -1162,18 +1005,18 @@
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getdist/getpoint/getint hand a keyword back as
 ;; a string where a value would be a number or a list.
-(defun perp:back-kw (v)
+(defun cperp:back-kw (v)
   (and (= (type v) 'STR) (member v '("Back" "Undo"))))
 
 ;; Ask whether the overall width has changed, and how the change is
 ;; shared between the two ends.  Returns (width frac) -- the width to
 ;; work to, and the share of the change that lands at the START end,
 ;; 0.5 when it is split evenly -- or nil when nothing has changed, so
-;; an unchanged answer skips the resize altogether, or PERP-BACK when
+;; an unchanged answer skips the resize altogether, or CPERP-BACK when
 ;; the first question was answered Back (only offered when back is
 ;; set).  d is the width the drawing carries now, and lbl heads the
-;; line that reports it: the question is asked of the selected object
-;; AND of every line a round draws, so it has to say which one it
+;; line that reports it: the question is asked of the selected curve
+;; AND of every curve a round draws, so it has to say which one it
 ;; means.
 ;;
 ;; Four questions walked with a step counter, so Back at any of them
@@ -1182,7 +1025,8 @@
 ;;   2  the amount (or the new width itself)
 ;;   3  split it evenly, half at each end?
 ;;   4  how much of it at the START end -- the rest goes on at FINISH
-(defun perp:ask-width (lbl d back / kws step kind ans v w diff frac out)
+(defun cperp:ask-width (lbl d back / kws step kind ans v w diff frac out
+                        sdflt)
   (princ (strcat "\n" lbl ", end to end: " (rtos d) "."))
   (setq kws "Grew Shrank New Unchanged" step 1 out nil w nil frac 0.5)
   (while (and (> step 0) (< step 5))
@@ -1200,7 +1044,7 @@
        (if lzd:ask (lzd:ask lbl kind) kind)
        (cond
          ((or (null kind) (= kind "Unchanged")) (setq out nil step 5))
-         ((member kind '("Back" "Undo")) (setq out 'PERP-BACK step 0))
+         ((member kind '("Back" "Undo")) (setq out 'CPERP-BACK step 0))
          (t (setq step 2))))
       ;; --- 2. by how much?
       ((= step 2)
@@ -1209,7 +1053,7 @@
           (initget 7 "Back Undo")                ; a real, positive amount
           (setq v (getdist "\nHow much wider? [Back]: "))
           (if lzd:ask (lzd:ask "\nHow much wider? [Back]: " v) v)
-          (if (perp:back-kw v)
+          (if (cperp:back-kw v)
             (progn (princ "\nStepping back one question.") (setq step 1))
             (setq w (+ d v) step 3)))
          ((= kind "Shrank")
@@ -1217,7 +1061,7 @@
           (setq v (getdist "\nHow much narrower? [Back]: "))
           (if lzd:ask (lzd:ask "\nHow much narrower? [Back]: " v) v)
           (cond
-            ((perp:back-kw v)
+            ((cperp:back-kw v)
              (princ "\nStepping back one question.")
              (setq step 1))
             ((< v d) (setq w (- d v) step 3))
@@ -1227,7 +1071,7 @@
           (setq v (getdist (strcat "\nNew overall width <" (rtos d) "> [Back]: ")))
           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v)
           (cond
-            ((perp:back-kw v)
+            ((cperp:back-kw v)
              (princ "\nStepping back one question.")
              (setq step 1))
             ((or (null v) (equal v d 1e-9)) (setq out nil step 5))
@@ -1235,11 +1079,13 @@
       ;; --- 3. half at each end, or not?
       ((= step 3)
        (setq diff (abs (- w d)))
+       (setq sdflt (cperp:split-dflt))
        (initget "Yes No Back Undo")
        (setq ans (getkword (strcat "\nSplit the " (rtos diff)
                                    " evenly, half at each end?"
-                                   " [Yes/No/Back] <Yes>: ")))
+                                   " [Yes/No/Back] <" sdflt ">: ")))
        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
+       (if (null ans) (setq ans sdflt))  ; Enter = the knob's word
        (cond
          ((member ans '("Back" "Undo"))
           (princ "\nStepping back one question.")
@@ -1257,7 +1103,7 @@
                                 " [Back]: ")))
        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v)
        (cond
-         ((perp:back-kw v)
+         ((cperp:back-kw v)
           (princ "\nStepping back one question.")
           (setq step 3))
          ((> v (+ diff 1e-9))
@@ -1274,13 +1120,13 @@
 ;; and the rest at FINISH: that far along the line from START to
 ;; FINISH.  0.5 is the midpoint, 0 holds START still, 1 holds FINISH
 ;; still.  z is START's, carried through untouched.
-(defun perp:scale-ctr (ps pf frac)
+(defun cperp:scale-ctr (ps pf frac)
   (list (+ (car ps)  (* frac (- (car pf)  (car ps))))
         (+ (cadr ps) (* frac (- (cadr pf) (cadr ps))))
         (caddr ps)))
 
 ;; The one line that says what a resize did to each end.
-(defun perp:width-line (wOld wNew frac / diff verb)
+(defun cperp:width-line (wOld wNew frac / diff verb)
   (setq diff (abs (- wNew wOld))
         verb (if (> wNew wOld) "added" "taken off"))
   (strcat "\nWidth " (rtos wOld) " -> " (rtos wNew) ": "
@@ -1294,7 +1140,7 @@
 ;; switched-off layer is the usual reason, and the caller has to say so
 ;; rather than measure offsets against geometry the drawing does not
 ;; actually have.
-(defun perp:rescale (en ctr k / r)
+(defun cperp:rescale (en ctr k / r)
   (setq r (vl-catch-all-apply
             'vla-ScaleEntity
             (list (vlax-ename->vla-object en)
@@ -1303,43 +1149,57 @@
   (not (vl-catch-all-error-p r)))
 
 ;; p scaled about ctr by k, in plan; z is carried through untouched
-(defun perp:scale-pt (p ctr k)
+(defun cperp:scale-pt (p ctr k)
   (list (+ (car ctr)  (* k (- (car p)  (car ctr))))
         (+ (cadr ctr) (* k (- (cadr p) (cadr ctr))))
         (caddr p)))
 
-;; every point of pts scaled about ctr by k
-(defun perp:scale-pts (pts ctr k / out p)
+;; every point of pts scaled about ctr by k.  The selected curve is
+;; re-read from the drawing after a resize, but a curve a round draws
+;; has its points in hand -- they are what the dimensions are recorded
+;; from -- so they are scaled with it rather than measured off it again.
+(defun cperp:scale-pts (pts ctr k / out p)
   (setq out '())
-  (foreach p pts (setq out (cons (perp:scale-pt p ctr k) out)))
+  (foreach p pts (setq out (cons (cperp:scale-pt p ctr k) out)))
   (reverse out))
 
 ;; --- the START arrow -------------------------------------------------
-;; Three red lines on the guide layer: a shaft coming in from outside
-;; the line along the FINISH->START extension with its tip on START,
-;; and two barbs.  It marks the end the lengths are entered from for
-;; the whole run, and it is what the width question means by "the
-;; arrowed end".  Returns the three enames so the caller can track and
-;; redraw them: a resize moves START, and an arrow left where START was
-;; would point at nothing.
-(defun perp:arrow (p ux uy dlen / sz arlen hlen tailx taily ca sa bkx bky
-                                  b1x b1y b2x b2y seg out)
-  (setq sz    (caddr p)
-        arlen (* dlen 0.15))                    ; shaft length
+;; Three red lines on the guide layer: a shaft running back from START
+;; along the curve's tangent there, so the arrow sits outside the curve
+;; pointing at the end the lengths are entered from, and two barbs.  It
+;; is kept for the whole run, and it is what the width question means
+;; by "the arrowed end".  Returns the three enames so the caller can
+;; track and redraw them: a resize moves START, and an arrow left where
+;; START was would point at nothing.  rev says START is the curve's far
+;; end; tot is the curve's length.
+(defun cperp:arrow (crv rev tot / p p2 sz tx ty arlen hlen tailx taily
+                                 ca sa bkx bky b1x b1y b2x b2y seg out)
+  (setq p  (trans (if rev (vlax-curve-getEndPoint crv)
+                          (vlax-curve-getStartPoint crv))
+                  0 1)
+        sz (caddr p)
+        ;; a point a little way along the traversal gives the start tangent
+        p2 (cperp:pt-at-dist crv
+                             (if rev (- tot (* tot 0.001)) (* tot 0.001))
+                             tot))
+  (setq tx (- (car p2)  (car p))
+        ty (- (cadr p2) (cadr p)))
+  (if (< (distance p p2) 1e-9)
+    (setq tx 1.0 ty 0.0)
+    (setq tx (/ tx (distance p p2))
+          ty (/ ty (distance p p2))))
+  (setq arlen (* tot 0.15))
   (if (< arlen 1e-6) (setq arlen 1.0))
-  (setq hlen  (* arlen 0.35)                    ; arrowhead barb length
-        ;; tail = START minus (shaft along the line direction), tip = START
-        tailx (- (car p)  (* ux arlen))
-        taily (- (cadr p) (* uy arlen))
-        ;; barbs: rotate the "back" vector b = (-ux,-uy) by +/-25 degrees
-        ca    0.9063 sa 0.4226                  ; cos/sin 25 deg
-        bkx   (- ux) bky (- uy)
+  (setq hlen  (* arlen 0.35)
+        tailx (- (car p)  (* tx arlen))
+        taily (- (cadr p) (* ty arlen))
+        ca    0.9063 sa 0.4226                 ; cos/sin 25 deg
+        bkx   (- tx) bky (- ty)
         b1x   (+ (car p)  (* hlen (- (* bkx ca) (* bky sa))))
         b1y   (+ (cadr p) (* hlen (+ (* bkx sa) (* bky ca))))
         b2x   (+ (car p)  (* hlen (+ (* bkx ca) (* bky sa))))
         b2y   (+ (cadr p) (* hlen (+ (* (- bkx) sa) (* bky ca))))
         out   '())
-  ;; entmade LINE points are WCS, so convert from the current UCS
   (foreach seg (list (list (list tailx taily sz) p)
                      (list p (list b1x b1y sz))
                      (list p (list b2x b2y sz)))
@@ -1355,13 +1215,8 @@
 ;; being built has to answer to it.  Selecting that object once turns
 ;; it into either the maximum for EVERY offset (Limit) or the place
 ;; every offset ends (Meet) -- per point either way, since a boundary
-;; that runs at an angle to the line is nearer at one end than the
+;; that runs at an angle to the curve is nearer at one end than the
 ;; other, and one number could not say where.
-
-;; is this entity something AutoCAD can measure along?
-(defun perp:curve-p (e / r)
-  (setq r (vl-catch-all-apply 'vlax-curve-getEndParam (list e)))
-  (and r (not (vl-catch-all-error-p r))))
 
 ;; How far p may travel along the unit vector u before it meets bnd:
 ;; the nearest crossing strictly ahead of p, or nil when the ray never
@@ -1374,13 +1229,13 @@
 ;; point on it can be further off than -- and IntersectWith reports the
 ;; crossings.  The line is erased before this returns, whatever came
 ;; back, so a run cannot litter the drawing one probe at a time.
-(defun perp:capdist (bnd p u / near far prev ln rtn lst q d best)
+(defun cperp:capdist (bnd p u / near far prev ln rtn lst q d best)
   ;; the nearest point of bnd may not be readable on a degenerate
   ;; curve; its own length alone still reaches a boundary that crosses
   ;; the run, which is the case a cap is wanted for
   (setq near (vlax-curve-getClosestPointTo bnd (trans p 1 0))
         far  (+ (if near (distance p (trans near 0 1)) 0.0)
-                (vlax-curve-getDistAtParam bnd (vlax-curve-getEndParam bnd))))
+                (cperp:curvelen bnd)))
   (if (< far 1e-9) (setq far 1.0))
   (setq prev (entlast))
   (entmake (list '(0 . "LINE") '(8 . "PERPPTS-TEMP")
@@ -1421,10 +1276,10 @@
 ;; How many of pts sit past bnd, each measured along the ray from the
 ;; base it was offset from.  Every length was capped as it was typed,
 ;; so this can only come back above zero after a width correction: that
-;; scales the whole line and can carry a point that was sitting ON the
-;; boundary out beyond it.  A line that quietly crosses a boundary the
+;; scales the whole curve and can carry a point that was sitting ON the
+;; boundary out beyond it.  A curve that quietly crosses a boundary the
 ;; drafter asked it to respect is worth a line of its own.
-(defun perp:past-bnd (bnd bases pts / i n a b dx dy d u cap out)
+(defun cperp:past-bnd (bnd bases pts / i n a b dx dy d u cap out)
   (setq i 0 n (min (length bases) (length pts)) out 0)
   (while (< i n)
     (setq a  (nth i bases)
@@ -1435,7 +1290,7 @@
     (if (> d 1e-9)
       (progn
         (setq u   (list (/ dx d) (/ dy d))
-              cap (perp:capdist bnd a u))
+              cap (cperp:capdist bnd a u))
         (if (and cap (> d (+ cap 1e-8))) (setq out (1+ out)))))
     (setq i (1+ i)))
   out)
@@ -1443,9 +1298,9 @@
 ;; How many of pts no longer sit ON bnd -- the Meet answer's version of
 ;; the count above.  Every one of them was run out to the boundary as it
 ;; was placed, so only the width correction can have moved it off, and
-;; a line that no longer meets the boundary it was told to meet is
+;; a curve that no longer meets the boundary it was told to meet is
 ;; worth a line of its own too.
-(defun perp:off-bnd (bnd pts / p q out)
+(defun cperp:off-bnd (bnd pts / p q out)
   (setq out 0)
   (foreach p pts
     (setq q (vlax-curve-getClosestPointTo bnd (trans p 1 0)))
@@ -1456,44 +1311,47 @@
 ;; --- command ---------------------------------------------------------
 
 ;; ahead of the command on purpose: the structural tests scan from
-;; c:PERPPTS to end-of-file for leaked variables, and a defun name
+;; c:CPERPPTS to end-of-file for leaked variables, and a defun name
 ;; there would read as one
-(defun c:PERPPTSVER ()
-  (princ (strcat "\nPERPPTS " *perp-version*))
+(defun c:CPERPPTSVER ()
+  (princ (strcat "\nCPERPPTS " *cperp-version*))
   (princ))
 
-(defun c:PERPPTS (/ *error* perp:kill perp:unplace perp:finish
-                                    rl rr
-                    os ce pd plt clay cec celt celw celts cdim undoOpen
-                    tmpEnts
-                    srcData srcLayer srcColor srcLtype srcLw srcLts
-                    dimPairs dimStyle pr
-                    sel ent etype verts pStart pFinish click
-                    dx dy dlen ux uy cross fuzz nx ny
-                    path pathEnt n lastN basePts newPts guideEnts total
-                    len lastLen i base np again ans iter p e
-                    join lastJoin kws nseg picks reply tangs plEnt
-                    wOld wNew wres mid fac qstep arrow bnd bmode cap over
-                    rstep askd tgt)
+(defun c:CPERPPTS (/ *error* cperp:kill cperp:unplace cperp:finish
+                                      rl rr
+                     os ce pd clay cec celt celw celts cdim undoOpen tmpEnts
+                     srcData srcLayer srcColor srcLtype srcLw srcLts
+                     dimPairs dimStyle pr
+                     sel crv etype sp ep click rev side tot
+                     tng prj cross fuzz nrm tx ty
+                     curCrv curRev n lastN basePts newPts usedBases idxs
+                     tangs tg guideEnts total len lastLen i base np again
+                     ans iter plt p e
+                     wOld wNew wres mid fac qstep arrow bnd bmode cap over
+                     rstep askd tgt bdflt dsdflt)
 
   ;; erase one temporary entity and forget it
-  (defun perp:kill (e)
+  (defun cperp:kill (e)
     (if e
       (progn (if (entget e) (entdel e))
              (setq tmpEnts (vl-remove e tmpEnts)))))
 
-  ;; take back the points placed from index tgt on - guide nodes and
+  ;; take back every point placed from index tgt on - guide nodes and
   ;; all - so the prompt for point tgt can be asked again; tgt 0 takes
-  ;; back the whole round
-  (defun perp:unplace (tgt)
-    (while (> i tgt)
-      (perp:kill (car guideEnts))
+  ;; back the whole round.  idxs holds each created point's index, so
+  ;; skipped points are stepped over on the way back too
+  (defun cperp:unplace (tgt)
+    (while (and idxs (>= (car idxs) tgt))
+      (cperp:kill (car guideEnts))
       (setq guideEnts (cdr guideEnts)
             newPts    (cdr newPts)
-            i         (1- i))))
+            usedBases (cdr usedBases)
+            tangs     (cdr tangs)
+            idxs      (cdr idxs)))
+    (setq i tgt))
 
   ;; single cleanup path shared by normal exit, Esc and errors
-  (defun perp:finish (/ guard)
+  (defun cperp:finish (/ guard)
     ;; The drafter's settings come back FIRST -- ahead of the drain
     ;; below, which is the one form in here that can throw.  A bare
     ;; (command) from *error* is legal only while a pushed error mode is
@@ -1513,13 +1371,11 @@
     ;; CLAYER last of the setvars: it is the one that can throw here, if
     ;; the layer it names was purged while the run was open
     (if clay  (setvar "CLAYER"    clay))
-    ;; now the drain: cancel any command left pending by an Esc
-    ;; mid-PLINE/DIMALIGNED
     (setq guard 0)
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)
       (setq guard (1+ guard)))
-    (if rl (setq rl (perp:ruler-off rl)))
+    (if rl (setq rl (cperp:ruler-off rl)))
     (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
     (setq tmpEnts nil)
     (if (and cdim (tblsearch "DIMSTYLE" cdim))
@@ -1537,15 +1393,15 @@
     (if *pop-error-mode* (*pop-error-mode*)))
 
   (defun *error* (msg)
-    (perp:finish)
+    (cperp:finish)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nError: " msg))
       (princ "\nCancelled."))
-    (if lzd:report (lzd:report "PERPPTS" *perp-version* msg))
+    (if lzd:report (lzd:report "CPERPPTS" *cperp-version* msg))
     (princ))
-  (if lzd:begin (lzd:begin "PERPPTS" *perp-version*))
+  (if lzd:begin (lzd:begin "CPERPPTS" *cperp-version*))
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
-  ;; CMDACTIVE drain in perp:finish; harmless no-op guard on older
+  ;; CMDACTIVE drain in cperp:finish; harmless no-op guard on older
   ;; releases where it doesn't exist
   (if *push-error-using-command* (*push-error-using-command*))
 
@@ -1553,17 +1409,17 @@
   (setq os    (getvar "OSMODE")
         ce    (getvar "CMDECHO")
         pd    (getvar "PDMODE")
-        plt   (getvar "PLINETYPE")
         clay  (getvar "CLAYER")
         cec   (getvar "CECOLOR")
         celt  (getvar "CELTYPE")
         celw  (getvar "CELWEIGHT")
         celts (getvar "CELTSCALE")
         cdim  (getvar "DIMSTYLE")
+        plt   (getvar "PLINETYPE")
         tmpEnts '())
   (setvar "CMDECHO" 0)
-  ;; PLINE must produce a lightweight polyline, the only kind an arc
-  ;; bulge can be written onto
+  ;; PLINE must produce a lightweight polyline so the arc bulges can be
+  ;; written into it and the result stays a plain LWPOLYLINE
   (setvar "PLINETYPE" 2)
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
@@ -1571,20 +1427,18 @@
     (progn
       (command "_.UNDO" "_Begin")
       (setq undoOpen T)))
-  ;; guide points must be visible whatever the drawing's PDMODE is
   (if (member pd '(0 1)) (setvar "PDMODE" 3))
 
   ;; --- prepare the layers ---------------------------------------------
-  ;; Guides live on their own layer so a locked current layer cannot stop
-  ;; them being erased; the START arrow and the boundary probe both draw
-  ;; on it.  Offset polylines go on the source object's own layer;
-  ;; dimensions go on DIMENSIONS.  Made once, ahead of the chain below,
-  ;; which can come back through the click step more than once.
-  (perp:layer "PERPPTS-TEMP" 1)     ; guides, erased before the command ends
-  (perp:layer "DIMENSIONS"   4)
+  ;; PERPPTS-TEMP first: the START arrow and the boundary probe both draw
+  ;; on it, and a locked current layer cannot stop them being erased
+  ;; there.  Made once, ahead of the chain below, which can come back
+  ;; through the click step more than once.
+  (cperp:layer "PERPPTS-TEMP" 1)
+  (cperp:layer "DIMENSIONS"   4)
   ;; the length ruler, not up yet: it stands beside the length prompts
-  ;; on the guide layer, and perp:finish takes it down with the guides
-  (setq rl (perp:ruler-new "PERPPTS-TEMP" (perp:ruler-style)))
+  ;; on the guide layer, and cperp:finish takes it down with the guides
+  (setq rl (cperp:ruler-new "PERPPTS-TEMP" (cperp:ruler-style)))
 
   ;; --- 1 to 3: the selection, the click and the width ------------------
   ;; One chain walked with a step counter: Back at the click re-opens
@@ -1595,33 +1449,38 @@
   (setq qstep 1 arrow nil)
   (while (< qstep 4)
     (cond
-      ;; --- 1. select a line (re-prompts until valid) -------------------
+      ;; --- 1. select a curve (re-prompts until valid) ------------------
       ((= qstep 1)
-       (setq ent nil)
-       (while (null ent)
-         (setq sel (entsel "\nSelect a line or polyline: "))
-         (if lzd:ask (lzd:ask "\nSelect a line or polyline: " sel) sel)
+       (setq crv nil)
+       (while (null crv)
+         (setq sel (entsel "\nSelect a curve (polyline, arc, spline...): "))
+         (if lzd:ask (lzd:ask "\nSelect a curve (polyline, arc, spline...): " sel) sel)
          (if lzd:watch (lzd:watch sel) sel)
          (cond
            ((null sel)
             (princ "\nNothing selected - try again, or press Esc to quit."))
            (t
-            (setq etype (cdr (assoc 0 (entget (car sel))))
-                  verts (perp:verts (car sel)))
+            (setq etype (cdr (assoc 0 (entget (car sel)))))
             (cond
-              ((null verts)
-               (princ (strcat "\nA " etype " is not a line or polyline.")))
-              ((< (length (setq verts (perp:dedupe verts))) 2)
-               (princ "\nThat object has no usable length."))
-              ((<= (distance (car verts) (last verts)) 1e-9)
-               (princ "\nStart and end coincide - a closed shape has no direction."))
-              (t (setq ent (car sel)))))))
-       (setq qstep 2))
+              ((not (cperp:curve-p (car sel)))
+               (princ (strcat "\nA " etype " is not a curve.")))
+              ((< (cperp:curvelen (car sel)) 1e-9)
+               (princ "\nThat curve has no length."))
+              ((equal (vlax-curve-getStartPoint (car sel))
+                      (vlax-curve-getEndPoint (car sel)) 1e-9)
+               (princ (strcat "\nThat curve is closed, so it has no start or"
+                              " end - use an open curve.")))
+              (t (setq crv (car sel)))))))
+       (setq tot (cperp:curvelen crv)
+             sp  (trans (vlax-curve-getStartPoint crv) 0 1)
+             ep  (trans (vlax-curve-getEndPoint crv) 0 1)
+             qstep 2))
 
       ;; --- 2. click to set direction (START/FINISH) and offset side ----
+      ;; The side is measured against the direction of travel (START ->
+      ;; FINISH), so later rounds -- whose curves are built in travel
+      ;; order -- inherit the same side directly.
       ((= qstep 2)
-       ;; Snapping is off so the click cannot be pulled onto the line
-       ;; itself, which would make "which side" ambiguous.
        (setvar "OSMODE" 0)
        (setq click nil)
        (while (null click)
@@ -1630,109 +1489,100 @@
          (if lzd:ask (lzd:ask "\nClick to pick direction / offset side [Back]: " click) click)
          (cond
            ((null click)
-            (princ "\nA point is required - click one side of the line."))
-           ((perp:back-kw click)
+            (princ "\nA point is required - click one side of the curve."))
+           ((cperp:back-kw click)
             (princ "\nStepping back one question.")
             (setq qstep 1))
            (t
-            ;; nearest endpoint to the click = START
-            (if (<= (distance click (car verts)) (distance click (last verts)))
-              (setq pStart (car verts)  pFinish (last verts))
-              (setq pStart (last verts) pFinish (car verts)))
-            (setq dx   (- (car pFinish)  (car pStart))
-                  dy   (- (cadr pFinish) (cadr pStart))
-                  dlen (sqrt (+ (* dx dx) (* dy dy))))
+            ;; nearest end of the curve to the click = START
+            (setq rev (> (distance click sp) (distance click ep)))
             (cond
-              ((equal dlen 0.0 1e-9)
-               (princ "\nSelected object has zero length.")
-               (perp:finish)
-               (exit))
+              ((null (setq tng (cperp:tangent crv click rev)))
+               (princ "\nCannot read the curve direction there - click elsewhere.")
+               (setq click nil))
               (t
-               (setq ux (/ dx dlen)
-                     uy (/ dy dlen))
-               ;; cross = signed distance from the infinite line;
-               ;; >0 => click is on the left.
-               (setq cross (- (* ux (- (cadr click) (cadr pStart)))
-                              (* uy (- (car click)  (car pStart))))
-                     fuzz  (max 1e-8 (* dlen 1e-6)))
+               ;; signed offset of the click from the tangent line at the
+               ;; projection of the click onto the curve
+               (setq prj (trans (vlax-curve-getClosestPointTo
+                                  crv (trans click 1 0))
+                                0 1))
+               (setq cross (- (* (car tng)  (- (cadr click) (cadr prj)))
+                              (* (cadr tng) (- (car click)  (car prj))))
+                     fuzz  (max 1e-8 (* tot 1e-6)))
                (if (< (abs cross) fuzz)
                  (progn
-                   (princ "\nThat point is on the line - click clearly to one side.")
+                   (princ "\nThat point is on the curve - click clearly to one side.")
                    (setq click nil))
                  (setq qstep 3)))))))
        (if (= qstep 3)
          (progn
-           ;; perpendicular unit vector, chosen toward the clicked side.
-           ;; This is fixed for the whole command: every offset and
-           ;; dimension in every round is measured along this direction,
-           ;; i.e. perpendicular to the ORIGINAL line -- never to a later
-           ;; polyline.
-           (if (>= cross 0.0)
-             (setq nx (- uy) ny ux)          ; left normal
-             (setq nx uy     ny (- ux)))     ; right normal
+           (setq side (if (>= cross 0.0) 1.0 -1.0))
            ;; the red arrow at START, kept until the command finishes so
            ;; the entry order stays clear across repeat rounds -- and so
            ;; the width question can say "the arrowed end" and be
            ;; understood
-           (setq arrow   (perp:arrow pStart ux uy dlen)
+           (setq arrow   (cperp:arrow crv rev tot)
                  tmpEnts (append arrow tmpEnts)))))
 
       ;; --- 3. has the overall width changed? ---------------------------
       ;; The width asked about is the distance straight across, end to
-      ;; end, not the developed length of the object -- a bowed polyline
-      ;; runs further than the width it spans, and it is the width that
-      ;; gets re-measured.  Making a new one true is a scale about a
-      ;; point on the line through the two ends: the midpoint when the
+      ;; end -- NOT the length of the curve, which on anything bowed runs
+      ;; a good deal further than the width it spans, and it is the width
+      ;; that gets re-measured.  Making a new one true is a scale about a
+      ;; point on the line through the two ends -- the midpoint when the
       ;; change is split evenly, nearer START the more of it goes to
-      ;; FINISH.  The drawing is resized too: the offsets and their
-      ;; dimensions are measured off this object, so leaving it at the
-      ;; old width would put every base point somewhere the drawing
-      ;; says nothing is.  It is all inside the command's undo group, so
-      ;; one U puts the width back.  dlen is that width: the click step
-      ;; refused a plan projection with none.
+      ;; FINISH -- and the curve keeps its shape: an arc stays that arc,
+      ;; scaled.  The drawing is resized too: the offsets and their
+      ;; dimensions are measured off this curve, so leaving it at the old
+      ;; width would put every base point somewhere the drawing says
+      ;; nothing is.  It is all inside the command's undo group, so one U
+      ;; puts the width back.
       ((= qstep 3)
-       (setq wOld dlen
-             wres (perp:ask-width "Overall width" wOld T))
+       (setq tx   (- (car ep)  (car sp))
+             ty   (- (cadr ep) (cadr sp))
+             wOld (sqrt (+ (* tx tx) (* ty ty)))
+             ;; a plan projection with no width at all has nothing to
+             ;; ask about
+             wres (if (> wOld 1e-9) (cperp:ask-width "Overall width" wOld T)))
        (cond
-         ((eq wres 'PERP-BACK)
+         ((eq wres 'CPERP-BACK)
           ;; back to the click - the arrow goes with it, since the click
           ;; is what placed it
           (princ "\nStepping back one question.")
-          (foreach e arrow (perp:kill e))
+          (foreach e arrow (cperp:kill e))
           (setq arrow nil qstep 2))
          (t
           (if wres
             (progn
               (setq wNew (car wres)
-                    mid  (perp:scale-ctr pStart pFinish (cadr wres))
+                    ;; START is the end the click chose, whichever end of
+                    ;; the curve that is
+                    mid  (if rev
+                           (cperp:scale-ctr ep sp (cadr wres))
+                           (cperp:scale-ctr sp ep (cadr wres)))
                     fac  (/ wNew wOld))
-              (if (not (perp:rescale ent mid fac))
+              (if (not (cperp:rescale crv mid fac))
                 (progn
-                  (princ (strcat "\nThe line could not be resized - it is most"
+                  (princ (strcat "\nThe curve could not be resized - it is most"
                                  " likely on a locked, frozen or switched-off"
-                                 " layer.  Free the layer and run PERPPTS again."))
-                  (perp:finish)
+                                 " layer.  Free the layer and run CPERPPTS again."))
+                  (cperp:finish)
                   (exit)))
-              (setq verts   (perp:scale-pts verts mid fac)
-                    pStart  (perp:scale-pt pStart mid fac)
-                    pFinish (perp:scale-pt pFinish mid fac)
-                    dlen    wNew)
-              (princ (perp:width-line wOld wNew (cadr wres)))
+              ;; re-read: the curve itself is what every round measures along
+              (setq tot (cperp:curvelen crv)
+                    sp  (trans (vlax-curve-getStartPoint crv) 0 1)
+                    ep  (trans (vlax-curve-getEndPoint crv) 0 1))
+              (princ (cperp:width-line wOld wNew (cadr wres)))
               ;; START moved, so the arrow is drawn again where it now is
-              (foreach e arrow (perp:kill e))
-              (setq arrow   (perp:arrow pStart ux uy dlen)
+              (foreach e arrow (cperp:kill e))
+              (setq arrow   (cperp:arrow crv rev tot)
                     tmpEnts (append arrow tmpEnts))))
           (setq qstep 4))))))
 
   ;; --- properties to give the offset polylines -------------------------
-  ;; The new polylines are drawn with the same layer, colour, linetype,
-  ;; lineweight and linetype scale as the object they are offset from, so
-  ;; they read as the same kind of object in the drawing.  Anything the
-  ;; source does not carry explicitly is BYLAYER, which is also the
-  ;; correct inherited value.
-  (setq srcData  (entget ent)
+  (setq srcData  (entget crv)
         srcLayer (cdr (assoc 8 srcData))
-        srcColor (perp:color srcData)
+        srcColor (cperp:color srcData)
         srcLtype (cond ((cdr (assoc 6 srcData))) ("BYLAYER"))
         srcLw    (cond ((cdr (assoc 370 srcData))) (-1))
         srcLts   (cond ((cdr (assoc 48 srcData))) (1.0)))
@@ -1746,7 +1596,7 @@
   ;; exactly as it did before there was one.  A boundary then gets one
   ;; more question -- a limit the offsets stop at, or the line every one
   ;; of them runs out to meet -- and Back there re-opens the selection.
-  (setq qstep 1 bnd nil bmode nil)
+  (setq qstep 1 bnd nil bmode nil bdflt (cperp:boundary-dflt))
   (while (< qstep 3)
     (cond
       ((= qstep 1)
@@ -1764,12 +1614,12 @@
            ((and (null sel) (= 7 (getvar "ERRNO")))
             (princ "\nNothing there - click the boundary itself, or press Enter for none."))
            ((or (null sel) (= (type sel) 'STR)) (setq bnd nil))
-           ((not (perp:curve-p (car sel)))
+           ((not (cperp:curve-p (car sel)))
             (princ (strcat "\nA " (cdr (assoc 0 (entget (car sel))))
                            " cannot be a boundary - pick a curve, or press"
                            " Enter for none.")))
-           ((eq (car sel) ent)
-            (princ (strcat "\nThat is the line being offset from - a run"
+           ((eq (car sel) crv)
+            (princ (strcat "\nThat is the curve being offset from - a run"
                            " cannot be bounded by where it starts.")))
            (t (setq bnd (car sel)))))
        (setq qstep (if bnd 2 3)))
@@ -1777,14 +1627,14 @@
        (initget "Limit Meet Back Undo")
        (setq bmode (getkword (strcat "\nDo the offsets stop at the boundary,"
                                      " or run out to meet it?"
-                                     " [Limit/Meet/Back] <Limit>: ")))
+                                     " [Limit/Meet/Back] <" bdflt ">: ")))
        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") bmode) bmode)
        (cond
          ((member bmode '("Back" "Undo"))
           (princ "\nStepping back one question.")
           (setq qstep 1))
          (t
-          (if (null bmode) (setq bmode "Limit"))
+          (if (null bmode) (setq bmode bdflt))
           (setq qstep 3))))))
   (if bnd
     (princ (strcat "\nBoundary set: "
@@ -1794,38 +1644,41 @@
                    (cdr (assoc 0 (entget bnd))) ".")))
 
   ;; --- offset rounds --------------------------------------------------
-  ;; the path the points are spaced along.  Round 1 uses the selected
-  ;; object, oriented START -> FINISH; each later round uses the polyline
-  ;; the previous round built.
-  (setq path (if (equal pStart (car verts) 1e-9) verts (reverse verts))
-        again "Yes"
-        iter  0
-        total 0)
+  ;; Every round samples and offsets from the NEWEST curve: the selected
+  ;; curve in round 1 (traversed from the clicked end), then the
+  ;; arc polyline each round builds.  Later curves are built in travel
+  ;; order, so their traversal is never reversed.
+  (setq curCrv crv
+        curRev rev
+        again  "Yes"
+        iter   0
+        total  0)
+  ;; the closing style question's Enter answer, read through the
+  ;; canonicaliser so a misspelled override cannot reach the style table
+  (setq dsdflt (cperp:dimstyle-dflt))
 
   (while (equal again "Yes")
     (setq iter (1+ iter) rstep 1)
 
-    ;; The count, the lengths and the join are one chain walked with a
-    ;; step counter.  Back at a length re-asks the last length TYPED --
-    ;; a point that ran out to the boundary was never asked, so it is
+    ;; The count and the lengths are one chain walked with a step
+    ;; counter.  Back at a length re-asks the last length TYPED -- a
+    ;; point that ran out to the boundary was never asked, so it is
     ;; taken back on the way past -- and re-asks the count when nothing
-    ;; was typed in front of it; Back at the join does the same from
-    ;; the far end.
-    (while (< rstep 4)
+    ;; was typed in front of it.
+    (while (< rstep 3)
       (cond
         ;; --- how many values / points for this round -------------------
-        ;; Enter reuses the previous round's count.
         ((= rstep 1)
-         (setq rl (perp:ruler-off rl))
+         (setq rl (cperp:ruler-off rl))
          (setq n nil)
          (while (null n)
-           (initget 6)                            ; no zero, no negative
+           (initget 6)
            (setq n (getint (strcat "\nRound " (itoa iter)
                                    " - how many values (points) are required?"
                                    (if lastN (strcat " <" (itoa lastN) ">") "")
                                    " ")))
            (if lzd:ask (lzd:ask (getvar "LASTPROMPT") n) n)
-           (if (null n) (setq n lastN))           ; Enter = same count as last round
+           (if (null n) (setq n lastN))
            (cond
              ((null n)
               (princ "\nA number is required."))
@@ -1833,9 +1686,8 @@
               (princ "\nNeed at least 2 points.")
               (setq n nil))
              ((> n 100)
-              ;; guard against a mistyped count creating thousands of entities;
-              ;; Back is listed because it is what a hand reaches for here, and
-              ;; it means what No means - ask the count again
+              ;; Back is listed because it is what a hand reaches for here,
+              ;; and it means what No means - ask the count again
               (initget "Yes No Back Undo")
               (setq ans (getkword
                           (strcat "\n" (itoa n) " points means " (itoa n)
@@ -1844,170 +1696,131 @@
               (if (not (equal ans "Yes")) (setq n nil)))))
          (setq lastN n)
 
-         ;; base points, equally spaced along the current path.  The offset
-         ;; side (nx,ny) was fixed from the direction click and is reused for
-         ;; every round, so all rounds offset to the same side.  A path drawn
-         ;; with arcs is measured along the curve itself (pathEnt); a
-         ;; straight one is measured along its own points, which is the same
-         ;; walk over the chords.
-         (setq basePts (cond ((and pathEnt (perp:ent-pts pathEnt n)))
-                             ((perp:sample path n))))
+         ;; base points, equally spaced by true arc length along the newest
+         ;; curve, START first
+         (setq basePts (cperp:curve-pts curCrv n curRev))
+         ;; usedBases collects the base of each created point so bases and
+         ;; new points stay paired even when a point is skipped; tangs
+         ;; holds the travel tangent under each created point (it becomes
+         ;; the arc direction of the new polyline there); idxs records each
+         ;; created point's position so Back returns to the right prompt
+         ;; even across skipped points; askd records which of them were
+         ;; ASKED, which is where Back goes.
          (setvar "CLAYER" "PERPPTS-TEMP")
-         (setq newPts '() guideEnts '() askd '() i 0 rstep 2))
+         (setq newPts '() usedBases '() tangs '() idxs '() askd '()
+               guideEnts '() i 0 rstep 2))
 
         ;; --- length per point + build the new perpendicular points -----
-        ;; Enter reuses the last length entered (shown as the prompt
-        ;; default), since runs of equal lengths are common; the last value
-        ;; carries across rounds.  Back steps back a point (Undo is kept as
-        ;; a hidden synonym).  Zero and negative lengths are rejected, so a
-        ;; dimension is never degenerate and the offset can never flip to
-        ;; the wrong side.  askd remembers which points were ASKED, which
-        ;; is where Back goes.
         ((= rstep 2)
          (if (>= i n)
-           (progn (setq rl (perp:ruler-off rl)) (setq rstep 3))
+           (progn (setq rl (cperp:ruler-off rl)) (setq rstep 3))
            (progn
              (setq base (nth i basePts)
-                   ;; How far this point may go before it meets the
-                   ;; boundary, measured along the fixed normal.  nil
-                   ;; when the ray never reaches it, and then nothing
-                   ;; below changes.
-                   cap  (if bnd (perp:capdist bnd base (list nx ny))))
+                   tg   (cperp:tangent curCrv base curRev)
+                   nrm  (if tg (list (* side (- (cadr tg))) (* side (car tg)))))
              (cond
-               ;; Meet: a boundary ahead IS the length, so nothing is asked
-               ((and cap (equal bmode "Meet"))
-                (setq np (list (+ (car base)  (* cap nx))
-                               (+ (cadr base) (* cap ny))
-                               (caddr base)))
-                (princ (strcat "\nPoint " (itoa (1+ i)) " of " (itoa n)
-                               " runs out to the boundary: " (rtos cap) "."))
-                (setq newPts (cons np newPts))
-                (command "._POINT" np)
-                (setq guideEnts (cons (entlast) guideEnts)
-                      tmpEnts   (cons (entlast) tmpEnts))
+               ;; no readable tangent under this point - skip it rather than
+               ;; place the offset in an arbitrary direction
+               ((null nrm)
+                (princ (strcat "\nSkipping point " (itoa (1+ i))
+                               ": the curve direction cannot be read there."))
                 (setq i (1+ i)))
                (t
-                ;; Max is offered only where there is a boundary ahead of
-                ;; this point to reach
-                (setq rl  (perp:ruler-show rl lastLen nil)
-                      rr  (perp:ask-len
-                            (strcat "\nLength for point " (itoa (1+ i))
-                                    " of " (itoa n)
-                                    (cond
-                                      (cap (strcat ", boundary at " (rtos cap)))
-                                      ((equal bmode "Meet") " (no boundary ahead)")
-                                      (t ""))
-                                    (if lastLen
-                                      (strcat " <" (rtos lastLen) ">")
-                                      "")
-                                    (if cap " [Back/Max]: " " [Back]: "))
-                            (if cap "Back Undo Max" "Back Undo")
-                            rl nil)
-                          len (car rr)
-                          rl  (cadr rr))
-                (if (null len) (setq len lastLen))     ; Enter = same as last time
-                (if (equal len "Max") (setq len cap))
-                ;; The typed number is what Enter repeats, not the capped
-                ;; one: the tape still says what it says, and the next
-                ;; point has its own boundary to meet it against.
-                (if (numberp len) (setq lastLen len))
-                (if (and cap (numberp len) (> len cap))
-                  (progn
-                    (princ (strcat "\n" (rtos len) " would cross the boundary -"
-                                   " point " (itoa (1+ i)) " is capped at "
-                                   (rtos cap) "."))
-                    (setq len cap)))
+                ;; How far this point may go before it meets the boundary.
+                ;; Measured per point along its own normal: a boundary
+                ;; running at an angle to the curve is nearer at one end
+                ;; than at the other, and one number could not say where.
+                ;; nil when the ray never reaches it, and then nothing
+                ;; below changes.
+                (setq cap (if bnd (cperp:capdist bnd base nrm)))
                 (cond
-                  ;; step back to the last length typed and re-enter it
-                  ;; (getdist returned "Back", or "Undo" - the old keyword,
-                  ;; kept as a synonym); with nothing typed in front of this
-                  ;; point the count question is the one to go back to
-                  ((eq (type len) 'STR)
-                   (cond
-                     (askd
-                      (setq tgt (car askd) askd (cdr askd))
-                      (perp:unplace tgt)
-                      (princ "\nStepping back one point."))
-                     (t
-                      (perp:unplace 0)
-                      (princ "\nStepping back one question.")
-                      (setq rstep 1))))
-                  ((null len)
-                   (princ "\nA length is required."))
-                  (t
-                   (setq np (list (+ (car base)  (* len nx))
-                                  (+ (cadr base) (* len ny))
+                  ;; Meet: a boundary ahead IS the length, so nothing is asked
+                  ((and cap (equal bmode "Meet"))
+                   (setq np (list (+ (car base)  (* cap (car nrm)))
+                                  (+ (cadr base) (* cap (cadr nrm)))
                                   (caddr base)))
-                   (setq newPts (cons np newPts)
-                         askd   (cons i askd))
-                   ;; temporary POINT node at the new location as a guide
+                   (princ (strcat "\nPoint " (itoa (1+ i)) " of " (itoa n)
+                                  " runs out to the boundary: " (rtos cap) "."))
+                   (setq newPts    (cons np newPts)
+                         usedBases (cons base usedBases)
+                         tangs     (cons tg tangs)
+                         idxs      (cons i idxs))
                    (command "._POINT" np)
                    (setq guideEnts (cons (entlast) guideEnts)
                          tmpEnts   (cons (entlast) tmpEnts))
-                   (setq i (1+ i)))))))))
-
-        ;; --- straight lines, arcs, or both -----------------------------
-        ;; Straight is what this routine has always drawn and stays the
-        ;; opening default; Arcs curves every segment; Mixed asks which
-        ;; segment numbers to curve and leaves the rest as lines.  Two
-        ;; points make one segment with no neighbouring point to take a
-        ;; curvature from, so below three points there is nothing to ask.
-        ;; The answer carries across rounds as the offered default.
-        ((= rstep 3)
-         (setq nseg  (1- n)
-               kws   "Straight Arcs Mixed"
-               picks nil)
-         (if (null lastJoin) (setq lastJoin "Straight"))
-         (if (< n 3)
-           (progn
-             (princ "\nTwo points make one straight segment - nothing to curve.")
-             (setq join "Straight"))
-           (setq join nil))
-         (while (null join)
-           (initget (strcat kws " Back Undo"))
-           (setq join (getkword (strcat "\nRound " (itoa iter)
-                                        " - how should the points be joined? ["
-                                        (vl-string-translate " " "/" kws)
-                                        "/Back] <" lastJoin ">: ")))
-           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") join) join)
-           (if (null join) (setq join lastJoin))   ; Enter = same as last round
-           (cond
-             ;; back to the last length typed: its guide node goes with
-             ;; it, and the chain re-enters the length prompt - or the
-             ;; count, when every point ran out to the boundary
-             ((member join '("Back" "Undo"))
-              (cond
-                (askd
-                 (setq tgt (car askd) askd (cdr askd))
-                 (perp:unplace tgt)
-                 (princ "\nStepping back one point.")
-                 (setq rstep 2))
-                (t
-                 (perp:unplace 0)
-                 (princ "\nStepping back one question.")
-                 (setq rstep 1)))
-              (setq join 'RETRY))
-             ;; Mixed is not an answer on its own - it needs the segment list,
-             ;; and Back returns to the question above rather than guessing
-             ((equal join "Mixed")
-              (while (and join (null picks))
-                (setq reply (getstring T
-                              (strcat "\nWhich segments are arcs (1 to "
-                                      (itoa nseg) ", e.g. 1 3-5)? (B = back): ")))
-                (if lzd:ask (lzd:ask (getvar "LASTPROMPT") reply) reply)
-                (cond
-                  ((member (strcase reply) '("B" "BACK" "U" "UNDO"))
-                   (setq join nil))
-                  ((setq picks (perp:parse-segs reply nseg)))
-                  (t (princ (strcat "\nSegment numbers run 1 to " (itoa nseg)
-                                    " - single numbers, ranges like 3-5, or"
-                                    " both."))))))))
-         (if (not (eq join 'RETRY)) (setq rstep 4)))))
-    (setq newPts (reverse newPts))
-    (setq lastJoin join)
+                   (setq i (1+ i)))
+                  (t
+                   ;; Undo kept as a hidden synonym; Max is offered only
+                   ;; where there is a boundary ahead of this point to reach
+                   (setq rl  (cperp:ruler-show rl lastLen nil)
+                         rr  (cperp:ask-len
+                               (strcat "\nLength for point " (itoa (1+ i))
+                                       " of " (itoa n)
+                                       (cond
+                                         (cap (strcat ", boundary at " (rtos cap)))
+                                         ((equal bmode "Meet") " (no boundary ahead)")
+                                         (t ""))
+                                       (if lastLen
+                                         (strcat " <" (rtos lastLen) ">")
+                                         "")
+                                       (if cap " [Back/Max]: " " [Back]: "))
+                               (if cap "Back Undo Max" "Back Undo")
+                               rl nil)
+                             len (car rr)
+                             rl  (cadr rr))
+                   (if (null len) (setq len lastLen))
+                   (if (equal len "Max") (setq len cap))
+                   ;; The typed number is what Enter repeats, not the capped
+                   ;; one: the tape still says what it says, and the next
+                   ;; point has its own boundary to meet it against.
+                   (if (numberp len) (setq lastLen len))
+                   (if (and cap (numberp len) (> len cap))
+                     (progn
+                       (princ (strcat "\n" (rtos len) " would cross the boundary -"
+                                      " point " (itoa (1+ i)) " is capped at "
+                                      (rtos cap) "."))
+                       (setq len cap)))
+                   (cond
+                     ;; Back: to the last length typed - or to the count
+                     ;; when nothing was typed in front of this point
+                     ((eq (type len) 'STR)
+                      (cond
+                        (askd
+                         (setq tgt (car askd) askd (cdr askd))
+                         (cperp:unplace tgt)
+                         (princ "\nStepping back one point."))
+                        (t
+                         (cperp:unplace 0)
+                         (princ "\nStepping back one question.")
+                         (setq rstep 1))))
+                     ((null len)
+                      (princ "\nA length is required."))
+                     (t
+                      (setq np (list (+ (car base)  (* len (car nrm)))
+                                     (+ (cadr base) (* len (cadr nrm)))
+                                     (caddr base)))
+                      (setq newPts    (cons np newPts)
+                            usedBases (cons base usedBases)
+                            tangs     (cons tg tangs)
+                            idxs      (cons i idxs)
+                            askd      (cons i askd))
+                      (command "._POINT" np)
+                      (setq guideEnts (cons (entlast) guideEnts)
+                            tmpEnts   (cons (entlast) tmpEnts))
+                      (setq i (1+ i)))))))))))))
+    (setq newPts    (reverse newPts)
+          usedBases (reverse usedBases)
+          tangs     (reverse tangs))
 
     ;; --- connect the new points with a polyline ----------------------
-    ;; drawn with the source object's layer and line properties
+    ;; drawn with the source curve's layer and line properties.  If
+    ;; skipped points left fewer than 2, there is nothing to join and
+    ;; nothing for the next round to follow.
+    (if (< (length newPts) 2)
+      (progn
+        (princ "\nToo few points were placed to build a polyline.")
+        (cperp:finish)
+        (exit)))
     (setvar "CLAYER"    srcLayer)
     (setvar "CECOLOR"   srcColor)
     (setvar "CELTYPE"   srcLtype)
@@ -2016,29 +1829,24 @@
     (command "._PLINE")
     (foreach p newPts (command p))
     (command "")
-    ;; One tangent per vertex; perp:arcs turns the segments picks names
-    ;; into arcs and writes the rest straight, so the same call draws an
-    ;; all-arc round and a mixed one.  The polyline keeps its vertices,
-    ;; so every arc still runs through the measured points and every
-    ;; dimension still lands on the curve.
-    (setq tangs (if (equal join "Straight") nil (perp:tangents newPts)))
-    (if tangs (perp:arcs (entlast) newPts tangs picks))
-    (setq plEnt (entlast))
-    ;; a round that drew arcs is the next round's curve to measure along
-    (setq pathEnt (if tangs plEnt))
-    (princ (strcat "\nRound " (itoa iter) ": polyline drawn "
-                   (cond ((equal join "Straight") "with straight segments")
-                         ((equal join "Arcs")     "with arcs through the points")
-                         (t (strcat "with arcs on " (itoa (length picks))
-                                    " of " (itoa nseg) " segments")))
-                   "."))
+    ;; Curve it: every straight segment becomes an arc whose direction
+    ;; at its start point matches the source curve's tangent there (an
+    ;; offset curve runs parallel to its source, so the tangent carries
+    ;; over).  The entity stays a plain LWPOLYLINE -- smooth, passing
+    ;; exactly through every offset point, and never a spline.
+    (cperp:arcs (entlast) newPts tangs)
+
+    ;; the curve just built becomes the source for the next round; it
+    ;; was drawn in travel order, so it is never traversed reversed
+    (setq curCrv (entlast)
+          curRev nil)
 
     ;; --- erase this round's point guides -----------------------------
-    (foreach e guideEnts (perp:kill e))
+    (foreach e guideEnts (cperp:kill e))
     (setq guideEnts nil)
 
-    ;; --- has the width of the line just drawn changed? ---------------
-    ;; Step 3's question, asked again of the line this round built.  It
+    ;; --- has the width of the curve just drawn changed? --------------
+    ;; Step 3's question, asked again of the curve this round built.  It
     ;; is the next course out and it was re-measured too, and the typed
     ;; offsets only reach the width they happen to add up to: a course
     ;; whose ends were measured a little long or a little short comes
@@ -2049,70 +1857,66 @@
     ;; correction, the same split and the same undo group as step 3,
     ;; with the polyline's first point as START (it sits at the arrowed
     ;; end).  Unchanged is the default and the Enter answer, which
-    ;; leaves the round exactly as it drew.  No Back: the line is drawn.
-    (setq dx   (- (car  (last newPts)) (car  (car newPts)))
-          dy   (- (cadr (last newPts)) (cadr (car newPts)))
-          wOld (sqrt (+ (* dx dx) (* dy dy)))
+    ;; leaves the round exactly as it drew.  No Back: the curve is drawn.
+    (setq tx   (- (car  (last newPts)) (car  (car newPts)))
+          ty   (- (cadr (last newPts)) (cadr (car newPts)))
+          wOld (sqrt (+ (* tx tx) (* ty ty)))
           ;; ends that land on top of each other span no width, so there
           ;; is nothing to ask about and nothing to scale about either
           wres (if (> wOld 1e-9)
-                 (perp:ask-width "Overall width of the new polyline" wOld nil)))
+                 (cperp:ask-width "Overall width of the new curve" wOld nil)))
     (if wres
       (progn
         (setq wNew (car wres)
-              mid  (perp:scale-ctr (car newPts) (last newPts) (cadr wres))
+              mid  (cperp:scale-ctr (car newPts) (last newPts) (cadr wres))
               fac  (/ wNew wOld))
         ;; A refused resize stops step 3 outright: nothing is drawn yet
         ;; there, so re-running costs one click.  Here rounds of typed
         ;; lengths sit behind it and not one dimension is written, so
-        ;; the line is left at the width it drew and the drafter is told
-        ;; which width that is -- nothing is scaled, so the drawing and
-        ;; the numbers measured off it still agree.
-        (if (perp:rescale plEnt mid fac)
+        ;; the curve is left at the width it drew and the drafter is
+        ;; told which width that is -- nothing is scaled, so the drawing
+        ;; and the numbers measured off it still agree.
+        (if (cperp:rescale curCrv mid fac)
           (progn
-            (setq newPts (perp:scale-pts newPts mid fac))
-            (princ (perp:width-line wOld wNew (cadr wres)))
+            (setq newPts (cperp:scale-pts newPts mid fac))
+            (princ (cperp:width-line wOld wNew (cadr wres)))
             ;; every length was capped, or run out to the boundary, as
-            ;; it was placed; this scales the whole line and can carry a
-            ;; point that was sitting ON the boundary out past it, or
+            ;; it was placed; this scales the whole curve and can carry
+            ;; a point that was sitting ON the boundary out past it, or
             ;; off it.  The correction is the drafter's measurement and
-            ;; is not second-guessed -- but a line that crosses a
+            ;; is not second-guessed -- but a curve that crosses a
             ;; boundary it was told to respect, or leaves one it was
             ;; told to meet, does not go without saying.
             (if bnd
               (progn
                 (setq over (if (equal bmode "Meet")
-                             (perp:off-bnd bnd newPts)
-                             (perp:past-bnd bnd basePts newPts)))
+                             (cperp:off-bnd bnd newPts)
+                             (cperp:past-bnd bnd usedBases newPts)))
                 (if (> over 0)
                   (princ (strcat "\n" (itoa over) " of " (itoa (length newPts))
                                  (if (equal bmode "Meet")
                                    (strcat " points no longer sit on the"
                                            " boundary - the width correction"
-                                           " moved the line off it.")
+                                           " moved the curve off it.")
                                    (strcat " points now sit past the"
                                            " boundary - the width correction"
-                                           " carried the line beyond it."))))))))
-          (princ (strcat "\nThe new polyline could not be resized - it is"
+                                           " carried the curve beyond it."))))))))
+          (princ (strcat "\nThe new curve could not be resized - it is"
                          " most likely on a locked, frozen or switched-off"
                          " layer.  It is left at the " (rtos wOld)
                          " it was drawn, and the dimensions follow it.")))))
 
     ;; --- remember the dimensions to draw -----------------------------
-    ;; np = base + len*(nx,ny), so each dimension runs along the fixed
-    ;; normal, i.e. perpendicular to the ORIGINAL line, no matter which
-    ;; polyline `base` sits on -- until a width correction above moves
-    ;; the new points along it, and then each dimension reads the
-    ;; distance the corrected drawing really has.  They are drawn once
-    ;; at the end, after the dimension style has been chosen.
+    ;; each pair runs along the normal of the curve the base point sits
+    ;; on, so the dimension reads perpendicular to that curve -- until a
+    ;; width correction above moves the new points along the curve they
+    ;; landed on, and then each dimension reads the distance the
+    ;; corrected drawing really has
     (setq i 0)
-    (while (< i n)
-      (setq dimPairs (cons (list (nth i basePts) (nth i newPts)) dimPairs)
+    (while (< i (length newPts))
+      (setq dimPairs (cons (list (nth i usedBases) (nth i newPts)) dimPairs)
             i        (1+ i)))
-    (setq total (+ total n))
-
-    ;; the polyline just built becomes the path for the next round
-    (setq path newPts)
+    (setq total (+ total (length newPts)))
 
     ;; --- repeat?, and when not, the dimension style ------------------
     ;; the two are one chain: Back at the style re-asks whether to
@@ -2127,13 +1931,15 @@
         (progn
           (initget "STandard SIde Back Undo")
           (setq ans (getkword (strcat "\nDimension style - STANDARD INCHES or "
-                                      "SIDE STANDARD? [STandard/SIde/Back] <STandard>: ")))
+                                      "SIDE STANDARD? [STandard/SIde/Back] <"
+                                      dsdflt ">: ")))
           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
+          (if (null ans) (setq ans dsdflt))  ; Enter = the knob's word
           (if (member ans '("Back" "Undo"))
             (progn (princ "\nStepping back one question.")
                    (setq again 'RETRY)))))))
 
-  ;; --- 10. draw every dimension in the chosen style -------------------
+  ;; --- 9. draw every dimension in the chosen style --------------------
   (setq dimStyle (if (equal ans "SIde") "SIDE STANDARD" "STANDARD INCHES"))
   (if (tblsearch "DIMSTYLE" dimStyle)
     (command "._-DIMSTYLE" "_Restore" dimStyle)
@@ -2146,12 +1952,12 @@
     (command "._DIMALIGNED" (car pr) (cadr pr) (cadr pr)))
 
   ;; --- restore everything and close the undo group --------------------
-  (perp:finish)
+  (cperp:finish)
   (princ (strcat "\nDone: " (itoa iter) " round(s), "
                  (itoa total) " points, "
                  (itoa iter) " polyline(s) on layer \"" srcLayer "\" and "
                  (itoa total) " dimensions on layer \"DIMENSIONS\"."))
-  (if lzd:end (lzd:end "PERPPTS"))
+  (if lzd:end (lzd:end "CPERPPTS"))
   (princ))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
@@ -2162,6 +1968,6 @@
 ;; is the one time somebody wants to be told.  CALVER reports the
 ;; whole roster whenever it is asked.
 (if (not *calofin-quiet*)
-  (princ (strcat "\nperp_points.lsp " *perp-version*
-                 " loaded.  Type PERPPTS to run.")))
+  (princ (strcat "\ncperp_points.lsp " *cperp-version*
+                 " loaded.  Type CPERPPTS to run.")))
 (princ)

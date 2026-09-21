@@ -114,7 +114,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.21")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.22")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -306,14 +306,24 @@
                                   ; 8 recedes on the first and is one of the
                                   ; most prominent things on screen on the
                                   ; second.  A number is used exactly as given
-;; The six below are 'auto too -- they do not vary with the screen the
+;; These three STAY IN THE DRAWING: a dimension answered "No" wears the
+;; flag colour, a moved arc and a merged line theirs, until a rerun,
+;; DIMCHECKRESCUE or U puts them back, and the report's attention lines
+;; carry the flag colour as MTEXT colour codes.  A mark that outlives
+;; the command is part of the drawing, not a cue on the screen, so
+;; these are NUMBERS -- the same colour for everyone who opens the
+;; file, never one drafter's Item colours.  Change them here, or per
+;; drafter through LAZTUNE, where the change is a decision about the
+;; drawing; a number is used exactly as given.
+(setq *dchk-flag-color*   1)       ; ACI: dimensions you answered "No" to (red)
+(setq *dchk-arc-color*    6)       ; ACI: arcs whose endpoints were moved (magenta)
+(setq *dchk-olap-color*   4)       ; ACI: merged or flagged overlapping lines (cyan)
+;; The three crosses are 'auto: they do not vary with the screen the
 ;; way *dchk-grey-color* does, but 'auto routes them through dchk:ink's
-;; item-type table, which CALSET's Itemcolors menu (CalofinInk-<ROLE>
-;; in the profile) can override without touching source.  A number is
-;; still used exactly as given.
-(setq *dchk-flag-color*   'auto)   ; ACI: dimensions you answered "No" to (red)
-(setq *dchk-arc-color*    'auto)   ; ACI: arcs whose endpoints were moved (magenta)
-(setq *dchk-olap-color*   'auto)   ; ACI: merged or flagged overlapping lines (cyan)
+;; item-type table, which LAZSET's Item colours (CalofinInk-<ROLE> in
+;; the profile) can override without touching source -- and they are
+;; drawn with grdraw and gone at the next redraw, which is what makes
+;; them a drafter's own to colour.  A number is still used as given.
 (setq *dchk-orig-color*   'auto)   ; ACI: the X marking where you drew the point (red)
 (setq *dchk-sugg-color*   'auto)   ; ACI: the + marking where DIMCHECK would put it (green)
 (setq *dchk-point-color*  'auto)   ; ACI: the crosses marking an overlap's two ends (yellow)
@@ -329,9 +339,9 @@
 ;; colour applies only then, so a layer already in the drawing keeps
 ;; its own.
 (setq *dchk-constr-layer* "DIMCHECK-CONSTRUCTION")
-(setq *dchk-constr-color* 'auto)   ; ACI (yellow)
+(setq *dchk-constr-color* 2)       ; ACI (yellow)
 (setq *dchk-report-layer* "DIMCHECK-REPORT")
-(setq *dchk-report-color* 'auto)   ; ACI (green)
+(setq *dchk-report-color* 3)       ; ACI (green)
 
 ;; -- how the report is sized and placed --------------------------------
 
@@ -1708,8 +1718,8 @@
           (progn
             (command "_.UNDO" "_Begin")
             (setq undo-open T)))
-        (dchk:ensure-layer *dchk-constr-layer* (dchk:ink *dchk-constr-color* 'constr))
-        (dchk:ensure-layer *dchk-report-layer* (dchk:ink *dchk-report-color* 'report))
+        (dchk:ensure-layer *dchk-constr-layer* *dchk-constr-color*)
+        (dchk:ensure-layer *dchk-report-layer* *dchk-report-color*)
 
         ;; a locked layer swallows every fix and recolour silently -
         ;; surface that up front and offer to unlock for the run
@@ -2184,7 +2194,7 @@
                          lines)))
 
      ;; --- report (the only thing DIMSCAN writes) ------------------
-     (dchk:ensure-layer *dchk-report-layer* (dchk:ink *dchk-report-color* 'report))
+     (dchk:ensure-layer *dchk-report-layer* *dchk-report-color*)
      (dchk:clear-old)
      (setq hdr (list
                  (cons (strcat "Dimensions scanned: " (itoa nd) " ("
@@ -2484,7 +2494,7 @@
         (cond
           ((= sstep 1)
            (if (dchk:ask-yn "\n  Drop that list into the drawing as a reference sheet?")
-             (progn (dchk:ensure-layer *dchk-report-layer* (dchk:ink *dchk-report-color* 'report))
+             (progn (dchk:ensure-layer *dchk-report-layer* *dchk-report-color*)
                     (setq sstep 2))
              (setq sstep 4)))
           ((= sstep 2)
