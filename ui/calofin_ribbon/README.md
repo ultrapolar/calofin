@@ -266,10 +266,27 @@ pulled from NuGet.
 dotnet build ui/calofin_ribbon/CalofinRibbon.csproj -c Release
 ```
 
-| AutoCAD | TargetFramework | AutoCAD.NET |
-| --- | --- | --- |
-| 2021-2024 | `net48` | `24.x` |
-| 2025+ | `net8.0-windows` | `25.x` |
+| AutoCAD | TargetFramework | AutoCAD.NET | build with |
+| --- | --- | --- | --- |
+| 2021-2024 | `net48` | `24.3.0` | (default) |
+| 2025 | `net8.0-windows` | `25.0.0` | `-p:AcadApi=25.0.0 -p:TargetFramework=net8.0-windows` |
+| 2026 | `net10.0-windows` | `25.1.1` | `-p:AcadApi=25.1.1 -p:TargetFramework=net10.0-windows` |
+| 2027 | `net10.0-windows` | `26.0.0` | `-p:AcadApi=26.0.0 -p:TargetFramework=net10.0-windows` |
+
+Nothing has to be edited to switch: both project files take `AcadApi`
+and `TargetFramework` from the command line, and the bundle's
+`build-net.cmd` takes the year (`build-net.cmd 2025`). The pairs are
+not interchangeable -- AutoCAD loads a plugin in-process against the
+runtime it was built for, and each `AutoCAD.NET` version targets
+exactly one.
+
+**Two packages, not one.** `AutoCAD.NET` carries `AcMgd`, `AcCoreMgd`
+and `AdWindows`; `AcDbMgd` is in `AutoCAD.NET.Model`, which the first
+does **not** depend on. Both projects reference both, because
+`IExtensionApplication` (the ribbon) and the whole of
+`Autodesk.AutoCAD.DatabaseServices` (the palette) live in `AcDbMgd` --
+and neither project referenced it until `tools/check_netapi.py` was
+written and said so.
 
 `ExcludeAssets="runtime"` is deliberate, exactly as in
 `Calofin.vbproj`: shipping `acmgd.dll` / `acdbmgd.dll` /

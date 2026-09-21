@@ -256,22 +256,36 @@ rem  which is where the DLLs land and therefore where BottomCatalog and
 rem  LoadIcon look for them.  Each project's own copy step finds nothing
 rem  to do here, which is right.
 rem
-rem  AutoCAD 2025 and later moved to .NET 8.  Edit TargetFramework in
-rem  src\Calofin.vbproj AND src\ribbon\CalofinRibbon.csproj to
-rem  net8.0-windows and the AutoCAD.NET version to 25.x before building
-rem  for those; src\README.md has the table.
+rem  WHICH AUTOCAD.  Pass the year; the default is 2024.  AutoCAD loads
+rem  a plugin in-process against the runtime it was built for, so the
+rem  pairs below are not interchangeable and a DLL built for the wrong
+rem  one does not load:
+rem
+rem      build-net.cmd          2021-2024   net48            AutoCAD.NET 24.3.0
+rem      build-net.cmd 2025     2025        net8.0-windows   AutoCAD.NET 25.0.0
+rem      build-net.cmd 2026     2026        net10.0-windows  AutoCAD.NET 25.1.1
+rem      build-net.cmd 2027     2027        net10.0-windows  AutoCAD.NET 26.0.0
+rem
+rem  2025 and later need the matching .NET SDK installed (8 or 10).
 rem ---------------------------------------------------------------------
 setlocal
 cd /d "%~dp0"
 
+set "ACADAPI=24.3.0"
+set "ACADTFM=net48"
+if /i "%~1"=="2025" ( set "ACADAPI=25.0.0" & set "ACADTFM=net8.0-windows" )
+if /i "%~1"=="2026" ( set "ACADAPI=25.1.1" & set "ACADTFM=net10.0-windows" )
+if /i "%~1"=="2027" ( set "ACADAPI=26.0.0" & set "ACADTFM=net10.0-windows" )
+echo Building for AutoCAD.NET %ACADAPI% (%ACADTFM%)...
+
 if not exist "Contents\net" mkdir "Contents\net"
 
 echo Building the Calofin palette...
-dotnet build "src\Calofin.vbproj" -c Release -o "build\palette" || goto :failed
+dotnet build "src\Calofin.vbproj" -c Release -o "build\palette" -p:AcadApi=%ACADAPI% -p:TargetFramework=%ACADTFM% || goto :failed
 copy /y "build\palette\Calofin.dll" "Contents\net\Calofin.dll" >nul || goto :failed
 
 echo Building the Calofin ribbon...
-dotnet build "src\ribbon\CalofinRibbon.csproj" -c Release -o "build\ribbon" || goto :failed
+dotnet build "src\ribbon\CalofinRibbon.csproj" -c Release -o "build\ribbon" -p:AcadApi=%ACADAPI% -p:TargetFramework=%ACADTFM% || goto :failed
 copy /y "build\ribbon\CalofinRibbon.dll" "Contents\net\CalofinRibbon.dll" >nul || goto :failed
 
 echo.
@@ -334,16 +348,30 @@ nothing else has to be found beside it.
 
 Both are .NET assemblies, so they have to be compiled on Windows
 against the AutoCAD reference assemblies.  The sources are in `src\\`
-(the palette) and `src\\ribbon\\` (the ribbon).
+(the palette) and `src\\ribbon\\` (the ribbon).  You need the **.NET
+SDK** (`dotnet --version` should answer) and, on the first run, a
+network connection: the AutoCAD reference assemblies come from NuGet
+and are cached afterwards.
+
+**Pass your AutoCAD year.**  AutoCAD loads a plugin in-process against
+the runtime it was built for, so a DLL built for the wrong one simply
+does not load:
 
 ```
-build-net.cmd
+build-net.cmd            for AutoCAD 2021-2024   (net48)
+build-net.cmd 2025       for AutoCAD 2025        (.NET 8 SDK)
+build-net.cmd 2026       for AutoCAD 2026        (.NET 10 SDK)
+build-net.cmd 2027       for AutoCAD 2027        (.NET 10 SDK)
 ```
 
 It runs `dotnet build` twice and copies `Calofin.dll` and
 `CalofinRibbon.dll` into `Contents\\net\\`, which are the slots the
 manifest already points at.  Restart AutoCAD: the **Calofin** ribbon tab
 is there by itself, and `CALOFIN` opens the palette.
+
+If the 2021-2024 build stops on **MSB3644** ("reference assemblies for
+.NETFramework,Version=v4.8 were not found"), install the .NET Framework
+4.8 **Developer Pack** -- the SDK does not carry targeting packs.
 
 **Until you do that**, typing `CALOFIN` reports a missing module and
 there is no ribbon tab -- the manifest names both either way, on

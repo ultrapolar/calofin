@@ -175,16 +175,11 @@ namespace Calofin.Ribbon
         private static RibbonPanel BuildPanel(
             string category, CommandCatalog.Item[] items)
         {
-            // Title and Image only.  Nothing here compiles C#, so every
-            // property this file names is a property a human believes
-            // exists -- and the panels are rebuilt wholesale on every
-            // BuildRibbon, so there is nothing an Id would be for.
-            var source = new RibbonPanelSource
-            {
-                Title = category,
-                Image = LoadIcon(
-                    "cat-" + category.ToLowerInvariant() + "-32.png"),
-            };
+            // Title only.  RibbonPanelSource has no image of any kind --
+            // tools/check_netapi.py reads that out of AdWindows.dll, and
+            // it is where the category icon was wrongly hung first.  The
+            // picture a panel shows is the PANEL's, below.
+            var source = new RibbonPanelSource { Title = category };
 
             foreach (CommandCatalog.Item item in items)
             {
@@ -228,7 +223,16 @@ namespace Calofin.Ribbon
                 source.Items.Add(column);
             }
 
-            return new RibbonPanel { Source = source };
+            // CollapsedPanelImage is what AutoCAD draws when the strip
+            // runs out of room and the panel folds into one button --
+            // which, with five panels this wide, is a state Checking and
+            // Converters will often be in.
+            return new RibbonPanel
+            {
+                Source = source,
+                CollapsedPanelImage = LoadIcon(
+                    "cat-" + category.ToLowerInvariant() + "-32.png"),
+            };
         }
 
         /// <summary>A routine's button: plain when it has no variants,

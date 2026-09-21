@@ -1,11 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- AutoCAD loads in-process against .NET Framework; net48 is the
-         target for AutoCAD 2021-2024. AutoCAD 2025+ moved to .NET 8,
-         which needs net8.0-windows and the matching AutoCAD.NET package
-         version - see README.md. -->
-    <TargetFramework>net48</TargetFramework>
+    <!-- Which AutoCAD you are building for, switchable from the command
+         line so no file has to be edited:
+
+           2021-2024   -p:AcadApi=24.3.0 -p:TargetFramework=net48   (default)
+           2025        -p:AcadApi=25.0.0 -p:TargetFramework=net8.0-windows
+           2026        -p:AcadApi=25.1.1 -p:TargetFramework=net10.0-windows
+           2027        -p:AcadApi=26.0.0 -p:TargetFramework=net10.0-windows
+
+         The pairs are not interchangeable: AutoCAD loads a plugin
+         in-process against the runtime it was built for, and each
+         AutoCAD.NET version targets exactly one. -->
+    <AcadApi Condition="'$(AcadApi)' == ''">24.3.0</AcadApi>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework Condition="'$(TargetFramework)' == ''">net48</TargetFramework>
     <RootNamespace>Calofin</RootNamespace>
     <AssemblyName>Calofin</AssemblyName>
     <UseWPF>true</UseWPF>
@@ -20,7 +31,13 @@
     <!-- Reference assemblies only. CopyLocal MUST stay false: shipping
          acmgd/acdbmgd next to the assembly makes AutoCAD load a second
          copy of its own API and fail in ways that look unrelated. -->
-    <PackageReference Include="AutoCAD.NET" Version="24.3.0" ExcludeAssets="runtime" />
+    <PackageReference Include="AutoCAD.NET" Version="$(AcadApi)" ExcludeAssets="runtime" />
+    <!-- AcDbMgd.dll ships in a SEPARATE package, and AutoCAD.NET does
+         not depend on it.  Without this the build stops on
+         Autodesk.AutoCAD.Runtime.IExtensionApplication (the ribbon) and
+         Autodesk.AutoCAD.DatabaseServices (the palette), which are both
+         in there.  Verified with tools/check_netapi.py. -->
+    <PackageReference Include="AutoCAD.NET.Model" Version="$(AcadApi)" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <ItemGroup>

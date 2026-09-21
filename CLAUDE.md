@@ -543,6 +543,20 @@ python3 tools/check_vb.py [f]    # the palette as CODE, for a tree with no
                                  # assembly's own types resolved, and every
                                  # framework type it names bare (SystemColors,
                                  # Registry) brought in by an Imports
+python3 tools/check_netapi.py    # the two .NET surfaces against AUTOCAD'S
+     --refs <dir> [--list]       # OWN assemblies - the half check_vb cannot
+                                 # see, because the answer is inside
+                                 # Autodesk's DLLs: does this type really
+                                 # have this member, and is it in a package
+                                 # we reference?  Reads the ECMA-335
+                                 # metadata itself, pure stdlib.  OPT-IN:
+                                 # with no --refs it lists what it would
+                                 # check and exits 0, so make check does
+                                 # not run it - run it on a machine that
+                                 # HAS AutoCAD, before a build.  It found
+                                 # RibbonPanelSource.Image (no such member)
+                                 # and a missing AutoCAD.NET.Model on BOTH
+                                 # projects while make check was green
 python3 tools/check_dcl.py       # every generated dialog still FITS: DCL
                         [--list] # does not scroll, so one past the screen
                                  # does not clip, it refuses to open.  The
