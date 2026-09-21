@@ -169,10 +169,10 @@ SHAPES = [
     # a tangent fillet's two joints bend 0 degrees: the arc earns its
     # row, the joints never earn a corner pad
     ("tangent R2'-6\" fillet - its row only", fillet_corner(30), 1),
-    ("tangent R4'-6\" fillet is inside the cap", fillet_corner(54), 3),
-    ("tangent R4'-7\" fillet is over the cap", fillet_corner(55), 0),
+    ("tangent R4'-0\" fillet is inside the cap", fillet_corner(48), 1),
+    ("tangent R4'-1\" fillet is over the cap", fillet_corner(49), 0),
     ("8-degree concave arc is semi-straight", arc_wall(8), 0),
-    ("12-degree concave arc is a feature", arc_wall(12), 1),
+    ("12-degree concave arc is a feature", arc_wall(12, r=40.0), 1),
     # an arc bulging OUT of the wall is an alcove: the arc itself is convex
     # and gets nothing, but its two ends are real inside corners
     ("convex arc - only its mouth corners", arc_wall(90, concave=False), 2),
@@ -215,7 +215,7 @@ def main():
 
     print("tunables agree")
     check("pad size (36\")", padsize == cchk_size, f"{padsize} vs {cchk_size}")
-    check("radius cap (4'-6\")", paddle_rad == cchk_rad, f"{paddle_rad} vs {cchk_rad}")
+    check("radius cap (4'-0\")", paddle_rad == cchk_rad, f"{paddle_rad} vs {cchk_rad}")
     check("corner tolerance (30 deg)",
           abs(paddle_corner - cchk_corner) < 1e-12, f"{paddle_corner} vs {cchk_corner}")
     check("corner tolerance really is 30 degrees",
@@ -242,7 +242,7 @@ def main():
         check(label, clear, str(mine))
 
     print("tangent joints are never corners")
-    for r in (30, 54):
+    for r in (30, 48):
         mine, _ = both(vm, fillet_corner(r))
         check(f"R{r} fillet: arc pads only",
               mine and all(p[2] == "arc" for p in mine), str(mine))

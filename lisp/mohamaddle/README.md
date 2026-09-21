@@ -28,7 +28,7 @@ back to, so it does not offer `Back`.
 ## Pad specification
 
 Identical to `PADDLE`'s (see `lisp/paddle/README.md` for the full
-table): a concave arc of radius 4′-6″ or less, bending more than 10°,
+table): a concave arc of radius 4′-0″ or less, bending more than 10°,
 gets a flush row of pads; a concave corner bending more than 30° gets
 one pad on the vertex; convex geometry and gentler bends get nothing.
 "Concave" is judged from the interior of the closed loop either way it
@@ -96,7 +96,7 @@ Drawing units are assumed to be **inches** (architectural).
 | `*mohamaddle-layer*` | `"PADS"` | Layer pads land on. Created when missing; thawed, unlocked and turned on when not |
 | `*mohamaddle-layer-color*` | `7` | Colour index the layer is created with. An existing layer keeps its own |
 | `*mohamaddle-align*` | `nil` | `nil` = pads parallel to the X/Y axes; `T` = rotated to follow the perimeter edge |
-| `*mohamaddle-maxrad*` | `54.0` | Largest concave radius (4′-6″) that still needs pads, whichever size was picked |
+| `*mohamaddle-maxrad*` | `48.0` | Largest concave radius (4′-0″) that still needs pads, whichever size was picked |
 | `*mohamaddle-cornertol*` | 30° | A joint has to bend **more than** this, into the pool, to be a sharp inside corner |
 | `*mohamaddle-arctol*` | 10° | A concave arc has to bend **more than** this in total to be a feature |
 | `*mohamaddle-fuzz*` | `0.05` | Largest gap that still counts as touching when chaining loose lines and arcs |

@@ -20,10 +20,10 @@ that nearly closes** below).
 
 | Perimeter feature | Pads? |
 | --- | --- |
-| Concave arc / inside fillet with radius **4′-6″ (54″) or less**, bending more than 10° in total — all the way down to a sharp corner | **Yes** — a flush row of pads along the arc |
+| Concave arc / inside fillet with radius **4′-0″ (48″) or less**, bending more than 10° in total — all the way down to a sharp corner | **Yes** — a flush row of pads along the arc |
 | Concave intersection of straight segments bending **more than 30°** | **Yes** — one pad centered on the corner |
 | Semi-straight geometry — a connection point bending 30° or less, or an arc whose total bend is 10° or less | No |
-| Concave arc with radius **greater than 4′-6″** | No |
+| Concave arc with radius **greater than 4′-0″** | No |
 | Convex corners and convex arcs | No |
 
 "Concave" is judged from the interior of the closed loop, so it
@@ -49,7 +49,7 @@ bulges or ARC entities.
 
 Type `TUTORIALPADDLE` for a guided tour. It first lists everything
 PADDLE checks (perimeter input, chaining and the gap it offers to
-fillet, the >30° corner rule and the >10° arc rule, the 4′-6″ radius
+fillet, the >30° corner rule and the >10° arc rule, the 4′-0″ radius
 rule, the no-collision rule, where pads land). Then it offers a **live demonstration**: it draws a
 labelled sample perimeter that has one of everything — a 2° kink
 (ignored), convex corners (ignored), a slot with two inside corners
@@ -60,8 +60,8 @@ pipeline on it step by step, pausing so you can watch each rule fire. At the end
 ## Revisions
 
 `PADDLE.lsp` carries the auto-stamped banner `(setq *paddle-version*
-"v1.14")` that `tools/release_lisp.py` reads; run it after any change
-and the dated twin `releases/PADDLE_MMDDYY_REV114.lsp` regenerates
+"v1.15")` that `tools/release_lisp.py` reads; run it after any change
+and the dated twin `releases/PADDLE_MMDDYY_REV115.lsp` regenerates
 itself. Bump the banner with every revision.
 
 PADDLE reports what it found, e.g.:
@@ -252,7 +252,7 @@ constants at the top of `PADDLE.lsp` are easy to change:
 | `*paddle-layer*` | `"PADS"` | Layer pads land on. Created when missing; thawed, unlocked and turned on when not |
 | `*paddle-layer-color*` | `7` | Colour index the layer is created with. An existing layer keeps its own |
 | `*paddle-align*` | `nil` | `nil` = pads parallel to the X/Y axes; `T` = rotated to follow the perimeter edge |
-| `*paddle-maxrad*` | `54.0` | Largest concave radius (4′-6″) that still needs pads |
+| `*paddle-maxrad*` | `48.0` | Largest concave radius (4′-0″) that still needs pads |
 | `*paddle-cornertol*` | 30° | A joint has to bend **more than** this, into the pool, to be a sharp inside corner. Edit the `30.0` in its line; the rest converts to radians |
 | `*paddle-arctol*` | 10° | A concave arc has to bend **more than** this in total to be a feature. Judged separately from corners on purpose |
 | `*paddle-fuzz*` | `0.05` | Largest gap that still counts as touching when chaining loose lines and arcs; shorter segments are dropped as slivers |

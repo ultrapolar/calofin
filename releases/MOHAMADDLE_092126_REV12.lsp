@@ -1,12 +1,15 @@
 ;;; ===================================================================
-;;; PADDLE.lsp
+;;; MOHAMADDLE.lsp
 ;;;
-;;; Scans the perimeter of a drawing for concave features that require
-;;; pads, and inserts 36" x 36" pad blocks ("Pad36x36") centered on
-;;; the affected areas, always parallel to the X/Y axes.
+;;; PADDLE's pad placer, with the pad size asked at run time instead of
+;;; fixed at the top of the file.  Scans the perimeter of a drawing for
+;;; concave features that require pads and inserts pad blocks centered
+;;; on the affected areas, always parallel to the X/Y axes -- exactly
+;;; PADDLE's rule set, just with a choice of block/size at the start of
+;;; the run instead of one baked in.
 ;;;
-;;; Pad specification:
-;;;   * Any CONCAVE arc / fillet with a radius of 4'-6" (54") or less
+;;; Pad specification (identical to PADDLE's):
+;;;   * Any CONCAVE arc / fillet with a radius of 4'-0" (48") or less
 ;;;     -- all the way down to sharp 90-degree inside corners --
 ;;;     requires pads along the affected arc.
 ;;;   * Any CONCAVE intersection of straight segments (an inside
@@ -17,7 +20,7 @@
 ;;;     straight, and an arc is a feature only once its total bend is
 ;;;     more than 10 degrees.  Shallow drafting kinks and segmented
 ;;;     walls are not corners.
-;;;   * Convex features and concave arcs larger than 4'-6" radius do
+;;;   * Convex features and concave arcs larger than 4'-0" radius do
 ;;;     NOT require pads.
 ;;;   * Pads never overlap: where features crowd together, a pad on a
 ;;;     sharp point stays dead-center on that point, and the pads
@@ -26,40 +29,44 @@
 ;;;
 ;;; Accepted perimeter input (generous):
 ;;;   * a closed LWPOLYLINE or 2D POLYLINE, or
-;;;   * loose LINEs / ARCs (or a mix of all of the above) -- PADDLE
+;;;   * loose LINEs / ARCs (or a mix of all of the above) -- MOHAMADDLE
 ;;;     chains touching segments end-to-end into closed loops.
-;;;   * geometry that is a closed perimeter EXCEPT for a gap: PADDLE
-;;;     recognises the near-miss (the chains and the gaps between them
-;;;     go round once and come back), draws an arrow at every open
-;;;     joint and offers to close it with a zero-radius FILLET.  Yes
-;;;     closes it and the run carries straight on from the perimeter
-;;;     that leaves; No leaves the arrow standing to work from.
+;;;   * geometry that is a closed perimeter EXCEPT for a gap: the
+;;;     near-miss is recognised (the chains and the gaps between them
+;;;     go round once and come back), an arrow is drawn at every open
+;;;     joint and closing it with a zero-radius FILLET is offered.
+;;;     Yes closes it and the run carries straight on from the
+;;;     perimeter that leaves; No leaves the arrow standing to work
+;;;     from.  PADDLE's pass, ported with the rest of the engine, and
+;;;     the arrows share PADDLE's own layer.
 ;;;
 ;;; Usage:
-;;;   Command: PADDLE
-;;;   Highlight the perimeter geometry BEFORE typing the command and it
-;;;   is taken as-is; otherwise select it at the prompt, or press Enter
-;;;   to auto-detect the perimeter (the largest closed loop found in
-;;;   the drawing).  LINGUTTER hands its freshly drawn perimeter over
-;;;   that way.
-;;;
-;;;   Command: TUTORIALPADDLE
-;;;   Guided tour for new users: lists everything PADDLE checks, then
-;;;   optionally draws a labelled sample perimeter and pads it step by
-;;;   step so you can watch what happens.
+;;;   Command: MOHAMADDLE
+;;;   First asks which pad size to place (the sizes *mohamaddle-blkfile*
+;;;   ships block definitions for).  Highlight the perimeter geometry
+;;;   BEFORE typing the command and it is taken as-is; otherwise select
+;;;   it at the prompt, or press Enter to auto-detect the perimeter
+;;;   (the largest closed loop found in the drawing).
 ;;;
 ;;; Versioning: see tools/release_lisp.py at the repo root. It reads
-;;; *paddle-version* below and stamps a dated, REV-numbered twin of
+;;; *mohamaddle-version* below and stamps a dated, REV-numbered twin of
 ;;; this file into releases/.
 ;;;
 ;;; Block resolution order for the chosen pad block:
 ;;;   1. A block definition already in the drawing.
 ;;;   2. Imported from "24inpad.dwg" found on the AutoCAD support
-;;;      path (ships alongside this lisp -- add its folder to the
-;;;      support file search path, or drop the dwg next to the
-;;;      current drawing).
+;;;      path (ships alongside PADDLE.lsp in lisp/paddle/ -- add that
+;;;      folder to the support file search path, or drop the dwg next
+;;;      to the current drawing).
 ;;;   3. As a last resort a plain square block of the right size is
 ;;;      created so the command always works.
+;;;
+;;; The perimeter-reading and pad-placement geometry below is PADDLE's
+;;; own engine, ported under the mohamaddle-- prefix the way LINGUTTER
+;;; ports paddle--ent-segs and friends under lg: (see lisp/paddle/
+;;; README.md) -- a second self-contained copy, not a shared library
+;;; call, because every lisp/ tool has to load alone. Only the pad-size
+;;; question at the top of c:MOHAMADDLE is new.
 ;;;
 ;;; Assumes drawing units are INCHES (architectural). Adjust the
 ;;; constants below for other setups.
@@ -67,8 +74,8 @@
 
 (vl-load-com)
 
-;; --------------------------- settings ------------------------------
-;; Every knob PADDLE has lives in this block: change a value here,
+;; --------------------------- tunables -------------------------------
+;; Every knob MOHAMADDLE has lives in this block: change a value here,
 ;; save, and APPLOAD the file again.  Distances are drawing units
 ;; (inches on an architectural drawing); the two angles are typed in
 ;; degrees and converted to radians on the same line.  Nothing below
@@ -78,39 +85,41 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.14")
+(setq *mohamaddle-version* "v1.2")
 
 ;; --- the pad itself ---
-;; Name of the block inserted at every pad spot.  *paddle-blkfile*
-;; ships two, Pad36x36 and Pad24x24; if you switch, set
-;; *paddle-padsize* to match or the rows along arcs are spaced for
-;; the wrong pad.
-(setq *paddle-blkname* "Pad36x36")
-;; Edge of the pad in drawing units (a 36" x 36" square).  This one
-;; number sets the pitch of the flush rows along concave arcs, the
-;; collision distance in the dodge pass, the size of the fallback
-;; square block, and the wording of every message that quotes it.
-(setq *paddle-padsize* 36.0)
+;; Pad sizes MOHAMADDLE offers, in the order shown at the prompt.  Each
+;; entry is (KEYWORD BLOCKNAME SIZE-IN-INCHES); *mohamaddle-blkfile*
+;; ships block definitions for both.  Add a third entry here to offer
+;; a third size -- nothing else about the picker needs to change.
+(setq *mohamaddle-sizes*
+  '(("24" "Pad24x24" 24.0)
+    ("36" "Pad36x36" 36.0)))
+;; Which size the prompt defaults to the first time it is asked in a
+;; session.  MOHAMADDLE remembers whatever was picked last after that
+;; and offers it instead, so this only matters once per drawing session.
+(setq *mohamaddle-defaultkw* "36")
 ;; The dwg the block definitions are imported from when the drawing
 ;; does not already hold them.  Looked up with findfile, so put its
 ;; folder on the AutoCAD support path or drop the dwg beside the
 ;; drawing.  If it cannot be found a plain square block is made.
-(setq *paddle-blkfile* "24inpad.dwg")
+(setq *mohamaddle-blkfile* "24inpad.dwg")
 ;; Layer the pads land on.  Created when missing; an existing one is
 ;; thawed, unlocked and turned on so the result is visible.
-(setq *paddle-layer* "PADS")
+(setq *mohamaddle-layer* "PADS")
 ;; AutoCAD colour index the layer is created with.  An existing layer
 ;; keeps whatever colour it already has.
-(setq *paddle-layer-color* 7)
+(setq *mohamaddle-layer-color* 7)
 ;; nil = every pad stays parallel to the X/Y axes (the shop standard).
 ;; T   = each pad rotates to follow its stretch of perimeter instead.
-(setq *paddle-align* nil)
+(setq *mohamaddle-align* nil)
 
 ;; --- what counts as a feature ---
-;; Largest concave radius that still needs pads, 4'-6".  Concave arcs
+;; Largest concave radius that still needs pads, 4'-0".  Concave arcs
 ;; this tight or tighter get a flush row of pads; bigger sweeps get
-;; none.
-(setq *paddle-maxrad* 54.0)
+;; none.  Independent of which pad size was picked -- it is a
+;; drafting-standard threshold, not a property of the block.
+(setq *mohamaddle-maxrad* 48.0)
 ;; A connection point (line meets line, line meets arc, a polyline
 ;; vertex) counts as a sharp inside corner only when the perimeter
 ;; bends MORE than this many degrees away from straight, into the
@@ -118,91 +127,100 @@
 ;; drawn as several nearly-collinear pieces, the mouth of a shallow
 ;; alcove - are semi-straight and get no pad.  Edit the 30.0; the
 ;; rest of the line converts it to radians.
-(setq *paddle-cornertol* (/ (* 30.0 pi) 180.0))
+(setq *mohamaddle-cornertol* (/ (* 30.0 pi) 180.0))
 ;; A concave arc counts as a feature only when its total bend is MORE
 ;; than this many degrees; a gentler sweep is a semi-straight line
 ;; however tight its radius.  Judged separately from corners on
 ;; purpose: a curve earns its row of pads more easily than a joint
 ;; earns one pad.  Edit the 10.0.
-(setq *paddle-arctol* (/ (* 10.0 pi) 180.0))
+(setq *mohamaddle-arctol* (/ (* 10.0 pi) 180.0))
 
 ;; --- reading the perimeter ---
 ;; Largest gap between the end of one loose line/arc and the start of
-;; the next that still counts as touching when PADDLE chains them into
-;; a loop.  Segments shorter than this are dropped as slivers (a
+;; the next that still counts as touching when MOHAMADDLE chains them
+;; into a loop.  Segments shorter than this are dropped as slivers (a
 ;; doubled polyline vertex, a zero-length line), which is also what
 ;; keeps a corner drawn with a duplicate vertex from being missed.
-(setq *paddle-fuzz* 0.05)
+(setq *mohamaddle-fuzz* 0.05)
 
 ;; --- the gap in a perimeter that nearly closes ---
 ;; Furthest apart two loose ends may be and still read as a DRAFTING
 ;; GAP rather than a missing piece of perimeter.  Geometry that chains
 ;; into a loop except here is one arrow and one question away from
-;; being paddable -- PADDLE offers the zero fillet that closes it.
+;; being paddable -- MOHAMADDLE offers the zero fillet that closes it.
 ;; Geometry short of a whole wall is not, and gets the plain report it
 ;; always got.  One pad wide: a hole a pad would fall through is not a
-;; gap.  Ends closer together than *paddle-fuzz* are already chained
+;; gap.  Ends closer together than *mohamaddle-fuzz* are already chained
 ;; and are not a gap either.
-(setq *paddle-gapmax* 36.0)
+(setq *mohamaddle-gapmax* 36.0)
 ;; Layer the gap arrow is drawn on, and the colour index it is created
 ;; with.  A plain ACI number rather than 'auto on purpose: red reads
 ;; against any background a drafter can set, which is the one thing a
-;; mark saying "it is open HERE" has to do.  The arrows are PADDLE's
-;; own marks and nobody else's -- every run clears this layer and
-;; re-marks whatever is still open, so an arrow does not outlive the
-;; gap it pointed at -- so put nothing else on it.
-(setq *paddle-gap-layer* "PADDLE-GAP")
-(setq *paddle-gap-color* 1)
+;; mark saying "it is open HERE" has to do.  The layer is PADDLE's and
+;; is shared with it deliberately: the two tools mark the same thing in
+;; the same drawing, the way they already share "PADS", so whichever of
+;; them runs next clears the marks and re-marks whatever is still open.
+;; An arrow never outlives the gap it pointed at.  Put nothing else on
+;; this layer.
+(setq *mohamaddle-gap-layer* "PADDLE-GAP")
+(setq *mohamaddle-gap-color* 1)
 ;; Length of that arrow, tail to tip, in drawing units.  Its head is a
 ;; third of that long and three times as wide as its shaft, which is
 ;; what makes it read as an arrow at the zoom the pads are seen at.
-(setq *paddle-arrow* 36.0)
+(setq *mohamaddle-arrow* 36.0)
 
-;; --- TUTORIALPADDLE ---
-;; Layer the tutorial draws its labelled sample perimeter on, and the
-;; colour index it is given.  Created if missing, recoloured either
-;; way, and left behind unless the demo is erased at the end.
-(setq *paddle-demo-layer* "PADDLE-DEMO")
-(setq *paddle-demo-color* 3)
-
-;; -------------------------- text helper ----------------------------
+;; -------------------------- text helper ------------------------------
 ;; A length as inches with the mark, 36.0 -> 36" -- every message that
-;; quotes the pad size goes through this so *paddle-padsize* is the
-;; only place it is written.
-(defun paddle--in (n)
+;; quotes a pad size goes through this, whichever size was picked.
+(defun mohamaddle--in (n)
   (strcat (rtos n 2 (if (equal n (float (fix n)) 1e-9) 0 2)) "\""))
 
+;; -------------------------- size picker -------------------------------
+;; Ask which pad size to place, from *mohamaddle-sizes* above.  This is
+;; the FIRST thing MOHAMADDLE asks -- there is nothing in front of it
+;; to go back to, so it offers no Back (tools/back_baseline.txt).  The
+;; keyword string and the bracket shown are both built off the table,
+;; so a third size needs no other edit here.
+(defun mohamaddle--asksize (dflt / kws shown v)
+  (setq kws (apply 'strcat (mapcar '(lambda (s) (strcat (car s) " "))
+                                   *mohamaddle-sizes*)))
+  (setq shown (vl-string-translate " " "/" (substr kws 1 (1- (strlen kws)))))
+  (initget 0 kws)
+  (setq v (getkword (strcat "\nPad size (inches)? [" shown "] <" dflt ">: ")))
+  (if lzd:ask (lzd:ask "Pad size (inches)?" v) v)
+  (if v v dflt))
+
 ;; ------------------------ 2D vector helpers ------------------------
-(defun paddle--sub (a b) (list (- (car a) (car b)) (- (cadr a) (cadr b))))
-(defun paddle--add (a b) (list (+ (car a) (car b)) (+ (cadr a) (cadr b))))
-(defun paddle--scl (v k) (list (* (car v) k) (* (cadr v) k)))
-(defun paddle--len (v) (distance '(0.0 0.0) v))
-(defun paddle--unit (v / l) (if (> (setq l (paddle--len v)) 1e-12) (paddle--scl v (/ 1.0 l))))
-(defun paddle--cross (a b) (- (* (car a) (cadr b)) (* (cadr a) (car b))))
-(defun paddle--dot (a b) (+ (* (car a) (car b)) (* (cadr a) (cadr b))))
-(defun paddle--dir (a) (list (cos a) (sin a))) ; unit vector at angle a
-(defun paddle--rot (v a) ; rotate vector v by angle a
+(defun mohamaddle--sub (a b) (list (- (car a) (car b)) (- (cadr a) (cadr b))))
+(defun mohamaddle--add (a b) (list (+ (car a) (car b)) (+ (cadr a) (cadr b))))
+(defun mohamaddle--scl (v k) (list (* (car v) k) (* (cadr v) k)))
+(defun mohamaddle--len (v) (distance '(0.0 0.0) v))
+(defun mohamaddle--unit (v / l) (if (> (setq l (mohamaddle--len v)) 1e-12) (mohamaddle--scl v (/ 1.0 l))))
+(defun mohamaddle--cross (a b) (- (* (car a) (cadr b)) (* (cadr a) (car b))))
+(defun mohamaddle--dot (a b) (+ (* (car a) (car b)) (* (cadr a) (cadr b))))
+(defun mohamaddle--dir (a) (list (cos a) (sin a))) ; unit vector at angle a
+(defun mohamaddle--rot (v a) ; rotate vector v by angle a
   (list (- (* (car v) (cos a)) (* (cadr v) (sin a)))
         (+ (* (car v) (sin a)) (* (cadr v) (cos a)))))
-(defun paddle--2d (p) (list (car p) (cadr p)))
-(defun paddle--arcpt (cen r ang) (paddle--add cen (paddle--scl (paddle--dir ang) r)))
-(defun paddle--cheb (v) (max (abs (car v)) (abs (cadr v)))) ; Chebyshev norm
+(defun mohamaddle--2d (p) (list (car p) (cadr p)))
+(defun mohamaddle--arcpt (cen r ang) (mohamaddle--add cen (mohamaddle--scl (mohamaddle--dir ang) r)))
+(defun mohamaddle--cheb (v) (max (abs (car v)) (abs (cadr v)))) ; Chebyshev norm
 
 ;; Segment data for vertex A -> B with bulge b (b /= 0):
 ;; returns (theta radius center start-tangent end-tangent)
 ;; theta = signed included angle (CCW positive), tangents are angles.
-(defun paddle--arcdata (a b blg / theta chord r phi ts cen)
+(defun mohamaddle--arcdata (a b blg / theta chord r phi ts cen)
   (setq theta (* 4.0 (atan blg))
         chord (distance a b)
         r     (/ chord (* 2.0 (sin (/ (abs theta) 2.0))))
         phi   (angle a b)
         ts    (- phi (/ theta 2.0))
-        cen   (paddle--add a (paddle--scl (paddle--dir (+ ts (if (> blg 0.0) (/ pi 2.0) (/ pi -2.0)))) r)))
+        cen   (mohamaddle--add a (mohamaddle--scl (mohamaddle--dir (+ ts (if (> blg 0.0) (/ pi 2.0) (/ pi -2.0)))) r)))
   (list theta r cen ts (+ phi (/ theta 2.0))))
 
 ;; Signed area of a closed vertex list (shoelace + circular segments).
 ;; vts = list of (x y bulge), bulge belongs to the segment leaving it.
-(defun paddle--area (vts / n i a b blg area theta r seg)
+(defun mohamaddle--area (vts / n i a b blg area theta r seg)
   (setq n (length vts) i 0 area 0.0)
   (repeat n
     (setq a   (nth i vts)
@@ -211,7 +229,7 @@
     (setq area (+ area (* 0.5 (- (* (car a) (cadr b)) (* (car b) (cadr a))))))
     (if (/= blg 0.0)
         (progn
-          (setq seg   (paddle--arcdata a b blg)
+          (setq seg   (mohamaddle--arcdata a b blg)
                 theta (abs (car seg))
                 r     (cadr seg))
           (setq area (+ area (* (if (> blg 0.0) 1.0 -1.0)
@@ -225,27 +243,27 @@
 ;; aligned pads of that size then touch edge-to-edge without ever
 ;; overlapping. Returns (parameter center), or nil when the rest of
 ;; the arc is too short for another flush pad.
-(defun paddle--next-flush (cen r sa sgn cur sweep prev padsize
-                           / ds d p hit lo hi mid)
+(defun mohamaddle--next-flush (cen r sa sgn cur sweep prev padsize
+                               / ds d p hit lo hi mid)
   (setq ds (/ padsize r 8.0))                ; ~1/8 pad per probe step
   (if (> ds (/ sweep 4.0)) (setq ds (/ sweep 4.0)))
   (setq d cur hit nil)
   (while (and (not hit) (< d (- sweep 1e-9))) ; walk until pads separate
     (setq lo d
           d  (min sweep (+ d ds))
-          p  (paddle--arcpt cen r (+ sa (* sgn d))))
-    (if (>= (paddle--cheb (paddle--sub p prev)) padsize)
+          p  (mohamaddle--arcpt cen r (+ sa (* sgn d))))
+    (if (>= (mohamaddle--cheb (mohamaddle--sub p prev)) padsize)
         (setq hit T)))
   (if hit
       (progn ; tighten the crossing between lo and d by bisection
         (setq hi d)
         (repeat 45
           (setq mid (/ (+ lo hi) 2.0)
-                p   (paddle--arcpt cen r (+ sa (* sgn mid))))
-          (if (>= (paddle--cheb (paddle--sub p prev)) padsize)
+                p   (mohamaddle--arcpt cen r (+ sa (* sgn mid))))
+          (if (>= (mohamaddle--cheb (mohamaddle--sub p prev)) padsize)
               (setq hi mid)
               (setq lo mid)))
-        (list hi (paddle--arcpt cen r (+ sa (* sgn hi)))))))
+        (list hi (mohamaddle--arcpt cen r (+ sa (* sgn hi)))))))
 
 ;; Pad centers for one concave arc: the fewest pads that matter most.
 ;; The first pad is centered on the MIDDLE of the arc (the part that
@@ -255,36 +273,36 @@
 ;; curve. Marching stops when the leftover end of the arc is too short
 ;; for another flush pad -- the extreme ends of the radius are allowed
 ;; to stay uncovered.
-(defun paddle--arc-pads (cen r sa sgn sweep padsize
-                         / mid amid pmid fwd bwd cur prev nxt)
+(defun mohamaddle--arc-pads (cen r sa sgn sweep padsize
+                             / mid amid pmid fwd bwd cur prev nxt)
   (setq mid  (/ sweep 2.0)
         amid (+ sa (* sgn mid))
-        pmid (paddle--arcpt cen r amid))
+        pmid (mohamaddle--arcpt cen r amid))
   ;; march from the middle toward the arc's end...
   (setq cur 0.0 prev pmid fwd nil)
-  (while (setq nxt (paddle--next-flush cen r amid sgn cur (- sweep mid) prev padsize))
+  (while (setq nxt (mohamaddle--next-flush cen r amid sgn cur (- sweep mid) prev padsize))
     (setq cur (car nxt) prev (cadr nxt) fwd (cons prev fwd)))
   ;; ...and from the middle back toward the arc's start
   (setq cur 0.0 prev pmid bwd nil)
-  (while (setq nxt (paddle--next-flush cen r amid (- sgn) cur mid prev padsize))
+  (while (setq nxt (mohamaddle--next-flush cen r amid (- sgn) cur mid prev padsize))
     (setq cur (car nxt) prev (cadr nxt) bwd (cons prev bwd)))
   (append bwd (list pmid) (reverse fwd)))
 
 ;; Direction (unit vector) of travel at the START / END of segment a->b.
-(defun paddle--tan-start (a b blg)
+(defun mohamaddle--tan-start (a b blg)
   (if (= blg 0.0)
-      (paddle--unit (paddle--sub b a))
-      (paddle--dir (cadddr (paddle--arcdata a b blg)))))
-(defun paddle--tan-end (a b blg)
+      (mohamaddle--unit (mohamaddle--sub b a))
+      (mohamaddle--dir (cadddr (mohamaddle--arcdata a b blg)))))
+(defun mohamaddle--tan-end (a b blg)
   (if (= blg 0.0)
-      (paddle--unit (paddle--sub b a))
-      (paddle--dir (last (paddle--arcdata a b blg)))))
+      (mohamaddle--unit (mohamaddle--sub b a))
+      (mohamaddle--dir (last (mohamaddle--arcdata a b blg)))))
 
 ;; --------------------- entities -> segments ------------------------
 ;; A segment is (p1 p2 bulge) with 2D points.
 
 ;; LWPOLYLINE -> (closed-flag . vts)
-(defun paddle--lwverts (ent / ed out grp)
+(defun mohamaddle--lwverts (ent / ed out grp)
   (setq ed (entget ent))
   (foreach grp ed
     (cond
@@ -295,7 +313,7 @@
   (cons (= 1 (logand 1 (cdr (assoc 70 ed)))) (reverse out)))
 
 ;; heavy 2D POLYLINE -> (closed-flag . vts), nil for 3D/mesh plines
-(defun paddle--plverts (ent / ed flags e ved out p)
+(defun mohamaddle--plverts (ent / ed flags e ved out p)
   (setq ed (entget ent) flags (cdr (assoc 70 ed)))
   (if (zerop (logand 112 flags)) ; skip 3D polylines / meshes / polyfaces
       (progn
@@ -311,61 +329,61 @@
         (cons (= 1 (logand 1 flags)) (reverse out)))))
 
 ;; vertex list -> segments (wrapping when closed)
-(defun paddle--vts->segs (closed vts / n i segs a b)
+(defun mohamaddle--vts->segs (closed vts / n i segs a b)
   (setq n (length vts) i 0)
   (repeat (if closed n (max 0 (1- n)))
     (setq a (nth i vts)
           b (nth (rem (1+ i) n) vts))
-    (setq segs (cons (list (paddle--2d a) (paddle--2d b) (caddr a)) segs))
+    (setq segs (cons (list (mohamaddle--2d a) (mohamaddle--2d b) (caddr a)) segs))
     (setq i (1+ i)))
   (reverse segs))
 
 ;; any supported entity -> list of segments
-(defun paddle--ent-segs (ent / ed typ cen r sa ea sweep cv)
+(defun mohamaddle--ent-segs (ent / ed typ cen r sa ea sweep cv)
   (setq ed (entget ent) typ (cdr (assoc 0 ed)))
   (cond
     ((= typ "LINE")
-     (list (list (paddle--2d (cdr (assoc 10 ed)))
-                 (paddle--2d (cdr (assoc 11 ed))) 0.0)))
+     (list (list (mohamaddle--2d (cdr (assoc 10 ed)))
+                 (mohamaddle--2d (cdr (assoc 11 ed))) 0.0)))
     ((= typ "ARC")
-     (setq cen   (paddle--2d (cdr (assoc 10 ed)))
+     (setq cen   (mohamaddle--2d (cdr (assoc 10 ed)))
            r     (cdr (assoc 40 ed))
            sa    (cdr (assoc 50 ed))
            ea    (cdr (assoc 51 ed))
            sweep (- ea sa))
      (if (<= sweep 0.0) (setq sweep (+ sweep pi pi)))
-     (list (list (paddle--add cen (paddle--scl (paddle--dir sa) r))
-                 (paddle--add cen (paddle--scl (paddle--dir ea) r))
+     (list (list (mohamaddle--add cen (mohamaddle--scl (mohamaddle--dir sa) r))
+                 (mohamaddle--add cen (mohamaddle--scl (mohamaddle--dir ea) r))
                  (/ (sin (/ sweep 4.0)) (cos (/ sweep 4.0)))))) ; tan(sweep/4)
     ((= typ "LWPOLYLINE")
-     (setq cv (paddle--lwverts ent))
-     (paddle--vts->segs (car cv) (cdr cv)))
+     (setq cv (mohamaddle--lwverts ent))
+     (mohamaddle--vts->segs (car cv) (cdr cv)))
     ((= typ "POLYLINE")
-     (setq cv (paddle--plverts ent))
-     (if cv (paddle--vts->segs (car cv) (cdr cv))))))
+     (setq cv (mohamaddle--plverts ent))
+     (if cv (mohamaddle--vts->segs (car cv) (cdr cv))))))
 
 ;; ------------------- chain segments into loops ---------------------
 ;; SEG walked the other way: the same geometry, so the bulge changes
 ;; sign with the direction, and still owned by the same entity.
-(defun paddle--revseg (s)
+(defun mohamaddle--revseg (s)
   (list (cadr s) (car s) (- (caddr s)) (cadddr s)))
 
-;; The first segment in SEGS with an end on PT (within *paddle-fuzz*),
+;; The first segment in SEGS with an end on PT (within *mohamaddle-fuzz*),
 ;; turned so that it LEAVES pt, and the rest of SEGS without it, in
 ;; order: (segment rest).  (nil rest) when nothing touches pt.
-(defun paddle--take (segs pt / found rest s)
+(defun mohamaddle--take (segs pt / found rest s)
   (setq found nil rest nil)
   (foreach s segs
     (if found
         (setq rest (cons s rest))
         (cond
-          ((<= (distance pt (car s)) *paddle-fuzz*) (setq found s))
-          ((<= (distance pt (cadr s)) *paddle-fuzz*) ; reversed
-           (setq found (paddle--revseg s)))
+          ((<= (distance pt (car s)) *mohamaddle-fuzz*) (setq found s))
+          ((<= (distance pt (cadr s)) *mohamaddle-fuzz*) ; reversed
+           (setq found (mohamaddle--revseg s)))
           (T (setq rest (cons s rest))))))
   (list found (reverse rest)))
 
-;; Chains touching segments (ends within *paddle-fuzz*) end-to-end.
+;; Chains touching segments (ends within *mohamaddle-fuzz*) end-to-end.
 ;; Returns (loops opens): each loop is a vertex list (x y bulge), and
 ;; each open chain the SEGMENTS it ran out of geometry with, in walk
 ;; order -- which is what the gap pass below needs, because a segment
@@ -378,10 +396,10 @@
 ;; segment already taken.  Two chains meeting at a point that is not a
 ;; gap is not what the drawing says -- there is one loop with one hole
 ;; in it, and the arrow belongs at the hole.
-(defun paddle--chain (segs / loops opens chain head tail done found rest)
+(defun mohamaddle--chain (segs / loops opens chain head tail done found rest)
   ;; drop degenerate slivers
   (setq segs (vl-remove-if
-               '(lambda (s) (<= (distance (car s) (cadr s)) *paddle-fuzz*))
+               '(lambda (s) (<= (distance (car s) (cadr s)) *mohamaddle-fuzz*))
                segs))
   (while segs
     (setq chain (list (car segs))
@@ -392,13 +410,13 @@
     (while (not done)
       (cond
         ;; loop closed back onto its start?
-        ((and (> (length chain) 1) (<= (distance tail head) *paddle-fuzz*))
+        ((and (> (length chain) 1) (<= (distance tail head) *mohamaddle-fuzz*))
          (setq loops (cons (mapcar '(lambda (s) (list (car (car s)) (cadr (car s)) (caddr s)))
                                    chain)
                            loops)
                done  T))
         (T ;; a segment leaving the tail, else one arriving at the head
-         (setq rest  (paddle--take segs tail)
+         (setq rest  (mohamaddle--take segs tail)
                found (car rest)
                rest  (cadr rest))
          (cond
@@ -406,11 +424,11 @@
                         tail  (cadr found)
                         segs  rest))
            (T
-            (setq rest  (paddle--take segs head)
+            (setq rest  (mohamaddle--take segs head)
                   found (car rest)
                   rest  (cadr rest))
             (if found
-                (setq found (paddle--revseg found) ; turned to arrive at head
+                (setq found (mohamaddle--revseg found) ; turned to arrive at head
                       chain (cons found chain)
                       head  (car found)
                       segs  rest)
@@ -421,9 +439,9 @@
 ;; ------------------------ feature detection ------------------------
 ;; Returns a list of pads: (center rotation kind), kind = "corner"/"arc".
 ;; PADSIZE sets the pad-grid pitch used to cover concave arcs.
-(defun paddle--features (vts padsize / s n i a b c blg pads din dout turn
-                             seg theta r cen sa sgn sweep)
-  (setq s (if (< (paddle--area vts) 0.0) -1 1) ; -1 = clockwise
+(defun mohamaddle--features (vts padsize / s n i a b c blg pads din dout turn
+                                 seg theta r cen sa sgn sweep)
+  (setq s (if (< (mohamaddle--area vts) 0.0) -1 1) ; -1 = clockwise
         n (length vts)
         i 0)
   (repeat n
@@ -433,34 +451,34 @@
           blg (caddr a))
 
     ;; --- concave vertex (inside corner) at a, between seg i-1 and i ---
-    (setq din  (paddle--tan-end (paddle--2d c) (paddle--2d a) (caddr c))
-          dout (paddle--tan-start (paddle--2d a) (paddle--2d b) blg))
+    (setq din  (mohamaddle--tan-end (mohamaddle--2d c) (mohamaddle--2d a) (caddr c))
+          dout (mohamaddle--tan-start (mohamaddle--2d a) (mohamaddle--2d b) blg))
     (if (and din dout)
         (progn
-          (setq turn (atan (paddle--cross din dout) (paddle--dot din dout)))
-          (if (< (* s turn) (- *paddle-cornertol*)) ; turns away from
-                                                    ; the interior by
-                                                    ; more than 30 deg
-              (setq pads (cons (list (paddle--2d a) (angle '(0.0 0.0) din) "corner")
+          (setq turn (atan (mohamaddle--cross din dout) (mohamaddle--dot din dout)))
+          (if (< (* s turn) (- *mohamaddle-cornertol*)) ; turns away from
+                                                        ; the interior by
+                                                        ; more than 30 deg
+              (setq pads (cons (list (mohamaddle--2d a) (angle '(0.0 0.0) din) "corner")
                                pads)))))
 
-    ;; --- concave arc segment with radius <= 4'-6" ---
+    ;; --- concave arc segment with radius <= 4'-0" ---
     (if (and (/= blg 0.0)
              (< (* s blg) 0.0)) ; bulges into the interior
         (progn
-          (setq seg   (paddle--arcdata (paddle--2d a) (paddle--2d b) blg)
+          (setq seg   (mohamaddle--arcdata (mohamaddle--2d a) (mohamaddle--2d b) blg)
                 theta (car seg)
                 r     (cadr seg)
                 cen   (caddr seg))
-          (if (and (<= r (+ *paddle-maxrad* 1e-6))
-                   (> (abs theta) *paddle-arctol*)) ; total bend over 10
-                                                   ; deg, else it's a
-                                                   ; semi-straight line
+          (if (and (<= r (+ *mohamaddle-maxrad* 1e-6))
+                   (> (abs theta) *mohamaddle-arctol*)) ; total bend over 10
+                                                       ; deg, else it's a
+                                                       ; semi-straight line
               (progn
-                (setq sa    (angle cen (paddle--2d a))
+                (setq sa    (angle cen (mohamaddle--2d a))
                       sgn   (if (> theta 0.0) 1.0 -1.0)
                       sweep (abs theta))
-                (foreach ctr (paddle--arc-pads cen r sa sgn sweep padsize)
+                (foreach ctr (mohamaddle--arc-pads cen r sa sgn sweep padsize)
                   (setq pads (cons (list ctr 0.0 "arc") pads)))))))
     (setq i (1+ i)))
   (reverse pads))
@@ -477,14 +495,14 @@
 ;; clear flush spot within half a pad of where it wanted to be -- is
 ;; dropped: its area is covered by the neighbours it kept hitting.
 ;; Returns the committed pads, corner pads first.
-(defun paddle--dodge (pads padsize / out ctr orig tries done hit d ax sgn)
+(defun mohamaddle--dodge (pads padsize / out ctr orig tries done hit d ax sgn)
   (foreach pad pads ; sharp points first: exact centers, never slid
     (if (= (caddr pad) "corner")
         (progn
           (setq hit nil)
           (foreach q out
             (if (and (not hit)
-                     (< (paddle--cheb (paddle--sub (car pad) (car q)))
+                     (< (mohamaddle--cheb (mohamaddle--sub (car pad) (car q)))
                         (- padsize 1e-6)))
                 (setq hit T)))
           (if (not hit) (setq out (cons pad out))))))
@@ -499,19 +517,19 @@
             (setq hit nil)
             (foreach q out
               (if (and (not hit)
-                       (< (paddle--cheb (paddle--sub ctr (car q)))
+                       (< (mohamaddle--cheb (mohamaddle--sub ctr (car q)))
                           (- padsize 1e-6)))
                   (setq hit (car q))))
             (cond
               ((not hit) ; clear: commit it here
                (setq out  (cons (list ctr (cadr pad) (caddr pad)) out)
                      done T))
-              ((or (< (paddle--cheb (paddle--sub ctr hit)) (/ padsize 2.0))
+              ((or (< (mohamaddle--cheb (mohamaddle--sub ctr hit)) (/ padsize 2.0))
                    (> tries 6)
-                   (> (paddle--cheb (paddle--sub ctr orig)) (/ padsize 2.0)))
+                   (> (mohamaddle--cheb (mohamaddle--sub ctr orig)) (/ padsize 2.0)))
                (setq done T)) ; already covered there, or stuck: drop it
               (T ; slide along the more-separated axis until flush
-               (setq d   (paddle--sub ctr hit)
+               (setq d   (mohamaddle--sub ctr hit)
                      ax  (if (>= (abs (car d)) (abs (cadr d))) 0 1)
                      sgn (if (< (nth ax d) 0.0) -1.0 1.0))
                (setq ctr (if (= ax 0)
@@ -523,18 +541,18 @@
 ;; ------------------------- block handling --------------------------
 ;; Make sure block NAME (a SIZE-inch pad) is defined in the drawing.
 ;; Returns T.
-(defun paddle--ensure-block (doc name size / path oldcmd oldatt tmpname)
+(defun mohamaddle--ensure-block (doc name size / path oldcmd oldatt tmpname)
   (cond
     ((tblsearch "BLOCK" name) T)
     ;; pull the definitions in from the pad dwg if it can be found --
     ;; inserting the file (under a throwaway name, then cancelling)
     ;; imports every block definition it contains
-    ((setq path (findfile *paddle-blkfile*))
+    ((setq path (findfile *mohamaddle-blkfile*))
      (setq oldcmd (getvar "CMDECHO") oldatt (getvar "ATTREQ")
-           tmpname "PADDLE-TEMP-IMPORT")
+           tmpname "MOHAMADDLE-TEMP-IMPORT")
      (setvar "CMDECHO" 0) (setvar "ATTREQ" 0)
      ;; the restore below must run even if the insert throws: oldcmd
-     ;; and oldatt are locals of THIS helper, so c:PADDLE's *error*
+     ;; and oldatt are locals of THIS helper, so c:MOHAMADDLE's *error*
      ;; handler cannot put them back and the user would be left with
      ;; no command echo and no attribute prompts
      (vl-catch-all-apply
@@ -546,11 +564,11 @@
        '(lambda () (vla-Delete (vla-Item (vla-get-Blocks doc) tmpname))) '())
      (if (tblsearch "BLOCK" name)
          T
-         (paddle--make-fallback-block name size)))
-    (T (paddle--make-fallback-block name size))))
+         (mohamaddle--make-fallback-block name size)))
+    (T (mohamaddle--make-fallback-block name size))))
 
 ;; Last-resort pad: a plain size x size square block, base at center.
-(defun paddle--make-fallback-block (name size / h)
+(defun mohamaddle--make-fallback-block (name size / h)
   (setq h (/ size 2.0))
   (entmake (list '(0 . "BLOCK") (cons 2 name)
                  '(10 0.0 0.0 0.0) '(70 . 0)))
@@ -559,14 +577,14 @@
                  (list 10 (- h) (- h)) (list 10 h (- h))
                  (list 10 h h) (list 10 (- h) h)))
   (entmake '((0 . "ENDBLK")))
-  (princ (strcat "\nPADDLE: block \"" name "\" not found; created a plain "
+  (princ (strcat "\nMOHAMADDLE: block \"" name "\" not found; created a plain "
                  (rtos size 2 0) "x" (rtos size 2 0) " square block instead."))
   (tblsearch "BLOCK" name))
 
 ;; Offset from the block's insertion point to the center of its extents
 ;; (measured at 0 rotation), so pads land centered no matter where the
 ;; block's base point was drawn.
-(defun paddle--block-delta (space name / tmp mn mx d)
+(defun mohamaddle--block-delta (space name / tmp mn mx d)
   (setq tmp (vla-InsertBlock space (vlax-3d-point 0.0 0.0 0.0)
                              name 1.0 1.0 1.0 0.0))
   (vla-GetBoundingBox tmp 'mn 'mx)
@@ -580,7 +598,7 @@
 ;; Create the pad layer, or - when it already exists - un-freeze,
 ;; unlock and switch it back on and say so.  Symbol-table (DXF) level,
 ;; so it needs no document object.
-(defun paddle--ensure-layer (name color / rec ed flags col fixed)
+(defun mohamaddle--ensure-layer (name color / rec ed flags col fixed)
   (if (not (tblsearch "LAYER" name))
     (entmakex (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                     '(100 . "AcDbLayerTableRecord")
@@ -608,14 +626,14 @@
   name)
 
 ;; Insert one pad so that its extents are centered on CTR. Pads stay
-;; parallel to the X/Y axes unless *paddle-align* is set.
-(defun paddle--insert-pad (space name ctr rot delta / ip obj)
-  (if (not *paddle-align*) (setq rot 0.0))
-  (setq ip  (paddle--sub ctr (paddle--rot delta rot))
+;; parallel to the X/Y axes unless *mohamaddle-align* is set.
+(defun mohamaddle--insert-pad (space name ctr rot delta / ip obj)
+  (if (not *mohamaddle-align*) (setq rot 0.0))
+  (setq ip  (mohamaddle--sub ctr (mohamaddle--rot delta rot))
         obj (vla-InsertBlock space
               (vlax-3d-point (car ip) (cadr ip) 0.0)
               name 1.0 1.0 1.0 rot))
-  (vla-put-Layer obj *paddle-layer*)
+  (vla-put-Layer obj *mohamaddle-layer*)
   obj)
 
 ;; Loops that enclose no area - two lines lying on top of each other,
@@ -625,35 +643,35 @@
 ;; called an inside corner on the strength of a -0.0.  Returns LOOPS
 ;; without them.  (Auto-detect never picks one, since it keeps the
 ;; largest area; an explicit selection would have padded it.)
-(defun paddle--solid-loops (loops)
-  (vl-remove-if '(lambda (l) (< (abs (paddle--area l)) 1e-6)) loops))
+(defun mohamaddle--solid-loops (loops)
+  (vl-remove-if '(lambda (l) (< (abs (mohamaddle--area l)) 1e-6)) loops))
 
 ;; ============= a perimeter that nearly closes =======================
 ;; A drawing says "closed perimeter" long before it is one: two walls
 ;; that overshoot each other by an inch, a polyline that stops a hair
 ;; short of its own start, a fillet somebody erased and never redrew.
-;; PADDLE chains everything that touches, so what is left over is a set
+;; MOHAMADDLE chains everything that touches, so what is left over is a set
 ;; of OPEN chains -- and when those chains and the gaps between them go
 ;; round once and arrive back where they started, the drawing WAS one
 ;; closed perimeter with holes punched in it.  This section finds that
-;; ring and marks every hole with an arrow; c:PADDLE offers the zero
+;; ring and marks every hole with an arrow; c:MOHAMADDLE offers the zero
 ;; fillet that closes one.
 
 ;; The point at U along segment S -- 0 at the start, 1 at the end, the
 ;; arc followed round when there is one.
-(defun paddle--segpt (s u / a b blg seg cen)
+(defun mohamaddle--segpt (s u / a b blg seg cen)
   (setq a   (car s)
         b   (cadr s)
         blg (caddr s))
   (if (= blg 0.0)
-      (paddle--add a (paddle--scl (paddle--sub b a) u))
+      (mohamaddle--add a (mohamaddle--scl (mohamaddle--sub b a) u))
       (progn
-        (setq seg (paddle--arcdata a b blg)
+        (setq seg (mohamaddle--arcdata a b blg)
               cen (caddr seg))
-        (paddle--arcpt cen (cadr seg) (+ (angle cen a) (* (car seg) u))))))
+        (mohamaddle--arcpt cen (cadr seg) (+ (angle cen a) (* (car seg) u))))))
 
 ;; A 2D point as the 3D one (command ...) and trans want.
-(defun paddle--3d (p) (list (car p) (cadr p) 0.0))
+(defun mohamaddle--3d (p) (list (car p) (cadr p) 0.0))
 
 ;; Where the FILLET pick goes on an end segment, as a fraction of it
 ;; measured FROM the loose end: nine tenths of the way in, right up by
@@ -679,39 +697,39 @@
 ;; one the end sits on, turned so that it always runs FROM the loose
 ;; end into the chain -- which makes the pick one rule for both, and
 ;; gives the gap the two lines it has to cross.
-(defun paddle--ends (chain i / sf sl)
+(defun mohamaddle--ends (chain i / sf sl)
   (setq sf (car chain)                          ; the head's segment runs
-        sl (paddle--revseg (last chain)))       ; in; the tail's is turned
+        sl (mohamaddle--revseg (last chain)))       ; in; the tail's is turned
                                                 ; round so that it does too
-  (list (list (car sf) (cadddr sf) (paddle--segpt sf 0.9) i 0 sf)
-        (list (car sl) (cadddr sl) (paddle--segpt sl 0.9) i 1 sl)))
+  (list (list (car sf) (cadddr sf) (mohamaddle--segpt sf 0.9) i 0 sf)
+        (list (car sl) (cadddr sl) (mohamaddle--segpt sl 0.9) i 1 sl)))
 
-;; One number per loose end, and its index in paddle--endlist's answer,
+;; One number per loose end, and its index in mohamaddle--endlist's answer,
 ;; so a pair, a partner and a visited mark are all comparable as
 ;; numbers rather than as the lists they name.
-(defun paddle--endkey (e) (+ (* 2 (nth 3 e)) (nth 4 e)))
+(defun mohamaddle--endkey (e) (+ (* 2 (nth 3 e)) (nth 4 e)))
 
 ;; Every loose end in OPENS, in chain order -- so (nth key ends) finds
 ;; one again from its key.
-(defun paddle--endlist (opens / out i c)
+(defun mohamaddle--endlist (opens / out i c)
   (setq i 0)
   (foreach c opens
-    (setq out (append out (paddle--ends c i))
+    (setq out (append out (mohamaddle--ends c i))
           i   (1+ i)))
   out)
 
 ;; Pair the loose ends off, closest first: a gap is two ends that want
-;; to be one point.  Ends further apart than *paddle-gapmax* are left
+;; to be one point.  Ends further apart than *mohamaddle-gapmax* are left
 ;; unpaired -- that is a missing wall, not a gap -- ends closer
-;; together than *paddle-fuzz* are already chained and are not a gap
+;; together than *mohamaddle-fuzz* are already chained and are not a gap
 ;; either, and an end already spoken for cannot be paired twice.  What
 ;; comes back is a set of disjoint pairs, each (end-a end-b distance).
-(defun paddle--pairs (ends / cand taken out best a b d p)
+(defun mohamaddle--pairs (ends / cand taken out best a b d p)
   (foreach a ends
     (foreach b ends
-      (if (and (< (paddle--endkey a) (paddle--endkey b)) ; each pair once
-               (> (setq d (distance (car a) (car b))) *paddle-fuzz*)
-               (<= d *paddle-gapmax*))
+      (if (and (< (mohamaddle--endkey a) (mohamaddle--endkey b)) ; each pair once
+               (> (setq d (distance (car a) (car b))) *mohamaddle-fuzz*)
+               (<= d *mohamaddle-gapmax*))
           (setq cand (cons (list d a b) cand)))))
   ;; then take them closest first.  The pick is a scan rather than a
   ;; vl-sort because vl-sort DROPS an element that compares equal to
@@ -723,31 +741,31 @@
   (repeat (length cand)
     (setq best nil)
     (foreach p cand
-      (if (and (not (member (paddle--endkey (cadr p)) taken))
-               (not (member (paddle--endkey (caddr p)) taken))
+      (if (and (not (member (mohamaddle--endkey (cadr p)) taken))
+               (not (member (mohamaddle--endkey (caddr p)) taken))
                (or (null best) (< (car p) (car best))))
           (setq best p)))
     (if best
         (setq a     (cadr best)
               b     (caddr best)
-              taken (cons (paddle--endkey a) (cons (paddle--endkey b) taken))
+              taken (cons (mohamaddle--endkey a) (cons (mohamaddle--endkey b) taken))
               out   (cons (list a b (car best)) out))))
   (reverse out))
 
 ;; The end paired with E, or nil.
-(defun paddle--partner (e pairs / k out p)
-  (setq k (paddle--endkey e))
+(defun mohamaddle--partner (e pairs / k out p)
+  (setq k (mohamaddle--endkey e))
   (foreach p pairs
     (cond
-      ((= k (paddle--endkey (car p)))  (setq out (cadr p)))
-      ((= k (paddle--endkey (cadr p))) (setq out (car p)))))
+      ((= k (mohamaddle--endkey (car p)))  (setq out (cadr p)))
+      ((= k (mohamaddle--endkey (cadr p))) (setq out (car p)))))
   out)
 
 ;; One gap: the two ends that want to be one point, and how far apart
 ;; they are -- the number the drafter is told before being asked about
 ;; it, because an eighth of an inch and a foot are not the same
 ;; question even though they read the same on screen.
-(defun paddle--gap (a b)
+(defun mohamaddle--gap (a b)
   (list a b (distance (car a) (car b))))
 
 ;; Walk the ring that leaves chain START by its tail: across the gap
@@ -759,22 +777,22 @@
 ;; in walk order, and the gaps as the (end end) pairs it crossed.  nil
 ;; when the walk meets a loose end nothing wants, or a chain it has
 ;; already walked -- a knot, not a ring.
-(defun paddle--ring (start ends pairs / here goal chains gaps nxt ci ok done)
+(defun mohamaddle--ring (start ends pairs / here goal chains gaps nxt ci ok done)
   (setq goal   (* 2 start)                   ; the head of START again
         here   (nth (1+ (* 2 start)) ends)   ; leaving START by its tail
         chains (list (cons start 0))
         ok     nil
         done   nil)
   (while (not done)
-    (setq nxt (paddle--partner here pairs))
+    (setq nxt (mohamaddle--partner here pairs))
     (cond
       ((null nxt) (setq done T))                 ; a loose end: no ring
-      ((= (paddle--endkey nxt) goal)             ; home: the ring closes
-       (setq gaps (cons (paddle--gap here nxt) gaps)
+      ((= (mohamaddle--endkey nxt) goal)             ; home: the ring closes
+       (setq gaps (cons (mohamaddle--gap here nxt) gaps)
              ok   T
              done T))
       ((assoc (nth 3 nxt) chains) (setq done T)) ; a chain walked twice
-      (T (setq gaps   (cons (paddle--gap here nxt) gaps)
+      (T (setq gaps   (cons (mohamaddle--gap here nxt) gaps)
                ci     (nth 3 nxt)
                chains (cons (cons ci (nth 4 nxt)) chains)
                here   (nth (+ (* 2 ci) (- 1 (nth 4 nxt))) ends)))))
@@ -785,11 +803,11 @@
 ;; in by its tail, and each gap left as the straight closing segment it
 ;; is about to become.  Enough to measure the area it encloses and find
 ;; the middle of it, which is all the ring is read for.
-(defun paddle--ring-vts (opens chains / out c segs s end)
+(defun mohamaddle--ring-vts (opens chains / out c segs s end)
   (foreach c chains
     (setq segs (nth (car c) opens))
     (if (= (cdr c) 1)
-        (setq segs (reverse (mapcar '(lambda (s) (paddle--revseg s)) segs))))
+        (setq segs (reverse (mapcar '(lambda (s) (mohamaddle--revseg s)) segs))))
     (foreach s segs
       (setq out (cons (list (car (car s)) (cadr (car s)) (caddr s)) out)))
     ;; and the loose end the chain stops at.  A vertex carries the
@@ -802,30 +820,30 @@
   (reverse out))
 
 ;; The biggest of a set of closed loops by the area it encloses -- what
-;; a ring of open chains has to beat before PADDLE reads it as the
+;; a ring of open chains has to beat before MOHAMADDLE reads it as the
 ;; perimeter rather than as something loose beside one.
-(defun paddle--maxarea (loops / best a l)
+(defun mohamaddle--maxarea (loops / best a l)
   (setq best 0.0)
   (foreach l loops
-    (if (> (setq a (abs (paddle--area l))) best) (setq best a)))
+    (if (> (setq a (abs (mohamaddle--area l))) best) (setq best a)))
   best)
 
 ;; The ring the open chains make, or the biggest of them when they make
 ;; more than one -- the same rule auto-detect uses to pick between
 ;; closed loops.  A ring enclosing no area (chains doubling back on
 ;; each other) is not one.  Returns (vts chains gaps area).
-(defun paddle--best-ring (opens / ends pairs i seen r vts a best bestarea)
-  (setq ends     (paddle--endlist opens)
-        pairs    (paddle--pairs ends)
+(defun mohamaddle--best-ring (opens / ends pairs i seen r vts a best bestarea)
+  (setq ends     (mohamaddle--endlist opens)
+        pairs    (mohamaddle--pairs ends)
         i        0
         bestarea 0.0)
   (repeat (length opens)
     (if (not (member i seen))
-        (if (setq r (paddle--ring i ends pairs))
+        (if (setq r (mohamaddle--ring i ends pairs))
             (progn
               (setq seen (append seen (mapcar '(lambda (c) (car c)) (car r)))
-                    vts  (paddle--ring-vts opens (car r))
-                    a    (abs (paddle--area vts)))
+                    vts  (mohamaddle--ring-vts opens (car r))
+                    a    (abs (mohamaddle--area vts)))
               (if (> a bestarea)
                   (setq bestarea a
                         best     (list vts (car r) (cadr r) a))))))
@@ -834,14 +852,14 @@
 
 ;; Where two straight segments would cross if both ran on for ever --
 ;; the point a zero fillet joins them at -- or nil when they never do.
-(defun paddle--xsect (s1 s2 / a u c v den)
+(defun mohamaddle--xsect (s1 s2 / a u c v den)
   (setq a   (car s1)
-        u   (paddle--sub (cadr s1) a)
+        u   (mohamaddle--sub (cadr s1) a)
         c   (car s2)
-        v   (paddle--sub (cadr s2) c)
-        den (paddle--cross u v))
+        v   (mohamaddle--sub (cadr s2) c)
+        den (mohamaddle--cross u v))
   (if (> (abs den) 1e-9)
-      (paddle--add a (paddle--scl u (/ (paddle--cross (paddle--sub c a) v)
+      (mohamaddle--add a (mohamaddle--scl u (/ (mohamaddle--cross (mohamaddle--sub c a) v)
                                        den)))))
 
 ;; Is this gap the two ends of ONE open LWPOLYLINE, straight at both of
@@ -849,10 +867,10 @@
 ;; closed, and it is the one gap FILLET must not be asked to close: two
 ;; picks on one polyline joins those two segments and throws away every
 ;; segment between them, which here is the whole perimeter.  It is
-;; closed by editing the polyline instead (paddle--lwclose), so this
+;; closed by editing the polyline instead (mohamaddle--lwclose), so this
 ;; asks everything that edit needs to be safe -- one entity, its own
 ;; two ends, open, straight where it is being joined.
-(defun paddle--lwgap-p (g / a b ent cv vts p q)
+(defun mohamaddle--lwgap-p (g / a b ent cv vts p q)
   (setq a   (car g)
         b   (cadr g)
         ent (cadr a))
@@ -860,17 +878,17 @@
        (= "LWPOLYLINE" (cdr (assoc 0 (entget ent))))
        (= 0.0 (caddr (nth 5 a)))               ; straight at both ends
        (= 0.0 (caddr (nth 5 b)))
-       (setq cv (paddle--lwverts ent))
+       (setq cv (mohamaddle--lwverts ent))
        (not (car cv))                          ; and not closed already
        (> (length (cdr cv)) 2)
        (setq vts (cdr cv)
-             p   (paddle--2d (car vts))
-             q   (paddle--2d (last vts)))
+             p   (mohamaddle--2d (car vts))
+             q   (mohamaddle--2d (last vts)))
        ;; the polyline's OWN two ends, and nothing else's
-       (or (and (<= (distance p (car a)) *paddle-fuzz*)
-                (<= (distance q (car b)) *paddle-fuzz*))
-           (and (<= (distance p (car b)) *paddle-fuzz*)
-                (<= (distance q (car a)) *paddle-fuzz*)))))
+       (or (and (<= (distance p (car a)) *mohamaddle-fuzz*)
+                (<= (distance q (car b)) *mohamaddle-fuzz*))
+           (and (<= (distance p (car b)) *mohamaddle-fuzz*)
+                (<= (distance q (car a)) *mohamaddle-fuzz*)))))
 
 ;; Close that polyline onto itself at X: its first vertex moves to the
 ;; crossing, its last one goes (it is the same point now, reached the
@@ -880,7 +898,7 @@
 ;; because FILLET cannot be asked for it.  Every group that is not a
 ;; vertex is carried over untouched, and so is each vertex's own width
 ;; and bulge.  Returns T.
-(defun paddle--lwclose (ent x / ed g chunks cur head tail)
+(defun mohamaddle--lwclose (ent x / ed g chunks cur head tail)
   (setq ed (entget ent))
   (foreach g ed
     (cond
@@ -909,12 +927,12 @@
 
 ;; Where a gap is: halfway between the two ends that want to be one
 ;; point, which is where the arrow points and where the fillet lands.
-(defun paddle--gap-mid (g)
-  (paddle--scl (paddle--add (car (car g)) (car (cadr g))) 0.5))
+(defun mohamaddle--gap-mid (g)
+  (mohamaddle--scl (mohamaddle--add (car (car g)) (car (cadr g))) 0.5))
 
 ;; The middle of a vertex list, near enough for "which side is the
 ;; inside of the loop": the arrow flies in from the other one.
-(defun paddle--centroid (vts / n)
+(defun mohamaddle--centroid (vts / n)
   (setq n (float (length vts)))
   (list (/ (apply '+ (mapcar '(lambda (v) (car v)) vts)) n)
         (/ (apply '+ (mapcar '(lambda (v) (cadr v)) vts)) n)))
@@ -924,33 +942,33 @@
 ;; points at the joint from clear space instead of across the drawing.
 ;; One entity, so taking it away again when the gap closes is one
 ;; entdel.  Returns it.
-(defun paddle--arrow (tip dir lay / l h w sh nrm head back pts)
-  (setq l    *paddle-arrow*
+(defun mohamaddle--arrow (tip dir lay / l h w sh nrm head back pts)
+  (setq l    *mohamaddle-arrow*
         h    (/ l 3.0)      ; head length
         w    (/ l 8.0)      ; half the head's width
         sh   (/ l 24.0)     ; half the shaft's width
         nrm  (list (- (cadr dir)) (car dir))
-        head (paddle--sub tip (paddle--scl dir h))
-        back (paddle--sub tip (paddle--scl dir l))
+        head (mohamaddle--sub tip (mohamaddle--scl dir h))
+        back (mohamaddle--sub tip (mohamaddle--scl dir l))
         pts  (list tip
-                   (paddle--add head (paddle--scl nrm w))
-                   (paddle--add head (paddle--scl nrm sh))
-                   (paddle--add back (paddle--scl nrm sh))
-                   (paddle--sub back (paddle--scl nrm sh))
-                   (paddle--sub head (paddle--scl nrm sh))
-                   (paddle--sub head (paddle--scl nrm w))))
+                   (mohamaddle--add head (mohamaddle--scl nrm w))
+                   (mohamaddle--add head (mohamaddle--scl nrm sh))
+                   (mohamaddle--add back (mohamaddle--scl nrm sh))
+                   (mohamaddle--sub back (mohamaddle--scl nrm sh))
+                   (mohamaddle--sub head (mohamaddle--scl nrm sh))
+                   (mohamaddle--sub head (mohamaddle--scl nrm w))))
   (entmake (append (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") (cons 8 lay)
                          '(100 . "AcDbPolyline") (cons 90 (length pts)) '(70 . 1))
                    (mapcar '(lambda (p) (list 10 (car p) (cadr p))) pts)))
   (entlast))
 
-;; PADDLE's own marks and nobody else's: every run clears the gap layer
+;; the pad tools' own marks and nobody else's: every run clears the gap layer
 ;; and re-marks whatever is still open, so an arrow does not outlive
 ;; the gap it pointed at when the drafter closes one by hand.  Returns
 ;; how many it took away.
-(defun paddle--clear-arrows ( / ss i n)
+(defun mohamaddle--clear-arrows ( / ss i n)
   (setq n 0)
-  (if (setq ss (ssget "_X" (list (cons 8 *paddle-gap-layer*)
+  (if (setq ss (ssget "_X" (list (cons 8 *mohamaddle-gap-layer*)
                                  (cons 410 (getvar "CTAB")))))
       (progn
         (setq i 0)
@@ -961,20 +979,20 @@
   n)
 
 ;; Close one gap the way a drafter would: FILLET at radius 0, picked on
-;; each end segment up by the end of it that stays (paddle--ends).  Whether it took is read
+;; each end segment up by the end of it that stays (mohamaddle--ends).  Whether it took is read
 ;; back off the drawing afterwards rather than promised here -- FILLET
 ;; refuses a pair it cannot join (two ends that are parallel however
 ;; far they run on, two segments of one entity it will not close), and
 ;; a tool that says "if you say so" and then LOOKS is a tool that
 ;; cannot be wrong about it.
-(defun paddle--dofillet (g / a b guard)
+(defun mohamaddle--dofillet (g / a b guard)
   (setq a (car g)
         b (cadr g))
   (setvar "FILLETRAD" 0.0)
   (setvar "TRIMMODE" 1)
   (command "_.FILLET"
-           (list (cadr a) (trans (paddle--3d (caddr a)) 0 1))
-           (list (cadr b) (trans (paddle--3d (caddr b)) 0 1)))
+           (list (cadr a) (trans (mohamaddle--3d (caddr a)) 0 1))
+           (list (cadr b) (trans (mohamaddle--3d (caddr b)) 0 1)))
   ;; a FILLET that refused a pick is still asking: cancel it here, where
   ;; the refusal costs one message, rather than letting the next command
   ;; answer it
@@ -986,16 +1004,16 @@
 ;; Is there still a loose end where this gap was?  A zero fillet that
 ;; took leaves none -- the two ends are one point now, and one point
 ;; chains -- and one AutoCAD refused leaves both of them exactly where
-;; the arrow is pointing.  Read over *paddle-gapmax* of the gap's
+;; the arrow is pointing.  Read over *mohamaddle-gapmax* of the gap's
 ;; middle rather than at the ends themselves, because a fillet MOVES
 ;; the ends it joins and the points the gap was measured between are
 ;; not where they are afterwards.
-(defun paddle--still-open-p (mid opens / open i c e)
+(defun mohamaddle--still-open-p (mid opens / open i c e)
   (setq open nil
         i    0)
   (foreach c opens
-    (foreach e (paddle--ends c i)
-      (if (<= (distance (car e) mid) *paddle-gapmax*) (setq open T)))
+    (foreach e (mohamaddle--ends c i)
+      (if (<= (distance (car e) mid) *mohamaddle-gapmax*) (setq open T)))
     (setq i (1+ i)))
   open)
 
@@ -1005,9 +1023,9 @@
 ;; open chains that would not close, as segments.  Auto-detect keeps
 ;; only the largest loop.  Every segment carries the entity it came off
 ;; so the gap pass can hand two of them to FILLET, and entities on the
-;; gap layer are skipped -- those are PADDLE's own arrows, and a run
+;; gap layer are skipped -- those are the pad tools' own arrows, and a run
 ;; that read its own marks back as geometry would pad them.
-(defun paddle--perimeters (ss / auto i en ed segs res loops opens nflat best
+(defun mohamaddle--perimeters (ss / auto i en ed segs res loops opens nflat best
                               bestarea a l)
   (setq auto (not ss))
   (if auto
@@ -1023,36 +1041,37 @@
           ;; same set is read again after the gap pass has filleted
           (if (and (setq ed (entget en))
                    (/= (strcase (cdr (assoc 8 ed)))
-                       (strcase *paddle-gap-layer*)))
+                       (strcase *mohamaddle-gap-layer*)))
               (setq segs (append segs
                                  (mapcar '(lambda (s) (append s (list en)))
-                                         (paddle--ent-segs en))))))
-        (setq res   (paddle--chain segs)
-              loops (paddle--solid-loops (car res))
+                                         (mohamaddle--ent-segs en))))))
+        (setq res   (mohamaddle--chain segs)
+              loops (mohamaddle--solid-loops (car res))
               nflat (- (length (car res)) (length loops))
               opens (cadr res))
         (if (> nflat 0)
-            (princ (strcat "\nPADDLE: ignored " (itoa nflat)
+            (princ (strcat "\nMOHAMADDLE: ignored " (itoa nflat)
                            " closed loop(s) that enclose no area"
                            " (lines doubling back on themselves).")))
         (if auto
             (progn ; keep only the biggest closed loop
               (setq bestarea 0.0)
               (foreach l loops
-                (setq a (abs (paddle--area l)))
+                (setq a (abs (mohamaddle--area l)))
                 (if (> a bestarea) (setq bestarea a best l)))
               (setq loops nil)
               (if best
                   (progn
-                    (princ "\nPADDLE: auto-detected the largest closed loop as the perimeter.")
+                    (princ "\nMOHAMADDLE: auto-detected the largest closed loop as the perimeter.")
                     (setq loops (list best))))))
         (list loops opens))))
 
 ;; ---------------------------- command ------------------------------
-(defun c:PADDLE (/ *error* doc space mark-open padsize blkname ss res perims
-                   opens vts allpads delta ndodge ncorner narc ofrad otrim
-                   oecho ring gaps ngap nring nopen marks mk g mid ctr ans
-                   xsc tried nyes nclosed nrefused nleft pad)
+(defun c:MOHAMADDLE (/ *error* doc space mark-open sizekw picked padsize
+                       blkname ss res perims opens vts allpads delta ndodge
+                       ncorner narc ofrad otrim oecho ring gaps ngap nring
+                       nopen marks mk g mid ctr ans xsc tried nyes nclosed
+                       nrefused nleft pad)
   (defun *error* (msg)
     ;; the sysvars the gap pass borrows go back FIRST.  A setvar cannot
     ;; throw and everything below it can, and an error raised inside
@@ -1062,33 +1081,38 @@
     (if ofrad (setvar "FILLETRAD" ofrad))
     (if otrim (setvar "TRIMMODE" otrim))
     (if oecho (setvar "CMDECHO" oecho))
-    ;; close only the mark THIS run opened: an Esc at the perimeter
-    ;; prompt comes before StartUndoMark, and closing a mark nothing
-    ;; opened throws -- from inside the handler, where nothing catches
-    ;; it.  command-s style: the close itself goes through
+    ;; close only the mark THIS run opened: an Esc at the size or
+    ;; perimeter prompt comes before StartUndoMark, and closing a mark
+    ;; nothing opened throws -- from inside the handler, where nothing
+    ;; catches it.  command-s style: the close itself goes through
     ;; vl-catch-all-apply so it can never be the second error.
     (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-        (princ (strcat "\nPADDLE error: " msg)))
-    (if lzd:report (lzd:report "PADDLE" *paddle-version* msg))
+        (princ (strcat "\nMOHAMADDLE error: " msg)))
+    (if lzd:report (lzd:report "MOHAMADDLE" *mohamaddle-version* msg))
     (princ))
-  (if lzd:begin (lzd:begin "PADDLE" *paddle-version*))
+  (if lzd:begin (lzd:begin "MOHAMADDLE" *mohamaddle-version*))
 
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
         space (vla-get-Block (vla-get-ActiveLayout doc)))
 
-  (princ (strcat "\nPADDLE " *paddle-version*))
-  (princ (strcat "\nPADDLE - " (paddle--in *paddle-padsize*)
+  (princ (strcat "\nMOHAMADDLE " *mohamaddle-version*))
+
+  ;; ask which size to place -- see mohamaddle--asksize above for why
+  ;; this one prompt is allowed to offer no Back
+  (setq sizekw  (mohamaddle--asksize *mohamaddle-defaultkw*)
+        picked  (assoc sizekw *mohamaddle-sizes*)
+        blkname (cadr picked)
+        padsize (caddr picked))
+  (setq *mohamaddle-defaultkw* sizekw) ; remember the pick for next time
+
+  (princ (strcat "\nMOHAMADDLE - " (mohamaddle--in padsize)
                  " pads at concave perimeter features (R <= "
-                 (rtos *paddle-maxrad* 4 0) " and inside corners)."))
+                 (rtos *mohamaddle-maxrad* 4 0) " and inside corners)."))
 
-  (setq padsize *paddle-padsize*
-        blkname *paddle-blkname*)
-
-  ;; A pickfirst selection is taken as-is.  LINGUTTER hands its freshly
-  ;; drawn perimeter over that way, and a user who highlighted the
-  ;; outline before typing PADDLE meant the same thing.  It matters
+  ;; A pickfirst selection is taken as-is.  A user who highlighted the
+  ;; outline before typing MOHAMADDLE meant the same thing. It matters
   ;; because auto-detect reads the WHOLE drawing for its largest closed
   ;; loop -- being handed the loop beats guessing at it beside a title
   ;; block border.
@@ -1099,16 +1123,15 @@
         (princ "\nSelect perimeter (polylines, lines and arcs) or press Enter to auto-detect: ")
         (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
         (if lzd:watch (lzd:watch ss) ss)))
-
   ;; One undo step covers the lot: the marks this run clears, the arrows
   ;; it draws at whatever is open, the gaps the drafter has it close,
   ;; and the pads that follow.  It opens here rather than at the pads
   ;; because the first thing below already writes to the drawing.
   (vla-StartUndoMark doc)
   (setq mark-open T)
-  (paddle--clear-arrows)
+  (mohamaddle--clear-arrows)
 
-  (setq res    (paddle--perimeters ss)
+  (setq res    (mohamaddle--perimeters ss)
         perims (car res)
         opens  (cadr res)
         nring  0)
@@ -1117,10 +1140,10 @@
   ;; The chains and the gaps between them go round once and come back:
   ;; that is one perimeter with holes in it, not a pile of loose lines.
   ;; It has to enclose more than any loop that DID close, or it is
-  ;; something loose lying beside a perimeter PADDLE already has.
+  ;; something loose lying beside a perimeter MOHAMADDLE already has.
   (if (and opens
-           (setq ring (paddle--best-ring opens))
-           (> (nth 3 ring) (paddle--maxarea perims)))
+           (setq ring (mohamaddle--best-ring opens))
+           (> (nth 3 ring) (mohamaddle--maxarea perims)))
       (setq gaps  (nth 2 ring)
             ngap  (length gaps)
             nring (length (nth 1 ring)))
@@ -1128,31 +1151,31 @@
 
   (setq nopen (- (length opens) nring))
   (if (> nopen 0)
-      (princ (strcat "\nPADDLE: ignored " (itoa nopen)
+      (princ (strcat "\nMOHAMADDLE: ignored " (itoa nopen)
                      " open chain(s) that never close back on themselves"
                      " (check for gaps; chaining tolerance is "
-                     (rtos *paddle-fuzz* 2 2) ").")))
+                     (rtos *mohamaddle-fuzz* 2 2) ").")))
 
   (if ring
       (progn
-        (paddle--ensure-layer *paddle-gap-layer* *paddle-gap-color*)
-        (princ (strcat "\nPADDLE: this reads as one closed perimeter with "
+        (mohamaddle--ensure-layer *mohamaddle-gap-layer* *mohamaddle-gap-color*)
+        (princ (strcat "\nMOHAMADDLE: this reads as one closed perimeter with "
                        (itoa ngap) " gap(s) in it, not as loose geometry."
-                       " Arrow(s) drawn on layer \"" *paddle-gap-layer*
+                       " Arrow(s) drawn on layer \"" *mohamaddle-gap-layer*
                        "\" at the open joint(s)."))
         ;; every arrow goes in BEFORE the first question: a drafter who
         ;; answers No, or presses Esc at one, is left looking at the
         ;; whole picture rather than at the one gap that got as far as
         ;; being asked about
-        (setq ctr (paddle--centroid (car ring))) ; the inside of the loop
+        (setq ctr (mohamaddle--centroid (car ring))) ; the inside of the loop
         (foreach g gaps
-          (setq mid   (paddle--gap-mid g)
-                marks (cons (list (paddle--arrow
+          (setq mid   (mohamaddle--gap-mid g)
+                marks (cons (list (mohamaddle--arrow
                                     mid
-                                    (cond ((paddle--unit (paddle--sub ctr mid)))
+                                    (cond ((mohamaddle--unit (mohamaddle--sub ctr mid)))
                                           ('(0.0 1.0))) ; a gap dead on the
                                                         ; middle: any way in
-                                    *paddle-gap-layer*)
+                                    *mohamaddle-gap-layer*)
                                   mid g)
                             marks)))
         (setq marks (reverse marks)
@@ -1166,7 +1189,7 @@
                 g    (caddr mk)
                 mid  (cadr mk))
           (princ (strcat "\n  gap " (itoa ngap) " of " (itoa (length marks))
-                         ": " (paddle--in (caddr g)) " wide, at "
+                         ": " (mohamaddle--in (caddr g)) " wide, at "
                          (rtos (car mid) 2 2) "," (rtos (cadr mid) 2 2)))
           ;; Both loose ends on ONE entity is the polyline somebody
           ;; drew round the pool and never closed.  FILLET must not be
@@ -1178,18 +1201,18 @@
           ;; the fillet would have left.  Anything else on one entity
           ;; (a heavy POLYLINE, an arc at either end, two ends that
           ;; never cross) is marked and named instead.
-          (setq xsc (if (paddle--lwgap-p g)
-                        (paddle--xsect (nth 5 (car g)) (nth 5 (cadr g)))))
+          (setq xsc (if (mohamaddle--lwgap-p g)
+                        (mohamaddle--xsect (nth 5 (car g)) (nth 5 (cadr g)))))
           (if (and (eq (cadr (car g)) (cadr (cadr g))) (not xsc))
               (progn
-                (princ "\n  both ends are on one entity, and PADDLE cannot join it in")
+                (princ "\n  both ends are on one entity, and MOHAMADDLE cannot join it in")
                 (princ "\n  place. A zero fillet there is two picks on one polyline,")
                 (princ "\n  which cuts away everything between them, so it is not")
                 (princ "\n  offered. Close it (PEDIT > Close, or pull the two ends")
-                (princ "\n  together) and run PADDLE again."))
+                (princ "\n  together) and run MOHAMADDLE again."))
               (progn
                 (if xsc
-                    (princ "\n  both ends are on one polyline: PADDLE joins them at the crossing itself."))
+                    (princ "\n  both ends are on one polyline: MOHAMADDLE joins them at the crossing itself."))
                 (initget "Yes No")
                 (setq ans (getkword "\nClose the gap the arrow points at with a zero fillet? [Yes/No] <Yes>: "))
                 (if lzd:ask (lzd:ask "\nClose the gap the arrow points at with a zero fillet? [Yes/No] <Yes>: " ans) ans)
@@ -1198,8 +1221,8 @@
                     (progn
                       (setvar "CMDECHO" 0)
                       (if xsc
-                          (paddle--lwclose (cadr (car g)) xsc)
-                          (paddle--dofillet g))
+                          (mohamaddle--lwclose (cadr (car g)) xsc)
+                          (mohamaddle--dofillet g))
                       (setvar "CMDECHO" oecho)
                       (setq nyes  (1+ nyes)
                             tried (cons (car mk) tried)))))))  ; asked for, and tried
@@ -1209,236 +1232,73 @@
         ;; read the drawing again: a gap that closed is not there to be
         ;; found any more, and what it closed is a perimeter to pad
         (if (> nyes 0)
-            (setq res    (paddle--perimeters ss)
+            (setq res    (mohamaddle--perimeters ss)
                   perims (car res)
                   opens  (cadr res)))
         (foreach mk marks
-          (if (paddle--still-open-p (cadr mk) opens)
+          (if (mohamaddle--still-open-p (cadr mk) opens)
               (if (member (car mk) tried)
                   (setq nrefused (1+ nrefused))
                   (setq nleft (1+ nleft)))
               (progn (entdel (car mk)) ; the arrow has nothing left to
                      (setq nclosed (1+ nclosed))))) ; point at
         (if (> nclosed 0)
-            (princ (strcat "\nPADDLE: " (itoa nclosed)
+            (princ (strcat "\nMOHAMADDLE: " (itoa nclosed)
                            " gap(s) closed with a zero fillet - carrying on"
                            " with what that leaves.")))
         (if (> nrefused 0)
-            (princ (strcat "\nPADDLE: FILLET would not close " (itoa nrefused)
+            (princ (strcat "\nMOHAMADDLE: FILLET would not close " (itoa nrefused)
                            " gap(s) - the two ends do not meet even run on."
                            " Their arrow(s) stay.")))
         (if (> nleft 0)
-            (princ (strcat "\nPADDLE: " (itoa nleft)
+            (princ (strcat "\nMOHAMADDLE: " (itoa nleft)
                            " gap(s) left as they are - the arrow(s) mark them."
-                           " PADDLE pads the perimeter once it closes.")))))
+                           " MOHAMADDLE pads the perimeter once it closes.")))))
 
   (if (not perims)
-      (princ "\nPADDLE: no closed perimeter loop found.")
+      (princ "\nMOHAMADDLE: no closed perimeter loop found.")
       (progn
-        (paddle--ensure-block doc blkname padsize)
-        (paddle--ensure-layer *paddle-layer* *paddle-layer-color*)
-        (setq delta (paddle--block-delta space blkname))
+        (mohamaddle--ensure-block doc blkname padsize)
+        (mohamaddle--ensure-layer *mohamaddle-layer* *mohamaddle-layer-color*)
+        (setq delta (mohamaddle--block-delta space blkname))
         (foreach vts perims
           (if (> (length vts) 1)
-              (setq allpads (append allpads (paddle--features vts padsize)))))
+              (setq allpads (append allpads (mohamaddle--features vts padsize)))))
         (setq ndodge  (length allpads)
-              allpads (paddle--dodge allpads padsize)
+              allpads (mohamaddle--dodge allpads padsize)
               ndodge  (- ndodge (length allpads)))
         (setq ncorner 0 narc 0)
         (foreach pad allpads
-          (paddle--insert-pad space blkname (car pad) (cadr pad) delta)
+          (mohamaddle--insert-pad space blkname (car pad) (cadr pad) delta)
           (if (= (caddr pad) "corner") (setq ncorner (1+ ncorner)) (setq narc (1+ narc))))
         (if allpads
             (progn
-              (princ (strcat "\nPADDLE: inserted " (itoa (length allpads))
-                             " " (paddle--in padsize) " pad(s) on layer \""
-                             *paddle-layer* "\" ("
+              (princ (strcat "\nMOHAMADDLE: inserted " (itoa (length allpads))
+                             " " (mohamaddle--in padsize) " pad(s) on layer \""
+                             *mohamaddle-layer* "\" ("
                              (itoa ncorner) " at inside corners, "
                              (itoa narc) " along concave arcs)."))
               (if (> ndodge 0)
-                  (princ (strcat "\nPADDLE: " (itoa ndodge)
+                  (princ (strcat "\nMOHAMADDLE: " (itoa ndodge)
                                  " overlapping pad(s) merged into their"
                                  " neighbours where features crowd together."))))
-            (princ "\nPADDLE: perimeter checked - no concave features need pads."))))
+            (princ "\nMOHAMADDLE: perimeter checked - no concave features need pads."))))
   (vla-EndUndoMark doc)
   (setq mark-open nil)
-  (if lzd:end (lzd:end "PADDLE"))
+  (if lzd:end (lzd:end "MOHAMADDLE"))
   (princ))
 
-;; --------------------------- tutorial ------------------------------
-;; TUTORIALPADDLE walks a new user through what PADDLE checks, then
-;; (optionally) draws a sample perimeter containing every kind of
-;; feature and pads it step by step.
-
-(defun paddle--pause ()
-  ((lambda (v) (if lzd:ask (lzd:ask "\n  [ press ENTER to continue ]" v) v))
-    (getstring "\n  [ press ENTER to continue ]"))
+(defun c:MOHAMADDLEVER ()
+  (princ (strcat "\nMOHAMADDLE " *mohamaddle-version*))
   (princ))
 
-;; the sample perimeter: straight walls, a 2-degree kink (ignored),
-;; convex corners (ignored), a rectangular slot with two 90-degree
-;; inside corners (padded), a concave R4'-0" bite (padded row) and a
-;; concave R6'-0" sweep (too big -- no pads)
-(defun paddle--demo-pline (base lay / pts absv)
-  (setq pts '((0 0 0) (150 3 0) (300 0 0) (300 168 0) (264 168 -1.0)
-              (168 168 0) (132 168 0) (132 120 0) (84 120 0) (84 168 0)
-              (0 168 0) (0 134 -0.4038) (0 34 0)))
-  (setq absv (mapcar '(lambda (v) (list (+ (car base) (car v))
-                                        (+ (cadr base) (cadr v))
-                                        (caddr v)))
-                     pts))
-  (entmake (append
-             (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") (cons 8 lay)
-                   '(100 . "AcDbPolyline") (cons 90 (length absv)) '(70 . 1))
-             (apply 'append
-                    (mapcar '(lambda (v) (list (list 10 (car v) (cadr v))
-                                               (cons 42 (caddr v))))
-                            absv))))
-  (entlast))
-
-(defun paddle--demo-text (base lay pt str)
-  (entmake (list '(0 . "TEXT") (cons 8 lay)
-                 (list 10 (+ (car base) (car pt)) (+ (cadr base) (cadr pt)) 0.0)
-                 '(40 . 6.0) (cons 1 str)))
-  (entlast))
-
-(defun c:TUTORIALPADDLE (/ *error* mark-open doc space base lay ents pl vts
-                           feats blk delta pad ncorner narc)
-  ;; the demo draws a layer, a perimeter, labels and pads with pauses
-  ;; between -- an Esc at a pause used to leave all of it behind, N
-  ;; undos deep, with no handler.  One mark round the whole tour,
-  ;; closed on both exits the way c:PADDLE closes its own.
-  (defun *error* (msg)
-    (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
-    (setq mark-open nil)
-    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-        (princ (strcat "\nTUTORIALPADDLE error: " msg)))
-    (if lzd:report (lzd:report "TUTORIALPADDLE" *paddle-version* msg))
-    (princ))
-  (if lzd:begin (lzd:begin "TUTORIALPADDLE" *paddle-version*))
-  (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
-        space (vla-get-Block (vla-get-ActiveLayout doc)))
-  (vla-StartUndoMark doc)
-  (setq mark-open T)
-  (princ (strcat "\n=== PADDLE TUTORIAL " *paddle-version* " ==="))
-  (princ "\nPADDLE looks at the perimeter of a drawing and inserts pad blocks")
-  (princ "\nwherever the perimeter caves inward. Everything it checks:")
-  (princ "\n")
-  (princ "\n 1. THE PERIMETER. Select it, or press ENTER and PADDLE finds the")
-  (princ "\n    largest closed loop by itself. A closed polyline is ideal, but")
-  (princ "\n    loose lines and arcs work too - touching ends (within ")
-  (princ (strcat (rtos *paddle-fuzz* 2 2) "\") are"))
-  (princ "\n    chained together automatically.  Ends that ALMOST meet are a")
-  (princ (strcat "\n    GAP: up to " (paddle--in *paddle-gapmax*)
-                 " apart, and with the rest of the geometry going"))
-  (princ "\n    round once and coming back, PADDLE reads it as a perimeter with")
-  (princ "\n    a hole in it - draws an arrow at the open joint, offers to close")
-  (princ "\n    it with a zero fillet, and pads what that leaves.  Say No and the")
-  (princ (strcat "\n    arrow stays on layer \"" *paddle-gap-layer*
-                 "\" for you to work from."))
-  (princ (strcat "\n 2. INSIDE CORNERS. A connection point that bends more than "
-                 (rtos (/ (* *paddle-cornertol* 180.0) pi) 2 0) " degrees"))
-  (princ "\n    away from straight gets one pad centered on the corner. Gentler")
-  (princ "\n    kinks - semi-straight lines - and all convex (outside) corners")
-  (princ "\n    are passed over.")
-  (princ (strcat "\n 3. CONCAVE CURVES. A concave radius of " (rtos *paddle-maxrad* 4 0)
-                 " or less, bending more"))
-  (princ (strcat "\n    than " (rtos (/ (* *paddle-arctol* 180.0) pi) 2 0)
-                 " degrees in total, gets a row of pads: the middle of the"))
-  (princ "\n    curve is always covered, then pads march flush toward both ends")
-  (princ (strcat "\n    (exactly " (paddle--in *paddle-padsize*)
-                 " on center, touching, never overlapping) - a blocky"))
-  (princ "\n    version of the curve. The extreme ends of the radius may stay")
-  (princ "\n    uncovered; that is by design. Bigger concave radii, and curves")
-  (princ (strcat "\n    bending " (rtos (/ (* *paddle-arctol* 180.0) pi) 2 0)
-                 " degrees or less, need no pads at all."))
-  (princ "\n 4. NO COLLISIONS. Where features crowd together, a pad on a sharp")
-  (princ "\n    point stays dead-center on that point - it never moves. The pads")
-  (princ "\n    along curves do the dodging: they slide over to sit flush")
-  (princ "\n    alongside, or drop out when a neighbour already covers their spot.")
-  (princ (strcat "\n 5. RESULT. " (paddle--in *paddle-padsize*) " x "
-                 (paddle--in *paddle-padsize*) " pads (block " *paddle-blkname*
-                 ", imported from"))
-  (princ (strcat "\n    " *paddle-blkfile* " if needed), always square to the"
-                 " X/Y axes, on layer"))
-  (princ (strcat "\n    \"" *paddle-layer* "\", as a single undo step."))
-  (paddle--pause)
-  (initget "Yes No")
-  (if (/= ((lambda (v) (if lzd:ask (lzd:ask "\nDraw a live demonstration in this drawing? [Yes/No] <Yes>: " v) v))
-            (getkword "\nDraw a live demonstration in this drawing? [Yes/No] <Yes>: ")) "No")
-      (progn
-        (setq lay *paddle-demo-layer*)
-        (vla-put-Color (vla-Add (vla-get-Layers doc) lay) *paddle-demo-color*)
-        (setq base (getpoint "\nPick a clear spot for the demo <0,0>: "))
-        (if lzd:ask (lzd:ask "\nPick a clear spot for the demo <0,0>: " base) base)
-        (if (not base) (setq base '(0.0 0.0 0.0)))
-        (setq pl   (paddle--demo-pline base lay)
-              ents (list pl))
-        (command "_.ZOOM" "_W"
-                 (list (- (car base) 40.0) (- (cadr base) 40.0))
-                 (list (+ (car base) 340.0) (+ (cadr base) 210.0)))
-        (princ "\nThis sample perimeter (green) has one of everything. Labelling it...")
-        (paddle--pause)
-        (setq ents (cons (paddle--demo-text base lay '(96 14)
-                     "2-deg kink here: 30 deg or less = ignored") ents))
-        (setq ents (cons (paddle--demo-text base lay '(140 100)
-                     "slot corners bend 90 deg: pad on each") ents))
-        (setq ents (cons (paddle--demo-text base lay '(166 108)
-                     "concave R4'-0\" (<= R4'-6\"): row of pads") ents))
-        (setq ents (cons (paddle--demo-text base lay '(30 84)
-                     "concave R6'-0\" (> R4'-6\"): no pads") ents))
-        (setq ents (cons (paddle--demo-text base lay '(230 180)
-                     "convex corners: never padded") ents))
-        (princ "\nRead the labels on the drawing.")
-        (paddle--pause)
-        ;; run the real PADDLE pipeline on the demo
-        (setq vts   (cdr (paddle--lwverts pl))
-              feats (paddle--dodge (paddle--features vts *paddle-padsize*)
-                                   *paddle-padsize*)
-              blk   *paddle-blkname*)
-        (paddle--ensure-block doc blk *paddle-padsize*)
-        (paddle--ensure-layer *paddle-layer* *paddle-layer-color*)
-        (setq delta (paddle--block-delta space blk)
-              ncorner 0 narc 0)
-        (princ "\nStep 1 - inside corners: one pad centered on each corner of the slot.")
-        (foreach pad feats
-          (if (= (caddr pad) "corner")
-              (progn (paddle--insert-pad space blk (car pad) (cadr pad) delta)
-                     (setq ents (cons (entlast) ents) ncorner (1+ ncorner)))))
-        (paddle--pause)
-        (princ "\nStep 2 - the R4'-0\" curve: first pad centered on the middle of the")
-        (princ (strcat "\nradius, the rest flush at " (paddle--in *paddle-padsize*)
-                       " on center, stair-stepping the curve."))
-        (princ "\nNote the R6'-0\" curve and the kink get nothing.")
-        (foreach pad feats
-          (if (= (caddr pad) "arc")
-              (progn (paddle--insert-pad space blk (car pad) (cadr pad) delta)
-                     (setq ents (cons (entlast) ents) narc (1+ narc)))))
-        (princ (strcat "\nDone: " (itoa ncorner) " corner pad(s) + " (itoa narc)
-                       " pad(s) along the curve, on layer \"" *paddle-layer* "\"."))
-        (paddle--pause)
-        (initget "Yes No")
-        (if (= ((lambda (v) (if lzd:ask (lzd:ask "\nErase the demonstration? [Yes/No] <No>: " v) v))
-                 (getkword "\nErase the demonstration? [Yes/No] <No>: ")) "Yes")
-            (foreach e ents (entdel e)))))
-  (princ "\nEnd of tutorial. Type PADDLE to run it on a real drawing.")
-  (vla-EndUndoMark doc)
-  (setq mark-open nil)
-  (if lzd:end (lzd:end "TUTORIALPADDLE"))
-  (princ))
-
-(defun c:PADDLEVER ()
-  (princ (strcat "\nPADDLE " *paddle-version*))
-  (princ))
-
-;; Quiet inside the whole build: LAZPASS.lsp and
-;; CALOFIN-LOADER.lsp set the flag while they load their members,
-;; because one file's greeting is a greeting and sixty-three of
-;; them is a wall the drafter scrolls past in every drawing they
-;; open.  APPLOADed alone the flag is nil and this prints, which
-;; is the one time somebody wants to be told.  CALVER reports the
-;; whole roster whenever it is asked.
+;; Quiet inside the whole build: LAZPASS.lsp and CALOFIN-LOADER.lsp set
+;; the flag while they load their members, because one file's greeting
+;; is a greeting and every tool's is a wall the drafter scrolls past in
+;; every drawing they open.  APPLOADed alone the flag is nil and this
+;; prints, which is the one time somebody wants to be told.  CALVER
+;; reports the whole roster whenever it is asked.
 (if (not *calofin-quiet*)
-  (princ (strcat "\nPADDLE " *paddle-version*
-                 " loaded. Commands: PADDLE (place pads), TUTORIALPADDLE (guided demo).")))
+  (princ (strcat "\nMOHAMADDLE " *mohamaddle-version*
+                 " loaded. Command: MOHAMADDLE (pick a pad size, then place pads).")))
 (princ)

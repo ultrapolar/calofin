@@ -72,7 +72,7 @@ alongside.
      (COVERSCAN just notes the block is not there).
    - **Pads**: the outline is run through PADDLE's concave-feature
      rules at 36" -- inside corners bending more than 30 degrees,
-     concave radii of 4'-6" or less bending more than 10 degrees in
+     concave radii of 4'-0" or less bending more than 10 degrees in
      total, no overlapping suggestions -- and every spot with no pad
      already nearby is circled and suggested.
 6. **The report** (MTEXT) is placed to the right of the drawing on
@@ -143,7 +143,7 @@ The tables below are the block, read off it:
 | `*cchk-pad-blocks*` | `'("Pad36x36" "Pad24x24")` | Pads are suggested at this size (PADDLE's big pad), and these block names, on this layer, count as a pad that is already there |
 | `*cchk-pads-layer*` | `"PADS"` | Pads are suggested at this size (PADDLE's big pad), and these block names, on this layer, count as a pad that is already there |
 | `*cchk-pad-near*` | `18.0` | A pad centre within this of a spot (Chebyshev distance -- the pad is a square) already covers it, so no second pad is suggested (drawing units) |
-| `*cchk-pad-maxrad*` | `54.0` | The largest concave radius that still needs pads: a gentler curve than 4'-6" does not pull the cover in hard enough to want one (drawing units) |
+| `*cchk-pad-maxrad*` | `48.0` | The largest concave radius that still needs pads: a gentler curve than 4'-0" does not pull the cover in hard enough to want one (drawing units) |
 | `*cchk-pad-cornertol*` | `(/ (* 30.0 pi) 180.0)` | A joint bending less than CORNERTOL is semi-straight rather than an inside corner; a whole arc bending less than ARCTOL is semi-straight too. Both are PADDLE's, and tests/test_covercheck_pads.py fails if the two tools part company -- change them together (30 degrees, in radians) |
 | `*cchk-pad-arctol*` | `(/ (* 10.0 pi) 180.0)` | A joint bending less than CORNERTOL is semi-straight rather than an inside corner; a whole arc bending less than ARCTOL is semi-straight too. Both are PADDLE's, and tests/test_covercheck_pads.py fails if the two tools part company -- change them together (10 degrees, in radians) |
 | `*cchk-chain-fuzz*` | `0.05` | The widest gap that still chains two ends of an exploded outline into one loop. Raising it closes sloppier outlines and can chain two separate runs together (drawing units) |

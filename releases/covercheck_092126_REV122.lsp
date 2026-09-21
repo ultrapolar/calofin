@@ -174,7 +174,7 @@
 ;;;     - PADS. The pool outline is run through PADDLE's concave-
 ;;;       feature hunt at 36" pads (PADDLE v1.11 rules): an inside
 ;;;       corner gets a pad centered dead on the corner, a concave
-;;;       radius of 4'-6" or less gets a row of pads starting on the
+;;;       radius of 4'-0" or less gets a row of pads starting on the
 ;;;       middle of the radius and marching flush (36" on center)
 ;;;       toward both ends, and semi-straight geometry - a kink
 ;;;       bending 30 degrees or less, a whole arc bending 10 degrees
@@ -237,7 +237,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.21")
+(setq *cchk-version* "v1.22")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -311,8 +311,8 @@
 (setq *cchk-pad-near*     18.0)    ; drawing units
 
 ;; The largest concave radius that still needs pads: a gentler curve
-;; than 4'-6" does not pull the cover in hard enough to want one.
-(setq *cchk-pad-maxrad*   54.0)    ; drawing units
+;; than 4'-0" does not pull the cover in hard enough to want one.
+(setq *cchk-pad-maxrad*   48.0)    ; drawing units
 
 ;; A joint bending less than CORNERTOL is semi-straight rather than an
 ;; inside corner; a whole arc bending less than ARCTOL is semi-straight

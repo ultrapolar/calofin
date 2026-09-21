@@ -6,7 +6,7 @@
 ;;; the affected areas, always parallel to the X/Y axes.
 ;;;
 ;;; Pad specification:
-;;;   * Any CONCAVE arc / fillet with a radius of 4'-6" (54") or less
+;;;   * Any CONCAVE arc / fillet with a radius of 4'-0" (48") or less
 ;;;     -- all the way down to sharp 90-degree inside corners --
 ;;;     requires pads along the affected arc.
 ;;;   * Any CONCAVE intersection of straight segments (an inside
@@ -17,7 +17,7 @@
 ;;;     straight, and an arc is a feature only once its total bend is
 ;;;     more than 10 degrees.  Shallow drafting kinks and segmented
 ;;;     walls are not corners.
-;;;   * Convex features and concave arcs larger than 4'-6" radius do
+;;;   * Convex features and concave arcs larger than 4'-0" radius do
 ;;;     NOT require pads.
 ;;;   * Pads never overlap: where features crowd together, a pad on a
 ;;;     sharp point stays dead-center on that point, and the pads
@@ -78,7 +78,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.14")
+(setq *paddle-version* "v1.15")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -107,10 +107,10 @@
 (setq *paddle-align* nil)
 
 ;; --- what counts as a feature ---
-;; Largest concave radius that still needs pads, 4'-6".  Concave arcs
+;; Largest concave radius that still needs pads, 4'-0".  Concave arcs
 ;; this tight or tighter get a flush row of pads; bigger sweeps get
 ;; none.
-(setq *paddle-maxrad* 54.0)
+(setq *paddle-maxrad* 48.0)
 ;; A connection point (line meets line, line meets arc, a polyline
 ;; vertex) counts as a sharp inside corner only when the perimeter
 ;; bends MORE than this many degrees away from straight, into the
@@ -444,7 +444,7 @@
               (setq pads (cons (list (paddle--2d a) (angle '(0.0 0.0) din) "corner")
                                pads)))))
 
-    ;; --- concave arc segment with radius <= 4'-6" ---
+    ;; --- concave arc segment with radius <= 4'-0" ---
     (if (and (/= blg 0.0)
              (< (* s blg) 0.0)) ; bulges into the interior
         (progn
@@ -1384,9 +1384,9 @@
         (setq ents (cons (paddle--demo-text base lay '(140 100)
                      "slot corners bend 90 deg: pad on each") ents))
         (setq ents (cons (paddle--demo-text base lay '(166 108)
-                     "concave R4'-0\" (<= R4'-6\"): row of pads") ents))
+                     "concave R4'-0\" (<= R4'-0\"): row of pads") ents))
         (setq ents (cons (paddle--demo-text base lay '(30 84)
-                     "concave R6'-0\" (> R4'-6\"): no pads") ents))
+                     "concave R6'-0\" (> R4'-0\"): no pads") ents))
         (setq ents (cons (paddle--demo-text base lay '(230 180)
                      "convex corners: never padded") ents))
         (princ "\nRead the labels on the drawing.")

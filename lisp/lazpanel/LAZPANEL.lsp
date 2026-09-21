@@ -138,7 +138,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.55")
+(setq *lazpanel-version* "v3.56")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -4689,7 +4689,7 @@
      ("*cchk-pad-blocks*" "'(\"Pad36x36\" \"Pad24x24\")" "Pads are suggested at this size (PADDLE's big pad), and these block names, on this layer, count as a pad th...")
      ("*cchk-pads-layer*" "\"PADS\"" "Pads are suggested at this size (PADDLE's big pad), and these block names, on this layer, count as a pad th...")
      ("*cchk-pad-near*" "18.0" "drawing units A pad centre within this of a spot (Chebyshev distance -- the pad is a square) already covers...")
-     ("*cchk-pad-maxrad*" "54.0" "drawing units The largest concave radius that still needs pads: a gentler curve than 4'-6\" does not pull th...")
+     ("*cchk-pad-maxrad*" "48.0" "drawing units The largest concave radius that still needs pads: a gentler curve than 4'-0\" does not pull th...")
      ("*cchk-pad-cornertol*" "(/ (* 30.0 pi) 180.0)" "30 degrees, in radians A joint bending less than CORNERTOL is semi-straight rather than an inside corner; a...")
      ("*cchk-pad-arctol*" "(/ (* 10.0 pi) 180.0)" "10 degrees, in radians A joint bending less than CORNERTOL is semi-straight rather than an inside corner; a...")
      ("*cchk-chain-fuzz*" "0.05" "drawing units The widest gap that still chains two ends of an exploded outline into one loop. Raising it cl...")
@@ -5180,7 +5180,7 @@
      ("*mohamaddle-layer*" "\"PADS\"" "AutoCAD colour index the layer is created with. An existing layer keeps whatever colour it already has. Lay...")
      ("*mohamaddle-layer-color*" "7" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
      ("*mohamaddle-align*" "nil" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
-     ("*mohamaddle-maxrad*" "54.0" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
+     ("*mohamaddle-maxrad*" "48.0" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
      ("*mohamaddle-cornertol*" "(/ (* 30.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
      ("*mohamaddle-arctol*" "(/ (* 10.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
      ("*mohamaddle-fuzz*" "0.05" "--- reading the perimeter --- Largest gap between the end of one loose line/arc and the start of the next t...")
@@ -5270,7 +5270,7 @@
      ("*paddle-layer*" "\"PADS\"" "AutoCAD colour index the layer is created with. An existing layer keeps whatever colour it already has. Lay...")
      ("*paddle-layer-color*" "7" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
      ("*paddle-align*" "nil" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
-     ("*paddle-maxrad*" "54.0" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
+     ("*paddle-maxrad*" "48.0" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
      ("*paddle-cornertol*" "(/ (* 30.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
      ("*paddle-arctol*" "(/ (* 10.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
      ("*paddle-fuzz*" "0.05" "--- reading the perimeter --- Largest gap between the end of one loose line/arc and the start of the next t...")

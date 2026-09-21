@@ -64211,7 +64211,7 @@
 ;;;     - PADS. The pool outline is run through PADDLE's concave-
 ;;;       feature hunt at 36" pads (PADDLE v1.11 rules): an inside
 ;;;       corner gets a pad centered dead on the corner, a concave
-;;;       radius of 4'-6" or less gets a row of pads starting on the
+;;;       radius of 4'-0" or less gets a row of pads starting on the
 ;;;       middle of the radius and marching flush (36" on center)
 ;;;       toward both ends, and semi-straight geometry - a kink
 ;;;       bending 30 degrees or less, a whole arc bending 10 degrees
@@ -64278,7 +64278,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.21")
+(setq *cchk-version* "v1.22")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -64352,8 +64352,8 @@
 (setq *cchk-pad-near*     18.0)    ; drawing units
 
 ;; The largest concave radius that still needs pads: a gentler curve
-;; than 4'-6" does not pull the cover in hard enough to want one.
-(setq *cchk-pad-maxrad*   54.0)    ; drawing units
+;; than 4'-0" does not pull the cover in hard enough to want one.
+(setq *cchk-pad-maxrad*   48.0)    ; drawing units
 
 ;; A joint bending less than CORNERTOL is semi-straight rather than an
 ;; inside corner; a whole arc bending less than ARCTOL is semi-straight
@@ -88944,7 +88944,7 @@
 ;;; the affected areas, always parallel to the X/Y axes.
 ;;;
 ;;; Pad specification:
-;;;   * Any CONCAVE arc / fillet with a radius of 4'-6" (54") or less
+;;;   * Any CONCAVE arc / fillet with a radius of 4'-0" (48") or less
 ;;;     -- all the way down to sharp 90-degree inside corners --
 ;;;     requires pads along the affected arc.
 ;;;   * Any CONCAVE intersection of straight segments (an inside
@@ -88955,7 +88955,7 @@
 ;;;     straight, and an arc is a feature only once its total bend is
 ;;;     more than 10 degrees.  Shallow drafting kinks and segmented
 ;;;     walls are not corners.
-;;;   * Convex features and concave arcs larger than 4'-6" radius do
+;;;   * Convex features and concave arcs larger than 4'-0" radius do
 ;;;     NOT require pads.
 ;;;   * Pads never overlap: where features crowd together, a pad on a
 ;;;     sharp point stays dead-center on that point, and the pads
@@ -89019,7 +89019,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.14")
+(setq *paddle-version* "v1.15")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -89048,10 +89048,10 @@
 (setq *paddle-align* nil)
 
 ;; --- what counts as a feature ---
-;; Largest concave radius that still needs pads, 4'-6".  Concave arcs
+;; Largest concave radius that still needs pads, 4'-0".  Concave arcs
 ;; this tight or tighter get a flush row of pads; bigger sweeps get
 ;; none.
-(setq *paddle-maxrad* 54.0)
+(setq *paddle-maxrad* 48.0)
 ;; A connection point (line meets line, line meets arc, a polyline
 ;; vertex) counts as a sharp inside corner only when the perimeter
 ;; bends MORE than this many degrees away from straight, into the
@@ -89376,7 +89376,7 @@
               (setq pads (cons (list (cal:2d a) (angle '(0.0 0.0) din) "corner")
                                pads)))))
 
-    ;; --- concave arc segment with radius <= 4'-6" ---
+    ;; --- concave arc segment with radius <= 4'-0" ---
     (if (and (/= blg 0.0)
              (< (* s blg) 0.0)) ; bulges into the interior
         (progn
@@ -90316,9 +90316,9 @@
         (setq ents (cons (paddle--demo-text base lay '(140 100)
                      "slot corners bend 90 deg: pad on each") ents))
         (setq ents (cons (paddle--demo-text base lay '(166 108)
-                     "concave R4'-0\" (<= R4'-6\"): row of pads") ents))
+                     "concave R4'-0\" (<= R4'-0\"): row of pads") ents))
         (setq ents (cons (paddle--demo-text base lay '(30 84)
-                     "concave R6'-0\" (> R4'-6\"): no pads") ents))
+                     "concave R6'-0\" (> R4'-0\"): no pads") ents))
         (setq ents (cons (paddle--demo-text base lay '(230 180)
                      "convex corners: never padded") ents))
         (princ "\nRead the labels on the drawing.")
@@ -90391,7 +90391,7 @@
 ;;; the run instead of one baked in.
 ;;;
 ;;; Pad specification (identical to PADDLE's):
-;;;   * Any CONCAVE arc / fillet with a radius of 4'-6" (54") or less
+;;;   * Any CONCAVE arc / fillet with a radius of 4'-0" (48") or less
 ;;;     -- all the way down to sharp 90-degree inside corners --
 ;;;     requires pads along the affected arc.
 ;;;   * Any CONCAVE intersection of straight segments (an inside
@@ -90402,7 +90402,7 @@
 ;;;     straight, and an arc is a feature only once its total bend is
 ;;;     more than 10 degrees.  Shallow drafting kinks and segmented
 ;;;     walls are not corners.
-;;;   * Convex features and concave arcs larger than 4'-6" radius do
+;;;   * Convex features and concave arcs larger than 4'-0" radius do
 ;;;     NOT require pads.
 ;;;   * Pads never overlap: where features crowd together, a pad on a
 ;;;     sharp point stays dead-center on that point, and the pads
@@ -90470,7 +90470,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *mohamaddle-version* "v1.1")
+(setq *mohamaddle-version* "v1.2")
 
 ;; --- the pad itself ---
 ;; Pad sizes MOHAMADDLE offers, in the order shown at the prompt.  Each
@@ -90500,11 +90500,11 @@
 (setq *mohamaddle-align* nil)
 
 ;; --- what counts as a feature ---
-;; Largest concave radius that still needs pads, 4'-6".  Concave arcs
+;; Largest concave radius that still needs pads, 4'-0".  Concave arcs
 ;; this tight or tighter get a flush row of pads; bigger sweeps get
 ;; none.  Independent of which pad size was picked -- it is a
 ;; drafting-standard threshold, not a property of the block.
-(setq *mohamaddle-maxrad* 54.0)
+(setq *mohamaddle-maxrad* 48.0)
 ;; A connection point (line meets line, line meets arc, a polyline
 ;; vertex) counts as a sharp inside corner only when the perimeter
 ;; bends MORE than this many degrees away from straight, into the
@@ -90838,7 +90838,7 @@
               (setq pads (cons (list (cal:2d a) (angle '(0.0 0.0) din) "corner")
                                pads)))))
 
-    ;; --- concave arc segment with radius <= 4'-6" ---
+    ;; --- concave arc segment with radius <= 4'-0" ---
     (if (and (/= blg 0.0)
              (< (* s blg) 0.0)) ; bulges into the interior
         (progn
@@ -120884,7 +120884,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.55")
+(setq *lazpanel-version* "v3.56")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -125419,7 +125419,7 @@
      ("*cchk-pad-blocks*" "'(\"Pad36x36\" \"Pad24x24\")" "Pads are suggested at this size (PADDLE's big pad), and these block names, on this layer, count as a pad th...")
      ("*cchk-pads-layer*" "\"PADS\"" "Pads are suggested at this size (PADDLE's big pad), and these block names, on this layer, count as a pad th...")
      ("*cchk-pad-near*" "18.0" "drawing units A pad centre within this of a spot (Chebyshev distance -- the pad is a square) already covers...")
-     ("*cchk-pad-maxrad*" "54.0" "drawing units The largest concave radius that still needs pads: a gentler curve than 4'-6\" does not pull th...")
+     ("*cchk-pad-maxrad*" "48.0" "drawing units The largest concave radius that still needs pads: a gentler curve than 4'-0\" does not pull th...")
      ("*cchk-pad-cornertol*" "(/ (* 30.0 pi) 180.0)" "30 degrees, in radians A joint bending less than CORNERTOL is semi-straight rather than an inside corner; a...")
      ("*cchk-pad-arctol*" "(/ (* 10.0 pi) 180.0)" "10 degrees, in radians A joint bending less than CORNERTOL is semi-straight rather than an inside corner; a...")
      ("*cchk-chain-fuzz*" "0.05" "drawing units The widest gap that still chains two ends of an exploded outline into one loop. Raising it cl...")
@@ -125910,7 +125910,7 @@
      ("*mohamaddle-layer*" "\"PADS\"" "AutoCAD colour index the layer is created with. An existing layer keeps whatever colour it already has. Lay...")
      ("*mohamaddle-layer-color*" "7" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
      ("*mohamaddle-align*" "nil" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
-     ("*mohamaddle-maxrad*" "54.0" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
+     ("*mohamaddle-maxrad*" "48.0" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
      ("*mohamaddle-cornertol*" "(/ (* 30.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
      ("*mohamaddle-arctol*" "(/ (* 10.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
      ("*mohamaddle-fuzz*" "0.05" "--- reading the perimeter --- Largest gap between the end of one loose line/arc and the start of the next t...")
@@ -126000,7 +126000,7 @@
      ("*paddle-layer*" "\"PADS\"" "AutoCAD colour index the layer is created with. An existing layer keeps whatever colour it already has. Lay...")
      ("*paddle-layer-color*" "7" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
      ("*paddle-align*" "nil" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
-     ("*paddle-maxrad*" "54.0" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
+     ("*paddle-maxrad*" "48.0" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
      ("*paddle-cornertol*" "(/ (* 30.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
      ("*paddle-arctol*" "(/ (* 10.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
      ("*paddle-fuzz*" "0.05" "--- reading the perimeter --- Largest gap between the end of one loose line/arc and the start of the next t...")
