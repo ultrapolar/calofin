@@ -716,6 +716,16 @@ that code loads. Every knob is also a row in a table in the tool's
 README: `## Tunables` where there is one, PADDLE's
 `## Assumptions / configuration` where the table came first.
 
+A knob SHARED by a family of files is declared under a guard --
+`(if (not (boundp '*cs-tol-inch*)) (setq *cs-tol-inch* 0.125))` -- so
+whichever of them loads first sets it and a value the drafter set
+before loading still stands. CORNERSTP, HEMISTEP and NORMIESTEP carry
+one set of `*cs-*` settings that way, twenty of the twenty-six in all
+three files. It is a knob like any other and `tools/knobs.py` reads
+it as one; the catalog lists a shared name ONCE, under the first file
+that declares it, because `LAZTUNE` keys an override by the name
+alone and three copies would offer one setting under three tools.
+
 A knob-shaped global that is not a setting -- LAZPANEL's base64
 alphabet is RFC 4648's, and reordering a character in it decodes the
 icon to garbage rather than adjusting anything -- stays where it is and

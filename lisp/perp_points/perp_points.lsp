@@ -249,7 +249,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.19")
+(setq *perp-version* "v0.20")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -284,6 +284,38 @@
                                     ; row spacings, a click still counts
                                     ; as picking a row rather than as the
                                     ; first point of a measured length
+
+;; Which answer the "Split the ... evenly, half at each end?" question
+;; takes on Enter when a width change has to be shared out: "Yes" puts
+;; half of the difference at each end, "No" goes on to ask how much of
+;; it the START end takes.  Both words are still offered and either can
+;; still be typed -- this only decides what tapping Enter means.
+;; Anything that is neither word is ignored and "Yes" stands.
+(setq perp:*split-default* "Yes")
+
+;; Which answer the boundary's "stop at the boundary, or run out to
+;; meet it?" question takes on Enter: "Limit" caps a length that would
+;; carry a point past the boundary, "Meet" runs every offset out to it
+;; without asking a length at all.  Both keywords are still offered and
+;; either can still be typed.  Anything that is neither is ignored and
+;; "Limit" stands.
+(setq perp:*bound-default* "Limit")
+
+;; What the FIRST round's "how should the points be joined?" question
+;; offers on Enter, before there is a round behind it to reuse:
+;; "Straight", "Arcs" or "Mixed", in any case.  Every round after the
+;; first offers the answer before it, as it always has; this only
+;; decides where that chain starts.  Anything that is none of the three
+;; is ignored and "Straight" stands.
+(setq perp:*join-default* "Straight")
+
+;; Which of the two dimension styles the closing question takes on
+;; Enter -- "STandard" (STANDARD INCHES) or "SIde" (SIDE STANDARD), in
+;; any case.  A shop whose work is mostly side dimensions stops
+;; re-typing SIde at every run; the question is asked in the same words
+;; either way and both keywords are still offered.  Anything that is
+;; neither keyword is ignored and "STandard" stands.
+(setq perp:*dimstyle-default* "STandard")
 
 ;;; -------------------- the length ruler --------------------------------
 ;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
@@ -797,6 +829,36 @@
         perp:*ruler-row-frac* perp:*ruler-txt-frac* perp:*ruler-tick-frac*
         perp:*ruler-ring-frac* perp:*ruler-reach*))
 
+;; The canonical spelling S stands for among KWS, in any case, or nil
+;; for anything that is not one of them -- what a tunable default is
+;; read through before it reaches a question, since Enter hands a
+;; default straight back without checking it, and "side" typed into a
+;; settings box must not reach the style table unspelled.
+(defun perp:kw-canon (s kws / u out w)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w kws
+    (if (= u (strcase w)) (setq out w)))
+  out)
+
+;; The Enter answer each of the four question knobs names, canonicalised
+;; -- or the word the file ships with, when the override is none of the
+;; keywords the question offers.  One reader per knob, so the global is
+;; read in exactly one place and the question itself takes a word it can
+;; use.
+(defun perp:split-dflt ()
+  (cond ((perp:kw-canon perp:*split-default* '("Yes" "No"))) ("Yes")))
+
+(defun perp:bound-dflt ()
+  (cond ((perp:kw-canon perp:*bound-default* '("Limit" "Meet"))) ("Limit")))
+
+(defun perp:join-dflt ()
+  (cond ((perp:kw-canon perp:*join-default* '("Straight" "Arcs" "Mixed")))
+        ("Straight")))
+
+(defun perp:dimstyle-dflt ()
+  (cond ((perp:kw-canon perp:*dimstyle-default* '("STandard" "SIde")))
+        ("STandard")))
+
 ;; --- geometry helpers ------------------------------------------------
 
 ;; linear interpolation between two 3D points at parameter tt (0..1)
@@ -1182,7 +1244,8 @@
 ;;   2  the amount (or the new width itself)
 ;;   3  split it evenly, half at each end?
 ;;   4  how much of it at the START end -- the rest goes on at FINISH
-(defun perp:ask-width (lbl d back / kws step kind ans v w diff frac out)
+(defun perp:ask-width (lbl d back / kws step kind ans v w diff frac out
+                       sdflt)
   (princ (strcat "\n" lbl ", end to end: " (rtos d) "."))
   (setq kws "Grew Shrank New Unchanged" step 1 out nil w nil frac 0.5)
   (while (and (> step 0) (< step 5))
@@ -1235,11 +1298,13 @@
       ;; --- 3. half at each end, or not?
       ((= step 3)
        (setq diff (abs (- w d)))
+       (setq sdflt (perp:split-dflt))
        (initget "Yes No Back Undo")
        (setq ans (getkword (strcat "\nSplit the " (rtos diff)
                                    " evenly, half at each end?"
-                                   " [Yes/No/Back] <Yes>: ")))
+                                   " [Yes/No/Back] <" sdflt ">: ")))
        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
+       (if (null ans) (setq ans sdflt))  ; Enter = the knob's word
        (cond
          ((member ans '("Back" "Undo"))
           (princ "\nStepping back one question.")
@@ -1474,7 +1539,7 @@
                     len lastLen i base np again ans iter p e
                     join lastJoin kws nseg picks reply tangs plEnt
                     wOld wNew wres mid fac qstep arrow bnd bmode cap over
-                    rstep askd tgt)
+                    rstep askd tgt bdflt dsdflt)
 
   ;; erase one temporary entity and forget it
   (defun perp:kill (e)
@@ -1746,7 +1811,7 @@
   ;; exactly as it did before there was one.  A boundary then gets one
   ;; more question -- a limit the offsets stop at, or the line every one
   ;; of them runs out to meet -- and Back there re-opens the selection.
-  (setq qstep 1 bnd nil bmode nil)
+  (setq qstep 1 bnd nil bmode nil bdflt (perp:bound-dflt))
   (while (< qstep 3)
     (cond
       ((= qstep 1)
@@ -1777,14 +1842,14 @@
        (initget "Limit Meet Back Undo")
        (setq bmode (getkword (strcat "\nDo the offsets stop at the boundary,"
                                      " or run out to meet it?"
-                                     " [Limit/Meet/Back] <Limit>: ")))
+                                     " [Limit/Meet/Back] <" bdflt ">: ")))
        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") bmode) bmode)
        (cond
          ((member bmode '("Back" "Undo"))
           (princ "\nStepping back one question.")
           (setq qstep 1))
          (t
-          (if (null bmode) (setq bmode "Limit"))
+          (if (null bmode) (setq bmode bdflt))
           (setq qstep 3))))))
   (if bnd
     (princ (strcat "\nBoundary set: "
@@ -1801,6 +1866,9 @@
         again "Yes"
         iter  0
         total 0)
+  ;; the closing style question's Enter answer, read through the
+  ;; canonicaliser so a misspelled override cannot reach the style table
+  (setq dsdflt (perp:dimstyle-dflt))
 
   (while (equal again "Yes")
     (setq iter (1+ iter) rstep 1)
@@ -1947,17 +2015,18 @@
                    (setq i (1+ i)))))))))
 
         ;; --- straight lines, arcs, or both -----------------------------
-        ;; Straight is what this routine has always drawn and stays the
-        ;; opening default; Arcs curves every segment; Mixed asks which
-        ;; segment numbers to curve and leaves the rest as lines.  Two
-        ;; points make one segment with no neighbouring point to take a
-        ;; curvature from, so below three points there is nothing to ask.
-        ;; The answer carries across rounds as the offered default.
+        ;; Straight is what this routine has always drawn and is the
+        ;; opening default perp:*join-default* ships; Arcs curves every
+        ;; segment; Mixed asks which segment numbers to curve and leaves
+        ;; the rest as lines.  Two points make one segment with no
+        ;; neighbouring point to take a curvature from, so below three
+        ;; points there is nothing to ask.  The answer carries across
+        ;; rounds as the offered default.
         ((= rstep 3)
          (setq nseg  (1- n)
                kws   "Straight Arcs Mixed"
                picks nil)
-         (if (null lastJoin) (setq lastJoin "Straight"))
+         (if (null lastJoin) (setq lastJoin (perp:join-dflt)))
          (if (< n 3)
            (progn
              (princ "\nTwo points make one straight segment - nothing to curve.")
@@ -2127,8 +2196,10 @@
         (progn
           (initget "STandard SIde Back Undo")
           (setq ans (getkword (strcat "\nDimension style - STANDARD INCHES or "
-                                      "SIDE STANDARD? [STandard/SIde/Back] <STandard>: ")))
+                                      "SIDE STANDARD? [STandard/SIde/Back] <"
+                                      dsdflt ">: ")))
           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
+          (if (null ans) (setq ans dsdflt))  ; Enter = the knob's word
           (if (member ans '("Back" "Undo"))
             (progn (princ "\nStepping back one question.")
                    (setq again 'RETRY)))))))

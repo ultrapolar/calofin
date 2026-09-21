@@ -192,7 +192,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.7")
+(setq *perpmark-version* "v1.8")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -208,6 +208,15 @@
 ;; rather than one that recedes into it.
 (setq pm:*markcolor* 1)
 
+;; Which answer step 4's "Draw a polyline through the marks?" question
+;; takes on Enter: "Yes" joins the marks up and goes on to the ends and
+;; the dimensions, "No" stops the round there and leaves every circle
+;; and line standing on the marks layer.  Both words are still offered
+;; and either can still be typed -- this only decides what tapping
+;; Enter means.  Anything that is neither word is ignored and "Yes"
+;; stands.
+(setq pm:*join-default* "Yes")
+
 ;; Layer and creation colour for the dimensions step 6 leaves behind.
 (setq pm:*dimlayer* "DIMENSION")
 (setq pm:*dimcolor* 7)
@@ -220,6 +229,13 @@
 ;; drawing that has neither keeps its current style and is told so.
 (setq pm:*dimstyle-std*  "STANDARD INCHES")
 (setq pm:*dimstyle-side* "SIDE STANDARD")
+
+;; Which of the two styles above step 6's question takes on Enter --
+;; "STandard" or "SIde", in any case.  A shop whose work is mostly side
+;; dimensions stops re-typing SIde at every run; the question is asked
+;; in the same words either way and both keywords are still offered.
+;; Anything that is neither keyword is ignored and "STandard" stands.
+(setq pm:*dimstyle-default* "STandard")
 
 ;; What counts as a survey point.  The classifier is the one BPCALLOUT,
 ;; CDCALLOUT, ABFIND and LHD share: change it in all of them or the
@@ -769,6 +785,18 @@
 ;;;  standalone file loads alone -- see STANDARDS.md section 4.
 ;;;  Back sentinel: CAL-BACK.
 ;;; ----------------------------------------------------------------------
+
+;; The canonical spelling S stands for among KWS, in any case, or nil
+;; for anything that is not one of them -- what a tunable default is
+;; read through before it reaches a question, since the ask helpers
+;; hand a default straight back on Enter without checking it, and
+;; "side" typed into a settings box must not reach the style table
+;; unspelled.
+(defun pm:kw-canon (s kws / u out w)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w kws
+    (if (= u (strcase w)) (setq out w)))
+  out)
 
 ;; A PLACE, in the current UCS -- the centre click, and nothing else in
 ;; this command.  Always required: Enter re-asks.  Returns the point or
@@ -1369,7 +1397,10 @@
 
       ;; --- 4. join them up? -------------------------------------------
       ((= stage 4)
-       (setq ans (cal:askyn "Draw a polyline through the marks?" "Yes" T))
+       (setq ans (cal:askyn "Draw a polyline through the marks?"
+                           (or (pm:kw-canon pm:*join-default* '("Yes" "No"))
+                               "Yes")
+                           T))
        (cond
          ((eq ans 'CAL-BACK) (setq stage 3))
          ((null ans)
@@ -1454,7 +1485,11 @@
          (t
           (setq ans (cal:askkw (strcat "Dimension style - " pm:*dimstyle-std*
                                       " or " pm:*dimstyle-side* "?")
-                              "STandard SIde" "STandard/SIde" "STandard" T))
+                              "STandard SIde" "STandard/SIde"
+                              (or (pm:kw-canon pm:*dimstyle-default*
+                                               '("STandard" "SIde"))
+                                  "STandard")
+                              T))
           (cond
             ((eq ans 'CAL-BACK) (setq stage (if wayasked 7 6)))
             (t (setq sty   (if (= ans "SIde") pm:*dimstyle-side*

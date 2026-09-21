@@ -231,7 +231,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "091926 REV26")
+(setq spa:*version* "092126 REV27")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -592,6 +592,60 @@
 ;;;  beside it.
 (setq spa:*radius-ladder* '(3.0 18.0 3.0))
 (setq spa:*cutface-ladder* '(3.0 18.0 3.0))
+
+;; ---- what the questions offer on Enter
+;;;
+;;;  The Enter answer on the questions that ship with one.  A knob here
+;;;  changes only what Enter MEANS: the wording, the bracketed keywords
+;;;  and the order they are offered in are STANDARDS section 2's and do
+;;;  not move, and every word stays typeable at the prompt.  A value
+;;;  that is not one of that question's own words is ignored and the
+;;;  shipped answer stands, so a settings box cannot leave a prompt
+;;;  offering a default it would refuse.
+
+;; What Enter means at the offer of the SECOND outline -- "Yes" goes on
+;; to draw the other one (the cover size after a water's edge, or the
+;; reverse), "No" leaves the outline already drawn standing alone and
+;; ends the round.  A shop that draws one outline and stops sets "No"
+;; and stops typing it; both words are still offered either way.
+(setq spa:*second-default* "Yes")
+
+;; What Enter means at "Take it from" -- "Offset" builds that second
+;; outline by lapping the one already drawn, "Dims" asks for its own
+;; measurements instead.  A shop whose covers are measured separately
+;; rather than lapped sets "Dims" and answers one question less.
+(setq spa:*method-default* "Offset")
+
+;; What Enter means at "Is there a spillaway" -- "No" ends the round of
+;; spillaways, "Yes" opens another one.  A shop whose spas nearly
+;; always carry one sets "Yes" and types No to finish instead, which is
+;; the same round with the tapping the other way about.
+(setq spa:*spill-default* "No")
+
+;; What Enter means at a spillaway's location -- "Wall" centres it on a
+;; wall and asks which wall, "Corner" asks which corner and how far
+;; along to keep clear of the hinges.  The two answers ask different
+;; follow-ups, so this decides which of them Enter walks into.
+(setq spa:*spillloc-default* "Wall")
+
+;; What Enter means at "Auto-hinge the cover" -- "Yes" goes on to the
+;; spillaways and lays the fold hinges out itself, "No" draws the
+;; outlines and their dimensions and leaves the cover unhinged.  A shop
+;; that hinges by hand sets "No" and is never asked the spillaways.
+(setq spa:*autohinge-default* "Yes")
+
+;; What the FIRST corner's treatment question offers on Enter, before
+;; there is a previous answer to reuse: "" asks cold, or one of the
+;; four words -- "Square", "Radius", "Cut", "NotGiven" -- in any case.
+;; Every corner after the first offers the answer before it, as it
+;; always has; this only decides where that chain starts.
+(setq spa:*treat-default* "")
+
+;; What Enter means at "Are all four corners the same?" -- "Yes" buys
+;; ONE round of treatment questions for all four, "No" walks A, B, C
+;; and D with A's answer autofilling the rest.  A shop whose spas
+;; differ corner to corner sets "No" and starts at corner A.
+(setq spa:*samecorners-default* "Yes")
 
 ;;; -------------------- run state (not tunables) ----------------------
 ;;;
@@ -1346,6 +1400,17 @@
   (mapcar '(lambda (e c) (spa:setcol e c)) ents cols)
   (if (eq out 'SPA-NA) nil out))
 
+;; The canonical spelling S stands for among KWS, in any case, or nil
+;; for anything that is not one of them -- what a tunable default is
+;; read through before it reaches a question, since spa:askkw hands a
+;; default straight back on Enter without checking it, and "radius"
+;; typed into a settings box must not reach the corner table unspelled.
+(defun spa:kw-canon (s kws / u out w)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w kws
+    (if (= u (strcase w)) (setq out w)))
+  out)
+
 ;; Millimetres, typed with the unit on the number: 600mm, 600 MM,
 ;; 1524.5mm.  The drawing is in inches, so the value is converted.
 ;; Returns the distance in inches, or nil when the text is not that --
@@ -1817,10 +1882,18 @@
   (if (= "Yes" (spa:askkwf 'second
                            (strcat "Draw the " (spa:modeword (spa:othermode))
                                    " as well")
-                           "Yes No" "Yes/No" "Yes" nil))
+                           "Yes No" "Yes/No"
+                           (or (spa:kw-canon spa:*second-default*
+                                             '("Yes" "No"))
+                               "Yes")
+                           nil))
       (if (eq 'CAL-BACK
               (setq v (spa:askkwf 'method "Take it from" "Offset Dims"
-                                  "Offset/Dims" "Offset" t)))
+                                  "Offset/Dims"
+                                  (or (spa:kw-canon spa:*method-default*
+                                                    '("Offset" "Dims"))
+                                      "Offset")
+                                  t)))
           (spa:askother2)
           v)))
 
@@ -2284,7 +2357,9 @@
   (setq spills nil done nil)
   (princ "\n(a spillaway is named on the spa AS MEASURED; the drawing may be turned to clear it)")
   (while (not done)
-    (setq v (cal:askkw "Is there a spillaway" "Yes No" "Yes/No" "No"
+    (setq v (cal:askkw "Is there a spillaway" "Yes No" "Yes/No"
+                       (or (spa:kw-canon spa:*spill-default* '("Yes" "No"))
+                           "No")
                        (if spills t nil)))
     (cond
       ;; Back from the top question: drop the last spillaway and re-ask
@@ -2305,7 +2380,11 @@
             ;; "(centred)" note lives in the question (STANDARDS 1)
             (setq loc (cal:askkw
                         "Spillaway location (a wall one is centred on it)"
-                        "Corner Wall" "Corner/Wall" "Wall" t))
+                        "Corner Wall" "Corner/Wall"
+                        (or (spa:kw-canon spa:*spillloc-default*
+                                          '("Corner" "Wall"))
+                            "Wall")
+                        t))
             (setq stage (if (eq loc 'CAL-BACK) nil 1)))
            ((= stage 1)
             (if (= loc "Corner")
@@ -2600,7 +2679,11 @@
   (setq spa:*spills* nil
         spa:*hingeon*
         (= "Yes" (spa:askkwf 'autohinge "Auto-hinge the cover"
-                             "Yes No" "Yes/No" "Yes" nil)))
+                             "Yes No" "Yes/No"
+                             (or (spa:kw-canon spa:*autohinge-default*
+                                               '("Yes" "No"))
+                                 "Yes")
+                             nil)))
   (if spa:*hingeon*
       (setq spa:*spills* (spa:askspill)))
   spa:*hingeon*)
@@ -2969,7 +3052,7 @@
 ;; too-large answers are re-asked.  Returns (type size) or CAL-BACK.
 (defun spa:askcorner (label dflty dfltsz ents maxsb back / ty sz cols sb e
                                                             dsz out fk fty fsz
-                                                            lad)
+                                                            lad tyd)
   ;; A form can answer this corner: <stem>-ty carries the treatment,
   ;; <stem>-sz the radius or diagonal face.  Both are consumed NOW,
   ;; valid or not -- consume-once is what keeps Back from deadlocking,
@@ -2997,6 +3080,12 @@
                   (setq fsz nil))))))
   (setq cols (mapcar 'spa:getcol ents))
   (foreach e ents (spa:setcol e spa:*hi-col*))
+  ;; the answer before this one is what Enter reuses; the first corner
+  ;; has none, and offers spa:*treat-default* instead when it is set
+  (setq tyd (if dflty
+                dflty
+                (spa:kw-canon spa:*treat-default*
+                              '("Square" "Radius" "Cut" "NotGiven"))))
   (while (null out)
     (cal:osup)
     ;; the form's treatment stands in for the question ONCE -- a Back
@@ -3007,7 +3096,7 @@
     (setq ty (if fty fty
                  (cal:askkw (strcat "How should " label " be treated?")
                             "Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL"
-                            "Square/Radius/Cut/NotGiven" dflty back))
+                            "Square/Radius/Cut/NotGiven" tyd back))
           fty nil)
     (cal:osdown)
     (setq ty (cond ((equal ty "NG") "NotGiven")
@@ -3138,7 +3227,11 @@
       (setq same (if (and (not (spa:fhas 'samecorners)) (spa:fpercorner))
                      "No"
                      (spa:askkwf 'samecorners "Are all four corners the same?"
-                                 "Yes No" "Yes/No" "Yes" t)))
+                                 "Yes No" "Yes/No"
+                                 (or (spa:kw-canon spa:*samecorners-default*
+                                                   '("Yes" "No"))
+                                     "Yes")
+                                 t)))
       (cond
         ((eq same 'CAL-BACK) (setq back t done t))
         ;; ---- one round.  Every corner letter on the guide lights up,
