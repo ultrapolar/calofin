@@ -454,6 +454,49 @@
 (setq oasis:*cmdguard*  10)
 (setq oasis:*ringguard* 4)
 
+;; ---- the length ruler
+;;
+;;  The LENGTH RULER beside the RADIUS prompts.  Every one of these
+;;  shapes is a ring of bulges, and their radii come off a sheet in
+;;  whole feet -- 4' to 12' by a foot -- rather than being taped off
+;;  anything: the same handful of numbers is typed at six prompts in a
+;;  row.  So those prompts stand beside DIMSTAMP's ruler, drawn down a
+;;  strip near the right edge of the view, and a click on a row IS the
+;;  radius.  Scratch on its own layer, taken down before any prompt
+;;  that does not take it and on every way out.  Every size is a
+;;  fraction of the current view, so the ruler reads the same at any
+;;  zoom.
+(setq oasis:*ruler-layer* "OASIS-RULER") ; scratch layer the rows are
+                                         ; drawn on, made if missing
+(setq oasis:*ruler-color* 3)        ; ACI colour of the rows you can PICK
+(setq oasis:*ruler-current-color* 7); ACI colour of the ringed CURRENT
+                                    ; row; 7 is AutoCAD's black/white
+                                    ; swap
+(setq oasis:*ruler-screen-x* 0.88)  ; where the spine sits across the
+                                    ; view, as a fraction of its width
+                                    ; in from the left; past 0.5 the
+                                    ; rows reach left, short of it they
+                                    ; reach right, so the ruler is
+                                    ; always inside the view
+(setq oasis:*ruler-row-frac* 0.042) ; one row's share of the view's
+                                    ; height -- the ruler's size knob
+(setq oasis:*ruler-txt-frac* 0.5)   ; the biggest row label's height, as
+                                    ; a fraction of the row spacing
+(setq oasis:*ruler-tick-frac* 0.6)  ; the longest tick, same measure
+(setq oasis:*ruler-ring-frac* 0.26) ; the ring round the current row, as
+                                    ; a fraction of the row spacing
+(setq oasis:*ruler-reach* 6.0)      ; how far inboard of the spine, in
+                                    ; row spacings, a click still counts
+                                    ; as picking a row rather than as
+                                    ; the first point of a measured
+                                    ; length
+
+;; The LADDER those prompts stand on, as (LOW HIGH STEP) in inches: the
+;; bulge radii a shape of this family is built out of.  A shop drawing
+;; to some other measure sets its own; nil leaves every radius prompt
+;; the plain typed one it was.
+(setq oasis:*radius-ladder* '(48.0 144.0 12.0))
+
 ;;; -------------------- the five shapes ----------------------------------
 ;;; Every one of them is a ring of BULGES -- circles pinned to the
 ;;; envelope -- with a JOINER between each consecutive pair.  A joiner is
@@ -835,7 +878,12 @@
 ;; Distance entry with the kind system of STANDARDS.md section 3:
 ;; REQ required, NAX/ZER accept NA, SUG offers a default.  Returns the
 ;; number, nil for NA, or OASIS-BACK.
-(defun oasis:askdist (kind msg dflt back / v kw)
+;; LADDER nil is the plain typed question this has always been; a
+;; (LOW HIGH STEP) stands it beside the LENGTH RULER, which is what the
+;; RADIUS prompts hand in and no bound or offset does -- a bound is
+;; measured, and there is no short list of what it comes to.  Enter,
+;; NA, Back and the two-point pick all mean what they meant either way.
+(defun oasis:askdist (kind msg dflt back ladder / v kw rr prompt)
   ;; the form first.  A number this kind of question could have been
   ;; given is taken; anything else -- an NA on a REQUIRED measurement
   ;; above all -- is treated as an unanswered box and asked for, since
@@ -850,26 +898,139 @@
                  (t "NA")))
   ;; REQ always rejects zero -- offering Back must not loosen what
   ;; counts as a valid measurement; ZER alone admits 0
-  (if kw
-      (initget (cond ((eq kind 'ZER) 5)
-                     ((and (eq kind 'SUG) dflt) 6)
-                     (t 7))
-               kw)
-      (initget 7))
-  (setq v (getdist
-            (strcat "\n" msg
-                    (cond ((eq kind 'REQ) "")
-                          ((eq kind 'SUG)
-                           (if dflt (strcat " <" (rtos dflt) "> (or NA)")
-                               " (or NA)"))
-                          (t " (or NA if not measured)"))
-                    (if back " [Back]" "")
-                    ": ")))
-  (if lzd:ask (lzd:ask msg v) v)
+  ;; the prompt's TEXT is built once, above the fork below, so the two
+  ;; routes in cannot drift apart -- the form tests pin this wording
+  (setq prompt (strcat "\n" msg
+                       (cond ((eq kind 'REQ) "")
+                             ((eq kind 'SUG)
+                              (if dflt (strcat " <" (rtos dflt) "> (or NA)")
+                                  " (or NA)"))
+                             (t " (or NA if not measured)"))
+                       (if back " [Back]" "")
+                       ": "))
+  ;; A ZER question admits a zero and the ruler's prompt does not -- no
+  ;; length on a ruler is zero -- so a ladder handed to one is ignored
+  ;; rather than quietly tightening what the question takes.  Nothing
+  ;; hands it one today; this is what keeps that true.
+  (if (and ladder (not (eq kind 'ZER)))
+    (progn
+      (setq v nil)
+      (while (null v)
+        ;; the ruler goes up BEFORE the prompt and its state is the
+        ;; run's, not a local: an Esc in here runs c:OASIS's *error*,
+        ;; and what that can take down is what c:OASIS can see
+        (setq oasis:*ruler*
+                (cal:ruler-show (if oasis:*ruler* oasis:*ruler*
+                                      (cal:ruler-new (oasis:rulerlayer)
+                                                       (oasis:ruler-style)))
+                                  nil ladder)
+              rr (cal:ask-len prompt kw oasis:*ruler* nil)
+              v  (car rr)
+              oasis:*ruler* (cadr rr))
+        ;; Enter: taken as the suggestion where initget 6 took it, and
+        ;; refused where 7 refused it
+        (cond
+          ((and (null v) (eq kind 'SUG) dflt) (setq v dflt))
+          ((null v)
+           (princ (strcat "\nA measurement is required - type it, or"
+                          " click a ruler row.")))))
+      ;; down before the answer is used: the question after a radius
+      ;; takes no ruler until it asks for one of its own
+      (oasis:rulerkill))
+    (progn
+      (if kw
+          (initget (cond ((eq kind 'ZER) 5)
+                         ((and (eq kind 'SUG) dflt) 6)
+                         (t 7))
+                   kw)
+          (initget 7))
+      (setq v (getdist prompt))
+      (if lzd:ask (lzd:ask msg v) v)))
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'OASIS-BACK)
         ((= (type v) 'STR) nil)               ; NA
         ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
         (t v)))))
+
+;;; -------------------- the length ruler --------------------------------
+;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
+;;;  Once a first length has been given, the prompt draws the eighths
+;;;  of an inch for a whole inch either side of the last one down a
+;;;  strip near the right edge of the view, graded like a tape with the
+;;;  last length ringed in the middle -- and one prompt then takes a
+;;;  click on a row (that row's value), a typed measurement in any
+;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  or a click on empty space as the first of two points to measure
+;;;  between, which is what getdist always offered.  A run of
+;;;  near-equal lengths is clicked rather than typed over and over.
+;;;
+;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
+;;;  ask their lengths through it.  Each carries this block under its
+;;;  own prefix so the standalone file loads alone, the grouped build
+;;;  swaps the copy for the library's, and tests/test_ruler_copies.py
+;;;  holds every copy to this one text.  DIMSTAMP keeps its own ruler:
+;;;  its current row is drawn as the stamp it would make, on the
+;;;  stamp's layer in the stamp's style, which is a different thing
+;;;  from a row of nearby lengths.
+;;;
+;;;  A ruler comes in two families, and the prompt picks which.
+;;;
+;;;  The TAPE is the one above: the eighths of an inch for a whole inch
+;;;  either side of the LAST answer, which is what a run of near-equal
+;;;  numbers wants.  It needs a last answer to be built round, so the
+;;;  first prompt of a run stands alone.
+;;;
+;;;  The LADDER is the other: a fixed (LO HI STEP) of the values that
+;;;  prompt is actually answered with, every one of them offered from
+;;;  the first prompt on.  A corner radius is 3" to 2'-0" by 3" and a
+;;;  tape of eighths round nothing helps nobody -- 3, 6, 9, 12 is the
+;;;  whole vocabulary, and a drafter picks out of it rather than types
+;;;  into it.  Its rows are graded off the VALUE, not off a distance
+;;;  from the current row: the foot marks are the deep ones and the
+;;;  half-foot next, which is where a tape's deep marks are too.  A
+;;;  ladder still takes a typed measurement that is not on it, and the
+;;;  answer is then ringed among the rungs as the current row.
+;;;
+;;;  Nothing in here reads a knob.  A tool hands its knobs in as one
+;;;  STYLE list and keeps the ruler between prompts as one STATE list:
+;;;    STYLE  (COLOR CURRENT-COLOR SCREEN-X ROW-FRAC TXT-FRAC TICK-FRAC
+;;;            RING-FRAC REACH) -- a caller's tunables block says what
+;;;            each one moves
+;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID LADDER) -- the
+;;;            length the ruler stands round (nil = none), the family it
+;;;            is labelled in (T = feet), what is drawn, its layer, the
+;;;            style, whether the one-line hint has been said, and the
+;;;            ladder it is standing on (nil = a tape)
+;;;  Values are INCHES, the unit this shop draws in, and the ruler
+;;;  steps in eighths of one, which is what a tape reads in.
+
+;;; -------------------- end of the length ruler -------------------------
+
+;; The scratch layer the rows are drawn on, made if it is missing.  A
+;; layer of its own is what lets a drafter turn the ruler off without
+;; turning anything of the pool off with it.
+(defun oasis:rulerlayer ()
+  (if (not (tblsearch "LAYER" oasis:*ruler-layer*))
+    (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLayerTableRecord")
+                   (cons 2 oasis:*ruler-layer*) '(70 . 0) '(62 . 7)
+                   (cons 6 "CONTINUOUS"))))
+  oasis:*ruler-layer*)
+
+;; Take the ruler down -- the one call *error* and the clean exit both
+;; make, so neither has to know whether one was up.  What is left is
+;; the swept STATE, not nil: it carries the one-line hint's said flag,
+;; and a prompt that threw it away would say the hint again at the next
+;; radius, and the next.  c:OASIS clears it at the START of a run,
+;; which is where a fresh run wants a fresh hint.
+(defun oasis:rulerkill ()
+  (if oasis:*ruler* (setq oasis:*ruler* (cal:ruler-off oasis:*ruler*))))
+
+;; This file's knobs, in the order the ruler reads them.
+(defun oasis:ruler-style ()
+  (list oasis:*ruler-color* oasis:*ruler-current-color*
+        oasis:*ruler-screen-x* oasis:*ruler-row-frac*
+        oasis:*ruler-txt-frac* oasis:*ruler-tick-frac*
+        oasis:*ruler-ring-frac* oasis:*ruler-reach*))
 
 ;;; -------------------- snaps and the dimension style --------------------
 
@@ -2004,7 +2165,7 @@
 ;; A bulge is tangent to the bottom edge, so its top sits at twice its
 ;; radius: any more than half the Y bound and it breaks out of the top.
 (defun oasis:ask-bulge (msg side w h / v)
-  (setq v (oasis:askdist 'REQ msg nil T))
+  (setq v (oasis:askdist 'REQ msg nil T oasis:*radius-ladder*))
   (while (and (not (eq v 'OASIS-BACK))
               (or (> (* 2.0 v) (+ h oasis:*fuzz*))
                   (> (* 2.0 v) (+ w oasis:*fuzz*))))
@@ -2017,7 +2178,7 @@
                        (rtos (* 2.0 v)) " across and breaks out through the"
                        " far side of a " (rtos w) " envelope.  "
                        (rtos (/ w 2.0)) " or less.")))
-    (setq v (oasis:askdist 'REQ msg nil T)))
+    (setq v (oasis:askdist 'REQ msg nil T oasis:*radius-ladder*)))
   v)
 
 ;; The top bulge's radius, re-asked while it swallows a side bulge (or
@@ -2025,7 +2186,7 @@
 ;; later, so it has to be caught here.
 (defun oasis:ask-top (msg w h rl variant off / v cl ct big)
   (setq cl (list rl rl)
-        v  (oasis:askdist 'REQ msg nil T))
+        v  (oasis:askdist 'REQ msg nil T oasis:*radius-ladder*))
   (while (and (not (eq v 'OASIS-BACK))
               (progn
                 (setq ct  (oasis:topcen w h v variant off)
@@ -2044,7 +2205,7 @@
                        " -- raising one raises the other's reach by just as"
                        " much.  Try a top radius nearer the left bulge's "
                        (rtos rl) ".")))
-    (setq v (oasis:askdist 'REQ msg nil T)))
+    (setq v (oasis:askdist 'REQ msg nil T oasis:*radius-ladder*)))
   v)
 
 ;; The Y bound.  It is asked the same way for every shape but one: a
@@ -2057,7 +2218,9 @@
 ;; where the user can still change the number that caused it, rather
 ;; than at a radius question that would refuse every answer.
 (defun oasis:ask-ybound (msg w var / v)
-  (setq v (oasis:askdist 'REQ msg nil T))
+  ;; no ladder: Y is a BOUND, taped across the pool, and there is no
+  ;; short list of what a pool comes to -- only its radii have one
+  (setq v (oasis:askdist 'REQ msg nil T nil))
   (while (and (not (eq v 'OASIS-BACK))
               (= var "TrueKidney")
               (> (+ v oasis:*fuzz*) w))
@@ -2067,7 +2230,7 @@
     (princ (strcat "\nbefore they reach the sides of the box.  Y has to"
                    " be less than X here; an asymmetric kidney takes any"
                    " envelope."))
-    (setq v (oasis:askdist 'REQ msg nil T)))
+    (setq v (oasis:askdist 'REQ msg nil T nil)))
   v)
 
 ;; A true kidney's top-center radius, re-asked until a kidney can be
@@ -2078,7 +2241,7 @@
 ;; oasis:ask-ybound has already turned away any Y that is not less
 ;; than X.
 (defun oasis:ask-ktop (msg w h / v r)
-  (setq v (oasis:askdist 'REQ msg nil T))
+  (setq v (oasis:askdist 'REQ msg nil T oasis:*radius-ladder*))
   (while (and (not (eq v 'OASIS-BACK))
               (null (setq r (if (> v (+ (oasis:ktrue-min w h) oasis:*fuzz*))
                                 (oasis:ktrue-side w h v)))))
@@ -2086,7 +2249,7 @@
                    " sides of a " (rtos w) " x " (rtos h)
                    " envelope -- it has to be more than "
                    (rtos (oasis:ktrue-min w h)) "."))
-    (setq v (oasis:askdist 'REQ msg nil T)))
+    (setq v (oasis:askdist 'REQ msg nil T oasis:*radius-ladder*)))
   v)
 
 ;; A joiner answer on a COMPLEX run: a radius as usual, or the keyword
@@ -2136,7 +2299,7 @@
 ;; straight run has no radius to be too small.
 (defun oasis:ask-tangent (msg c1 r1 c2 r2 runs / v mn bad)
   (setq mn (oasis:filmin c1 r1 c2 r2)
-        v  (if runs (oasis:askrun msg) (oasis:askdist 'REQ msg nil T)))
+        v  (if runs (oasis:askrun msg) (oasis:askdist 'REQ msg nil T oasis:*radius-ladder*)))
   (while (and (not (eq v 'OASIS-BACK))
               (setq bad
                     (if (= (type v) 'STR)
@@ -2148,7 +2311,7 @@
                        (rtos mn) "."))
         (princ (strcat "\nOne of those two bulges lies inside the other,"
                        " so there is no straight run between them.")))
-    (setq v (if runs (oasis:askrun msg) (oasis:askdist 'REQ msg nil T))))
+    (setq v (if runs (oasis:askrun msg) (oasis:askdist 'REQ msg nil T oasis:*radius-ladder*))))
   v)
 
 ;; How far a complex Center pool's hump is off centre, re-asked while it
@@ -2209,9 +2372,11 @@
 ;; word Tie gets here, so the key is dropped: the store has nothing left
 ;; to say about this question or about any re-ask after it.
 (defun oasis:asktie (msg w h rt rr / v mn)
+  ;; no ladder: a tie is the distance between two centres, measured off
+  ;; the drawing, and there is no short list of what it comes to
   (setq oasis:*fkey* nil
         mn (abs (- (- h rt) rr))
-        v  (oasis:askdist 'REQ msg nil T))
+        v  (oasis:askdist 'REQ msg nil T nil))
   (while (and (not (eq v 'OASIS-BACK))
               (null (oasis:tieoff w h rt rr v)))
     (princ (strcat "\n" (rtos v) " does not reach from the right bulge's"
@@ -2220,7 +2385,7 @@
     (princ (strcat "\nAt exactly " (rtos mn) " the corner bulge stands"
                    " straight above the right one, which is as far out"
                    " as a tie goes; further out is a shift."))
-    (setq v (oasis:askdist 'REQ msg nil T)))
+    (setq v (oasis:askdist 'REQ msg nil T nil)))
   v)
 
 ;; Where a complex TOP-RIGHT pool's corner bulge sits, re-asked while the
@@ -2357,7 +2522,8 @@
      (oasis:askkw "Simple or complex?" "Simple Complex"
                   "Simple/Complex" "Simple" T))
     ((= k 1) (oasis:askbase T))
-    ((= k 2) (oasis:askdist 'REQ "X - overall left-to-right bounds" nil T))
+    ((= k 2) (oasis:askdist 'REQ "X - overall left-to-right bounds" nil T
+                            nil))
     ((= k 3) (oasis:ask-ybound "Y - overall front-to-back bounds" w var))
     ((= k 4) (oasis:ask-bulge (oasis:sprompt var 4)
                               (if (oasis:nxt-p var) "top-left" "left") w h))
@@ -2842,7 +3008,7 @@
       (progn
         (setq d (oasis:askdist 'REQ (strcat "How far in from the "
                                             (strcase side T) " bound")
-                               nil T))
+                               nil T nil))
         (if (eq d 'OASIS-BACK)
             d
             (cond ((= side "Left")    (list (list d 0.0) '(1.0 0.0)))
@@ -3260,6 +3426,13 @@
 ;; knob is the setting and this is the memory, and writing the setting
 ;; would make a run quietly edit its own configuration.
 (setq oasis:*hopoff-last* nil)
+;; The length ruler standing beside a radius prompt.  A module global
+;; for the reason oasis:*marks* is one: the helpers that ask are several
+;; calls down from c:OASIS, and what c:OASIS's handler can take down is
+;; what c:OASIS can see.  Esc at a radius prompt is the likeliest way
+;; out of the question, and a ruler left standing is scratch on a pool
+;; that is otherwise finished.
+(setq oasis:*ruler*   nil)
 
 (defun c:OASIS ( / *error* undo-open guard ans pos k steps v var base w h
                    rl rt rr ftl ftr fbc fbr off cbase arcs ents nests prev
@@ -3294,6 +3467,7 @@
     ;; oasis:*marks*.  Esc there left them on a finished pool.
     (oasis:pv-clear prev)
     (setq oasis:*marks* (oasis:pv-clear oasis:*marks*))
+    (oasis:rulerkill)
     (if undo-open (command "_.UNDO" "_End"))
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -3310,6 +3484,9 @@
 
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER"))
   (cal:dimstysave)
+  ;; a fresh run, so a fresh ruler: the hint is said once a run, and
+  ;; the flag that says it has been said travels in here
+  (setq oasis:*ruler* nil)
 
   (cond
     ;; -- a plan pool has nothing sensible to draw in a UCS that is not
@@ -3497,6 +3674,7 @@
   ;; answer nothing asked for must not be waiting for the next run
   (oasis:fclear)
   (setq oasis:*fkey* nil)
+  (oasis:rulerkill)
   ;; ...and so does the error mode pushed at the top: every quiet exit
   ;; and the drawn one come through here, and a mode left stacked
   ;; refuses command-s inside every later handler in the session

@@ -34,6 +34,14 @@ LSP = os.path.join(os.path.dirname(__file__), '..',
 #: click that must not be read as a row pick
 FAR = (300.0, 300.0)
 
+#: the height code every drawn fraction is wrapped in at the default
+#: knob -- 1.0000x, the size of the text around it
+FULL = '{\\H1.0000x;'
+
+#: and the alignment code the line carrying it opens with, centred --
+#: the pair the shop's own dimension text carries
+MID = '\\A1;'
+
 
 def newvm():
     vm = VM()
@@ -49,13 +57,16 @@ def run(vm, script, label):
     return vm
 
 
-def probe_ruler(eighths, hasfeet, **sysvars):
+def probe_ruler(value, family, **sysvars):
     """Where the ruler for this value lands, read off the routine
-    itself in a throwaway VM: (spine-x, box, rows)."""
+    itself in a throwaway VM: (spine-x, box, rows).  FAMILY is the tag
+    ds:parse hands back beside the value -- None or True for a
+    measurement in inches or in feet, 'letter' for a label."""
     vm = newvm()
     vm.sysvars.update(sysvars)
-    _, box, rows = vm.loads('(ds:draw-ruler %d %s)'
-                            % (eighths, 't' if hasfeet else 'nil'))
+    fam = ("(quote letter)" if family == 'letter'
+           else ('t' if family else 'nil'))
+    _, box, rows = vm.loads('(ds:draw-ruler %d %s)' % (value, fam))
     return (box[0] + box[1]) / 2.0, box, rows
 
 
@@ -153,26 +164,195 @@ def test_two_spellings_plain_and_stacked():
     vm = newvm()
     for eighths, hasfeet, plain, drawn in [
             (272, 'nil', '34"', '34"'),                 # no fraction: same
-            (276, 'nil', '34 1/2"', '34\\S1/2;"'),
+            (276, 'nil', '34 1/2"', f'{MID}34{FULL}\\S1/2;}}"'),
             (320, 't', "3'-4\"", "3'-4\""),             # no fraction: same
-            (396, 't', "4'-1 1/2\"", "4'-1\\S1/2;\""),
-            (398, 't', "4'-1 3/4\"", "4'-1\\S3/4;\"")]:
+            (396, 't', "4'-1 1/2\"", f"{MID}4'-1{FULL}\\S1/2;}}\""),
+            (398, 't', "4'-1 3/4\"", f"{MID}4'-1{FULL}\\S3/4;}}\"")]:
         assert vm.loads(f'(ds:format {eighths} {hasfeet})') == plain
         assert vm.loads(f'(ds:stacked {eighths} {hasfeet})') == drawn
     # and ds:drawn is the door between them, taking the plain spelling
-    assert vm.loads('(ds:drawn "4\'-1 1/2\\"")') == "4'-1\\S1/2;\""
+    assert (vm.loads('(ds:drawn "4\'-1 1/2\\"")')
+            == f"{MID}4'-1{FULL}\\S1/2;}}\"")
     # no space survives anywhere in a drawn fraction
     assert ' ' not in vm.loads('(ds:stacked 396 t)')
     print("ok  stacked      -> the drawn fraction is \\S-stacked and"
           " space-free; the echoed one stays readable")
 
 
+def test_the_stacked_fraction_is_the_size_of_the_text_around_it():
+    """A stack AutoCAD sizes itself comes out at 70% of the text it sits
+    in, which drew the half in 34 1/2" a size down from the 34.  So the
+    drawn spelling carries its own \\H height code, at ds:*stack-hgt*
+    -- 1.0, the size of the number beside it -- and the BRACES close
+    that height at the end of the stack, so the inch mark after it is
+    back at the stamp's own size."""
+    vm = newvm()
+    assert vm.loads('ds:*stack-hgt*') == 1.0, 'full size by default'
+    assert (vm.loads('(ds:stacked 276 nil)')
+            == '\\A1;34{\\H1.0000x;\\S1/2;}"')
+    # the height code opens INSIDE the group and the group closes
+    # before the inch mark -- the " is not part of the fraction
+    assert vm.loads('(ds:stacked 276 nil)').endswith(';}"')
+    # a value with no fraction has no height code to carry
+    assert '\\H' not in vm.loads('(ds:stacked 272 nil)')
+    # the knob is the factor, and it reaches the drawing
+    vm.loads('(setq ds:*stack-hgt* 0.75)')
+    assert (vm.loads('(ds:stacked 276 nil)')
+            == '\\A1;34{\\H0.7500x;\\S1/2;}"')
+    # and nil hands the sizing back to AutoCAD: the bare \\S spelling
+    vm.loads('(setq ds:*stack-hgt* nil)')
+    assert vm.loads('(ds:stacked 276 nil)') == '\\A1;34\\S1/2;"'
+    print("ok  stack height -> the fraction is drawn the size of the"
+          " text around it, and the \" after it is not")
+
+
+def test_the_stacked_fraction_sits_on_its_line():
+    """The other half of drawing a full-height stack: sized back up and
+    left on the baseline, a fraction towers over the number it belongs
+    to.  So a line with a stack on it opens with an \\A alignment code,
+    at ds:*stack-align* -- 1, centred, which is what the shop's own
+    dimension text carries (\\A1;33'-2{\\H1x;\\S1/2;}" out of one of
+    these drawings)."""
+    vm = newvm()
+    assert vm.loads('ds:*stack-align*') == 1, 'centred by default'
+    # the code opens the WHOLE line, ahead of the whole inches -- \A
+    # applies from where it stands, and it is the line being aligned
+    assert vm.loads('(ds:stacked 396 t)').startswith('\\A1;4\'-1{')
+    # a line with no fraction on it has nothing to align
+    assert vm.loads('(ds:stacked 320 t)') == "3'-4\""
+    # the knob is the value: 0 bottom, 1 centred, 2 top
+    vm.loads('(setq ds:*stack-align* 2)')
+    assert vm.loads('(ds:stacked 276 nil)').startswith('\\A2;34{')
+    # and nil writes no alignment code at all
+    vm.loads('(setq ds:*stack-align* nil)')
+    assert vm.loads('(ds:stacked 276 nil)') == '34{\\H1.0000x;\\S1/2;}"'
+    # the plain spelling carries neither code, whatever the knobs say
+    assert vm.loads('(ds:format 276 nil)') == '34 1/2"'
+    print("ok  stack line   -> a line with a stack on it is centred on"
+          " itself, the way the shop's own text is")
+
+
 def test_the_stack_separator_is_a_knob():
     vm = newvm()
     vm.loads('(setq ds:*stack* "#")')     # the diagonal form
-    assert vm.loads('(ds:stacked 396 t)') == "4'-1\\S1#2;\""
+    assert vm.loads('(ds:stacked 396 t)') == f"{MID}4'-1{FULL}\\S1#2;}}\""
     print("ok  stack knob   -> ds:*stack* picks bar, diagonal or"
           " tolerance stacking")
+
+
+def test_letters_are_a_family_of_their_own():
+    """The survey points are named in letters, so a letter is the other
+    thing this tool stamps.  A is 1, Z is 26, AA is 27 -- a
+    spreadsheet's columns -- and ds:parse tags it 'letter, which is
+    what every other part reads the family off."""
+    vm = newvm()
+    for n, name in [(1, 'A'), (2, 'B'), (26, 'Z'), (27, 'AA'),
+                    (28, 'AB'), (52, 'AZ'), (53, 'BA'), (702, 'ZZ')]:
+        assert vm.loads(f'(ds:letter-name {n})') == name
+        assert vm.loads(f'(ds:letter-index "{name}")') == n
+    # case does not matter going in; what comes out is upper case
+    assert vm.loads('(ds:letter-index "b")') == 2
+    assert vm.loads('(ds:read "b")') == 'B'
+    # the family rides along in the parse, beside the two measurement ones
+    assert vm.loads('(ds:parse "A")') == [1, 'letter']
+    assert vm.loads('(ds:parse "AB")') == [28, 'letter']
+    assert vm.loads('(ds:parse "34 1/2\\"")') == [276, None]
+    # nothing in a label stacks: the drawn spelling IS the plain one
+    assert vm.loads('(ds:drawn "A")') == 'A'
+    assert vm.loads('(ds:stacked 1 (quote letter))') == 'A'
+    print("ok  letters      -> A, B ... Z, AA: a family of their own,"
+          " parsed and spelled as one")
+
+
+def test_a_word_is_not_a_label():
+    """A label is one or two letters.  A longer run of them is a word
+    somebody typed by mistake, and being told beats finding NOPE
+    stamped on a sheet."""
+    vm = newvm()
+    assert vm.loads('(ds:letter-index "nope")') is None
+    assert vm.loads('(ds:parse "nope")') is None
+    assert vm.loads('(ds:letter-index "4A")') is None, 'digits are not a label'
+    assert vm.loads('(ds:letter-index "")') is None
+    # ...and how long is a knob
+    vm.loads('(setq ds:*letter-max* 4)')
+    assert vm.loads('(ds:letter-index "nope")') == 256625
+    print("ok  not a label  -> a word is refused, and the length is"
+          " ds:*letter-max*")
+
+
+def test_the_ruler_offers_letters_when_the_value_is_one():
+    """What is near A is B, not 1/8\": the ruler offers the letters
+    either side instead of the eighths, all one tier because every
+    letter is one whole step, and nothing before A."""
+    vm = newvm()
+    ents, box, rows = vm.loads("(ds:draw-ruler 3 (quote letter))")   # C
+    # four either side, plus the current row
+    assert [v for v, y in rows] == [1, 2, 3, 4, 5, 6, 7], rows
+    labels = sorted(d[1] for d in live_entities(vm) if d.get(0) == 'MTEXT')
+    assert labels == ['A', 'B', 'C', 'D', 'E', 'F', 'G'], labels
+    # no row before A, however near the front of the sequence it starts
+    _, _, rows = vm.loads("(ds:draw-ruler 1 (quote letter))")        # A
+    assert [v for v, y in rows] == [1, 2, 3, 4, 5], rows
+    # every letter row is the same size -- there is no eighth of a letter
+    heights = {d.get(40) for d in live_entities(vm) if d.get(0) == 'MTEXT'}
+    assert len(heights) == 1, heights
+    # and how many is a knob
+    vm.loads('(setq ds:*letters-either-side* 2)')
+    _, _, rows = vm.loads("(ds:draw-ruler 10 (quote letter))")
+    assert len(rows) == 5, rows
+    print("ok  letter ruler -> the letters either side, one tier, none"
+          " before A")
+
+
+def test_a_letter_moves_on_as_it_is_stamped():
+    """The whole of stamping a lot of letters: a run of labels is A, B,
+    C and never A, A, A, so the value steps by one as it lands and the
+    next click stamps the next letter."""
+    vm = newvm()
+    run(vm, [(0.0, 0.0), 'A', (10.0, 0.0), (20.0, 0.0), (30.0, 0.0),
+             None], 'a lot of letters')
+    t = stamps(vm)
+    assert [x[1] for x in t] == ['A', 'B', 'C', 'D'], t
+    assert [tuple(x[10][:2]) for x in t] == [(0.0, 0.0), (10.0, 0.0),
+                                             (20.0, 0.0), (30.0, 0.0)], t
+    # the line back says which one is next, so a run reads off the
+    # command line without looking at the ruler
+    assert [p for p in vm.printed if p.startswith(' Next:')] == \
+        [' Next: B.', ' Next: C.', ' Next: D.', ' Next: E.'], vm.printed
+    # a MEASUREMENT stays put -- stamping 34" in three places is what
+    # dimensioning is
+    vm = newvm()
+    run(vm, [(0.0, 0.0), '34"', (10.0, 0.0), (20.0, 0.0), None], 'measure')
+    assert [x[1] for x in stamps(vm)] == ['34"', '34"', '34"']
+    assert not any(p.startswith(' Next:') for p in vm.printed), vm.printed
+    # ...and the moving on is a knob
+    vm = newvm()
+    vm.loads('(setq ds:*letter-advance* nil)')
+    run(vm, [(0.0, 0.0), 'A', (10.0, 0.0), None], 'no advance')
+    assert [x[1] for x in stamps(vm)] == ['A', 'A']
+    print("ok  letter run   -> A, B, C off three clicks; a measurement"
+          " stays put")
+
+
+def test_a_letter_picked_off_the_ruler_carries_on_from_there():
+    """Adopting a letter works the way adopting a measurement does, and
+    the run carries on from the letter picked.  Note where the ruler
+    is by then: stamping C moved the value on to D, so the ruler has
+    already re-centred on D and it is D's rows a click lands on --
+    the ruler follows the advance rather than the letter just
+    stamped."""
+    vm = newvm()
+    # D, with four either side: nothing before A, so A..H
+    spine, box, rows = probe_ruler(4, 'letter')
+    assert [v for v, y in rows] == [1, 2, 3, 4, 5, 6, 7, 8], rows
+    run(vm, [(0.0, 0.0), 'C',           # stamps C, moves on to D
+             (spine, rows[-1][1]),      # pick the top row, H
+             (10.0, 0.0),               # stamp it
+             (20.0, 0.0),               # and the next letter after it
+             None], 'adopt a letter')
+    assert [x[1] for x in stamps(vm)] == ['C', 'H', 'I'], stamps(vm)
+    print("ok  letter pick  -> adopted off the ruler, and the run"
+          " carries on from there")
 
 
 def test_rounds_to_the_nearest_eighth():
@@ -359,6 +539,60 @@ def test_the_ring_is_bigger_than_it_was_and_is_a_knob():
           " ds:*ring-frac* sets it")
 
 
+def test_the_ruler_holds_the_right_edge_of_the_view():
+    """The strip is scratch over somebody's drawing, so it sits where
+    there is least of it: a spine near the RIGHT edge, with every tick
+    and label reaching back INWARD from it.  Hung the other way they
+    would be drawn past the edge of the screen the ruler is pinned
+    to -- unreadable, and a pan away from being pickable."""
+    vm = newvm()
+    _, box, rows = vm.loads('(ds:draw-ruler 352 nil)')
+    vx, vy, vw, vh = vm.loads('(ds:view)')
+    spine = vx + vw * 0.88
+    assert vm.loads('ds:*ruler-screen-x*') == 0.88, 'pinned right'
+    live = live_entities(vm)
+    ticks = [d for d in live if d.get(0) == 'LINE']
+    labels = [d for d in live if d.get(0) == 'MTEXT']
+    # every tick's far end and every label's insertion is inboard of
+    # the spine, and the whole ruler is inside the view
+    assert all(d[11][0] <= spine + 1e-9 for d in ticks), ticks
+    assert all(d[10][0] <= spine + 1e-9 for d in labels), labels
+    assert all(d[10][0] > vx for d in labels), labels
+    assert spine < vx + vw, (spine, vx + vw)
+    # a label on a row that reaches left is hung by its RIGHT edge, so
+    # it grows away from the spine instead of back across it
+    assert {d.get(71) for d in labels} == {3}, labels
+    # and the reserved strip runs inward from the spine too
+    assert box[0] < box[1] <= spine + vh * 0.042, box
+    print("ok  right edge   -> spine at the right of the view, rows"
+          " reaching inward, all of it on screen")
+
+
+def test_the_side_is_a_knob_and_the_rows_turn_round_with_it():
+    """ds:*ruler-screen-x* is still the whole placement knob: put the
+    spine back on the left and the rows reach RIGHT again, labels hung
+    by their left edge, because a ruler always runs toward the middle
+    of the view rather than off its nearest edge."""
+    vm = newvm()
+    vm.loads('(setq ds:*ruler-screen-x* 0.12)')
+    _, box, rows = vm.loads('(ds:draw-ruler 352 nil)')
+    vx, vy, vw, vh = vm.loads('(ds:view)')
+    spine = vx + vw * 0.12
+    live = live_entities(vm)
+    ticks = [d for d in live if d.get(0) == 'LINE']
+    labels = [d for d in live if d.get(0) == 'MTEXT']
+    assert all(d[11][0] >= spine - 1e-9 for d in ticks), ticks
+    assert all(d[10][0] >= spine - 1e-9 for d in labels), labels
+    assert {d.get(71) for d in labels} == {1}, labels
+    assert box[1] > box[0] >= spine - vh * 0.042, box
+    # the direction is derived from the side, not set beside it
+    assert vm.loads('(ds:ruler-dir)') == 1.0
+    vm.loads('(setq ds:*ruler-screen-x* 0.88)')
+    assert vm.loads('(ds:ruler-dir)') == -1.0
+    print("ok  ruler side   -> the knob moves it, and the rows turn"
+          " round to keep reaching inward")
+
+
 def test_ruler_is_pinned_to_the_view_and_scales_with_it():
     """The ruler holds the same strip of SCREEN at any zoom: centred on
     the view, sized as a fraction of it.  Zoom in 5x and every measure
@@ -423,16 +657,20 @@ def test_click_a_ruler_row_adopts_without_stamping():
 
 
 def test_a_click_just_off_the_ruler_stamps_instead():
-    """The strip is reserved, and only the strip: a click past its
-    right-hand reach is a stamp, not a row pick."""
+    """The strip is reserved, and only the strip: a click past the end
+    of its reach is a stamp, not a row pick.  Either end of it -- the
+    inboard one is the side the labels run and the side the drawing
+    is on, the outboard one is the sliver beyond the spine."""
     spine, box, rows = probe_ruler(272, False)
-    vm = newvm()
-    run(vm, [(0.0, 0.0), '34"',
-             (box[1] + 1.0, rows[-1][1]),     # same row, just outside
-             None], 'off the strip')
-    t = stamps(vm)
-    assert [x[1] for x in t] == ['34"', '34"'], t
-    print("ok  off the strip -> a click past the ruler's reach stamps")
+    for x, where in [(box[0] - 1.0, 'inboard'), (box[1] + 1.0, 'outboard')]:
+        vm = newvm()
+        run(vm, [(0.0, 0.0), '34"',
+                 (x, rows[-1][1]),            # same row, just outside
+                 None], 'off the strip ' + where)
+        t = stamps(vm)
+        assert [y[1] for y in t] == ['34"', '34"'], (where, t)
+    print("ok  off the strip -> a click past either end of the ruler's"
+          " reach stamps")
 
 
 def test_typed_text_at_the_unified_prompt_is_adopted():
@@ -456,7 +694,8 @@ def test_a_lazy_answer_is_stamped_canonically_and_echoed():
              FAR,
              None], 'lazy')
     t = stamps(vm)
-    assert [x[1] for x in t] == ["4'-4\\S1/2;\"", '52\\S1/2;"'], t
+    assert [x[1] for x in t] == [f"{MID}4'-4{FULL}\\S1/2;}}\"",
+                                 f'{MID}52{FULL}\\S1/2;}}"'], t
     said = [p for p in vm.printed if 'read as' in p]
     assert len(said) == 2, said
     assert "4'-4 1/2\"" in said[0] and '52 1/2"' in said[1], said
@@ -593,7 +832,14 @@ if __name__ == '__main__':
     test_parse_and_format_round_trip()
     test_reads_the_lazy_spellings()
     test_two_spellings_plain_and_stacked()
+    test_the_stacked_fraction_is_the_size_of_the_text_around_it()
+    test_the_stacked_fraction_sits_on_its_line()
     test_the_stack_separator_is_a_knob()
+    test_letters_are_a_family_of_their_own()
+    test_a_word_is_not_a_label()
+    test_the_ruler_offers_letters_when_the_value_is_one()
+    test_a_letter_moves_on_as_it_is_stamped()
+    test_a_letter_picked_off_the_ruler_carries_on_from_there()
     test_rounds_to_the_nearest_eighth()
     test_rejects_what_is_not_a_measurement()
     test_tier_grading()
@@ -606,6 +852,8 @@ if __name__ == '__main__':
     test_draw_ruler_geometry()
     test_the_current_row_is_drawn_as_a_stamp_not_as_a_ruler()
     test_the_ring_is_bigger_than_it_was_and_is_a_knob()
+    test_the_ruler_holds_the_right_edge_of_the_view()
+    test_the_side_is_a_knob_and_the_rows_turn_round_with_it()
     test_ruler_is_pinned_to_the_view_and_scales_with_it()
     test_first_placement_has_no_ruler_yet()
     test_ruler_is_cleaned_up_at_the_end()

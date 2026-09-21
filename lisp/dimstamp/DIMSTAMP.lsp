@@ -1,6 +1,6 @@
 ;;; ======================================================================
 ;;; DIMSTAMP.lsp  --  click a point, stamp a feet/inch dimension text
-;;;                    there, and repeat
+;;;                    or a letter label there, and repeat
 ;;; ----------------------------------------------------------------------
 ;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
 ;;;
@@ -28,12 +28,23 @@
 ;;; would stamp.
 ;;;
 ;;; The ruler is pinned to the SCREEN, not to the drawing: it is drawn
-;;; down a strip near the left of whatever the current view is showing
-;;; and sized as a fraction of that view, so it stays the same size and
-;;; in the same place whether the drawing is zoomed to a whole pool or
-;;; to one step.  It re-pins every time it redraws.  That strip is
-;;; reserved -- a click inside it picks a row, so stamps land outside
-;;; it; ds:*ruler-screen-x* moves it if it is ever in the way.
+;;; down a strip near the RIGHT edge of whatever the current view is
+;;; showing and sized as a fraction of that view, so it stays the same
+;;; size and in the same place whether the drawing is zoomed to a whole
+;;; pool or to one step.  It re-pins every time it redraws.  The right
+;;; edge is where it sits over the least drawing: a pool is drawn from
+;;; the middle out and dimensioned along its sides, and the ruler is
+;;; scratch -- it should be the thing at the edge of the eye, not the
+;;; thing a stamp has to be placed around.
+;;;
+;;; Its rows reach INWARD from that spine, and that is not a knob: a
+;;; tick and a label hung off the outside of a spine pinned near an
+;;; edge would be drawn past the edge, where nothing can be read and a
+;;; pick is a pan away.  So the side decides the direction --
+;;; ds:*ruler-screen-x* past the middle of the view reaches left, short
+;;; of it reaches right -- and the ruler is inside the view wherever it
+;;; is pinned.  That strip is reserved: a click inside it picks a row,
+;;; so stamps land outside it.
 ;;;
 ;;; From there, one prompt does three jobs:
 ;;;   * click empty space           -- stamps the CURRENT text there;
@@ -54,18 +65,55 @@
 ;;; front of it: the stack is the separation, and a space there only
 ;;; pushes the inch mark off the number.
 ;;;
-;;;   drawn (MTEXT)      reads on the sheet as   the plain spelling
-;;;   -----------------  ---------------------   -----------------
-;;;   34"                34"                     34"
-;;;   3'-4"              3'-4"                   3'-4"
-;;;   34\S1/2;"          34 over-a-half "        34 1/2"
-;;;   4'-1\S1/2;"        4'-1 over-a-half "      4'-1 1/2"
+;;; The stack carries its own HEIGHT and ALIGNMENT codes, and they are
+;;; what the shop's own dimension text carries: an MTEXT out of one of
+;;; these drawings reads \A1;33'-2{\H1x;\S1/2;}", not a bare stack.
+;;; Both matter, and for the same reason -- left alone, AutoCAD draws
+;;; a stack SMALLER than the text it sits in (70% of it, the
+;;; TSTACKSIZE default), so the half in 34 1/2" came out a size down
+;;; from the 34 it belongs to, and a stack sized back up has to sit on
+;;; the line rather than tower over it.  So ds:*stack-hgt* is 1.0, the
+;;; size of the number beside it, and ds:*stack-align* is 1, centred.
+;;; The braces close the height change at the end of the stack, so the
+;;; inch mark after it is back at the stamp's own height rather than
+;;; inheriting the fraction's.
 ;;;
-;;; The plain spelling on the right is what a prompt offers, what the
+;;;   the plain spelling  reads as           drawn (MTEXT)
+;;;   ------------------  -----------------  --------------------------
+;;;   34"                 34"                34"
+;;;   3'-4"               3'-4"              3'-4"
+;;;   34 1/2"             34 over-a-half "   \A1;34{\H1.0000x;\S1/2;}"
+;;;   4'-1 1/2"           4'-1 over-a-half " \A1;4'-1{\H1.0000x;\S1/2;}"
+;;;
+;;; The plain spelling on the left is what a prompt offers, what the
 ;;; command line echoes and what ds:parse reads back -- nothing stacks
 ;;; on a command line, and 4'-11/2" there would read as eleven halves.
-;;; The stacked one reaches an MTEXT and nothing else; ds:drawn is the
+;;; The drawn one reaches an MTEXT and nothing else; ds:drawn is the
 ;;; one door between them, so no call site can forget it.
+;;;
+;;; LETTERS are the other thing it stamps, and the reason is that the
+;;; survey points are named in them: type a letter rather than a
+;;; measurement and the whole tool turns over to labelling.  A is 1, Z
+;;; is 26, AA is 27 -- a spreadsheet's columns, which is the sequence
+;;; a shop whose points arrive in Excel already reads -- and the ruler
+;;; offers the letters either side instead of the eighths of an inch,
+;;; because what is near A is B, not 1/8".
+;;;
+;;; The one real difference is what a stamp leaves behind.  A
+;;; measurement STAYS: dimensioning is stamping 34" in three places,
+;;; so the next click stamps it again.  A letter MOVES ON: a run of
+;;; labels is A, B, C and never A, A, A, so the value steps by one as
+;;; it lands and the next click stamps the next letter.  That is what
+;;; makes a lot of them worth stamping -- click, click, click -- and
+;;; ds:*letter-advance* turns it off for the drawing that wants the
+;;; same label twice.  The line back says which letter is next, so a
+;;; run can be read off the command line without looking at the ruler.
+;;;
+;;; A label is one or two letters (ds:*letter-max*), which is A
+;;; through ZZ, 702 of them.  More than that is a word typed by
+;;; mistake, and being told so beats finding NOPE stamped on a sheet.
+;;; Nothing in a label stacks, so its drawn spelling and its plain one
+;;; are the same string.
 ;;;
 ;;; What it READS is far looser, because nobody types a dimension
 ;;; carefully twice.  The inch mark is optional and may be two
@@ -82,8 +130,9 @@
 ;;; drawing.  Feet spelled means feet written, so 52.5 stays 52 1/2"
 ;;; rather than becoming 4'-4 1/2".
 ;;;
-;;; The ruler offers, around whatever the current value is, every
-;;; eighth of an inch for a WHOLE INCH EITHER SIDE -- 44" offers 43"
+;;; The ruler offers, around whatever the current value is, the four
+;;; letters either side when it is a label -- and when it is a
+;;; measurement, every eighth of an inch for a WHOLE INCH EITHER SIDE -- 44" offers 43"
 ;;; through 45", the inch before as well as the inch after, since a
 ;;; measurement is read back off the tape as often downward as up.
 ;;; Quarters and eighths sit on the one ruler, told apart by tier
@@ -98,7 +147,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.3")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.6")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -132,6 +181,29 @@
                                     ; over the other with a bar between,
                                     ; "#" the diagonal form, "^" the
                                     ; tolerance stack with no bar
+(setq ds:*stack-hgt* 1.0)          ; how tall that stacked fraction is
+                                    ; drawn, as a factor of the text
+                                    ; around it.  1.0 is the size of
+                                    ; the whole inches beside it, which
+                                    ; is how this shop's dimension text
+                                    ; reads; AutoCAD left to itself
+                                    ; draws a stack at 0.7 (its
+                                    ; TSTACKSIZE default), a size down
+                                    ; from the number it belongs to.
+                                    ; nil writes no height code at all
+                                    ; and leaves that default alone
+(setq ds:*stack-align* 1)          ; where that fraction sits against
+                                    ; the line it is on: 0 bottom, 1
+                                    ; centred, 2 top, and 1 is what the
+                                    ; shop's own dimension text carries
+                                    ; (\A1;33'-2{\H1x;\S1/2;}" out of
+                                    ; one of these drawings).  It is
+                                    ; the other half of drawing a
+                                    ; full-height stack: sized back up
+                                    ; and left to sit on the baseline,
+                                    ; a fraction towers over the number
+                                    ; it belongs to.  nil writes no
+                                    ; alignment code at all
 
 ;; -- the ruler.  Scratch geometry, and pinned to the SCREEN: every
 ;;    size below is a fraction of the current view, so the ruler looks
@@ -142,12 +214,17 @@
 (setq ds:*ruler-color* 3)          ; ACI colour of the ruler, on the
                                     ; entities themselves so it reads
                                     ; the same whatever its layer says
-(setq ds:*ruler-screen-x* 0.12)    ; where the spine sits across the
+(setq ds:*ruler-screen-x* 0.88)    ; where the spine sits across the
                                     ; view: a fraction of the view's
-                                    ; WIDTH in from its left edge.
-                                    ; Raise it to move the ruler right,
-                                    ; out of the way of work at the
-                                    ; left of the screen
+                                    ; WIDTH in from its LEFT edge, so
+                                    ; 0.88 is near the right edge --
+                                    ; the strip that sits over the
+                                    ; least of the drawing.  The rows
+                                    ; reach INWARD from the spine
+                                    ; whichever side it is on, so a
+                                    ; value under 0.5 puts the ruler
+                                    ; back on the left and turns the
+                                    ; rows round to reach right
 (setq ds:*ruler-row-frac* 0.042)   ; one row's share of the view's
                                     ; HEIGHT -- the ruler's whole size
                                     ; knob.  Raise it for a bigger
@@ -166,10 +243,35 @@
                                     ; means it reads in exactly the
                                     ; colour the stamp will.  A number
                                     ; here overrides that
-(setq ds:*ruler-reach* 6.0)        ; how far right of the spine, in row
+(setq ds:*letter-max* 2)           ; how many letters a LABEL may be.
+                                    ; 2 covers A through ZZ -- 702
+                                    ; labels, more than a drawing has
+                                    ; points -- and anything longer is
+                                    ; a word, not a label: a slip of
+                                    ; the keyboard still gets told it
+                                    ; is not a measurement rather than
+                                    ; being stamped as one
+(setq ds:*letters-either-side* 4)  ; how many letters the ruler offers
+                                    ; each way round the current one.
+                                    ; A row before A is dropped, the
+                                    ; way a measurement at or below
+                                    ; zero is
+(setq ds:*letter-advance* T)       ; a LETTER stamp moves the current
+                                    ; value on to the next letter, so
+                                    ; a run of labels is click, click,
+                                    ; click for A, B, C -- they are
+                                    ; never A, A, A, which is what
+                                    ; makes stamping a lot of them
+                                    ; worth doing.  nil stamps the
+                                    ; same letter until you change it,
+                                    ; the way a measurement does
+(setq ds:*ruler-reach* 6.0)        ; how far INBOARD of the spine -- the
+                                    ; way the rows run -- in row
                                     ; spacings, a click still counts as
                                     ; picking a row rather than as an
-                                    ; empty-space stamp
+                                    ; empty-space stamp.  The far side
+                                    ; of the spine is half a row
+                                    ; spacing, which is the tick itself
 
 ;;; -------------------- helpers ----------------------------------------
 
@@ -229,11 +331,61 @@
       (setq total nil)))
   total)
 
-;; Parse a measurement into (EIGHTHS HASFEET), where EIGHTHS is the
-;; total in eighths of an inch (an integer, rounded to the nearest
-;; eighth) and HASFEET is T when feet were spelled -- carried back
-;; through so a value renders, and is offered further suggestions, in
-;; the family it was typed in.
+;; A LETTER LABEL as its place in the sequence: A is 1, Z is 26, AA
+;; is 27, AB 28 -- the way a spreadsheet's columns run, which is the
+;; progression a shop whose points arrive in Excel already reads.
+;; Case does not matter going in and what comes back out is upper
+;; case, so a typed "b" is stamped "B".
+;;
+;; nil when S is not letters at all, and nil when it is MORE letters
+;; than ds:*letter-max*: a label is one or two letters, so a longer
+;; run of them is a word somebody typed by mistake, and telling them
+;; that beats stamping NOPE on their drawing.
+(defun ds:letter-index (s / n i c out)
+  (setq s (vl-string-trim " \t" s)
+        n (strlen s)
+        i 1
+        out 0)
+  (if (and (> n 0) (<= n ds:*letter-max*))
+    (progn
+      (while (and out (<= i n))
+        (setq c (ascii (strcase (substr s i 1))))
+        (if (and (>= c 65) (<= c 90))
+          (setq out (+ (* out 26) (- c 64)))
+          (setq out nil))
+        (setq i (1+ i)))
+      out)))
+
+;; The other way round: place N in that sequence, spelled.  1 is "A",
+;; 26 "Z", 27 "AA".  NOTE: the remainder is "r", not "rem" -- rem IS
+;; an AutoLISP function, and a local of that name shadows it for every
+;; call this one makes.
+(defun ds:letter-name (n / out r)
+  (setq out "")
+  (while (> n 0)
+    (setq r   (rem (1- n) 26)
+          out (strcat (chr (+ 65 r)) out)
+          n   (/ (- n 1 r) 26)))
+  out)
+
+;; Parse an answer into (VALUE FAMILY) -- the pair every other part of
+;; this tool is handed, and the only place that decides which of the
+;; two things DIMSTAMP stamps an answer is.
+;;
+;;   (EIGHTHS nil)      a MEASUREMENT in plain inches, EIGHTHS being
+;;                      the total in eighths of an inch, an integer
+;;                      rounded to the nearest one
+;;   (EIGHTHS T)        the same, with FEET spelled -- carried back
+;;                      through so a value renders, and is offered
+;;                      further suggestions, in the family it was
+;;                      typed in
+;;   (INDEX 'letter)    a LETTER LABEL, INDEX being its place in the
+;;                      sequence (A is 1).  The survey points are
+;;                      named this way, and a drawing wants a run of
+;;                      them rather than one
+;;
+;; The two cannot collide: a measurement never spells letters and a
+;; label never spells digits.
 ;;
 ;; Deliberately LENIENT, because nobody types a dimension carefully
 ;; twice: the inch mark is optional and may be two apostrophes, the
@@ -242,9 +394,13 @@
 ;; 52.5 all read; what gets STAMPED is always ds:format's canonical
 ;; spelling, never what was typed.  nil when the text is not a
 ;; measurement at all, or reads as nothing at all.
-(defun ds:parse (s / n apos feetstr rest hasfeet feet inch eighths)
-  (setq s (vl-string-trim " \t" s)
-        n (strlen s))
+(defun ds:parse (s / n apos feetstr rest hasfeet feet inch eighths raw
+                     lidx)
+  (setq s   (vl-string-trim " \t" s)
+        raw s                          ; kept for the letter attempt:
+                                       ; the inch mark and the feet
+                                       ; split chew s up below
+        n   (strlen s))
   ;; the inch mark, however it was spelled, or left off entirely
   (cond
     ((and (>= n 2) (= (substr s (1- n) 2) "''"))
@@ -262,10 +418,42 @@
     (setq rest (vl-string-trim " \t" s)))
   (setq inch (if rest (ds:inches rest)))
   ;; an empty inches part is only an answer when feet carried it
-  (if (and inch (or hasfeet (/= rest "")))
-    (progn
-      (setq eighths (fix (+ 0.5 (* 8.0 (+ (* feet 12.0) inch)))))
-      (if (> eighths 0) (list eighths hasfeet)))))
+  (or (if (and inch (or hasfeet (/= rest "")))
+        (progn
+          (setq eighths (fix (+ 0.5 (* 8.0 (+ (* feet 12.0) inch)))))
+          (if (> eighths 0) (list eighths hasfeet))))
+      ;; not a measurement, then a LETTER LABEL -- the other family
+      ;; this tool stamps, and the one the survey points are named in
+      (if (setq lidx (ds:letter-index raw)) (list lidx 'letter))))
+
+;; STR -- a stacked fraction, \S code and all -- wrapped in the height
+;; code that draws it at ds:*stack-hgt* times the text around it.  A
+;; stack AutoCAD is left to size itself comes out at 70% of that text
+;; (TSTACKSIZE), a size down from the whole inches it belongs to, and
+;; a dimension reads as one number or it does not read: the fraction
+;; is part of the measurement, not a footnote to it.
+;;
+;; The BRACES are the other half of the job.  \H runs to the end of
+;; its enclosing group, so without them the height would carry on past
+;; the stack and take the inch mark with it; inside them it ends where
+;; the fraction does and the " after it is back at the stamp's own
+;; size.  A nil knob writes no code at all, which is the bare \S
+;; spelling and AutoCAD's own default height.
+(defun ds:stack-sized (str)
+  (if ds:*stack-hgt*
+    (strcat "{\\H" (rtos ds:*stack-hgt* 2 4) "x;" str "}")
+    str))
+
+;; The alignment code a line carrying a stack opens with, or "" when
+;; the knob is nil.  It goes at the FRONT of the whole string, ahead of
+;; the whole inches, which is where the shop's own dimension text
+;; carries it -- \A applies from where it stands, and what is being
+;; aligned is the line the stack sits on, not the stack alone.  A line
+;; with no fraction in it has nothing to align and gets no code.
+(defun ds:stack-aligned ()
+  (if ds:*stack-align*
+    (strcat "\\A" (itoa ds:*stack-align*) ";")
+    ""))
 
 ;; Spell TOTAL-EIGHTHS (an integer count of 1/8" units) out as text,
 ;; in the HASFEET family the source text used -- feet notation, or
@@ -279,10 +467,12 @@
 ;;          halves, so the space earns its keep.  This is the spelling
 ;;          ds:parse reads back, and the only one ever compared,
 ;;          prompted with, or printed.
-;;   T   -- DRAWN: "\S1/2;", AutoCAD's stacking code, and NO space in
-;;          front of it.  The stack IS the separation; a space there
-;;          only pushes the inch mark away from the number.  This is
-;;          the spelling that reaches an MTEXT, and nothing else.
+;;   T   -- DRAWN: "\A1;34{\H1.0000x;\S1/2;}"", AutoCAD's stacking
+;;          code at the height ds:stack-sized gives it, on a line
+;;          ds:stack-aligned centres, and NO space in front of it.
+;;          The stack IS the separation; a space there only pushes the
+;;          inch mark away from the number.  This is the spelling that
+;;          reaches an MTEXT, and nothing else.
 ;; NOTE: the leftover eighths are "remain", not "rem" -- rem IS an
 ;; AutoLISP function, and a local of that name shadows it for every
 ;; call this one makes.
@@ -303,19 +493,28 @@
   (setq fr (cond
              ((= num 0) "")
              ((null stacked) (strcat " " (itoa num) "/" (itoa den)))
-             (T (strcat "\\S" (itoa num) ds:*stack* (itoa den) ";"))))
-  (strcat (if hasfeet (strcat (itoa feet) "'-") "")
+             (T (ds:stack-sized
+                  (strcat "\\S" (itoa num) ds:*stack* (itoa den) ";")))))
+  (strcat (if (and stacked (/= num 0)) (ds:stack-aligned) "")
+          (if hasfeet (strcat (itoa feet) "'-") "")
           (itoa whole) fr "\""))
 
 ;; The PLAIN spelling: what a prompt offers, what the command line
 ;; says, and what ds:parse reads back.
-(defun ds:format (total-eighths hasfeet)
-  (ds:spell total-eighths hasfeet nil))
+(defun ds:format (value family)
+  (if (eq family 'letter)
+    (ds:letter-name value)
+    (ds:spell value family nil)))
 
 ;; The DRAWN spelling: the same value with its fraction stacked, for
-;; an MTEXT and nowhere else.
-(defun ds:stacked (total-eighths hasfeet)
-  (ds:spell total-eighths hasfeet T))
+;; an MTEXT and nowhere else.  A LETTER has only the one spelling --
+;; there is nothing in a label to stack, so the drawn one and the
+;; plain one are the same string, and saying so here is what keeps the
+;; stack codes out of a stamped A.
+(defun ds:stacked (value family)
+  (if (eq family 'letter)
+    (ds:letter-name value)
+    (ds:spell value family T)))
 
 ;; STR -- a plain canonical spelling -- as the string that DRAWS it.
 ;; Every stamp goes through here, so a stacked fraction is not
@@ -346,11 +545,32 @@
     ((member m '(2 6)) 'quarter)
     (T 'eighth)))
 
-;; The nearby values to offer, as a list of (EIGHTHS TIER) pairs (see
-;; the header banner for what each family offers); a row that would
-;; come out at or below zero is dropped.  Unsorted -- the ruler sorts
-;; once it also has the current row to place among them.
-(defun ds:suggestions (total-eighths hasfeet / out i off)
+;; The nearby values to offer, as a list of (VALUE TIER) pairs (see the
+;; header banner for what each family offers); a row that would come
+;; out at or below zero -- or before A -- is dropped.  Unsorted -- the
+;; ruler sorts once it also has the current row to place among them.
+;; One door, and it is the family that picks which side of it.
+(defun ds:suggestions (value family)
+  (if (eq family 'letter)
+    (ds:letter-suggestions value)
+    (ds:measure-suggestions value family)))
+
+;; The letters either side of INDEX.  Every row is one whole letter
+;; from the last -- there is no eighth of a letter -- so they are all
+;; the one tier and all drawn alike, and the only row that reads
+;; differently is the CURRENT one, which the ruler already draws as
+;; the stamp it would make.
+(defun ds:letter-suggestions (index / out i)
+  (setq out nil i 1)
+  (while (<= i ds:*letters-either-side*)
+    (setq out (cons (list (- index i) 'jump) out))
+    (setq out (cons (list (+ index i) 'jump) out))
+    (setq i (1+ i)))
+  (vl-remove-if '(lambda (pr) (<= (car pr) 0)) out))
+
+;; The measurements either side, which is the other half of the door
+;; above.
+(defun ds:measure-suggestions (total-eighths hasfeet / out i off)
   (setq out nil)
   ;; every eighth of an inch for a WHOLE INCH either side, whatever
   ;; family the value is in: 44" offers 43" through 45", the inch
@@ -390,6 +610,16 @@
                  1.6))                    ; no viewport to measure
   (setq vw (* vh aspect))
   (list (- (car ctr) (/ vw 2.0)) (- (cadr ctr) (/ vh 2.0)) vw vh))
+
+;; Which way a ruler row reaches from the spine: 1.0 toward higher x,
+;; -1.0 toward lower.  It is derived, not a knob, and it is what lets
+;; the ruler sit at either edge: a tick and a label hung off the
+;; OUTSIDE of a spine pinned near an edge would be drawn past that
+;; edge, off the screen the whole thing is pinned to, so the rows
+;; always run toward the middle of the view.  The spine's own side is
+;; the only thing that has to be said, and ds:*ruler-screen-x* says it.
+(defun ds:ruler-dir ()
+  (if (> ds:*ruler-screen-x* 0.5) -1.0 1.0))
 
 ;; Label height for a ruler row of this TIER, against a row spacing of
 ;; GAP.
@@ -457,11 +687,14 @@
                      " so the stamps have a style to carry."))))
   name)
 
-;; One MTEXT, written the way the shop's dimension text is: attached
-;; TOP LEFT at PT, the tool's own style, unwrapped, upright.  COL is
-;; an ACI number for the scratch ruler's own colour, or nil for
-;; ByLayer, which is what a real stamp takes.
-(defun ds:mtext (pt hgt str lay col / dxf)
+;; One MTEXT, written the way the shop's dimension text is: the tool's
+;; own style, unwrapped, upright, attached at PT by ATT -- 1 top left,
+;; 3 top right, AutoCAD's own codes.  A stamp is always 1, the way the
+;; shop's text is; a ruler label takes 3 when its row reaches LEFT, so
+;; the label grows away from the spine instead of over it.  COL is an
+;; ACI number for the scratch ruler's own colour, or nil for ByLayer,
+;; which is what a real stamp takes.
+(defun ds:mtext (pt hgt str lay col att / dxf)
   (setq dxf (list '(0 . "MTEXT") '(100 . "AcDbEntity") (cons 8 lay)))
   (if col (setq dxf (append dxf (list (cons 62 col)))))
   (entmakex
@@ -470,7 +703,7 @@
                   (cons 10 (list (car pt) (cadr pt) 0.0))
                   (cons 40 hgt)
                   (cons 41 ds:*text-width*)   ; 0 = no wrap
-                  '(71 . 1)                   ; attachment: top left
+                  (cons 71 att)               ; 1 top left, 3 top right
                   '(72 . 5)                   ; direction: by style
                   (cons 1 str)
                   (cons 7 ds:*style*)
@@ -481,7 +714,7 @@
 ;; Stamp STR at PT -- the drawing content this whole tool exists for.
 ;; STR arrives in the plain spelling and is drawn in the stacked one.
 (defun ds:stamp (pt str)
-  (ds:mtext pt ds:*text-hgt* (ds:drawn str) ds:*layer* nil))
+  (ds:mtext pt ds:*text-hgt* (ds:drawn str) ds:*layer* nil 1))
 
 ;; Erase every entity in ENTS -- how the scratch ruler is swept away,
 ;; before a redraw and for good when the run ends.
@@ -523,7 +756,7 @@
 ;; pick, and makes it read as what it would stamp.
 (defun ds:draw-ruler (total-eighths hasfeet / rows n i row val tier y
                           hgt tl spx ents lbl result view vx vy vw vh
-                          gap base rlay rcol)
+                          gap base rlay rcol dir far near)
   (ds:ensure-layer ds:*ruler-layer* ds:*ruler-color*)
   (ds:ensure-layer ds:*layer* ds:*layer-color*)   ; the current row's
   (ds:ensure-style ds:*style*)
@@ -536,6 +769,7 @@
   (setq n    (length rows)
         gap  (* vh ds:*ruler-row-frac*)
         spx  (+ vx (* vw ds:*ruler-screen-x*))
+        dir  (ds:ruler-dir)           ; rows run inward from the spine
         ;; centred on the view's own middle, however many rows there are
         base (- (+ vy (/ vh 2.0)) (* gap (/ (- n 1) 2.0)))
         i    0
@@ -551,15 +785,19 @@
     (if (eq tier 'current)
       (setq rlay ds:*layer*       rcol ds:*current-color*)
       (setq rlay ds:*ruler-layer* rcol ds:*ruler-color*))
-    (setq ents (cons (ds:ruler-line spx y (+ spx tl) y rlay rcol) ents))
+    (setq ents (cons (ds:ruler-line spx y (+ spx (* dir tl)) y rlay rcol)
+                     ents))
     ;; the ruler is drawn text too, so its rows stack the way a stamp
     ;; off that row will -- the label IS the preview
     (setq lbl (ds:stacked val hasfeet))
-    ;; top-left attachment, so half a label's height above the tick
-    ;; puts the label astride its own row
-    (setq ents (cons (ds:mtext (list (+ spx tl (* gap 0.35))
+    ;; half a label's height above the tick puts it astride its own
+    ;; row, and the attachment turns with the row: a label on a row
+    ;; that reaches left is hung by its RIGHT edge, so it grows away
+    ;; from the spine rather than back across it
+    (setq ents (cons (ds:mtext (list (+ spx (* dir (+ tl (* gap 0.35))))
                                      (+ y (/ hgt 2.0)))
-                               hgt lbl rlay rcol)
+                               hgt lbl rlay rcol
+                               (if (< dir 0.0) 3 1))
                      ents))
     (if (eq tier 'current)
       (setq ents (cons (ds:ruler-ring spx y (* gap ds:*ring-frac*)
@@ -570,10 +808,24 @@
   (setq ents (cons (ds:ruler-line spx base spx (+ base (* (- n 1) gap))
                                   ds:*ruler-layer* ds:*ruler-color*)
                    ents))
+  ;; the strip a click counts as a pick in: the reach on the side the
+  ;; rows run, half a spacing on the other -- the tick's own side
+  (setq near (+ spx (* dir gap ds:*ruler-reach*))
+        far  (- spx (* dir (/ gap 2.0))))
   (list ents
-        (list (- spx (/ gap 2.0)) (+ spx (* gap ds:*ruler-reach*))
-              (/ gap 2.0))
+        (list (min near far) (max near far) (/ gap 2.0))
         (reverse result)))
+
+;; What to carry forward after stamping PARSED.  A run of labels is A,
+;; B, C and never A, A, A, so a letter moves on by one as it is
+;; stamped and the next click lands the next letter -- which is the
+;; whole of "stamp a lot of letters": click, click, click.  A
+;; measurement stays put, because stamping the same one in three
+;; places is exactly what dimensioning is.
+(defun ds:advance (parsed)
+  (if (and ds:*letter-advance* (eq (cadr parsed) 'letter))
+    (list (1+ (car parsed)) 'letter)
+    parsed))
 
 ;; Erase OLDENTS and draw a fresh ruler for PARSED -- the
 ;; (EIGHTHS HASFEET) pair ds:parse hands back.
@@ -597,8 +849,9 @@
 ;; examples are the lazy spellings on purpose: the ones worth showing
 ;; are the ones that save keystrokes.
 (defun ds:say-unread (v)
-  (princ (strcat "\nDIMSTAMP: \"" v "\" is not a measurement - try 44,"
-                 " 44.5, 44 1/2, 4'4.5 or 4'-4 1/2\".")))
+  (princ (strcat "\nDIMSTAMP: \"" v "\" is not a measurement or a label"
+                 " - try 44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2\", or a"
+                 " letter like A or AB.")))
 
 ;; One free-text answer, read as loosely as ds:parse reads and handed
 ;; back in the CANONICAL spelling.  PROMPT already carries its leading
@@ -619,7 +872,7 @@
 ;; The very first text of a run: no default, no ruler yet -- nothing
 ;; exists to build one around.
 (defun ds:ask-first ()
-  (ds:ask-raw "\nText - 4'-4 1/2\", or just 4'4.5: "))
+  (ds:ask-raw "\nText - 4'-4 1/2\", just 4'4.5, or a letter like A: "))
 
 ;; The second-and-later prompt: one click or one typed line does every
 ;; job.  Returns nil for Enter (done), (adopt TEXT) for a new current
@@ -686,6 +939,11 @@
       (ds:stamp pk lasttext)
       (setq count 1 parsed (ds:parse lasttext))
       (princ (strcat "\n  \"" lasttext "\" placed."))
+      (setq parsed (ds:advance parsed))
+      (if (/= lasttext (ds:format (car parsed) (cadr parsed)))
+        (progn
+          (setq lasttext (ds:format (car parsed) (cadr parsed)))
+          (princ (strcat " Next: " lasttext "."))))
       (setq rr (ds:redraw-ruler parsed rulerents)
             rulerents (car rr) rulerbox (cadr rr) rulerrows (caddr rr))
       (while (setq action (ds:next-action rulerbox rulerrows (cadr parsed)))
@@ -694,7 +952,14 @@
            (ds:ensure-layer ds:*layer* ds:*layer-color*)
            (ds:stamp (cadr action) lasttext)
            (setq count (1+ count))
-           (princ (strcat "\n  \"" lasttext "\" placed.")))
+           (princ (strcat "\n  \"" lasttext "\" placed."))
+           ;; a letter moves on as it is stamped, so the next click
+           ;; lands the next one; a measurement stays where it is
+           (setq parsed (ds:advance parsed))
+           (if (/= lasttext (ds:format (car parsed) (cadr parsed)))
+             (progn
+               (setq lasttext (ds:format (car parsed) (cadr parsed)))
+               (princ (strcat " Next: " lasttext ".")))))
           (T                                    ; 'adopt
            (setq lasttext (cadr action) parsed (ds:parse lasttext))))
         (setq rr (ds:redraw-ruler parsed rulerents)
@@ -718,6 +983,6 @@
 ;; told.  CALVER reports the whole roster whenever it is asked.
 (if (not *calofin-quiet*)
   (princ (strcat "\nDIMSTAMP " *dimstamp-version*
-                 " loaded. Command: DIMSTAMP (stamp dimension text,"
-                 " click after click).")))
+                 " loaded. Command: DIMSTAMP (stamp dimension text or"
+                 " letter labels, click after click).")))
 (princ)

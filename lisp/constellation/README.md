@@ -46,6 +46,19 @@ has to work the positions out.
    Cross dims say how far apart things are and nothing about how the
    wall between them curves, so a radius end can be measured perfectly
    and still come out as a flat chord. See **Arcs** below.
+
+   The `Radius for <run>` prompt stands beside `DIMSTAMP`'s ruler,
+   drawn down a strip near the right edge of the view and offering 2'
+   to 20' by a foot (`cst:*radius-ladder*`): a curved wall comes off a
+   plan in whole feet rather than being taped off anything. Click a
+   row and that is the radius; type one and it reads the way
+   `DIMSTAMP` reads (`96`, `96.5`, `8'`, `7'-6"`); click empty space
+   and it is the first of two points to measure between. `Back` still
+   drops the arc, and zero and a negative are still refused where they
+   stand. The space bounds and the chart's own dims stay plain typed
+   questions -- those are measured, and there is no short list of what
+   one comes to. The ruler is scratch on `CONSTELLATION-RULER`, down
+   before the next question and swept on every way out, Esc included.
 6. **Solves, then draws**: an `ab_pt` survey point per letter on
    `POINTS`, one aligned dimension per dim given on `DIMENSION`, the
    space rectangle, and — if you say yes — the outline through the
@@ -275,6 +288,16 @@ holds this table and the block together.
 | `cst:*dimoff*` | `0.060` | How far a perimeter dim stands off, the same way |
 | `cst:*texth-min*` | `0.5` | Floor under the label height, in drawing units, so a tiny space still gets a label that can be read |
 | `cst:*dotr-min*` | `0.1` | Floor under the marker radius, for the same reason |
+| `cst:*ruler-layer*` | `"CONSTELLATION-RULER"` | Scratch layer the length ruler's rows are drawn on, made if missing. A layer of its own is what lets a drafter turn the ruler off without turning anything of the chart off with it |
+| `cst:*ruler-color*` | `3` | ACI colour of the ruler's rows -- the ones you can pick |
+| `cst:*ruler-current-color*` | `7` | ACI colour of its ringed current row, so it reads apart from the options; 7 is AutoCAD's black/white swap |
+| `cst:*ruler-screen-x*` | `0.88` | Where the ruler's spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach left, short of it right, so the ruler stays inside the view |
+| `cst:*ruler-row-frac*` | `0.042` | One row's share of the view's height -- the ruler's size knob |
+| `cst:*ruler-txt-frac*` | `0.5` | The biggest row label's height, as a fraction of the row spacing |
+| `cst:*ruler-tick-frac*` | `0.6` | The longest tick, same measure |
+| `cst:*ruler-ring-frac*` | `0.26` | The ring round the current row, as a fraction of the row spacing |
+| `cst:*ruler-reach*` | `6.0` | How far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the first point of a measured length |
+| `cst:*radius-ladder*` | `'(24.0 240.0 12.0)` | The rungs the ARC RADIUS prompt offers, as (LOW HIGH STEP) in inches -- 2' to 20' by a foot, the radii a curved wall is drawn to. The two space bounds and the point-to-point dims are measured, so they stay plain typed questions. `nil` leaves the radius prompt plain too |
 
 The block ends with what **looks** tunable and is deliberately not, and
 why: where `A` sits and which way the letters run (the preview's

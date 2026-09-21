@@ -194,6 +194,20 @@ that corner. Side lengths are always measured to the *true* (sharp)
 corner; the treatment cuts inward from there, and a treatment too big
 for its walls is re‑asked.
 
+**The size question stands beside a ruler.** A corner radius is picked
+out of the short list a shop builds to rather than taped off the
+sheet, so `Radius for <label>` and `Cut face length for <label>` are
+asked with `DIMSTAMP`'s ruler drawn down a strip near the right edge
+of the view, offering 3" to 1'-6" in 3" steps
+(`spa:*radius-ladder*`, `spa:*cutface-ladder*` — one size down from
+POOL's, a spa being the smaller shape). Click a row and that is the
+size; type one and it reads everything this prompt has always read,
+**`600mm` included**. Enter still takes the autofilled size where
+there is one and `Back` still re‑asks the treatment. Every other
+distance SPA asks is a measurement and stays the plain typed question
+it was. The ruler is scratch on `SPA-RULER`, down before the next
+question and swept on every way out, Esc included.
+
 `Back` at the gate leaves the corner stage for the overalls; `Back` at
 the round, or at corner A, re‑asks the gate.
 
@@ -708,6 +722,17 @@ holds this table and the block together, so neither can drift from the other.
 | `spa:*hinge-try*` | `3` | how many extra piece counts to try |
 | `spa:*hinge-edge*` | `0.01` | keep a hinge this far off the cover's edge |
 | `spa:*allcorners*` | `"the four corners"` | The subject the all-same round asks about, spelled ONCE: it is the label the treatment question and its size follow-up both read ("How should the four corners be treated?", "Rad... |
+| `spa:*ruler-layer*` | `"SPA-RULER"` | Scratch layer the length ruler's rows are drawn on, made if missing. A layer of its own is what lets a drafter turn the ruler off without turning anything of the spa off with it |
+| `spa:*ruler-color*` | `3` | ACI colour of the ruler's rows -- the ones you can pick |
+| `spa:*ruler-current-color*` | `7` | ACI colour of its ringed current row, so it reads apart from the options; 7 is AutoCAD's black/white swap |
+| `spa:*ruler-screen-x*` | `0.88` | Where the ruler's spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach left, short of it right, so the ruler stays inside the view |
+| `spa:*ruler-row-frac*` | `0.042` | One row's share of the view's height -- the ruler's size knob |
+| `spa:*ruler-txt-frac*` | `0.5` | The biggest row label's height, as a fraction of the row spacing |
+| `spa:*ruler-tick-frac*` | `0.6` | The longest tick, same measure |
+| `spa:*ruler-ring-frac*` | `0.26` | The ring round the current row, as a fraction of the row spacing |
+| `spa:*ruler-reach*` | `6.0` | How far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the first point of a measured length |
+| `spa:*radius-ladder*` | `'(3.0 18.0 3.0)` | The rungs the corner RADIUS prompt offers, as (LOW HIGH STEP) in inches -- 3" to 1'-6" by 3", one size down from POOL's, a spa being the smaller shape. `nil` leaves the prompt the plain typed one, with no ruler |
+| `spa:*cutface-ladder*` | `'(3.0 18.0 3.0)` | The same for the DIAGONAL's cut face |
 
 Not in that block, on purpose: run state (the which-outline switch, the
 guide's entity list), the octagon's edge table (that is shape

@@ -300,27 +300,48 @@ class at_each_prompt(object):
     next, so this is the only way to see it: wrap getdist, and record
     what is on screen at the moment the question is put."""
 
+    #: A MEASUREMENT question is one shot.  Most read through getdist;
+    #: a RADIUS reads through getpoint, because it stands beside the
+    #: length ruler and a click on a row is the answer.  So both are
+    #: wrapped -- and a getpoint with no ruler beside it is not a
+    #: measurement at all (the base point pick is one), so it is not
+    #: recorded and the shot list stays one entry per question, in the
+    #: order they were put.
+    READERS = ('getdist', 'getpoint')
+    RULER_LAYER = 'OASIS-RULER'
+
     def __enter__(self):
         self.shots = []
-        self.saved = BUILTINS[Sym('getdist')]
+        self.saved = {n: BUILTINS[Sym(n)] for n in self.READERS}
 
-        def _g(vm, a):
-            self.shots.append(
-                [(e, dict(_alist_dict(vm.entdata[e])))
-                 for e in vm.entities if e not in vm.deleted])
-            return self.saved(vm, a)
+        def wrap(name):
+            inner = self.saved[name]
 
-        BUILTINS[Sym('getdist')] = _g
+            def _g(vm, a):
+                live = [(e, dict(_alist_dict(vm.entdata[e])))
+                        for e in vm.entities if e not in vm.deleted]
+                ruler = any(d.get(8) == self.RULER_LAYER for _, d in live)
+                if name == 'getdist' or ruler:
+                    self.shots.append(live)
+                return inner(vm, a)
+            return _g
+
+        for n in self.READERS:
+            BUILTINS[Sym(n)] = wrap(n)
         return self
 
     def __exit__(self, *exc):
-        BUILTINS[Sym('getdist')] = self.saved
+        for n in self.READERS:
+            BUILTINS[Sym(n)] = self.saved[n]
         return False
 
     def shot(self, k, etype=None):
-        """Everything alive at question k, optionally of one type."""
+        """Everything alive at question k, optionally of one type --
+        the ruler's own scratch left out.  It is drawn beside the
+        drawing, not in it, and it is what this test is not about."""
         return [d for _, d in self.shots[k]
-                if etype is None or d.get(0) == etype]
+                if d.get(8) != 'OASIS-RULER'
+                and (etype is None or d.get(0) == etype)]
 
 
 # ---- tests ------------------------------------------------------------

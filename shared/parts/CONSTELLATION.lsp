@@ -269,8 +269,57 @@
 (setq cst:*texth-min* 0.5)
 (setq cst:*dotr-min*  0.1)
 
+;; The LENGTH RULER beside the ARC RADIUS prompt.  When a run of points
+;; lies on one radius the operator is asked what that radius is, and a
+;; wall's radius comes off a plan in whole feet rather than being taped
+;; off anything -- so the prompt stands beside DIMSTAMP's ruler, drawn
+;; down a strip near the right edge of the view, and a click on a row
+;; IS the radius.  Scratch on its own layer, taken down before any
+;; prompt that does not take it and on every way out.  Every size is a
+;; fraction of the current view, so the ruler reads the same at any
+;; zoom.  The two SPACE bounds beside it are measured off a site plan
+;; and stay the plain typed questions they were.
+(setq cst:*ruler-layer* "CONSTELLATION-RULER") ; scratch layer the rows
+                                               ; are drawn on
+(setq cst:*ruler-color* 3)         ; ACI colour of the rows you can PICK
+(setq cst:*ruler-current-color* 7) ; ACI colour of the ringed CURRENT
+                                   ; row; 7 is AutoCAD's black/white
+                                   ; swap
+(setq cst:*ruler-screen-x* 0.88)   ; where the spine sits across the
+                                   ; view, as a fraction of its width in
+                                   ; from the left; past 0.5 the rows
+                                   ; reach left, short of it they reach
+                                   ; right, so the ruler is always
+                                   ; inside the view
+(setq cst:*ruler-row-frac* 0.042)  ; one row's share of the view's
+                                   ; height -- the ruler's size knob
+(setq cst:*ruler-txt-frac* 0.5)    ; the biggest row label's height, as
+                                   ; a fraction of the row spacing
+(setq cst:*ruler-tick-frac* 0.6)   ; the longest tick, same measure
+(setq cst:*ruler-ring-frac* 0.26)  ; the ring round the current row, as
+                                   ; a fraction of the row spacing
+(setq cst:*ruler-reach* 6.0)       ; how far inboard of the spine, in
+                                   ; row spacings, a click still counts
+                                   ; as picking a row rather than as the
+                                   ; first point of a measured length
+
+;; The LADDER it stands on, as (LOW HIGH STEP) in inches: the radii a
+;; curved wall is drawn to, 2' to 20' by a foot.  A shop whose walls
+;; run to some other measure sets its own; nil leaves the prompt the
+;; plain typed one it was.
+(setq cst:*radius-ladder* '(24.0 240.0 12.0))
+
 ;;; ----------------------------------------------------------------------
 ;;;  Constants that are NOT knobs
+;;;
+;;;  The length ruler's STATE, first: a RUN state, not a setting -- it
+;;;  is what the run put there, and editing it here changes nothing.
+;;;  A module global rather than a local of cst:askarcs, because the
+;;;  reader is several calls down from c:CONSTELLATION and what that
+;;;  command's *error* can take down is what the command can see: Esc
+;;;  at a radius is the likeliest way out of the question, and a ruler
+;;;  left standing is scratch in somebody's drawing.
+(setq cst:*ruler* nil)
 ;;;
 ;;;  And, for the reader who comes here looking: the other numbers
 ;;;  further down that look tunable and are left where they are, each
@@ -315,6 +364,154 @@
 ;;;  with them -- so every call site tests for it by name and neither
 ;;;  tier needs a special case.
 ;;; ----------------------------------------------------------------------
+
+;; Distance entry with the kind system of STANDARDS.md section 3:
+;; REQ required, NAX accepts NA, ZER accepts NA and zero, SUG offers a
+;; default that Enter takes.  Returns the number, nil for NA, or
+;; CAL-BACK.
+;; LADDER nil is the plain typed question this has always been; a
+;; (LOW HIGH STEP) stands it beside the LENGTH RULER, which is what the
+;; ARC RADIUS hands in and neither space bound does -- a bound is
+;; measured off a site plan, and there is no short list of what one
+;; comes to.
+(defun cst:askdist (kind msg dflt back ladder / v kw rr prompt)
+  ;; Undo is accepted everywhere Back is, as a hidden synonym
+  (setq kw (cond ((eq kind 'REQ) (if back "Back Undo" nil))
+                 (back "NA Back Undo")
+                 (t "NA")))
+  ;; the prompt's TEXT is built once, above the fork, so the two routes
+  ;; in cannot drift apart
+  (setq prompt (strcat "\n" msg
+                       (cond ((eq kind 'REQ) "")
+                             ((eq kind 'SUG)
+                              (if dflt (strcat " <" (rtos dflt) "> (or NA)")
+                                  " (or NA)"))
+                             (t " (or NA if not measured)"))
+                       (if back " [Back]" "")
+                       ": "))
+  ;; A ZER question admits a zero and the ruler's prompt does not -- no
+  ;; length on a ruler is zero -- so a ladder handed to one is ignored
+  ;; rather than quietly tightening what the question takes.  Only the
+  ;; radius hands one in, and it is REQ.
+  (if (and ladder (not (eq kind 'ZER)))
+    (progn
+      (setq v nil)
+      (while (null v)
+        ;; the ruler goes up BEFORE the prompt and its state is the
+        ;; run's, not a local: an Esc in here runs c:CONSTELLATION's
+        ;; *error*, and what that can take down is what it can see
+        (setq cst:*ruler*
+                (cal:ruler-show (if cst:*ruler* cst:*ruler*
+                                    (cal:ruler-new (cst:rulerlayer)
+                                                   (cst:ruler-style)))
+                                nil ladder)
+              rr (cal:ask-len prompt kw cst:*ruler* nil)
+              v  (car rr)
+              cst:*ruler* (cadr rr))
+        ;; Enter: taken as the suggestion where initget 6 took it, and
+        ;; refused where 7 refused it
+        (cond
+          ((and (null v) (eq kind 'SUG) dflt) (setq v dflt))
+          ((null v)
+           (princ (strcat "\n  A radius is required - type it, or click"
+                          " a ruler row.")))))
+      ;; down before the answer is used: the question after a radius
+      ;; asks for a ruler of its own if it wants one
+      (cst:rulerkill))
+    (progn
+      ;; REQ always rejects zero - offering Back must not loosen what
+      ;; counts as a valid measurement; ZER alone admits 0
+      (if kw
+          (initget (cond ((eq kind 'ZER) 5)
+                         ((and (eq kind 'SUG) dflt) 6)
+                         (t 7))
+                   kw)
+          (initget 7))
+      (setq v (getdist prompt))
+      (if lzd:ask (lzd:ask msg v) v)))
+  (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
+        ((= (type v) 'STR) nil)               ; NA
+        ((and (null v) (eq kind 'SUG)) dflt)  ; Enter took the suggestion
+        (t v)))
+
+;;; -------------------- the length ruler --------------------------------
+;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
+;;;  Once a first length has been given, the prompt draws the eighths
+;;;  of an inch for a whole inch either side of the last one down a
+;;;  strip near the right edge of the view, graded like a tape with the
+;;;  last length ringed in the middle -- and one prompt then takes a
+;;;  click on a row (that row's value), a typed measurement in any
+;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  or a click on empty space as the first of two points to measure
+;;;  between, which is what getdist always offered.  A run of
+;;;  near-equal lengths is clicked rather than typed over and over.
+;;;
+;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
+;;;  ask their lengths through it.  Each carries this block under its
+;;;  own prefix so the standalone file loads alone, the grouped build
+;;;  swaps the copy for the library's, and tests/test_ruler_copies.py
+;;;  holds every copy to this one text.  DIMSTAMP keeps its own ruler:
+;;;  its current row is drawn as the stamp it would make, on the
+;;;  stamp's layer in the stamp's style, which is a different thing
+;;;  from a row of nearby lengths.
+;;;
+;;;  A ruler comes in two families, and the prompt picks which.
+;;;
+;;;  The TAPE is the one above: the eighths of an inch for a whole inch
+;;;  either side of the LAST answer, which is what a run of near-equal
+;;;  numbers wants.  It needs a last answer to be built round, so the
+;;;  first prompt of a run stands alone.
+;;;
+;;;  The LADDER is the other: a fixed (LO HI STEP) of the values that
+;;;  prompt is actually answered with, every one of them offered from
+;;;  the first prompt on.  A corner radius is 3" to 2'-0" by 3" and a
+;;;  tape of eighths round nothing helps nobody -- 3, 6, 9, 12 is the
+;;;  whole vocabulary, and a drafter picks out of it rather than types
+;;;  into it.  Its rows are graded off the VALUE, not off a distance
+;;;  from the current row: the foot marks are the deep ones and the
+;;;  half-foot next, which is where a tape's deep marks are too.  A
+;;;  ladder still takes a typed measurement that is not on it, and the
+;;;  answer is then ringed among the rungs as the current row.
+;;;
+;;;  Nothing in here reads a knob.  A tool hands its knobs in as one
+;;;  STYLE list and keeps the ruler between prompts as one STATE list:
+;;;    STYLE  (COLOR CURRENT-COLOR SCREEN-X ROW-FRAC TXT-FRAC TICK-FRAC
+;;;            RING-FRAC REACH) -- a caller's tunables block says what
+;;;            each one moves
+;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID LADDER) -- the
+;;;            length the ruler stands round (nil = none), the family it
+;;;            is labelled in (T = feet), what is drawn, its layer, the
+;;;            style, whether the one-line hint has been said, and the
+;;;            ladder it is standing on (nil = a tape)
+;;;  Values are INCHES, the unit this shop draws in, and the ruler
+;;;  steps in eighths of one, which is what a tape reads in.
+
+;;; -------------------- end of the length ruler -------------------------
+
+;; The scratch layer the rows are drawn on, made if it is missing.  A
+;; layer of its own is what lets a drafter turn the ruler off without
+;; turning anything of the chart off with it.
+(defun cst:rulerlayer ()
+  (if (not (tblsearch "LAYER" cst:*ruler-layer*))
+    (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLayerTableRecord")
+                   (cons 2 cst:*ruler-layer*) '(70 . 0) '(62 . 7)
+                   (cons 6 "CONTINUOUS"))))
+  cst:*ruler-layer*)
+
+;; Take the ruler down -- the one call *error* and the clean exit both
+;; make, so neither has to know whether one was up.  What is left is
+;; the swept STATE, not nil: it carries the one-line hint's said flag,
+;; and a prompt that threw it away would say the hint again at the next
+;; arc.  c:CONSTELLATION clears it at the START of a run.
+(defun cst:rulerkill ()
+  (if cst:*ruler* (setq cst:*ruler* (cal:ruler-off cst:*ruler*))))
+
+;; This file's knobs, in the order the ruler reads them.
+(defun cst:ruler-style ()
+  (list cst:*ruler-color* cst:*ruler-current-color* cst:*ruler-screen-x*
+        cst:*ruler-row-frac* cst:*ruler-txt-frac* cst:*ruler-tick-frac*
+        cst:*ruler-ring-frac* cst:*ruler-reach*))
 
 ;;; ----------------------------------------------------------------------
 ;;;  Settings, undo, layers  --  the STANDARDS section 5 skeleton
@@ -1512,7 +1709,8 @@
       ((eq ls 'CST-DONE) (setq done T))
       (t
        (setq nm (cst:runname ls)
-             r  (cal:askdist 'REQ (strcat "  Radius for " nm) nil T))
+             r  (cst:askdist 'REQ (strcat "  Radius for " nm) nil T
+                             cst:*radius-ladder*))
        (if (not (eq r 'CAL-BACK))
          (progn
            ;; three points on a circle of known R fix its centre
@@ -1579,8 +1777,10 @@
              (cut   (cst:saycut cut))
              (t     (setq done T))))
       (t
-       (setq v (cal:askdist 'REQ (strcat "  " (cst:key (car pr) (cadr pr)))
-                            nil T))
+       ;; no ladder: this is the tape between two survey points, and
+       ;; there is no short list of what one comes to
+       (setq v (cst:askdist 'REQ (strcat "  " (cst:key (car pr) (cadr pr)))
+                            nil T nil))
        (if (not (eq v 'CAL-BACK))
          (progn
            (setq chart (cst:putdim (car pr) (cadr pr) v chart))
@@ -1599,10 +1799,10 @@
   (while (< step 8)
     (cond
       ((= step 1)
-       (setq w (cal:askdist 'REQ "Space width (X)" nil nil)
+       (setq w (cst:askdist 'REQ "Space width (X)" nil nil nil)
              step 2))
       ((= step 2)
-       (setq v (cal:askdist 'REQ "Space height (Y)" nil T))
+       (setq v (cst:askdist 'REQ "Space height (Y)" nil T nil))
        (if (eq v 'CAL-BACK) (setq step 1) (setq h v step 3)))
       ((= step 3)
        (setq v (cst:askcount))
@@ -1830,6 +2030,7 @@
     ;; and the legend goes with them: a cancel part way through the
     ;; chart must not leave the starting oval in the drawing
     (cst:unpreview)
+    (cst:rulerkill)
     ;; command-s, never plain command: 2015+ engines reject (command)
     ;; inside *error* unless the error mode was pushed beforehand
     ;; (STANDARDS section 5), and a rejected _End leaves the group open
@@ -1842,6 +2043,9 @@
     (princ))
   (if lzd:begin (lzd:begin "CONSTELLATION" *constellation-version*))
   (cal:syssave (cst:sysvars))
+  ;; a fresh run, so a fresh ruler: the hint is said once a run, and
+  ;; the flag that says it has been said travels in here
+  (setq cst:*ruler* nil)
   (setvar "CMDECHO" 0)
   (setq undo-open (cal:undobegin))
   (cst:banner)
@@ -1951,6 +2155,7 @@
   ;; _End then would be closing a group that is not there
   (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
+  (cst:rulerkill)
   (if lzd:end (lzd:end "CONSTELLATION"))
   (princ))
 

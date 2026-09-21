@@ -127,7 +127,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "091626 REV33")
+(setq pool:*version* "091926 REV36")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -471,6 +471,75 @@
                            (list 212.13 300.0) (list 87.87 300.0)
                            (list 0.0 212.13) (list 0.0 87.87)))
 
+;; ---- the length ruler
+;;;
+;;;  The LENGTH RULER beside the corner-size prompts.  A corner radius
+;;;  and a chamfer's cut face are not measured off the sheet the way a
+;;;  wall is -- they are picked out of the short list a shop actually
+;;;  builds: 3", 6", 9", a foot, two feet.  So those prompts stand
+;;;  beside DIMSTAMP's ruler, drawn down a strip near the right edge of
+;;;  the view, and a click on a row IS the size.  Scratch on its own
+;;;  layer, taken down before any prompt that does not take it and on
+;;;  every way out.  Every size is a fraction of the current view, so
+;;;  the ruler reads the same whether the drawing is zoomed to the
+;;;  whole pool or to one corner.
+(setq pool:*ruler-layer* "POOL-RULER")  ; scratch layer the rows are
+                                        ; drawn on, made if missing and
+                                        ; left behind empty
+(setq pool:*ruler-color* 3)        ; ACI colour of the rows you can PICK,
+                                   ; carried on the entities themselves
+(setq pool:*ruler-current-color* 7); ACI colour of the ringed CURRENT
+                                   ; row -- the size already given -- so
+                                   ; it reads apart from the options; 7
+                                   ; is AutoCAD's black/white swap
+(setq pool:*ruler-screen-x* 0.88)  ; where the spine sits across the
+                                   ; view, as a fraction of its width in
+                                   ; from the left; past 0.5 the rows
+                                   ; reach left, short of it they reach
+                                   ; right, so the ruler is always inside
+                                   ; the view
+(setq pool:*ruler-row-frac* 0.042) ; one row's share of the view's
+                                   ; height -- the ruler's size knob
+(setq pool:*ruler-txt-frac* 0.5)   ; the biggest row label's height, as
+                                   ; a fraction of the row spacing
+(setq pool:*ruler-tick-frac* 0.6)  ; the longest tick, same measure
+(setq pool:*ruler-ring-frac* 0.26) ; the ring round the current row, as
+                                   ; a fraction of the row spacing
+(setq pool:*ruler-reach* 6.0)      ; how far inboard of the spine, in
+                                   ; row spacings, a click still counts
+                                   ; as picking a row rather than as the
+                                   ; first point of a measured length
+
+;;;  The two LADDERS those prompts stand on, as (LOW HIGH STEP) in
+;;;  inches.  A corner radius comes off an order sheet in quarter feet
+;;;  -- 3" to 2'-0" by 3" is the whole vocabulary -- and a chamfer's cut
+;;;  face is read the same way.  A shop whose corners run to some other
+;;;  measure sets its own here; nil on either leaves that prompt the
+;;;  plain typed one it was, with no ruler beside it.
+(setq pool:*radius-ladder* '(3.0 24.0 3.0))
+(setq pool:*cutface-ladder* '(3.0 24.0 3.0))
+
+;;;  ...and the three the DEPTH chain stands on.  A pool's depths are
+;;;  as short a list as its corners are: a wall is built to a handful
+;;;  of heights, a deep end to a handful of depths, and the break
+;;;  between them lands somewhere in the span of the two.  Same shape,
+;;;  (LOW HIGH STEP) in inches, and nil on any of them leaves that
+;;;  prompt the plain typed one it was.
+(setq pool:*wallheight-ladder* '(36.0 54.0 3.0))   ; C, the shallow depth
+(setq pool:*deepdepth-ladder*  '(60.0 96.0 6.0))   ; D, the deep end
+(setq pool:*breakdepth-ladder* '(36.0 96.0 6.0))   ; C2, between the two
+
+;;;  ...and the one the HOPPER OFFSETS stand on: M and K, the gap the
+;;;  hopper leaves to the top side and to the bottom side.  A hopper is
+;;;  set in from the walls by 2' to 6', which is why the same range is
+;;;  offered at the same question in ABHD (*PF-HOP-OFF-LADDER*) and in
+;;;  FITABHD (fit:*hop-side-ladder*, fit:*hop-back-ladder*) -- a hopper
+;;;  offset is one number whichever tool is asking for it.  The rest of
+;;;  the chain beside them is not on it: H, G, F and E are stations
+;;;  ALONG the pool and L is the hopper's own width, and a 40' pool's H
+;;;  has nothing to do with the gap at its side.
+(setq pool:*hopoffset-ladder* '(24.0 72.0 6.0))
+
 ;;; -------------------- run state (not tunables) ----------------------
 ;;;
 ;;;  Declared here because AutoLISP wants a global declared at top
@@ -498,6 +567,13 @@
                                           ; asking rather than stopping a
                                           ; form-driven run cold
 (setq pool:*smallwarned* nil)             ; the missing-style note is once a run
+;; The length ruler standing beside a corner-size prompt.  A RUN STATE
+;; and not a local of pool:askcorner, for the reason OSMODE is one: the
+;; helper that asks is three calls down from the command, and what
+;; c:POOL's *error* can take down is what c:POOL can see.  Esc at a
+;; radius prompt is the likeliest way out of the question, and a ruler
+;; left standing is scratch in somebody's drawing.
+(setq pool:*ruler*       nil)
 (setq pool:*sideon*      nil)             ; a SIDE STANDARD block is open
 (setq pool:*flooron*     nil)             ; a floor-dims (BOTTOM) block is open
 (setq pool:*dimstyle0*   nil)             ; dim style current when POOL started
@@ -874,12 +950,92 @@
   (cal:osdown)
   v)
 
+;;; -------------------- the length ruler --------------------------------
+;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
+;;;  Once a first length has been given, the prompt draws the eighths
+;;;  of an inch for a whole inch either side of the last one down a
+;;;  strip near the right edge of the view, graded like a tape with the
+;;;  last length ringed in the middle -- and one prompt then takes a
+;;;  click on a row (that row's value), a typed measurement in any
+;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  or a click on empty space as the first of two points to measure
+;;;  between, which is what getdist always offered.  A run of
+;;;  near-equal lengths is clicked rather than typed over and over.
+;;;
+;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
+;;;  ask their lengths through it.  Each carries this block under its
+;;;  own prefix so the standalone file loads alone, the grouped build
+;;;  swaps the copy for the library's, and tests/test_ruler_copies.py
+;;;  holds every copy to this one text.  DIMSTAMP keeps its own ruler:
+;;;  its current row is drawn as the stamp it would make, on the
+;;;  stamp's layer in the stamp's style, which is a different thing
+;;;  from a row of nearby lengths.
+;;;
+;;;  A ruler comes in two families, and the prompt picks which.
+;;;
+;;;  The TAPE is the one above: the eighths of an inch for a whole inch
+;;;  either side of the LAST answer, which is what a run of near-equal
+;;;  numbers wants.  It needs a last answer to be built round, so the
+;;;  first prompt of a run stands alone.
+;;;
+;;;  The LADDER is the other: a fixed (LO HI STEP) of the values that
+;;;  prompt is actually answered with, every one of them offered from
+;;;  the first prompt on.  A corner radius is 3" to 2'-0" by 3" and a
+;;;  tape of eighths round nothing helps nobody -- 3, 6, 9, 12 is the
+;;;  whole vocabulary, and a drafter picks out of it rather than types
+;;;  into it.  Its rows are graded off the VALUE, not off a distance
+;;;  from the current row: the foot marks are the deep ones and the
+;;;  half-foot next, which is where a tape's deep marks are too.  A
+;;;  ladder still takes a typed measurement that is not on it, and the
+;;;  answer is then ringed among the rungs as the current row.
+;;;
+;;;  Nothing in here reads a knob.  A tool hands its knobs in as one
+;;;  STYLE list and keeps the ruler between prompts as one STATE list:
+;;;    STYLE  (COLOR CURRENT-COLOR SCREEN-X ROW-FRAC TXT-FRAC TICK-FRAC
+;;;            RING-FRAC REACH) -- a caller's tunables block says what
+;;;            each one moves
+;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID LADDER) -- the
+;;;            length the ruler stands round (nil = none), the family it
+;;;            is labelled in (T = feet), what is drawn, its layer, the
+;;;            style, whether the one-line hint has been said, and the
+;;;            ladder it is standing on (nil = a tape)
+;;;  Values are INCHES, the unit this shop draws in, and the ruler
+;;;  steps in eighths of one, which is what a tape reads in.
+
+;;; -------------------- end of the length ruler -------------------------
+
+;; The scratch layer the rows are drawn on, made if it is missing.  A
+;; layer of its own is what lets a drafter turn the ruler off without
+;; turning anything of the pool off with it.
+(defun pool:rulerlayer ()
+  (if (not (tblsearch "LAYER" pool:*ruler-layer*))
+    (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                   '(100 . "AcDbLayerTableRecord")
+                   (cons 2 pool:*ruler-layer*) '(70 . 0) '(62 . 7)
+                   (cons 6 "CONTINUOUS"))))
+  pool:*ruler-layer*)
+
+;; Take the ruler down -- the one call *error* and the clean exit both
+;; make, so neither has to know whether one was up.  What is left is
+;; the swept STATE, not nil: it carries the one-line hint's said flag,
+;; and a corner that threw it away would say the hint again at the next
+;; corner, and the next.  c:POOL clears it at the START of a run, which
+;; is where a fresh run wants a fresh hint.
+(defun pool:rulerkill ()
+  (if pool:*ruler* (setq pool:*ruler* (cal:ruler-off pool:*ruler*))))
+
+;; This file's knobs, in the order the ruler reads them.
+(defun pool:ruler-style ()
+  (list pool:*ruler-color* pool:*ruler-current-color* pool:*ruler-screen-x*
+        pool:*ruler-row-frac* pool:*ruler-txt-frac* pool:*ruler-tick-frac*
+        pool:*ruler-ring-frac* pool:*ruler-reach*))
+
 ;;; -------------------- measurement sequences (Back) -------------------
 ;;;
 ;;;  A block of related measurements runs through pool:askseq so every
 ;;;  prompt after the first also offers *Back*, which re-asks the
 ;;;  previous question -- a typo no longer means Esc and start over.
-;;;  Each item: (key kind msg ents dflt skip skipmsg sug)
+;;;  Each item: (key kind msg ents dflt skip skipmsg sug ladder)
 ;;;    key   symbol the answer is stored under
 ;;;    kind  REQ  a value is required
 ;;;          NAX  NA accepted (returns nil)
@@ -898,6 +1054,12 @@
 ;;;          Enter can answer.  A REQ or ZER question keeps its kind:
 ;;;          those two mean something about what is a valid answer,
 ;;;          not about what is offered.
+;;;    ladder optional (LOW HIGH STEP) in inches: the LENGTH RULER's
+;;;          rungs, for a question answered out of a short list rather
+;;;          than taped off the sheet.  The hopper offsets M and K hand
+;;;          one in; nothing else in a chain does, a station along the
+;;;          pool being measured like the wall it runs beside.  The
+;;;          suggestion, where there is one, is ringed among the rungs.
 
 (defun pool:sq (ans key) (cdr (assoc key ans)))
 
@@ -1106,7 +1268,18 @@
 ;; SUGR is what a suggestion does to a REQ: Enter takes the number,
 ;; but NA is still not on the table, because the answer is still one
 ;; the pool cannot be drawn without.
-(defun pool:asks (kind msg ents dflt back / v cols kw)
+;; LADDER nil is the plain typed question this has always been; a
+;; (LOW HIGH STEP) stands it beside the LENGTH RULER, which is what the
+;; two HOPPER OFFSETS hand in and no other member of a chain does -- a
+;; wall, a station along the pool and a hopper's own width are all
+;; measured, and there is no short list of what one comes to.  The
+;; suggestion, where the question has one, is RINGED among the rungs:
+;; the chain says 48 and the rungs say what a hopper is usually set in
+;; by, and the drafter is looking at both.
+;;
+;; The prompt's TEXT is built once, above the fork, so the two routes
+;; in cannot drift apart -- tests/test_pool_form.py pins this wording.
+(defun pool:asks (kind msg ents dflt back ladder / v cols kw prompt rr)
   (setq cols (mapcar 'pool:getcol ents))
   (foreach e ents (pool:setcol e pool:*hi-col*))
   (cal:osup)
@@ -1114,26 +1287,56 @@
   (setq kw (cond ((member kind '(REQ SUGR)) (if back "Back Undo" nil))
                  (back "NA Back Undo")
                  (t "NA")))
-  (if kw
-      ;; REQ always rejects zero (bit 7) - offering Back must not
-      ;; loosen what counts as a valid measurement; ZER alone admits 0
-      (initget (cond ((eq kind 'ZER) 5)
-                     ((and (member kind '(SUG SUGR)) dflt) 6)
-                     (t 7))
-               kw)
-      (initget 7))
-  (setq v (getdist
-            (strcat "\n" msg
-                    (cond ((eq kind 'REQ) "")
-                          ((eq kind 'SUGR)
-                           (if dflt (strcat " <" (rtos dflt) ">") ""))
-                          ((eq kind 'SUG)
-                           (if dflt (strcat " <" (rtos dflt) "> (or NA)")
-                               " (or NA)"))
-                          (t " (or NA if not measured)"))
-                    (if back " [Back]" "")
-                    ": ")))
-  (if lzd:ask (lzd:ask msg v) v)
+  (setq prompt (strcat "\n" msg
+                       (cond ((eq kind 'REQ) "")
+                             ((eq kind 'SUGR)
+                              (if dflt (strcat " <" (rtos dflt) ">") ""))
+                             ((eq kind 'SUG)
+                              (if dflt (strcat " <" (rtos dflt) "> (or NA)")
+                                  " (or NA)"))
+                             (t " (or NA if not measured)"))
+                       (if back " [Back]" "")
+                       ": "))
+  ;; A ZER question admits a zero and the ruler's prompt does not -- no
+  ;; length on a ruler is zero -- so a ladder handed to one is ignored
+  ;; rather than quietly tightening what the question takes.  Nothing
+  ;; hands one to a ZER today; this is what keeps that true.
+  (if (and ladder (not (eq kind 'ZER)))
+    (progn
+      (setq v nil)
+      (while (null v)
+        ;; the ruler goes up BEFORE the prompt and its state is the
+        ;; run's, not a local: an Esc in here runs c:POOL's *error*,
+        ;; and what that can take down is what c:POOL can see
+        (setq pool:*ruler*
+                (cal:ruler-show (if pool:*ruler* pool:*ruler*
+                                     (cal:ruler-new (pool:rulerlayer)
+                                                     (pool:ruler-style)))
+                                 dflt ladder)
+              rr (cal:ask-len prompt kw pool:*ruler* nil)
+              v  (car rr)
+              pool:*ruler* (cadr rr))
+        ;; Enter: takes the suggestion where initget 6 took it, and is
+        ;; refused where 7 refused it
+        (cond
+          ((and (null v) (member kind '(SUG SUGR)) dflt) (setq v dflt))
+          ((null v)
+           (princ (strcat "\nA measurement is required - type it, click"
+                          " a ruler row, or answer NA.")))))
+      ;; down before the answer is used: the question after an offset
+      ;; asks for a ruler of its own if it wants one
+      (pool:rulerkill))
+    (progn
+      (if kw
+          ;; REQ always rejects zero (bit 7) - offering Back must not
+          ;; loosen what counts as a valid measurement; ZER alone admits 0
+          (initget (cond ((eq kind 'ZER) 5)
+                         ((and (member kind '(SUG SUGR)) dflt) 6)
+                         (t 7))
+                   kw)
+          (initget 7))
+      (setq v (getdist prompt))
+      (if lzd:ask (lzd:ask msg v) v)))
   (cal:osdown)
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   (cond ((and (= (type v) 'STR) (member v '("Back" "Undo"))) 'CAL-BACK)
@@ -1319,7 +1522,7 @@
           (setq v (if (pool:fhas (car it))
                       (pool:ftake (car it))
                       (pool:asks kind (caddr it) (cadddr it) dflt
-                                 (if (or asked bk) t nil))))
+                                 (if (or asked bk) t nil) (nth 8 it))))
           (if (eq v 'CAL-BACK)
               (if asked
                   (setq i (car asked) asked (cdr asked))
@@ -1385,7 +1588,36 @@
 
 ;; Ask for a distance while the matching guide elements glow red, then
 ;; restore each element to the color it had (outline vs cross-dim gray).
-(defun pool:askh (msg ents / v cols k)
+;; The question pool:ask asks, standing beside the LENGTH RULER on
+;; LADDER.  A depth is picked out of a short list rather than taped off
+;; anything, so the rungs stand from the first prompt and a click on one
+;; IS the answer.  Enter stays refused where pool:ask's initget 7
+;; refused it, and the ruler is down before the answer is used --
+;; nothing after a depth takes one.
+(defun pool:askl (msg ladder / v rr)
+  (cal:osup)
+  (setq v nil)
+  (while (null v)
+    (setq pool:*ruler*
+            (cal:ruler-show (if pool:*ruler* pool:*ruler*
+                                 (cal:ruler-new (pool:rulerlayer)
+                                                 (pool:ruler-style)))
+                             nil ladder)
+          rr (cal:ask-len (strcat "\n" msg ": ") nil pool:*ruler* nil)
+          v  (car rr)
+          pool:*ruler* (cadr rr))
+    (if (null v)
+      (princ (strcat "\nA measurement is required - type it, or click"
+                     " a ruler row."))))
+  (pool:rulerkill)
+  (cal:osdown)
+  v)
+
+;; LADDER nil is the plain typed question this has always been; a
+;; (LOW HIGH STEP) stands it beside the ruler, which is what the depth
+;; chain hands in and no wall length does -- a wall is measured, and
+;; there is no short list of what it comes to.
+(defun pool:askh (msg ents ladder / v cols k)
   ;; A form answer for this letter skips the prompt and the highlight
   ;; with it -- there is nothing to look at while nothing is being
   ;; asked.  Only a real measurement is taken: every caller here range
@@ -1398,7 +1630,7 @@
       (progn
         (setq cols (mapcar 'pool:getcol ents))
         (foreach e ents (pool:setcol e pool:*hi-col*))
-        (setq v (pool:ask msg))
+        (setq v (if ladder (pool:askl msg ladder) (pool:ask msg)))
         (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
         v)))
 
@@ -4373,7 +4605,8 @@
 ;; cross dims, so its true angles are not known yet -- and a pool
 ;; still called a rectangle is within a degree of 90 anyway.
 (defun pool:askcorner (subject prevty prevsz ents maxsb ang back
-                       / ty sz cols sb wed dflt tydflt szmsg nofit fk fty fsz)
+                       / ty sz cols sb wed dflt tydflt szmsg nofit fk fty fsz
+                         lad rr)
   ;; A form can answer this corner: <stem>-ty carries the treatment,
   ;; <stem>-sz the radius or cut face.  Both are consumed NOW, valid or
   ;; not -- consume-once is what keeps Back from deadlocking, and what
@@ -4447,19 +4680,42 @@
                                      "Cut face length for ")
                             subject))
         (cal:osup)
+        ;; The LADDER this prompt stands on -- the sizes a corner is
+        ;; actually built to.  It stands whether or not a size has been
+        ;; given already: a radius is picked out of quarter feet, not
+        ;; measured off the sheet, so the eighths either side of the
+        ;; last one are not what the next corner wants.  The remembered
+        ;; size is ringed among the rungs when there is one.
+        (setq lad (if (= ty "Radius") pool:*radius-ladder*
+                      pool:*cutface-ladder*))
         (if fsz
             ;; the form's size skips the prompt but NOT the cap check
             ;; below: one that will not fit is rejected there and
             ;; retyped at the keyboard, the store already being empty
             (setq sz fsz)
             (progn
-              (initget (if dflt 6 7))
-              (setq sz (getdist (strcat szmsg
-                                        (if dflt (strcat " <" (rtos dflt) ">")
-                                            "")
-                                        ": ")))
-              (if lzd:ask (lzd:ask subject sz) sz)
-              (if (null sz) (setq sz dflt))))
+              (setq pool:*ruler*
+                    (cal:ruler-show
+                      (if pool:*ruler* pool:*ruler*
+                          (cal:ruler-new (pool:rulerlayer)
+                                          (pool:ruler-style)))
+                      dflt lad))
+              ;; Enter is the default where there is one and refused
+              ;; where there is not, exactly as initget 6 and 7 said;
+              ;; zero and a negative pool:ask-len refuses itself
+              (setq sz nil)
+              (while (null sz)
+                (setq rr (cal:ask-len
+                           (strcat szmsg
+                                   (if dflt (strcat " <" (rtos dflt) ">") "")
+                                   ": ")
+                           nil pool:*ruler* nil)
+                      sz (car rr)
+                      pool:*ruler* (cadr rr))
+                (if (null sz)
+                    (if dflt
+                        (setq sz dflt)
+                        (princ "\nA size is required - type it, or click a ruler row."))))))
         ;; how far this treatment eats along each wall, at the real
         ;; corner angle -- so the cap holds on a 135-degree bend or a
         ;; skewed out-of-square corner, not just on a square one
@@ -4470,9 +4726,25 @@
           (princ (strcat "\nToo large for this corner's walls -- max "
                          (rtos (/ maxsb (pool:cornerk ty wed)))
                          ".  Re-enter."))
-          (initget 7)
-          (setq sz (getdist (strcat szmsg ": ")))
-          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sz) sz))
+          ;; the same question again, so the same ruler: a rung over the
+          ;; cap is still shown, since what will not fit here is what
+          ;; the sheet says and the drafter has to see it to disbelieve
+          ;; it.  Enter is refused, as initget 7 refused it
+          (setq pool:*ruler*
+                (cal:ruler-show
+                  (if pool:*ruler* pool:*ruler*
+                      (cal:ruler-new (pool:rulerlayer) (pool:ruler-style)))
+                  nil lad)
+                sz nil)
+          (while (null sz)
+            (setq rr (cal:ask-len (strcat szmsg ": ") nil pool:*ruler* nil)
+                  sz (car rr)
+                  pool:*ruler* (cadr rr))
+            (if (null sz)
+                (princ (strcat "\nA size is required - type it, or click"
+                               " a ruler row.")))))
+        ;; down before the next question, which does not take it
+        (pool:rulerkill)
         (cal:osdown))))
   (mapcar '(lambda (e c) (pool:setcol e c)) ents cols)
   (if ty (list ty sz) 'CAL-BACK)))
@@ -4907,20 +5179,20 @@
   (append (list label tgt act) (if (member i fixed) (list t) nil)))
 
 ;; Deep depth must beat the wall height; C2 must land between them.
-(defun pool:askdeep (msg ents wh / dp)
-  (setq dp (pool:askh msg ents))
+(defun pool:askdeep (msg ents wh ladder / dp)
+  (setq dp (pool:askh msg ents ladder))
   (while (<= dp wh)
     (princ (strcat "\nD must be deeper than the wall height C ("
                    (rtos wh) ") -- re-enter."))
-    (setq dp (pool:askh msg ents)))
+    (setq dp (pool:askh msg ents ladder)))
   dp)
 
-(defun pool:askc2 (msg ents wh dp / c2)
-  (setq c2 (pool:askh msg ents))
+(defun pool:askc2 (msg ents wh dp ladder / c2)
+  (setq c2 (pool:askh msg ents ladder))
   (while (or (< c2 wh) (> c2 dp))
     (princ (strcat "\nC2 must be between C (" (rtos wh) ") and D ("
                    (rtos dp) ") -- re-enter."))
-    (setq c2 (pool:askh msg ents)))
+    (setq c2 (pool:askh msg ents ladder)))
   c2)
 
 ;; Hopper-language bottom: lettered guide, the H/G/F/E/M/L/K chain,
@@ -5054,12 +5326,14 @@
                                           0.5)))
                             "\nH + G + F span the main section -- E not needed."
                             '(pool:chainrest ans '(h g f) toth2))
-                      (list 'm 'SUG "M - top side to deep end" (cdr (assoc "M" pv)) '(h))
+                      (list 'm 'SUG "M - top side to deep end" (cdr (assoc "M" pv)) '(h)
+                            nil nil nil pool:*hopoffset-ladder*)
                       (list 'l 'NAX "L - deep end width" (cdr (assoc "L" pv))
                             nil nil nil '(pool:sugsym ans totv2))
                       (list 'k 'SUG "K - deep end to bottom side"
                             (cdr (assoc "K" pv)) '(m h) nil nil
-                            '(pool:chainrest ans '(m l) totv2)))))
+                            '(pool:chainrest ans '(m l) totv2)
+                            pool:*hopoffset-ladder*))))
         hraw (pool:sq ans 'h) graw (pool:sq ans 'g) fraw (pool:sq ans 'f)
         eraw (pool:sq ans 'e) mraw (pool:sq ans 'm) lraw (pool:sq ans 'l)
         kraw (pool:sq ans 'k)
@@ -5071,13 +5345,16 @@
   ;; of the user
   (if (caddr sp)
       (progn
-        (setq wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv))))
+        (setq wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv))
+                            pool:*wallheight-ladder*))
         (pool:pvnote 'wh wh)
-        (setq dp (pool:askdeep "D - deep end depth" (cdr (assoc "D" pv)) wh))
+        (setq dp (pool:askdeep "D - deep end depth" (cdr (assoc "D" pv)) wh
+                               pool:*deepdepth-ladder*))
         (pool:pvnote 'dp dp)
         (setq c2 (if (cadddr sp)
                      (pool:askc2 "C2 - depth where the shallow floor meets the break"
-                                 (cdr (assoc "C2" pv)) wh dp)
+                                 (cdr (assoc "C2" pv)) wh dp
+                                 pool:*breakdepth-ladder*)
                      wh))
         (if (cadddr sp) (pool:pvnote 'c2 c2))))
   (pool:pvkill)
@@ -5104,8 +5381,10 @@
   (if (and (= g 0.0) (not (caddr sp)))
       (progn
         (princ "\nG = 0 -- that is a slope bottom, so a side view is drawn too.")
-        (setq wh (pool:askh "C - wall height (shallow depth)" nil)
-              dp (pool:askdeep "D - deep end depth" nil wh)
+        (setq wh (pool:askh "C - wall height (shallow depth)" nil
+                            pool:*wallheight-ladder*)
+              dp (pool:askdeep "D - deep end depth" nil wh
+                               pool:*deepdepth-ladder*)
               c2 wh)))
   (setq gg (pool:hopcalc quad corners h g e m k))
   (pool:hopdraw gg pool:*lay-pool* tie)
@@ -5320,18 +5599,22 @@
                     (list 'f1 'NAX "F1 - right slope" (cdr (assoc "F1" pv)))
                     (list 'e1 'NAX "E1 - right end shallow flat" (cdr (assoc "E1" pv))
                           nil nil nil '(pool:chainrest ans '(e2 f2 g f1) total2))
-                    (list 'm 'NAX "M - top side to deep flat" (cdr (assoc "M" pv)))
+                    (list 'm 'NAX "M - top side to deep flat" (cdr (assoc "M" pv))
+                          nil nil nil nil pool:*hopoffset-ladder*)
                     (list 'l 'NAX "L - deep flat width" (cdr (assoc "L" pv)))
                     (list 'k 'SUG "K - deep flat to bottom side"
                           (cdr (assoc "K" pv)) '(m) nil nil
-                          '(pool:chainrest ans '(m l) wid2))))
+                          '(pool:chainrest ans '(m l) wid2)
+                          pool:*hopoffset-ladder*)))
         e2r (pool:sq ans 'e2) f2r (pool:sq ans 'f2) gr (pool:sq ans 'g)
         f1r (pool:sq ans 'f1) e1r (pool:sq ans 'e1)
         mraw (pool:sq ans 'm) lraw (pool:sq ans 'l) kraw (pool:sq ans 'k)
         nopad (and gr (< gr 1.0e-6))
-        wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv))))
+        wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv))
+                      pool:*wallheight-ladder*))
   (pool:pvnote 'wh wh)
-  (setq hd (pool:askdeep "D - deep depth" (cdr (assoc "D" pv)) wh))
+  (setq hd (pool:askdeep "D - deep depth" (cdr (assoc "D" pv)) wh
+                         pool:*deepdepth-ladder*))
   (pool:pvnote 'dp hd)
   (pool:pvkill)
   ;; resolve: horizontal chain vs the pool length (G absorbs; the
@@ -5644,11 +5927,13 @@
                           (list 'f 'NAX "F - hopper to slope break" (cdr (assoc "F" pv)))
                           (list 'e 'NAX "E - slope break to pool right tip" (cdr (assoc "E" pv))
                                 nil nil nil '(pool:chainrest ans '(h g f) len2))
-                          (list 'm 'SUG "M - top side to hopper" (cdr (assoc "M" pv)) '(h))
+                          (list 'm 'SUG "M - top side to hopper" (cdr (assoc "M" pv)) '(h)
+                                nil nil nil pool:*hopoffset-ladder*)
                           (list 'l 'NAX "L - hopper width" (cdr (assoc "L" pv))
                                 nil nil nil '(pool:sugsym ans totv2))
                           (list 'k 'SUG "K - hopper to bottom side" (cdr (assoc "K" pv)) '(m h)
-                                nil nil '(pool:chainrest ans '(m l) totv2))
+                                nil nil '(pool:chainrest ans '(m l) totv2)
+                                pool:*hopoffset-ladder*)
                           ;; ttc, not tt.  The hopper's straight-side CHECK
                           ;; and the PERIMETER's T are two questions on one
                           ;; run of a Roman -- rm:letters asks 'tt and then
@@ -5991,12 +6276,14 @@
                       (list (list 'f 'NAX "F - hopper to slope break" (cdr (assoc "F" pv)))
                             (list 'e 'NAX "E - slope break to right end" (cdr (assoc "E" pv))
                                   nil nil nil '(pool:chainrest ans '(h g f) toth2))
-                            (list 'm 'SUG "M - top side to hopper" (cdr (assoc "M" pv)) '(h))
+                            (list 'm 'SUG "M - top side to hopper" (cdr (assoc "M" pv)) '(h)
+                                  nil nil nil pool:*hopoffset-ladder*)
                             (list 'l 'NAX "L - hopper width" (cdr (assoc "L" pv))
                                   nil nil nil '(pool:sugsym ans totv2))
                             (list 'k 'SUG "K - hopper to bottom side"
                                   (cdr (assoc "K" pv)) '(m h) nil nil
-                                  '(pool:chainrest ans '(m l) totv2)))))
+                                  '(pool:chainrest ans '(m l) totv2)
+                                  pool:*hopoffset-ladder*))))
               hraw (pool:sq ans 'h) graw (pool:sq ans 'g)
               coraw (pool:sq ans 'co)
               w (pool:sq ans 'w) l1 (pool:sq ans 'l1) x (pool:sq ans 'x)
@@ -6505,7 +6792,7 @@
                                "\nThe total length is needed when a side length is NA."
                                "\nThe total length is needed when an end radius is NA."))
                     (setq totl (pool:askh "Total pool length (arc tip to arc tip)"
-                                          (cdr (assoc 'tot pv))))
+                                          (cdr (assoc 'tot pv)) nil))
                     (pool:pvnote 'tot totl)))
               (if (or tpna bona) (qf:ovalsides))
               nil)))))
@@ -6528,13 +6815,14 @@
        (if pool:*insq*
            (setq tp (pool:askh "Side length (top & bottom)"
                                (append (cdr (assoc 'dc pv))
-                                       (cdr (assoc 'ab pv))))
+                                       (cdr (assoc 'ab pv)))
+                               nil)
                  bo tp)
            (progn
              (if tpna (setq tp (pool:askh "Side length TOP (D-C)"
-                                          (cdr (assoc 'dc pv)))))
+                                          (cdr (assoc 'dc pv)) nil)))
              (if bona (setq bo (pool:askh "Side length BOTTOM (A-B)"
-                                          (cdr (assoc 'ab pv)))))))
+                                          (cdr (assoc 'ab pv)) nil)))))
        (setq tpna nil bona nil))
       ((and tpna bona)
        (setq tp ax bo ax)
@@ -8332,6 +8620,7 @@
           pool:*flooron* nil)
     (pool:dimsend pool:*dimstyle0*)
     (pool:pvkill)
+    (pool:rulerkill)
     ;; a form must never outlive the run it was given to: left behind,
     ;; the next POOL typed at the command line would answer itself with
     ;; last time's numbers and draw a wrong pool with no error at all.
@@ -8352,6 +8641,9 @@
   (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil
+        ;; a fresh run, so a fresh ruler: the hint is said once a run,
+        ;; and the flag that says it has been said travels in here
+        pool:*ruler* nil
         pool:*profents* nil
         pool:*sideon* nil
         pool:*flooron* nil
@@ -8441,6 +8733,7 @@
   (if undo-open (setq undo-open (cal:undoend)))
   (cal:sysrestore)
   (pool:fclear)
+  (pool:rulerkill)
   (setq pool:*nobottom* nil pool:*hasbottom* nil pool:*formrun* nil)
   (if *pop-error-mode* (*pop-error-mode*))
   (if lzd:end (lzd:end "POOL"))

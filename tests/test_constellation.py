@@ -975,13 +975,18 @@ def test_the_count_is_kept_between_the_floor_and_the_ceiling():
 
 
 def test_a_zero_or_negative_measurement_never_gets_past_the_prompt():
-    print("\nzero and negative distances are refused by initget itself")
+    print("\nzero and negative distances are refused where they stand")
     have = truth(RECT)
     for bad, word in ((0.0, "zero"), (-24.0, "negative")):
-        for where, script in (
-                ("the width", [bad]),
-                ("a dim", [360.0, 240.0, 4, [0.0, 0.0, 0.0], "", bad]),
-                ("a radius", chain(have) + ["A-B", bad])):
+        # the width and the chart dims are read by initget, which says
+        # so in its own words; the RADIUS stands beside the length ruler
+        # and cst:ask-len does the refusing, in the ruler's words.  Both
+        # re-ask where they stand, which is what exhausts the script
+        for where, script, said in (
+                ("the width", [bad], "%s not allowed" % word),
+                ("a dim", [360.0, 240.0, 4, [0.0, 0.0, 0.0], "", bad],
+                 "%s not allowed" % word),
+                ("a radius", chain(have) + ["A-B", bad], "SCRIPT EXHAUSTED")):
             vm = VM()
             vm.load(LSP)
             try:
@@ -989,7 +994,10 @@ def test_a_zero_or_negative_measurement_never_gets_past_the_prompt():
                 check("%s of %s is refused" % (where, bad), False)
             except LispError as e:
                 check("%s of %s is refused (%s)" % (where, bad, word),
-                      "%s not allowed" % word in str(e))
+                      said in str(e))
+            if where == "a radius":
+                check("...and the radius prompt said why",
+                      any("must be more than zero" in t for t in vm.printed))
 
 
 def test_a_pair_that_is_not_one_is_explained_and_asked_again():

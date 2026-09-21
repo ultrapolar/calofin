@@ -595,8 +595,12 @@ def adab_vm():
 
 BREAKS = [SHALLOW[0], SHALLOW[1], DEEP[0], DEEP[1]]
 #: Enter at each of the three offsets (the remembered 18") and at both
-#: slope questions (Straight)
-BOTTOM = BREAKS + ['', '', '', None, None]
+#: slope questions (Straight).  The offsets read through getPOINT now,
+#: not getstring -- they stand beside the length ruler, where a click
+#: on a row is the answer -- so Enter is None there, as it is at every
+#: other picked prompt, rather than the empty string getstring hands
+#: back.
+BOTTOM = BREAKS + [None, None, None, None, None]
 
 vm, ents, pl = adab_vm()
 run(vm, 'c:ADAB', [None, [pl]] + BOTTOM)
@@ -627,7 +631,7 @@ vm, ents, pl = adab_vm()
 run(vm, 'c:ADAB',
     [None, [pl], SHALLOW[0], SHALLOW[0],                     # ends coincide
      SHALLOW[1], DEEP[0], DEEP[1]]                           # re-asked
-    + ['', '', '', None, None])
+    + [None, None, None, None, None])
 check("a break named on one point twice is refused and the end re-asked",
       'the shallow break needs two different points' in said(vm)
       and 'Pool bottom added' in said(vm), said(vm)[-300:])
@@ -635,7 +639,7 @@ check("a break named on one point twice is refused and the end re-asked",
 # the break ends can be typed by number, like every other point here
 vm, ents, pl = adab_vm()
 run(vm, 'c:ADAB', [None, [pl], "6", "Pt.8", "2", "#12"]
-    + ['', '', '', None, None])
+    + [None, None, None, None, None])
 check("break ends typed by survey number land the bottom",
       'Pool bottom added' in said(vm)
       and 'Back of the hopper: Pt.1' in said(vm), said(vm)[-300:])
@@ -644,7 +648,7 @@ check("break ends typed by survey number land the bottom",
 # Pt.3, so "3" typed at the Points prompt is a waypoint on it
 vm, ents, pl = adab_vm()
 run(vm, 'c:ADAB', [None, [pl]] + BREAKS
-    + ['', '', '', 'Points', "3", '', None, None])
+    + [None, None, None, 'Points', "3", '', None, None])
 check("a slope waypoint typed by number lands, with its own offset",
       any('offset at Pt.3' in p for p, _ in vm.prompts)
       and 'guided through 1 point(s)' in said(vm)
@@ -655,7 +659,7 @@ check("a slope waypoint typed by number lands, with its own offset",
 # still drawn through what was actually typed
 vm, ents, pl = adab_vm()
 run(vm, 'c:ADAB', [None, [pl]] + BREAKS
-    + ['', '', '',
+    + [None, None, None,
        'Points', "3", "40", "4", "10", "5", "30", None,   # the Pt.2 side
        None])                                             # the other: straight
 m = re.search(r'Pt\.4 is offset 10\.00, against ([\d.]+) and ([\d.]+) on'
@@ -675,7 +679,7 @@ check("...and the line still follows the offsets that were typed",
 # neighbours, which is a wall, not a digit
 vm, ents, pl = adab_vm()
 run(vm, 'c:ADAB', [None, [pl]] + BREAKS
-    + ['', '', '',
+    + [None, None, None,
        'Points', "3", "40", "4", "38", "5", "30", None,
        None])
 check("a side that bends away is not second-guessed",
@@ -685,7 +689,7 @@ check("a side that bends away is not second-guessed",
 # a click on nothing at a break end is re-asked, never snapped
 vm, ents, pl = adab_vm()
 run(vm, 'c:ADAB', [None, [pl], (900.0, 900.0), SHALLOW[0], SHALLOW[1],
-                   DEEP[0], DEEP[1]] + ['', '', '', None, None])
+                   DEEP[0], DEEP[1]] + [None, None, None, None, None])
 check("a break end clicked on nothing is re-asked",
       'No survey point there' in said(vm)
       and 'Pool bottom added' in said(vm), said(vm)[-300:])
@@ -717,14 +721,14 @@ check("Enter at a break pick cancels the bottom, cleanly",
 vm, ents, pl = adab_vm()
 run(vm, 'c:ADAB',
     [None, [pl], SHALLOW[0], 'Back', SHALLOW[0], SHALLOW[1],
-     DEEP[0], DEEP[1]] + ['', '', '', None, None])
+     DEEP[0], DEEP[1]] + [None, None, None, None, None])
 check("Back at a break pick re-opens the previous one",
       'Pool bottom added' in said(vm))
 
 # a typed offset in feet and inches picks the other dimension style
 vm, ents, pl = adab_vm()
 run(vm, 'c:ADAB', [None, [pl]] + BREAKS
-    + ["3'6", '', '', None, None])
+    + ["3'6", None, None, None, None])
 check("a feet-and-inches offset asks for the feet-inch dim style",
       'SIDE DIMENSION' in said(vm) and 'not in this drawing' in said(vm))
 check("the offset it was given is the one it reports",
@@ -960,7 +964,7 @@ check("...and leaves no preview or label behind",
 
 # the hopper offset is the third thing a session remembers
 vm, ents, pl = adab_vm()
-run(vm, 'c:ADAB', [None, [pl]] + BREAKS + ['24', '', '', None, None])
+run(vm, 'c:ADAB', [None, [pl]] + BREAKS + ['24', None, None, None, None])
 check("the first hopper offset becomes the session default",
       abs(vm.get(Sym('*pf-hop-off*')) - 24.0) < 1e-9,
       vm.get(Sym('*pf-hop-off*')))
@@ -970,14 +974,19 @@ check("the first hopper offset becomes the session default",
 
 print("\nthe smaller contingencies")
 
-# an offset must be a positive distance, and has to look like one
+# an offset must be a positive distance, and has to look like one.
+# The three hopper offsets stand beside the length ruler now, so it is
+# the RULER's prompt that refuses them -- in the words every other
+# ruler prompt in the tree uses, which is the point of there being one
+# of them.  The slope waypoint offset below still admits zero, so it
+# keeps getstring and its own wording.
 vm, ents, pl = adab_vm()
 run(vm, 'c:ADAB', [None, [pl]] + BREAKS
-    + ['0', 'not a distance', '18', '', '', None, None])
+    + ['0', 'not a distance', '18', None, None, None, None])
 check("a zero offset is refused, with the reason",
-      'must be a positive distance' in said(vm))
+      'must be more than zero' in said(vm))
 check("text that is not a distance is refused, with the spelling shown",
-      'that is not a distance' in said(vm) and "3'6" in said(vm))
+      'is not a length' in said(vm) and "4'4.5" in said(vm))
 
 # a survey of plain POINTs carries no numbers, so they are numbered in
 # the order they were selected -- and the reports use those numbers

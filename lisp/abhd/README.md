@@ -321,6 +321,16 @@ starts.)
 | `*PF-PICKUP-EPS*` | `3.0` | How near the loop a point must sit for `ADAB` to take it as one of its own |
 | `*PF-BOTTOM-STEP*` / `*PF-BOTTOM-FIT*` | `6.0` / `0.25` | Hopper sampling step, and how far a sample may sit off the arcs drawn through it |
 | `*PF-SPIKE-TOL*` | `2.0` | How far a slope waypoint's offset must sit **against both** its neighbours along that side before the run names it — and names the number the wall between them puts there. Raising it hides typos; lowering it starts naming real steps |
+| `*PF-RULER-LAYER*` | `"ABHD-RULER"` | Scratch layer the length ruler's rows are drawn on, made if missing. A layer of its own is what lets a drafter turn the ruler off without turning anything of the fit off with it |
+| `*PF-RULER-COLOR*` | `3` | ACI colour of the ruler's rows — the ones you can pick |
+| `*PF-RULER-CUR-COLOR*` | `7` | ACI colour of its ringed current row, so it reads apart from the options; 7 is AutoCAD's black/white swap |
+| `*PF-RULER-SCREEN-X*` | `0.88` | Where the ruler's spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach left, short of it right, so the ruler stays inside the view |
+| `*PF-RULER-ROW-FRAC*` | `0.042` | One row's share of the view's height — the ruler's size knob |
+| `*PF-RULER-TXT-FRAC*` | `0.5` | The biggest row label's height, as a fraction of the row spacing |
+| `*PF-RULER-TICK-FRAC*` | `0.6` | The longest tick, same measure |
+| `*PF-RULER-RING-FRAC*` | `0.26` | The ring round the current row, same measure |
+| `*PF-RULER-REACH*` | `6.0` | How far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the first point of a measured length |
+| `*PF-HOP-OFF-LADDER*` | `'(24.0 72.0 6.0)` | The rungs the three hopper-offset prompts offer, as (LOW HIGH STEP) in inches — 2' to 6' by 6", the offsets a hopper is laid out to. `POOL` (`pool:*hopoffset-ladder*`) and `FITABHD` (`fit:*hop-side-ladder*`, `fit:*hop-back-ladder*`) offer the same range at the same question: a hopper offset is one number whichever tool is asking for it. The slope-waypoint offset beside them admits **zero**, which no length on a ruler is, so it keeps the plain typed question. `nil` leaves the three plain too |
 
 **3. Guards** — limits that keep the maths finite and the searches
 bounded. Named so each is defined once and can be read, not because

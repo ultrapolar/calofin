@@ -13,7 +13,7 @@ help:
 	@echo "                  (including: every command reports its failures, gives"
 	@echo "                  the drafter their object snaps back, and every"
 	@echo "                  generated dialog fits the screen)"
-	@echo "make verify       just the generated-file checks (mirror/releases/bundle/palette)"
+	@echo "make verify       just the generated-file checks (mirror/releases/bundle/palette/ribbon icons)"
 	@echo "make lint         check_lisp + check_scope over every .lsp, check_vb over the palette"
 	@echo "make test         full suite, standalone tier (lisp/)"
 	@echo "make test-shared  full suite, grouped tier (shared/)"
@@ -39,6 +39,7 @@ verify:
 	$(PY) tools/gen_ui_data.py --check
 	$(PY) tools/gen_ui_charts.py --check
 	$(PY) tools/gen_knobs.py --check
+	$(PY) tools/gen_ribbon_icons.py --check
 
 lint:
 	$(PY) tools/check_lisp.py

@@ -6,6 +6,8 @@
 # into its chain, or say here which reason it falls under.
 # Regenerate with: python3 tools/check_back.py --update-baseline
 lisp/abhd/abhd.lsp|c:TUTORIALABHD|\n Read the checks it applies, watch a drawn demo, or both? [Checks/Demo/Both] <Both>:|demo / tutorial
+lisp/abhd/abhd.lsp|pf:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/abhd/abhd.lsp|pf:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/abhd/abhd.lsp|pf:bottom|\n\n Add the bottom of the pool (breaks and hopper)? [Yes/No] <No>:|past committed geometry
 lisp/abhd/abhd.lsp|pf:compare|\n Keep which fit - click one, or [ 1/2/3/4/5 1/2/3 /All/None/Redo] < >:|the fit picker - Redo is its way back
 lisp/abhd/abhd.lsp|pf:tut-demo|\n Keep the demo drawing to poke at? [Yes/No] <No>:|demo / tutorial
@@ -20,6 +22,8 @@ lisp/autobead/AUTOBEAD.lsp|autobead-tutorial-demo|\nPick an empty spot for the d
 lisp/autobead/AUTOBEAD.lsp|c:TUTORIALAUTOBEAD|\nAUTOBEAD tutorial - read the Checks, or watch a live Demo? \n [Checks/Demo/Both] <Both>:|demo / tutorial
 lisp/bpcallout/BPCALLOUT.lsp|c:BPCALLOUT|\nClick a bad point (a ringed one un-rings it, Enter when done):|reselection loop - clicking again undoes it
 lisp/cabhd/CABHD.lsp|cab:compare|\n Keep which fit - click one, or [1/2/3/All/None/Redo] < >:|the fit picker - Redo is its way back
+lisp/constellation/CONSTELLATION.lsp|cst:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/constellation/CONSTELLATION.lsp|cst:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nAdd a side profile? [Yes/No] <Yes>:|past committed geometry
 lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nBead the steps? [Yes/No] <Yes>:|past committed geometry
 lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>:|first of the option chain; only the selection is in front of it
@@ -27,6 +31,8 @@ lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nPick the FIRST wall of the corner:|fi
 lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nStep - step width [Same] <Enter = fit to walls , Same = >:|part of the step the next tread prompt takes back
 lisp/cornerstp/CORNERSTP.lsp|c:TUTORIALCORNERSTP|\nDraw a demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
 lisp/cornerstp/CORNERSTP.lsp|c:TUTORIALCORNERSTP|\nPick a clear spot (about 250 x 250 needed):|demo / tutorial
+lisp/cornerstp/CORNERSTP.lsp|cs-ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/cornerstp/CORNERSTP.lsp|cs-ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/cornerstp/CORNERSTP.lsp|cs-tut-pause||demo / tutorial
 lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nAdd a side profile? [Yes/No] <Yes>:|past committed geometry
 lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nBead the steps? [Yes/No] <Yes>:|past committed geometry
@@ -37,6 +43,8 @@ lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nPick the point on the curve to measure 
 lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nStep - step width [Same] <Enter = fit to the curve , Same = >: <Enter = >: :|part of the step the next tread prompt takes back
 lisp/cornerstp/HEMISTEP.lsp|c:TUTORIALHEMISTEP|\nDraw a demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
 lisp/cornerstp/HEMISTEP.lsp|c:TUTORIALHEMISTEP|\nPick a clear spot (about 300 x 150 needed):|demo / tutorial
+lisp/cornerstp/HEMISTEP.lsp|hs-ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/cornerstp/HEMISTEP.lsp|hs-ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/cornerstp/HEMISTEP.lsp|hs-tut-pause||demo / tutorial
 lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nAdd a side profile? [Yes/No] <Yes>:|past committed geometry
 lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nBead the steps? [Yes/No] <Yes>:|past committed geometry
@@ -46,6 +54,8 @@ lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nPick the line the steps run OFF OF:
 lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nStep width (the same for every step):|part of the step the next tread prompt takes back
 lisp/cornerstp/NORMIESTEP.lsp|c:TUTORIALNORMIESTEP|\nDraw a demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
 lisp/cornerstp/NORMIESTEP.lsp|c:TUTORIALNORMIESTEP|\nPick a clear spot (about 250 x 120 needed):|demo / tutorial
+lisp/cornerstp/NORMIESTEP.lsp|ns-ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/cornerstp/NORMIESTEP.lsp|ns-ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/cornerstp/NORMIESTEP.lsp|ns-tut-pause||demo / tutorial
 lisp/covercheck/covercheck.lsp|c:TUTORIALCOVERCHECK|\nPick a base point for the demo, clear of your real geometry <0,0>:|demo / tutorial
 lisp/covercheck/covercheck.lsp|cchk:ask-ny|[Yes/No] <No>:|helper: every caller asks it as a first question about one item
@@ -68,6 +78,9 @@ lisp/drone_height/DroneDistortion.lsp|c:DDCAL|\nApparent (traced) size in the dr
 lisp/drone_height/DroneDistortion.lsp|c:DDSET|\nDrone height ABOVE THE DECK, in FEET < > :|DDSET's only question
 lisp/drone_height/DroneHeightGPS.lsp|c:DDELEV|\nLatitude (decimal degrees, negative = South):|first of DDELEV's two; the longitude backs into it
 lisp/drone_height/DroneHeightGPS.lsp|c:DDGPS|\nPick a point in the drawing for the height report:|first question of the command
+lisp/dronote/DRONOTE.lsp|c:DRONOTE|\nWhich note? [ / ]:|first question of its command or branch
+lisp/fitabhd/FITABHD.lsp|fit:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/fitabhd/FITABHD.lsp|fit:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/lazdiag/LAZDIAG.lsp|lzd:paste|\nPlace the error report, far from the drawing:|the last resort after a failure - there is no earlier question to go back to, and Esc skips it
 lisp/lazpanel/LAZPANEL.lsp|c:CALHELP|\nCommand, or any part of one <Enter = all>:|the only question in the command; Enter answers it with everything
 lisp/lazpanel/LAZPANEL.lsp|c:CALSET|\nChange which? [Theme/Errordir/Stockdir/Itemcolors/Hidden/Quit] <Quit>:|first of the chain - Quit is the way out, Hidden opens LAZHIDE's own dialog, and the value question behind Theme/Errordir/Stockdir/Itemcolors offers Back
@@ -87,6 +100,8 @@ lisp/lisplab/LISPLAB.lsp|lab:pause|\n--- press Enter to continue ---|pause
 lisp/lobf/LOBF.lsp|lobf:askfit|\n Keep which fit - click one, or [1/2/3/All/None/Redo] < >:|the fit picker - Redo is its way back
 lisp/mohamaddle/MOHAMADDLE.lsp|c:MOHAMADDLE|\nClose the gap the arrow points at with a zero fillet? [Yes/No] <Yes>:|only the selection is in front of it, and No is itself the way past it
 lisp/mohamaddle/MOHAMADDLE.lsp|mohamaddle--asksize|\nPad size (inches)? [ ] < >:|first question of its command or branch
+lisp/oasis/OASIS.lsp|oasis:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/oasis/OASIS.lsp|oasis:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/paddle/PADDLE.lsp|c:PADDLE|\nClose the gap the arrow points at with a zero fillet? [Yes/No] <Yes>:|only the selection is in front of it, and No is itself the way past it
 lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nDraw a live demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
 lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nErase the demonstration? [Yes/No] <No>:|demo / tutorial
@@ -94,8 +109,12 @@ lisp/paddle/PADDLE.lsp|c:TUTORIALPADDLE|\nPick a clear spot for the demo <0,0>:|
 lisp/paddle/PADDLE.lsp|paddle--pause|\n [ press ENTER to continue ]|pause
 lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nRepeat on the new polyline? [Yes/No] <No>:|past committed geometry
 lisp/perp_points/cperp_points.lsp|c:CPERPPTS|\nRound - how many values (points) are required? < >|first question of each round; the round in front of it is drawn
+lisp/perp_points/cperp_points.lsp|cperp:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/perp_points/cperp_points.lsp|cperp:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/perp_points/perp_points.lsp|c:PERPPTS|\nRepeat on the new polyline? [Yes/No] <No>:|past committed geometry
 lisp/perp_points/perp_points.lsp|c:PERPPTS|\nRound - how many values (points) are required? < >|first question of each round; the round in front of it is drawn
+lisp/perp_points/perp_points.lsp|perp:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/perp_points/perp_points.lsp|perp:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\n --- press Enter to continue ---|demo / tutorial
 lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\nA point is required - insertion point:|demo / tutorial
 lisp/perp_points/tutorial_cperp_points.lsp|c:TUTORIALCPERPPTS|\nDemo size <100>:|demo / tutorial
@@ -108,15 +127,23 @@ lisp/perp_points/tutorial_perp_points.lsp|c:TUTORIALPERPPTS|\nDemo size <100>:|d
 lisp/perp_points/tutorial_perp_points.lsp|c:TUTORIALPERPPTS|\nInsertion point for the demo:|demo / tutorial
 lisp/perp_points/tutorial_perp_points.lsp|c:TUTORIALPERPPTS|\nKeep the demo drawing? [Keep/Erase] <Keep>:|demo / tutorial
 lisp/perp_points/tutorial_perp_points.lsp|c:TUTORIALPERPPTS|\nWhat would you like? [Checks/Demo/Both] <Both>:|demo / tutorial
+lisp/perpmark/PERPMARK.lsp|pm:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/perpmark/PERPMARK.lsp|pm:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
+lisp/pool/POOL.LSP|pool:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/pool/POOL.LSP|pool:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/pool/POOL.LSP|pool:ask|\n :|the re-ask after a failed range check - Back would leave the check
 lisp/pool/TUTORIALPOOL.LSP|tutorial:pause|\nPress ENTER for the next topic (X then ENTER to stop here):|demo / tutorial
+lisp/poolside/POOLSIDE.lsp|psd:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/poolside/POOLSIDE.lsp|psd:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/poolside/POOLSIDE.lsp|psd:ask|\n :|the re-ask after a failed range check - Back would leave the check
+lisp/spa/SPA.LSP|spa:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
+lisp/spa/SPA.LSP|spa:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/spa/TUTORIALSPA.LSP|c:TUTORIALSPA|\nShow me [Checks/Demo/Both] <Both>:|demo / tutorial
 lisp/spa/TUTORIALSPA.LSP|tut:demo|\nWhere shall the demo go <0,0>:|demo / tutorial
 lisp/spa/TUTORIALSPA.LSP|tut:pause|\n [Enter to carry on, X to stop]|demo / tutorial
 lisp/spa/TUTORIALSPA.LSP|tut:sheet|\nPoint for the reference sheet <skip>:|demo / tutorial
-lisp/spacheck/SPACHECK.lsp|spachk:demo|\nPick an empty spot for the practice drawing:|demo / tutorial
 lisp/spacheck/SPACHECK.lsp|spachk:demo-say|\n (Enter to go on)|demo / tutorial
+lisp/spacheck/SPACHECK.lsp|spachk:demo|\nPick an empty spot for the practice drawing:|demo / tutorial
 lisp/standards_checker/src/acady-ui.lsp|acady-ui-highlight|\nPress Enter to return to results...|pause
 lisp/standards_checker/src/acady-ui.lsp|acady-ui-zoom|\nPress Enter to return to results...|pause
 lisp/stockcover/STOCKCOVER.lsp|c:STOCKCOVER|\nStock drawing name < > :|first of its own chain - the which-one pick backs into it

@@ -3,7 +3,7 @@
 ## What it does
 
 `LAZPANEL` opens a dialog with one button per headline calofin command
--- 93 of them across 210 buttons, because the pages come in two kinds
+-- 94 of them across 212 buttons, because the pages come in two kinds
 and a tool that serves two jobs sits on both. (Both numbers are
 *checked*, not counted by hand: `tools/check_registry.py` computes them
 off the tree and `make check` fails when the prose disagrees.)
@@ -59,6 +59,20 @@ instead of launching. That is the opposite of the greyed button on
 every other page, and deliberately: a greyed button in a grid is a dead
 spot you can see, but a search that silently omits what you searched
 for reads as the tool not existing.
+
+Beside `Run` sit two more buttons over whatever is highlighted.
+**How it works** pops an OK-only alert with the fuller, step-by-step
+explanation behind the one-sentence blurb -- what it actually asks, in
+the order it asks it (`lzp:*howto*`, kept to
+`ui/calofin_net/howto.txt` word for word the same way `lzp:*blurbs*`
+is kept to `blurbs.txt`). **Tutorial** launches the command's own
+interactive `TUTORIAL*` walkthrough where one exists (`lzp:*tutorials*`
+-- most commands have none, and the button says so on the message line
+rather than failing silently); unlike an ordinary Run, launching a
+tutorial this way is quiet and never lands in Recent, because the
+walkthrough is a satellite and not a drafting command in its own
+right. The VB palette's Commands tab carries the same two buttons over
+its own Find selection.
 
 Everything else on the page is the furniture every page carries -- the
 status line, the tab strip, the pinned row, `Close` -- so moving onto

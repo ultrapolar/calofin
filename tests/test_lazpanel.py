@@ -173,6 +173,40 @@ print("   %d blurbs match blurbs.txt word for word, %d keyword rows, none blank"
       % (len(BLURBS), len(KEYWORDS)))
 
 
+print("== lzp:*howto* and lzp:*tutorials*: complete, and howto matches howto.txt ==")
+# The same contract as lzp:*blurbs*/blurbs.txt just above: the fuller
+# step-by-step explanation behind Find's How it works button is not
+# invented here a second time, it is copied in from howto.txt, and this
+# is what keeps the copy honest.
+TXT_HOWTO = gen_ui_data.howto()
+HOWTO = {str(c[0]): str(c[1]) for c in vm.globals.get('lzp:*howto*') or []}
+missing_howto = [c for c in PANEL if c not in HOWTO]
+assert not missing_howto, "buttons with no lzp:*howto* row: %r" % missing_howto
+orphan_howto = [c for c in HOWTO if c not in set(PANEL)]
+assert not orphan_howto, "lzp:*howto* rows with no button: %r" % orphan_howto
+assert all(HOWTO.values()), \
+    "blank howto: %r" % [c for c, v in HOWTO.items() if not v]
+mismatched = [c for c in PANEL if HOWTO[c] != TXT_HOWTO.get(c)]
+assert not mismatched, (
+    "lzp:*howto* has drifted from howto.txt: %r" % mismatched)
+
+# lzp:*tutorials* names the handful of commands with a full interactive
+# TUTORIAL* walkthrough -- most have none, so this is a small table
+# checked only for internal consistency: every command it names is a
+# real button, and every walkthrough it names is a real command (the
+# satellite itself, which stays off PANEL on purpose).
+TUTORIALS = {str(c[0]): str(c[1]) for c in vm.globals.get('lzp:*tutorials*') or []}
+bad_tutorial_cmd = [c for c in TUTORIALS if c not in set(PANEL)]
+assert not bad_tutorial_cmd, \
+    "lzp:*tutorials* rows for commands not on the panel: %r" % bad_tutorial_cmd
+FOLDED_ALL = set(FOLDED) | set(census())
+bad_tutorial_target = [t for t in TUTORIALS.values() if t not in FOLDED_ALL]
+assert not bad_tutorial_target, \
+    "lzp:*tutorials* names a walkthrough that is not a command: %r" % bad_tutorial_target
+print("   %d howto rows match howto.txt word for word, %d tutorial mapping(s)"
+      % (len(HOWTO), len(TUTORIALS)))
+
+
 print("== roster pin: panel == headline commands under lisp/ ==")
 ALL = census()
 HELD = held_commands()
@@ -320,7 +354,7 @@ for gname in PAGES:
     # them is a page command.
     extra = set(keys) - set(mine) \
             - {'status', 'cancel', 'pin_edit', 'options_btn'} \
-            - {'filter', 'hits', 'msg', 'run'} \
+            - {'filter', 'hits', 'msg', 'run', 'howto_btn', 'tutorial_btn'} \
             - {'tab_' + g for g in PAGES} \
             - {k for k in keys if k.startswith('pin_')} \
             - {k for k in keys if k.startswith('rec_')}

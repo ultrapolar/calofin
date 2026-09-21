@@ -157,6 +157,31 @@ A remembered size is only offered back as the default when the new
 answer **matches** the previous one: a radius is not a cut face, so
 24" does not carry across from one to the other.
 
+**The size question stands beside a ruler.** A corner radius is not
+measured off the sheet the way a wall is -- it is picked out of the
+short list a shop builds to -- so `Radius for <subject>` and
+`Cut face length for <subject>` are asked with `DIMSTAMP`'s ruler
+drawn down a strip near the right edge of the view, offering 3" to
+2'-0" in 3" steps (`pool:*radius-ladder*`, `pool:*cutface-ladder*`).
+Click a row and that is the size; type one and it reads the way
+`DIMSTAMP` reads (`24`, `24.5`, `2'`, `1'-4 1/2"`); click empty space
+and it is the first of two points to measure between. The remembered
+size is ringed among the rungs when there is one, Enter still takes
+it, and a size over the corner's cap is refused and asked again with
+the ruler still standing. The depth chain does the same on ladders of
+its own: C on 36"-54" by 3", D on 60"-96" by 6", C2 on the span of
+the two. So do the two HOPPER OFFSETS, M and K -- the gap the hopper
+leaves to the top side and to the bottom side -- on 2' to 6' by 6",
+the range `ABHD` and `FITABHD` offer at the same question; where the
+chain has worked a number out for one of them, Enter still takes it
+and it is RINGED among the rungs, so the sheet's own number and the
+sizes a hopper is usually set in by are both on screen. Everything
+else POOL asks is a MEASUREMENT -- a wall, a diagonal, a cross dim, a
+station along the pool, the hopper's own width -- and stays the plain
+typed question it was, there being no short list of what one comes
+to. The ruler is scratch on `POOL-RULER`, down before the next
+question and swept on every way out, Esc included.
+
 **`NotGiven` is built square but never drawn as a 90.** Its geometry is
 the plain sharp corner, but the sheet marks it with a circled, **boxed**
 `?` and a `Not Given` note on a leader off that box, so nobody
@@ -1483,6 +1508,21 @@ holds this table and the block together, so neither can drift from the other.
 | `pool:*btshown*` | `"Normal/Sport/Wedge/SLope/MOdflat/SHallow"` | Bottom-type keywords, shared by the rectangle / oval / grecian dispatchers. Normal and the four special bottoms all run through pool:hopnormal (they are the same plan chain with... |
 | `pool:*grecnpts*` | `(list (list 0.0 0.0) (list 360.0 0.0) (list 410.0 55.0` | What the Grecian and Octagon guides look like before any measurement is in. The octagon's is a REGULAR one -- 300 square, cut c = 300/(2+root 2) = 87.87, so all eight sides come... |
 | `pool:*octnpts*` | `(list (list 87.87 0.0) (list 212.13 0.0` | ...and the octagon's, which a change here resizes on screen and nowhere else -- the first answer rescales it either way. |
+| `pool:*ruler-layer*` | `"POOL-RULER"` | Scratch layer the length ruler's rows are drawn on, made if missing. A layer of its own is what lets a drafter turn the ruler off without turning anything of the pool off with it |
+| `pool:*ruler-color*` | `3` | ACI colour of the ruler's rows -- the ones you can pick |
+| `pool:*ruler-current-color*` | `7` | ACI colour of its ringed current row, so it reads apart from the options; 7 is AutoCAD's black/white swap |
+| `pool:*ruler-screen-x*` | `0.88` | Where the ruler's spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach left, short of it right, so the ruler stays inside the view |
+| `pool:*ruler-row-frac*` | `0.042` | One row's share of the view's height -- the ruler's size knob |
+| `pool:*ruler-txt-frac*` | `0.5` | The biggest row label's height, as a fraction of the row spacing |
+| `pool:*ruler-tick-frac*` | `0.6` | The longest tick, same measure |
+| `pool:*ruler-ring-frac*` | `0.26` | The ring round the current row, as a fraction of the row spacing |
+| `pool:*ruler-reach*` | `6.0` | How far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the first point of a measured length |
+| `pool:*radius-ladder*` | `'(3.0 24.0 3.0)` | The rungs the corner RADIUS prompt offers, as (LOW HIGH STEP) in inches -- 3" to 2'-0" by 3", the sizes a corner is built to. `nil` leaves the prompt the plain typed one, with no ruler |
+| `pool:*cutface-ladder*` | `'(3.0 24.0 3.0)` | The same for the CUT FACE prompt |
+| `pool:*wallheight-ladder*` | `'(36.0 54.0 3.0)` | ...and for C, the wall height |
+| `pool:*deepdepth-ladder*` | `'(60.0 96.0 6.0)` | ...and for D, the deep end |
+| `pool:*breakdepth-ladder*` | `'(36.0 96.0 6.0)` | ...and for C2, which lands between the two |
+| `pool:*hopoffset-ladder*` | `'(24.0 72.0 6.0)` | ...and for the two HOPPER OFFSETS, M and K — the gap the hopper leaves to the top side and to the bottom side. 2' to 6' by 6", which is what `ABHD` (`*PF-HOP-OFF-LADDER*`) and `FITABHD` (`fit:*hop-side-ladder*`, `fit:*hop-back-ladder*`) offer at the same question: a hopper offset is one number whichever tool is asking for it. The rest of the chain is not on it — H, G, F and E are stations ALONG the pool and L is the hopper's own width |
 
 Three kinds of thing are deliberately **not** in that block, and the
 block says so: run state (set and cleared by a run, not tuned), the

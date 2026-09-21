@@ -1435,10 +1435,10 @@ def test_cperppts_boundary_is_optional_and_wired_through():
         assert "[Limit/Meet/Back] <Limit>: " in code, "Enter must mean Limit"
         loop = code[code.index("(setq newPts '()"):]
         cap = loop.index("(%s:capdist bnd base" % prefix)
-        ask2 = loop.index("(setq len (getdist")
+        ask2 = loop.index("(%s:ask-len" % prefix)
         draw = loop[ask2:].index("(setq np (list") + ask2
         assert cap < ask2 < draw, (cap, ask2, draw)
-        assert '(initget 6 (if cap "Back Undo Max" "Back Undo"))' in loop, \
+        assert '(if cap "Back Undo Max" "Back Undo")' in loop, \
             "Max is only an answer where there is a boundary ahead"
         clip = loop.index("(setq len cap)")
         assert ask2 < clip < draw, \
@@ -2407,6 +2407,11 @@ def main():
     test_perppts_walks_its_chains_back()
     test_perppts_pops_the_error_mode_on_every_exit()
     print("\nall tests passed")
+    test_the_length_ruler_hands_a_row_in_as_the_length()
+    test_the_length_ruler_is_down_between_rounds()
+    test_the_length_prompt_reads_a_measurement_as_dimstamp_does()
+    test_a_click_off_the_ruler_measures_between_two_points()
+    test_max_and_back_still_work_at_the_ruler_prompt()
 
 
 def test_perppts_walks_its_chains_back():
@@ -2497,6 +2502,159 @@ def test_perppts_pops_the_error_mode_on_every_exit():
     fin = code[code.index("(defun cperp:finish"):code.index("(defun *error*")]
     assert "(*pop-error-mode*)" in fin, "cperp:finish does not pop the mode"
     print("PERPPTS/CPERPPTS: the error mode is popped on every exit")
+
+
+# --- the length ruler ---------------------------------------------------
+# DIMSTAMP's ruler beside the length prompt: once a length has been
+# given, the nearby eighths are drawn down a strip of the view and a
+# click on a row hands that value in as the length.
+
+def ruler_rows(path, prefix, eighths, hasfeet=False):
+    """Where the ruler for this value lands, read off the routine
+    itself in a throwaway VM with the same view as a run's: (box, rows)
+    with rows as (eighths, y) pairs."""
+    vm = VM()
+    vm.load(path)
+    vm.tables['LAYER'].add('PERPPTS-TEMP')
+    # the copy under the tool's prefix at the standalone tier; the
+    # library's at the grouped one, where the mirror has swapped it
+    draw = 'cal:draw-ruler' if os.environ.get('CALOFIN_LISP_ROOT') \
+        else prefix + ':draw-ruler'
+    # nil ladder: a perpendicular length is taped off a wall, so this
+    # prompt stands beside the tape and never a ladder
+    _, box, rows = vm.loads('(%s %d %s "PERPPTS-TEMP" (%s:ruler-style) nil)'
+                            % (draw, eighths, 't' if hasfeet else 'nil', prefix))
+    return box, rows
+
+
+def row_click(path, prefix, eighths, want, hasfeet=False):
+    """A click on the ruler row that offers WANT eighths, on the ruler
+    drawn around EIGHTHS."""
+    box, rows = ruler_rows(path, prefix, eighths, hasfeet)
+    y = dict((int(v), yy) for v, yy in rows)[want]
+    return [(box[0] + box[1]) / 2.0, y, 0.0]
+
+
+def temp_layer_live(vm):
+    return [e for e in vm.entities
+            if e not in vm.deleted and dxf(vm.entdata[e], 8) == 'PERPPTS-TEMP']
+
+
+def labels_ever_drawn(vm):
+    """Every ruler label the run drew, swept or not."""
+    return [dxf(vm.entdata[e], 1) for e in vm.entities
+            if dxf(vm.entdata[e], 0) == 'MTEXT'
+            and dxf(vm.entdata[e], 8) == 'PERPPTS-TEMP']
+
+
+def test_the_length_ruler_hands_a_row_in_as_the_length():
+    """After the first length the ruler is up, graded round that
+    length; a click on one of its rows IS the length for that point,
+    and becomes what Enter repeats and what the next ruler is built
+    around.  Nothing of it is left behind when the run ends."""
+    for path, prefix, run in ((PERP_LSP, "perp", run_perppts),
+                              (CPERP_LSP, "cperp", run_cperppts)):
+        script = [CLICK, 4, 10.0,
+                  row_click(path, prefix, 80, 84),        # 10 1/2"
+                  None,                                    # Enter repeats it
+                  row_click(path, prefix, 84, 92),        # 11 1/2"
+                  WIDTH_OK, "No", "STandard"]
+        if prefix == "perp":
+            script.insert(6, "Straight")
+        vm, pl = run(script)
+        ys = [round(v[1], 9) for v in poly_verts(vm, pl[0])]
+        assert ys == [10.0, 10.5, 10.5, 11.5], ys
+        asked = prompts_of(vm)
+        assert any(p.startswith("\nLength for point 3 of 4 <10.5000>")
+                   for p in asked), asked
+        assert "A ruler of nearby lengths is beside the drawing" in said(vm)
+        assert said(vm).count("A ruler of nearby lengths") == 1, \
+            "the hint is said once a run, not once a prompt"
+        assert not temp_layer_live(vm), "the ruler must be swept with the guides"
+        # the labels are the rows' own values, stacked the way DIMSTAMP
+        # stacks a fraction; the ringed row is the last length
+        drawn = labels_ever_drawn(vm)
+        assert '\\A1;10{\\H1.0000x;\\S1/2;}"' in drawn, drawn[:20]
+        assert '11"' in drawn, drawn[:20]
+        rings = [e for e in vm.entities
+                 if dxf(vm.entdata[e], 0) == 'CIRCLE'
+                 and dxf(vm.entdata[e], 8) == 'PERPPTS-TEMP']
+        # one ruler per DISTINCT last length: 10, then 10 1/2 -- Enter kept
+        # it, and the 11 1/2 taken at the last point ends the round
+        assert len(rings) == 2, len(rings)
+        print("%s: a ruler row is a length, repeats, and is swept away"
+              % prefix.upper())
+
+
+def test_the_length_ruler_is_down_between_rounds():
+    """The ruler belongs to the length prompts: at the join question,
+    the width question and the next round's count it is not on screen,
+    and it comes back at the next length prompt."""
+    seen = {}
+
+    def at(label):
+        def look(vm):
+            seen[label] = len(temp_layer_live(vm))
+            return None
+        return look
+
+    vm, pl = run_perppts([CLICK, 2, 10.0, 12.0, at("width"), "Yes",
+                          at("count"), 12.0, at("length"), WIDTH_OK,
+                          "No", "STandard"])
+    # the START arrow (three lines) and the guide points are the only
+    # guides standing between rounds; a ruler is 2 entities a row plus
+    # a spine and a ring, so its presence is unmistakable
+    assert seen["width"] < 8 and seen["count"] < 8, seen
+    assert seen["length"] > 20, seen
+    print("PERPPTS: the ruler is up at the length prompts and nowhere else")
+
+
+def test_the_length_prompt_reads_a_measurement_as_dimstamp_does():
+    """44 1/2, 3'8 and 4'-4 1/2\" all read, feet typed put the ruler in
+    the feet family, and what is not a length or is not positive is
+    refused and asked again."""
+    vm, pl = run_perppts([CLICK, 4, "44 1/2", "abc", "3'8", 0, "-5",
+                          "4'-4 1/2\"", 44.3, "Straight", WIDTH_OK, "No",
+                          "STandard"])
+    ys = [round(v[1], 9) for v in poly_verts(vm, pl[0])]
+    assert ys == [44.5, 44.0, 52.5, 44.3], ys
+    out = said(vm)
+    assert '"abc" is not a length - try 44, 44.5, 44 1/2, 4\'4.5 or ' \
+        '4\'-4 1/2".' in out, out
+    assert out.count("A length must be more than zero.") == 2, out
+    drawn = labels_ever_drawn(vm)
+    assert '3\'-8"' in drawn, "feet typed means feet on the ruler"
+    assert '\\A1;3\'-8{\\H1.0000x;\\S1/8;}"' in drawn, drawn
+    # a length off the eighths is kept exactly; the ruler rounds
+    assert len(vm.dims) == 4 and abs(vm.dims[3][1][1] - 44.3) < 1e-9, vm.dims
+    print("PERPPTS: the length prompt reads what DIMSTAMP reads")
+
+
+def test_a_click_off_the_ruler_measures_between_two_points():
+    """Empty space is not a row: the click is the first of two points
+    and the length is the distance between them -- what getdist always
+    offered at this prompt."""
+    vm, pl = run_perppts([CLICK, 2, 10.0, [300.0, 300.0, 0.0], 25.0,
+                          WIDTH_OK, "No", "STandard"])
+    ys = [round(v[1], 9) for v in poly_verts(vm, pl[0])]
+    assert ys == [10.0, 25.0], ys
+    assert "\nSecond point of the length: " in prompts_of(vm)
+    print("PERPPTS: a click on empty space starts a two-point length")
+
+
+def test_max_and_back_still_work_at_the_ruler_prompt():
+    """The keywords ride through the ruler prompt unchanged: Max takes
+    the boundary, Back steps back a point, and Max typed where no
+    boundary is ahead is not a keyword and is refused as text."""
+    vm, pl = run_perppts([CLICK, 3, 12.0, "Max", "B", 20.0, 12.0,
+                          "Straight", WIDTH_OK, "No", "STandard"],
+                         boundary=PART)
+    assert rounded(poly_verts(vm, pl[0])) == \
+        [(0.0, 12.0), (50.0, 20.0), (100.0, 12.0)], poly_verts(vm, pl[0])
+    vm, pl = run_perppts([CLICK, 2, "Max", 12.0, 12.0, WIDTH_OK, "No",
+                          "STandard"])
+    assert '"Max" is not a length' in said(vm), said(vm)
+    print("PERPPTS: Max and Back survive the ruler prompt")
 
 
 if __name__ == "__main__":

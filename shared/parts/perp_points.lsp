@@ -53,6 +53,10 @@
 ;;;      (U, the old keyword, is still accepted).  With a Limit boundary
 ;;;      the prompt names the distance to it and takes M (Max) to go
 ;;;      exactly that far; a longer length is brought back to it.
+;;;      From the second length on, DIMSTAMP's RULER stands beside the
+;;;      drawing: the eighths for an inch either side of the last
+;;;      length, and a click on a row IS the length for this point --
+;;;      see "The length ruler" below.
 ;;;   7. Say how the points are joined: Straight (every segment a
 ;;;      line, which is what the routine has always drawn), Arcs (every
 ;;;      segment an arc), or Mixed, which then asks which segment
@@ -198,6 +202,37 @@
 ;;;     has it; otherwise the current style is used and a note is
 ;;;     printed.
 ;;;
+;;; The length ruler
+;;;   Offsets off one wall are rarely all the same number and rarely
+;;;   far apart: 44, 44 1/2, 44 1/4, 45, and the run reads like that
+;;;   for twenty points.  Typing each one over again is what DIMSTAMP
+;;;   stopped doing for stamped text, and its ruler does the same job
+;;;   here.  Once a first length has been given, every later length
+;;;   prompt draws a column of nearby values down a strip near the
+;;;   right edge of the view -- every eighth of an inch for a whole
+;;;   inch either side of the last length, graded like a tape (the
+;;;   whole inches boldest, the eighths smallest), the last length
+;;;   ringed in the middle -- and one prompt takes four answers:
+;;;     * click a ROW            -- that value is the length for this
+;;;                                 point, and the ruler re-grades
+;;;                                 round it for the next;
+;;;     * type a length          -- read the way DIMSTAMP reads: 44,
+;;;                                 44.5, 44 1/2, 4'4.5 and 4'-4 1/2"
+;;;                                 all mean what they say, kept
+;;;                                 exactly as typed (44.3 stays 44.3;
+;;;                                 the ruler rounds to the eighth);
+;;;     * Enter                  -- the last length again, as before;
+;;;     * click EMPTY SPACE      -- the first of two points to measure
+;;;                                 the length between, which is what
+;;;                                 getdist always offered here.
+;;;   Feet typed put the ruler in the feet family (3'-8", 3'-8 1/8" ...)
+;;;   until a plain-inches length is typed.  B, U and M ride through
+;;;   unchanged.  The ruler is pinned to the screen, not the drawing,
+;;;   so it reads the same at any zoom; it is scratch on the guide
+;;;   layer, taken down between rounds and swept with the rest of the
+;;;   guides on every way out, Esc included.  Its sizes and colours
+;;;   are the knobs in the tunables block.
+;;;
 ;;; Robustness
 ;;;   * The whole run is one UNDO group: a single U reverses everything.
 ;;;   * Esc or an error at any prompt restores every system variable it
@@ -217,7 +252,101 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.16")
+(setq *perp-version* "v0.19")
+
+;;; -------------------- tunables --------------------------------------
+;; The LENGTH RULER.  Once a length has been given, every later length
+;; prompt draws a column of nearby values beside the drawing -- the
+;; DIMSTAMP ruler, borrowed whole: eighths for a whole inch either side
+;; of the last length, graded like a tape measure, with the last length
+;; ringed in the middle.  Clicking a row hands that value in as the
+;; length, so a run of near-equal offsets is clicked rather than typed
+;; over and over.  Scratch geometry on the guide layer, swept away with
+;; the rest of the guides.  Every size is a fraction of the current
+;; view, so the ruler reads the same at any zoom.
+(setq perp:*ruler-color* 3)          ; ACI colour of the rows you can PICK,
+                                    ; carried on the entities themselves
+(setq perp:*ruler-current-color* 7)  ; ACI colour of the ringed CURRENT
+                                    ; row -- the last length -- so it
+                                    ; reads apart from the options; 7 is
+                                    ; AutoCAD's black/white swap
+(setq perp:*ruler-screen-x* 0.88)    ; where the spine sits across the
+                                    ; view, as a fraction of its width
+                                    ; in from the left; past 0.5 the rows
+                                    ; reach left, short of it they reach
+                                    ; right, so the ruler is always inside
+                                    ; the view
+(setq perp:*ruler-row-frac* 0.042)   ; one row's share of the view's
+                                    ; height -- the ruler's size knob
+(setq perp:*ruler-txt-frac* 0.5)     ; the biggest row label's height, as
+                                    ; a fraction of the row spacing
+(setq perp:*ruler-tick-frac* 0.6)    ; the longest tick, same measure
+(setq perp:*ruler-ring-frac* 0.26)   ; the ring round the current row, as
+                                    ; a fraction of the row spacing
+(setq perp:*ruler-reach* 6.0)        ; how far inboard of the spine, in
+                                    ; row spacings, a click still counts
+                                    ; as picking a row rather than as the
+                                    ; first point of a measured length
+
+;;; -------------------- the length ruler --------------------------------
+;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
+;;;  Once a first length has been given, the prompt draws the eighths
+;;;  of an inch for a whole inch either side of the last one down a
+;;;  strip near the right edge of the view, graded like a tape with the
+;;;  last length ringed in the middle -- and one prompt then takes a
+;;;  click on a row (that row's value), a typed measurement in any
+;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  or a click on empty space as the first of two points to measure
+;;;  between, which is what getdist always offered.  A run of
+;;;  near-equal lengths is clicked rather than typed over and over.
+;;;
+;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
+;;;  ask their lengths through it.  Each carries this block under its
+;;;  own prefix so the standalone file loads alone, the grouped build
+;;;  swaps the copy for the library's, and tests/test_ruler_copies.py
+;;;  holds every copy to this one text.  DIMSTAMP keeps its own ruler:
+;;;  its current row is drawn as the stamp it would make, on the
+;;;  stamp's layer in the stamp's style, which is a different thing
+;;;  from a row of nearby lengths.
+;;;
+;;;  A ruler comes in two families, and the prompt picks which.
+;;;
+;;;  The TAPE is the one above: the eighths of an inch for a whole inch
+;;;  either side of the LAST answer, which is what a run of near-equal
+;;;  numbers wants.  It needs a last answer to be built round, so the
+;;;  first prompt of a run stands alone.
+;;;
+;;;  The LADDER is the other: a fixed (LO HI STEP) of the values that
+;;;  prompt is actually answered with, every one of them offered from
+;;;  the first prompt on.  A corner radius is 3" to 2'-0" by 3" and a
+;;;  tape of eighths round nothing helps nobody -- 3, 6, 9, 12 is the
+;;;  whole vocabulary, and a drafter picks out of it rather than types
+;;;  into it.  Its rows are graded off the VALUE, not off a distance
+;;;  from the current row: the foot marks are the deep ones and the
+;;;  half-foot next, which is where a tape's deep marks are too.  A
+;;;  ladder still takes a typed measurement that is not on it, and the
+;;;  answer is then ringed among the rungs as the current row.
+;;;
+;;;  Nothing in here reads a knob.  A tool hands its knobs in as one
+;;;  STYLE list and keeps the ruler between prompts as one STATE list:
+;;;    STYLE  (COLOR CURRENT-COLOR SCREEN-X ROW-FRAC TXT-FRAC TICK-FRAC
+;;;            RING-FRAC REACH) -- a caller's tunables block says what
+;;;            each one moves
+;;;    STATE  (LEN FEET ENTS BOX ROWS LAY STYLE SAID LADDER) -- the
+;;;            length the ruler stands round (nil = none), the family it
+;;;            is labelled in (T = feet), what is drawn, its layer, the
+;;;            style, whether the one-line hint has been said, and the
+;;;            ladder it is standing on (nil = a tape)
+;;;  Values are INCHES, the unit this shop draws in, and the ruler
+;;;  steps in eighths of one, which is what a tape reads in.
+
+;;; -------------------- end of the length ruler -------------------------
+
+;; This file's knobs, in the order the ruler reads them.
+(defun perp:ruler-style ()
+  (list perp:*ruler-color* perp:*ruler-current-color* perp:*ruler-screen-x*
+        perp:*ruler-row-frac* perp:*ruler-txt-frac* perp:*ruler-tick-frac*
+        perp:*ruler-ring-frac* perp:*ruler-reach*))
 
 ;; --- geometry helpers ------------------------------------------------
 
@@ -832,6 +961,7 @@
   (princ))
 
 (defun c:PERPPTS (/ *error* perp:kill perp:unplace perp:finish
+                                    rl rr
                     os ce pd plt clay cec celt celw celts cdim undoOpen
                     tmpEnts
                     srcData srcLayer srcColor srcLtype srcLw srcLts
@@ -887,6 +1017,7 @@
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)
       (setq guard (1+ guard)))
+    (if rl (setq rl (cal:ruler-off rl)))
     (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
     (setq tmpEnts nil)
     (if (and cdim (tblsearch "DIMSTYLE" cdim))
@@ -949,6 +1080,9 @@
   ;; which can come back through the click step more than once.
   (cal:ensure-layer "PERPPTS-TEMP" 1)     ; guides, erased before the command ends
   (cal:ensure-layer "DIMENSIONS"   4)
+  ;; the length ruler, not up yet: it stands beside the length prompts
+  ;; on the guide layer, and perp:finish takes it down with the guides
+  (setq rl (cal:ruler-new "PERPPTS-TEMP" (perp:ruler-style)))
 
   ;; --- 1 to 3: the selection, the click and the width ------------------
   ;; One chain walked with a step counter: Back at the click re-opens
@@ -1180,6 +1314,7 @@
         ;; --- how many values / points for this round -------------------
         ;; Enter reuses the previous round's count.
         ((= rstep 1)
+         (setq rl (cal:ruler-off rl))
          (setq n nil)
          (while (null n)
            (initget 6)                            ; no zero, no negative
@@ -1228,7 +1363,7 @@
         ;; is where Back goes.
         ((= rstep 2)
          (if (>= i n)
-           (setq rstep 3)
+           (progn (setq rl (cal:ruler-off rl)) (setq rstep 3))
            (progn
              (setq base (nth i basePts)
                    ;; How far this point may go before it meets the
@@ -1252,18 +1387,22 @@
                (t
                 ;; Max is offered only where there is a boundary ahead of
                 ;; this point to reach
-                (initget 6 (if cap "Back Undo Max" "Back Undo"))
-                (setq len (getdist (strcat "\nLength for point " (itoa (1+ i))
-                                           " of " (itoa n)
-                                           (cond
-                                             (cap (strcat ", boundary at " (rtos cap)))
-                                             ((equal bmode "Meet") " (no boundary ahead)")
-                                             (t ""))
-                                           (if lastLen
-                                             (strcat " <" (rtos lastLen) ">")
-                                             "")
-                                           (if cap " [Back/Max]: " " [Back]: "))))
-                (if lzd:ask (lzd:ask (getvar "LASTPROMPT") len) len)
+                (setq rl  (cal:ruler-show rl lastLen nil)
+                      rr  (cal:ask-len
+                            (strcat "\nLength for point " (itoa (1+ i))
+                                    " of " (itoa n)
+                                    (cond
+                                      (cap (strcat ", boundary at " (rtos cap)))
+                                      ((equal bmode "Meet") " (no boundary ahead)")
+                                      (t ""))
+                                    (if lastLen
+                                      (strcat " <" (rtos lastLen) ">")
+                                      "")
+                                    (if cap " [Back/Max]: " " [Back]: "))
+                            (if cap "Back Undo Max" "Back Undo")
+                            rl nil)
+                          len (car rr)
+                          rl  (cadr rr))
                 (if (null len) (setq len lastLen))     ; Enter = same as last time
                 (if (equal len "Max") (setq len cap))
                 ;; The typed number is what Enter repeats, not the capped

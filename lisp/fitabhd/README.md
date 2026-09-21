@@ -416,6 +416,22 @@ arc and becomes a straight run (`fit:*oas-line*`, `fit:*oas-rmin*`) and
 the kidney evidence margin (`fit:*oas-edge*`). `tests/test_fitabhd.py` checks this file and the
 mirror agree on the ones that shape the fit.
 
+**The length ruler** beside the four hopper questions and the
+tolerance has its own eight (`fit:*ruler-layer*`, `fit:*ruler-color*`,
+`fit:*ruler-current-color*`, `fit:*ruler-screen-x*`,
+`fit:*ruler-row-frac*`, `fit:*ruler-txt-frac*`,
+`fit:*ruler-tick-frac*`, `fit:*ruler-ring-frac*`, `fit:*ruler-reach*`)
+and one LADDER per question -- `fit:*brk-deep-ladder*` (4' to 12' by a
+foot), `fit:*brk-shal-ladder*` (12' to 30' by two), `fit:*hop-side-ladder*`
+and `fit:*hop-back-ladder*` (2' to 6' by 6", the range `POOL` and `ABHD`
+offer at the same question) and `fit:*tol-ladder*` (a
+quarter inch to two). These are the numbers a hopper is *laid out* to
+rather than lengths taped off the drawing, so the rungs stand from the
+first prompt and a click on one is the answer; everything else about
+the questions is unchanged, Enter taking what the session remembers
+and `B` still stepping back. `nil` on any ladder leaves that prompt
+the plain typed one it was.
+
 ## Notes & limitations
 
 * Everything is fitted on the 2D plane (XY); Z values are ignored.

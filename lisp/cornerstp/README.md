@@ -23,6 +23,31 @@ Common to all three:
 * In the tread loop, Enter = done, `Back` removes the step just drawn
   (its lines and its dimensions) and re-asks (`Undo` accepted too),
   and `Same` repeats the previous tread.
+* **The length ruler.** Every step tread -- and, in the side profile,
+  every step depth -- is asked beside `DIMSTAMP`'s ruler, drawn down a
+  strip near the right edge of the view. From the second answer on it
+  is a TAPE: the eighths of an inch for a whole inch either side of
+  the last one, graded like a tape with that answer ringed. At the
+  FIRST tread and the FIRST depth there is no last answer to build one
+  round, so a LADDER stands there instead -- `*cs-tread-ladder*`, half
+  feet, and `*cs-drop-ladder*`, whole inches -- and the tape takes
+  over the moment it can be built, the finer offer being the better
+  one. Click a row and that is the answer; type one and it reads the
+  way `DIMSTAMP` reads (`24`, `24.5`, `24 1/8`, `2'`, `1'4-1/2"`, kept
+  exactly as typed); click empty space and it is the first of two
+  points to measure between, as `getdist` always offered. Enter, `Back`
+  and `Same` mean what they always did. The prompt's wording does not
+  change, so the `LAZSTEP` form is untouched. The ruler is scratch on
+  the current layer, down again before the width prompt (which cannot
+  take it) and before the profile's pick, and swept on every way out,
+  Esc included. Its eight `*cs-ruler-*` knobs and the three ladders
+  are in the table below.
+* **NORMIESTEP's corner treatment stands on a ladder too.** Its
+  `Radius`, `Cut face length` and `Offset back along each line` are
+  sizes off an order sheet, not lengths taped off anything, so they
+  are offered `*cs-corner-ladder*` -- 3" to 2'-0" by 3" -- from the
+  first prompt: a run treats one corner, so there is never a second
+  answer for a tape to be built round.
 * **Optional dimensions** (`Dimension the steps? [Yes/No] <Yes>`):
   treads chained in `STANDARD INCHES`, widths nested in
   `SIDE STANDARD`; a missing style falls back to the current one with
@@ -142,6 +167,17 @@ override):
 | `*cs-profile-dimgap*` | `nil` | How far the side profile's dims stand off the flight, on top of the clearance the geometry needs; nil = the larger of the two terms below |
 | `*cs-profile-gap-txt*` | `4.0` | ...that default's first term, in text heights |
 | `*cs-profile-gap-tread*` | `0.75` | ...and its second, as a fraction of the widest tread |
+| `*cs-ruler-color*` | `3` | ACI colour of the length ruler's rows -- the ones you can pick |
+| `*cs-ruler-current-color*` | `7` | ACI colour of its ringed current row, the last answer, so it reads apart from the options; 7 is AutoCAD's black/white swap |
+| `*cs-ruler-screen-x*` | `0.88` | Where the ruler's spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach left, short of it right, so the ruler stays inside the view |
+| `*cs-ruler-row-frac*` | `0.042` | One row's share of the view's height -- the ruler's size knob |
+| `*cs-ruler-txt-frac*` | `0.5` | The biggest row label's height, as a fraction of the row spacing |
+| `*cs-ruler-tick-frac*` | `0.6` | The longest tick, same measure |
+| `*cs-ruler-ring-frac*` | `0.26` | The ring round the current row, same measure |
+| `*cs-ruler-reach*` | `6.0` | How far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the first point of a measured length |
+| `*cs-tread-ladder*` | `'(6.0 36.0 6.0)` | The rungs the FIRST step tread stands on, as (LOW HIGH STEP) in inches -- a tape of eighths has to be built round a last answer, and at the first tread there is none. From the second on the finer tape takes over. `nil` leaves that prompt with nothing beside it until the second answer |
+| `*cs-drop-ladder*` | `'(6.0 12.0 1.0)` | The same for the first step depth, in whole inches |
+| `*cs-corner-ladder*` | `'(3.0 24.0 3.0)` | NORMIESTEP only: the rungs its corner treatment's Radius, Cut face and Offset stand on -- 3" to 2'-0" by 3", the sizes a corner is built to. A run treats ONE corner, so there is never a second answer for a tape, and these stand from the first prompt |
 
 One knob each of two of them keeps to itself:
 
