@@ -141,7 +141,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.53")
+(setq *lazpanel-version* "v3.54")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -5210,7 +5210,7 @@
      ("*paddle-arrow*" "36.0" "Length of that arrow, tail to tip, in drawing units. Its head is a third of that long and three times as wi...")
      ("*paddle-demo-layer*" "\"PADDLE-DEMO\"" "--- TUTORIALPADDLE --- Layer the tutorial draws its labelled sample perimeter on, and the colour index it i...")
      ("*paddle-demo-color*" "3" "--- TUTORIALPADDLE --- Layer the tutorial draws its labelled sample perimeter on, and the colour index it i..."))
-    ("CPERP_POINTS" "lisp/perp_points/cperp_points.lsp"
+    ("CPERPPTS" "lisp/perp_points/cperp_points.lsp"
      ("cperp:*ruler-color*" "3" "ACI colour of the rows you can PICK, carried on the entities themselves -------------------- tunables -----...")
      ("cperp:*ruler-current-color*" "7" "ACI colour of the ringed CURRENT row -- the last length -- so it reads apart from the options; 7 is AutoCAD...")
      ("cperp:*ruler-screen-x*" "0.88" "where the spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach...")
@@ -5222,7 +5222,7 @@
      ("cperp:*split-default*" "\"Yes\"" "Which answer the \"Split the ... evenly, half at each end?\" question takes on Enter when a width change has...")
      ("cperp:*boundary-default*" "\"Limit\"" "Which answer the boundary's \"stop at the boundary, or run out to meet it?\" question takes on Enter: \"Limit\"...")
      ("cperp:*dimstyle-default*" "\"STandard\"" "Which of the two dimension styles the closing question takes on Enter -- \"STandard\" (STANDARD INCHES) or \"S..."))
-    ("PERP_POINTS" "lisp/perp_points/perp_points.lsp"
+    ("PERPPTS" "lisp/perp_points/perp_points.lsp"
      ("perp:*ruler-color*" "3" "ACI colour of the rows you can PICK, carried on the entities themselves -------------------- tunables -----...")
      ("perp:*ruler-current-color*" "7" "ACI colour of the ringed CURRENT row -- the last length -- so it reads apart from the options; 7 is AutoCAD...")
      ("perp:*ruler-screen-x*" "0.88" "where the spine sits across the view, as a fraction of its width in from the left; past 0.5 the rows reach...")
