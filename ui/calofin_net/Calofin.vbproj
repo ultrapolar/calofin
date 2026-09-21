@@ -29,8 +29,11 @@
          shapes used to be here too, as PNGs with a field map of nudged
          fractions; the chart forms draw from ChartCatalog's vectors
          instead and there is nothing left for them to photograph. -->
-    <None Include="assets\bottoms\*.png" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="assets\bottoms\fieldmap.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Update, not Include: the SDK's default None glob already holds
+         these, and declaring them twice stops the build on NETSDK1022.
+         ui/calofin_ribbon/CalofinRibbon.csproj carries the same note. -->
+    <None Update="assets\bottoms\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="assets\bottoms\fieldmap.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

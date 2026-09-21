@@ -84,28 +84,35 @@ def cs_entries(block):
             for m in CS_ENTRY.finditer(block)]
 
 
+CS_FEATURED = re.compile(r",\s*(true|false)\),\s*$")
+
+
 def items(block):
-    """[(primary, [variant, ...])] out of one panel's Item list.
+    """[(primary, [variant, ...], featured)] out of one panel's Items.
 
     Read a line at a time rather than with one big regex: a plain item
-    is a single line ending in ``new Entry[0])``, a family opens with
-    ``new[]`` and closes on its own ``}),``, and a pattern spanning
-    newlines happily swallows the plain item that follows a family."""
+    is a single line ending in ``new Entry[0], <flag>)``, a family opens
+    with ``new[]`` and closes on its own ``}, <flag>),``, and a pattern
+    spanning newlines happily swallows the plain item that follows a
+    family."""
     out = []
     open_item = None
     for line in block.splitlines():
         text = line.strip()
+        flag = CS_FEATURED.search(text)
         if text.startswith("new Item("):
             face = cs_entries(line)
-            open_item = (face[0], [])
+            open_item = [face[0], [], None]
             out.append(open_item)
             if "new Entry[0]" in text:
+                open_item[2] = flag and flag.group(1) == "true"
                 open_item = None
         elif open_item is not None and text.startswith("new Entry("):
             open_item[1].extend(cs_entries(line))
-        elif text == "}),":
+        elif open_item is not None and text.startswith("}"):
+            open_item[2] = flag and flag.group(1) == "true"
             open_item = None
-    return out
+    return [tuple(i) for i in out]
 
 
 PANELS = {m.group(1): items(m.group(2)) for m in CS_PANEL.finditer(SRC)}
@@ -119,7 +126,7 @@ check("the %d category panels are the panel's groups" % len(cr.CATEGORIES),
 seen = []
 for group in cr.CATEGORIES:
     want = [c for names in PAGES.get(group, {}).values() for c in names]
-    got = [e[0] for primary, variants in PANELS.get(group, [])
+    got = [e[0] for primary, variants, _f in PANELS.get(group, [])
            for e in [primary] + variants]
     seen.extend(got)
     check("%s reaches all %d of the panel's commands"
@@ -165,7 +172,8 @@ WANT_FAMILIES = {
 }
 
 found = {primary[0]: [v[0] for v in variants]
-         for group in PANELS.values() for primary, variants in group}
+         for group in PANELS.values()
+         for primary, variants, _f in group}
 
 for name, want in sorted(WANT_FAMILIES.items()):
     check("%s carries %s" % (name, ", ".join(want)),
@@ -186,7 +194,7 @@ check("the three step shapes are still three buttons",
 print("== 3. every caption and blurb is the panel's own ==")
 
 all_entries = [e for group in PANELS.values()
-               for primary, variants in group
+               for primary, variants, _f in group
                for e in [primary] + variants]
 
 wrong_cap = [(c, cap, CAPS.get(c)) for c, cap, _ in all_entries
@@ -200,7 +208,33 @@ check("every blurb in the file is the one blurbs.txt (or the caption) gives",
 check("a blurb is never empty", all(b.strip() for _, _, b in all_entries))
 
 
-print("== 4. the file is current ==")
+print("== 4. the large buttons are the FEATURED ones ==")
+
+# IsFeatured is the button SIZE, and it decides whether
+# gen_ribbon_icons.py drew a glyph for the routine at all.  A flag that
+# disagreed with FEATURED would be a large button with no picture on it
+# (or a glyph drawn every run and never shown) -- and neither looks like
+# a failure from the outside, which is why it is checked from the
+# emitted FILE rather than by asking the generator what it emits.
+flagged = sorted(primary[0] for group in PANELS.values()
+                 for primary, _v, feat in group if feat)
+check("%d of the %d buttons are large"
+      % (len(flagged), sum(len(v) for v in PANELS.values())),
+      flagged == sorted(gen_ui_data.FEATURED),
+      repr(sorted(set(flagged) ^ set(gen_ui_data.FEATURED))))
+check("every button carries a flag either way",
+      all(feat is not None for group in PANELS.values()
+          for _p, _v, feat in group))
+
+# A variant cannot be featured on its own: it has no button of its own
+# to be large, and gen_ui_data.featured() refuses to name one.
+check("no dropdown variant is flagged",
+      not (set(gen_ui_data.FEATURED) &
+           {v[0] for group in PANELS.values()
+            for _p, variants, _f in group for v in variants}))
+
+
+print("== 5. the file is current ==")
 
 check("gen_ui_data --check is happy", not gen_ui_data.check(),
       repr(gen_ui_data.check()))

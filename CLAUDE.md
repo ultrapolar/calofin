@@ -48,8 +48,10 @@ blender/    Blender add-ons (DXF import/export, mesh tools)
 lisp/       AutoLISP tools, one self-contained file each (the source of truth)
 releases/   Dated REV-stamped twins of the lisp/ files, flat, GENERATED
 shared/     The loaded-together build on CALOFIN-LIB.lsp (bundle GENERATED)
-ui/         The Calofin AutoCAD palette (VB.NET) and its LISP glue
-            (ui/calofin_net/Generated/ is GENERATED from LAZPANEL)
+ui/         The Calofin AutoCAD palette (VB.NET), the ribbon tab (C#)
+            and their LISP glue.  ui/calofin_net/Generated/,
+            ui/calofin_ribbon/Generated/ and ui/calofin_ribbon/icons/
+            are all GENERATED from LAZPANEL - never hand-edited
 tools/      Dev tooling (release stamping, bundle building, static checks)
 tests/      Python test suite - stdlib only, no AutoCAD or Blender needed
 ```
@@ -427,7 +429,14 @@ pass.
 **The palette's catalog is generated now**, which is why it is not on
 that list: `ui/calofin_net/Generated/CommandCatalog.g.vb` is written
 from `lzp:*captions*` and `lzp:*groups*` by `tools/gen_ui_data.py`, so
-a tool that is on the panel is in the palette by construction. Never
+a tool that is on the panel is in the palette by construction. The
+same generator writes the ribbon's `CommandCatalog.g.cs` from the same
+tables, so it is on the ribbon by construction too -- as a small text
+button, unless its name is added to `gen_ui_data.FEATURED`, the
+editorial list of routines that get a LARGE ribbon button. A name
+there needs a glyph in `gen_ribbon_icons.DESIGN`: `make check` fails
+until it has one, and fails the other way too on a glyph no button
+shows. Never
 hand-edit it — and the same goes for `ChartCatalog.g.vb`, which
 `tools/gen_ui_charts.py` writes from the three chart tables. Change a
 chart in `LAZFORM`/`LAZSPA`/`LAZSTEP` and re-run that generator in the
@@ -547,6 +556,14 @@ python3 tools/gen_ui_data.py     # rewrites the palette's catalog from
 python3 tools/gen_ui_charts.py   # the same for the palette's chart
                         [--check]# geometry, out of lzf:/lzs:/lzt:'s own
                                  # chart tables
+python3 tools/gen_ribbon_icons.py# the ribbon's 82 icons: one per category
+            [--check] [--prune]  # and one per FEATURED routine, at 16 and
+                                 # 32, drawn with zlib and struct alone.
+                                 # --check fails on a stale one the way a
+                                 # stale twin does, and on an ORPHAN - a
+                                 # picture for a routine that is no longer
+                                 # featured, which would otherwise be
+                                 # copied into every bundle for ever
 python3 tools/gen_knobs.py       # LAZTUNE's knob catalog (lzp:*knobs*
                         [--check]# in LAZPANEL.lsp), transcribed from
                                  # every tool's tunables block; a knob

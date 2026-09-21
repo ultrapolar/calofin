@@ -777,6 +777,85 @@ A `check_cs.py`, or teaching `check_vb.py` to read both, is the
 obvious next thing and is named here rather than left to be discovered
 as a silent gap the way the palette's own drift once was.
 
+## Phase 7 -- the ribbon made operational *(done 2026-09-21)*
+
+Phase 6 built the tab. It did not build a tab that would have WORKED,
+and the gap between those two is worth writing down, because every
+piece of it would have looked fine in a screenshot of the source.
+
+**The panels showed three buttons each.** `BuildPanel` put a
+`RibbonRowBreak` after every item, which is not "wrap" -- it is one
+button per row. A panel is three rows of standard items tall, so Layout
+asked for 26 rows and 23 of its buttons were not on the screen. A panel
+that renders its first three buttons and stops does not look broken; it
+looks short. Now: large buttons lead, the rest go three to a column,
+and each column is its own `RibbonRowPanel`.
+
+**The captions did not fit.** LAZPANEL's captions are sentences --
+"Pool from a filled-in chart" -- which is right for a list and
+unaffordable on a strip shared with every other AutoCAD tab. The face
+says the COMMAND now, which is what the drafter types anyway, and the
+caption is the tooltip's title.
+
+**Every button wore its category's icon**, so 26 Layout buttons were
+26 copies of the same blue floor plan. That is the same failure as no
+icon at all, and it costs panel width to say nothing. So: **36 FEATURED
+routines take a large button with a glyph of their own, and the other
+31 are text buttons.** A ribbon is only faster than a list where a
+drafter reaches by SHAPE without reading, and that is a thing you learn
+about tools you run -- drawing all 67 would spend the distinction it is
+made of. The list is the shop's own answer to which ones they run, and
+it lives in `gen_ui_data.FEATURED` beside `NAMED_VARIANTS`, as the
+editorial claim it is; `featured()` refuses a name that is not a real
+command, and refuses one that is a variant riding in a dropdown, whose
+glyph no button would ever show.
+
+**The icons are drawn at two sizes now, not one scaled twice.**
+`LargeImage` is 32, `Image` is the 16 a collapsed panel's drop-down
+shows, and handing one 32 to both slots makes WPF halve hard-edged
+pixel art -- the worst thing there is to downscale. Every glyph is
+written once on a 32-unit design grid and RENDERED at each size. Six
+subjects that carry more detail than 13 pixels hold say it again in
+fewer strokes at 16; a small icon is not a small picture of a big one.
+A corner badge carries the KIND (a tick for a review pass, chasing
+arrows for a converter) and is dropped at 16, where six pixels of
+corner is noise. The four converters wear their own initials in a 3x5
+font, read off the command name -- a format is a name, not a picture,
+and four variations on "two arrows" would be four icons you have to
+read the tooltip to tell apart.
+
+**The tab went away on a workspace switch**, because a switch rebuilds
+the ribbon out of the CUI and an API-added tab is not in the CUI.
+`WSCURRENT` is watched now. And it no longer makes itself current on
+the automatic path: the bundle demand-loads this at AutoCAD startup, so
+a tab that activated itself meant every session opened on Calofin
+instead of Home.
+
+**Neither .NET project would have built.** Both declared their content
+files with `<None Include=...>`, and the SDK's default `None` glob
+already holds them -- NETSDK1022, before a line is compiled. `Update`
+is the spelling that attaches metadata to an item the SDK already has.
+
+**What the two tests hold that nothing else can.**
+`test_ribbon_catalog.py` gained the button SIZE, read back out of the
+emitted file rather than from the generator: a flag disagreeing with
+`FEATURED` is a large button with no picture, or a glyph drawn every
+run and never seen, and neither looks like a failure. `test_ribbon_icons.py`
+holds `DESIGN` and `FEATURED` to each other in both directions, holds
+the file names to the spellings `LoadIcon` builds, and asserts **no two
+icons are the same picture** -- the whole argument for spending 36
+glyphs is that a drafter can tell them apart, and a copy-paste in
+`DESIGN` would look exactly like a working ribbon.
+
+**Still not done, and named rather than left to be found:** this
+surface does not grey out a command the session has not loaded, the way
+the palette's `UpdateAvailability` does -- a button for an unloaded
+command reports its own absence at the command line. And nothing here
+compiles C#, so the layout, `RibbonSplitButton`, `RibbonToolTip` and
+the `WSCURRENT` rebuild are all held by a human reader until a Windows
+build says otherwise. `ui/calofin_ribbon/README.md` ends with the list
+of what to click, in the order that settles the most.
+
 ## After the plan: what nothing was checking
 
 The five phases added roughly 1,240 `action_tile` callbacks across 37

@@ -113,6 +113,83 @@ NAMED_VARIANTS = {
 }
 
 
+#: The routines that get a LARGE ribbon button with a picture of their
+#: own, instead of a small one with its name beside it.
+#:
+#: A ribbon is not a list.  What it can do that the palette cannot is
+#: let a drafter reach a tool by SHAPE, without reading -- and that only
+#: works for a tool they reach for often enough to learn the shape of.
+#: Drawing a glyph for all 67 buttons would spend the distinction it is
+#: made of: 67 pictures nobody can tell apart is the same failure as one
+#: picture repeated 67 times, which is what this surface shipped with.
+#:
+#: So this is editorial, exactly like NAMED_VARIANTS above, and it is
+#: the shop's own answer to "which ones do you actually run": the pool
+#: and spa layouts, the survey point work, the callouts and the stamp,
+#: every converter, and every check.  What is NOT here still has a
+#: button, still has its dropdown and still reads its caption in the
+#: tooltip -- it is a text button, which is what the rest of AutoCAD's
+#: own ribbon is made of too.
+#:
+#: Two guards, both in featured(): a name here must be a real command on
+#: the panel, and it must be a PRIMARY -- the face of its button, not a
+#: variant riding in a dropdown.  A featured variant would have an icon
+#: drawn for it that no button ever shows, and nothing would look wrong.
+FEATURED = {
+    # Layout -- the shapes the shop draws
+    "POOL", "OASIS", "ABHD", "SPA", "PADDLE", "CUSTBLOCK",
+    "LAZSTEP", "CORNERSTP", "HEMISTEP", "NORMIESTEP",
+    # Points -- the survey work
+    "ABFIND", "ABMOVE", "PERPPTS",
+    # Dimensions -- the callouts and the stamp
+    "AUTODIM", "CDCREATE", "CDCALLOUT", "BPCALLOUT", "DIMSTAMP",
+    # Converters -- all four; the panel is four buttons wide either way
+    "XFTCONV", "SOCONV", "VSCONV", "G2MCONV",
+    # Checking -- every review pass, plus the two that read the record
+    "CHECK", "DIMARCCHECK", "DIMCHECK", "ABCURCHECK", "OLAUTO",
+    "ABPCHECK", "LINCHECK", "LINFINCHECK", "COVERCHECK", "SPACHECK",
+    "LINTXTCHK", "CCPRECHECK", "LAZDIAG", "LAZLOG",
+}
+
+
+def featured(src=None):
+    """FEATURED, in panel order, as [(category, command), ...].
+
+    Ordered rather than a set so the icon generator and the catalog walk
+    the same list in the same order, and so a diff of either reads like
+    the panel does.
+
+    Raises if a name is not a real command on the panel, or names a
+    variant instead of the button it rides on: an icon drawn for a
+    command no button shows is work that vanishes silently, which is the
+    one way this table can be wrong without anything looking wrong.
+    """
+    src = read(PANEL) if src is None else src
+    pg = pages(src)
+    if pg is None:
+        raise SystemExit(
+            "gen_ui_data: cannot read LAZPANEL's lzp:*groups* table")
+
+    out, seen = [], set()
+    for group in GROUPS:
+        cmds = [c for names_ in pg.get(group, {}).values() for c in names_]
+        for primary, _variants in families(cmds):
+            if primary in FEATURED:
+                out.append((group, primary))
+                seen.add(primary)
+
+    missing = sorted(FEATURED - seen)
+    if missing:
+        raise SystemExit(
+            "gen_ui_data: FEATURED names %d command(s) that are not the "
+            "face of any ribbon button: %s\n"
+            "  Each is either absent from LAZPANEL's roster, or a "
+            "variant riding in another tool's dropdown.  An icon drawn "
+            "for one would never be shown."
+            % (len(missing), ", ".join(missing)))
+    return out
+
+
 def variant_of(cmd, roster):
     """The command CMD is a variant OF, or None.
 
@@ -449,6 +526,7 @@ def build_cs(src=None, blurb=None):
             "gen_ui_data: cannot read LAZPANEL's roster tables - has "
             "lzp:*captions* or lzp:*groups* been renamed?")
     blurb = blurbs() if blurb is None else blurb
+    featured(src)   # raises if FEATURED names a command no button shows
 
     def blurb_of(cmd):
         return blurb.get(cmd) or caps.get(cmd, cmd)
@@ -472,6 +550,13 @@ def build_cs(src=None, blurb=None):
     add("// file carries only the category table, which is all the ribbon")
     add("// needs.  To add a tool: put it on LAZPANEL, write its blurb in")
     add("// blurbs.txt, and re-run the generator.")
+    add("//")
+    add("// A FEATURED routine takes a large button with a glyph of its")
+    add("// own (tools/gen_ribbon_icons.py draws it from the same list);")
+    add("// the rest take a small button with their name beside them.  A")
+    add("// ribbon is only faster than a list where a drafter knows the")
+    add("// shape, and that is a thing you learn about tools you run --")
+    add("// so the list is short and editorial: gen_ui_data.FEATURED.")
     add("//")
     add("// Variants ride in their primary's dropdown rather than taking a")
     add("// button of their own -- POOLCOVER under POOL, XFTRECONV under")
@@ -513,16 +598,26 @@ def build_cs(src=None, blurb=None):
     add("        /// <summary>One button on a panel: the routine on its face,")
     add("        /// and the variants of that routine behind its dropdown.")
     add("        /// No variants means a plain button, not a split one.")
+    add("        ///")
+    add("        /// IsFeatured is the button SIZE: a featured routine gets a")
+    add("        /// large button with a glyph of its own, the rest get a")
+    add("        /// small one with their name beside them.  The list is")
+    add("        /// gen_ui_data.FEATURED, and tools/gen_ribbon_icons.py")
+    add("        /// reads the same one to decide which glyphs to draw, so")
+    add("        /// a large button can never be left without a picture.")
     add("        /// </summary>")
     add("        public readonly struct Item")
     add("        {")
     add("            public readonly Entry Primary;")
     add("            public readonly Entry[] Variants;")
+    add("            public readonly bool IsFeatured;")
     add("")
-    add("            public Item(Entry primary, Entry[] variants)")
+    add("            public Item(Entry primary, Entry[] variants,")
+    add("                        bool isFeatured)")
     add("            {")
     add("                Primary = primary;")
     add("                Variants = variants;")
+    add("                IsFeatured = isFeatured;")
     add("            }")
     add("        }")
     add("")
@@ -539,15 +634,17 @@ def build_cs(src=None, blurb=None):
         for primary, variants in families(cmds):
             face = entry_cs(primary, caps.get(primary, ""),
                             blurb_of(primary))
+            feat = "true" if primary in FEATURED else "false"
             if not variants:
-                add("                new Item(%s, new Entry[0])," % face)
+                add("                new Item(%s, new Entry[0], %s),"
+                    % (face, feat))
                 continue
             add("                new Item(%s, new[]" % face)
             add("                {")
             for v in variants:
                 add("                    %s,"
                     % entry_cs(v, caps.get(v, ""), blurb_of(v)))
-            add("                }),")
+            add("                }, %s)," % feat)
         add("            } },")
     add("        };")
     add("    }")

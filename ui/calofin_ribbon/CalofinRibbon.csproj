@@ -30,8 +30,14 @@
          next to the DLL the same way Calofin.vbproj copies
          assets/bottoms, so LoadIcon in RibbonExtensionApplication.cs
          finds them beside whatever folder CalofinRibbon.dll ends up
-         in. -->
-    <None Include="icons\*.png" CopyToOutputDirectory="PreserveNewest" />
+         in.
+
+         UPDATE, not Include.  The .NET SDK's default None glob already
+         holds every file in the project folder, so Include declares
+         them a second time and the build stops on NETSDK1022 before it
+         compiles a line.  Update attaches the metadata to the item the
+         SDK already has, which is all this wants. -->
+    <None Update="icons\*.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -12,8 +12,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media.Imaging;
+using System.Windows.Input;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.Windows;
@@ -24,8 +24,9 @@ namespace Calofin.Ribbon
     /// <summary>
     /// Loaded on NETLOAD.  Builds the ribbon tab once the ribbon itself
     /// exists -- it does not always exist yet this early in a session --
-    /// and rebuilds it, rather than duplicating it, if this assembly is
-    /// ever NETLOADed a second time in the same session.
+    /// rebuilds it rather than duplicating it if this assembly is
+    /// NETLOADed a second time, and puts it back when a workspace
+    /// switch takes it away.
     /// </summary>
     public class RibbonExtensionApplication : IExtensionApplication
     {
@@ -41,48 +42,78 @@ namespace Calofin.Ribbon
 
         private const string TabId = "CALOFIN_RIBBON_TAB";
 
+        // An AutoCAD panel is three rows of standard-size items tall.
+        // This used to put a RibbonRowBreak after EVERY item, which is
+        // not "wrap" -- it is one button per row -- so Layout asked for
+        // 26 rows in a panel that can show three, and the other 23 were
+        // simply not on the screen.  Three to a column, and a fresh
+        // RibbonRowPanel per column, is how a ribbon panel is built.
+        private const int RowsPerColumn = 3;
+
         public void Initialize()
         {
-            if (ComponentManager.Ribbon != null)
-            {
-                BuildRibbon();
-            }
-            else
-            {
-                // The ribbon is not always up yet this early in a
-                // session (a bundle demand-loaded at AutoCAD startup,
-                // before the default workspace finishes building it).
-                // Application.Idle fires repeatedly once the drawing
-                // editor is responsive, so it doubles as "try again
-                // shortly" without a timer of its own.
-                AcadApp.Idle += OnIdle;
-            }
+            AcadApp.SystemVariableChanged += OnSystemVariableChanged;
+            ScheduleBuild();
         }
 
         public void Terminate()
         {
+            AcadApp.SystemVariableChanged -= OnSystemVariableChanged;
+            AcadApp.Idle -= OnIdle;
         }
 
-        private void OnIdle(object sender, EventArgs e)
+        /// <summary>
+        /// A workspace switch rebuilds the ribbon out of the CUI -- and
+        /// a tab added through the API is not IN the CUI, so ours is
+        /// gone with it.  Nothing about that looks like a failure: the
+        /// drafter picks a different workspace and the toolset's tab
+        /// has quietly stopped existing.  So put it back.
+        /// </summary>
+        private static void OnSystemVariableChanged(
+            object sender, SystemVariableChangedEventArgs e)
+        {
+            if (string.Equals(e.Name, "WSCURRENT",
+                              StringComparison.OrdinalIgnoreCase))
+            {
+                ScheduleBuild();
+            }
+        }
+
+        /// <summary>Build at the next idle rather than here and now.
+        /// The ribbon is not up yet during a startup load, and during a
+        /// workspace switch it is mid-rebuild; Application.Idle fires
+        /// once the editor is responsive, which is after both.</summary>
+        private static void ScheduleBuild()
+        {
+            AcadApp.Idle -= OnIdle;     // never queued twice
+            AcadApp.Idle += OnIdle;
+        }
+
+        private static void OnIdle(object sender, EventArgs e)
         {
             if (ComponentManager.Ribbon == null)
             {
-                return;
+                return;                 // not up yet; idle fires again
             }
             AcadApp.Idle -= OnIdle;
-            BuildRibbon();
+            BuildRibbon(activate: false);
         }
 
-        /// <summary>Rebuilds the tab by hand -- useful after a session
-        /// where the ribbon came up before this assembly finished
-        /// loading, and the manual escape hatch CALOFIN has as well.</summary>
+        /// <summary>Rebuilds the tab by hand -- the escape hatch for a
+        /// session where the ribbon came up before this assembly
+        /// finished loading, and the one place the tab is brought to
+        /// the front, because here somebody asked for it.</summary>
         [CommandMethod("CALOFINRIBBON")]
         public void ShowRibbon()
         {
-            BuildRibbon();
+            BuildRibbon(activate: true);
         }
 
-        private static void BuildRibbon()
+        /// <param name="activate">Make the tab the current one.  False
+        /// on every automatic path: this assembly is demand-loaded at
+        /// AutoCAD startup, and a tab that makes itself current there
+        /// means every session opens on Calofin instead of Home.</param>
+        private static void BuildRibbon(bool activate)
         {
             RibbonControl ribbon = ComponentManager.Ribbon;
             if (ribbon == null)
@@ -111,7 +142,10 @@ namespace Calofin.Ribbon
                 tab.Panels.Add(BuildPanel(category, items));
             }
 
-            tab.IsActive = true;
+            if (activate)
+            {
+                tab.IsActive = true;
+            }
         }
 
         private static RibbonTab FindTab(RibbonControl ribbon, string id)
@@ -126,53 +160,103 @@ namespace Calofin.Ribbon
             return null;
         }
 
-        /// <summary>One panel: the category's icon on the header, and
-        /// its buttons stacked in a column below it -- RibbonRowBreak is
-        /// what turns the flat item list into rows, the way a WPF
-        /// WrapPanel would if the ribbon framework exposed one.</summary>
+        /// <summary>
+        /// One panel.  The FEATURED routines take large buttons with a
+        /// glyph of their own and lead the panel; the rest follow as
+        /// small text buttons, three to a column.
+        ///
+        /// Which are featured is not decided here -- it is
+        /// Item.IsFeatured, out of gen_ui_data.FEATURED, the same list
+        /// gen_ribbon_icons.py draws from, so a large button and the
+        /// picture on it cannot come apart.
+        /// </summary>
         private static RibbonPanel BuildPanel(
             string category, CommandCatalog.Item[] items)
         {
-            BitmapImage icon = LoadIcon(category);
+            // Title and Image only.  Nothing here compiles C#, so every
+            // property this file names is a property a human believes
+            // exists -- and the panels are rebuilt wholesale on every
+            // BuildRibbon, so there is nothing an Id would be for.
             var source = new RibbonPanelSource
             {
                 Title = category,
-                Image = icon,
+                Image = LoadIcon(
+                    "cat-" + category.ToLowerInvariant() + "-32.png"),
             };
 
-            var flow = new RibbonRowPanel();
             foreach (CommandCatalog.Item item in items)
             {
-                flow.Items.Add(item.Variants.Length == 0
-                    ? (RibbonItem)BuildButton(item.Primary, icon)
-                    : BuildSplitButton(item, icon));
-                flow.Items.Add(new RibbonRowBreak());
+                if (item.IsFeatured)
+                {
+                    source.Items.Add(BuildItem(item, large: true));
+                }
             }
-            source.Items.Add(flow);
+
+            // The rest, in columns of three.  Each column is its own
+            // RibbonRowPanel: RibbonPanelSource.Items lays out across
+            // the panel, a RibbonRowPanel stacks down it, and a
+            // RibbonRowBreak between two items is what makes the second
+            // start a new row rather than sit beside the first.
+            RibbonRowPanel column = null;
+            int inColumn = 0;
+            foreach (CommandCatalog.Item item in items)
+            {
+                if (item.IsFeatured)
+                {
+                    continue;
+                }
+                if (column == null)
+                {
+                    column = new RibbonRowPanel();
+                    inColumn = 0;
+                }
+                if (inColumn > 0)
+                {
+                    column.Items.Add(new RibbonRowBreak());
+                }
+                column.Items.Add(BuildItem(item, large: false));
+                if (++inColumn == RowsPerColumn)
+                {
+                    source.Items.Add(column);
+                    column = null;
+                }
+            }
+            if (column != null)
+            {
+                source.Items.Add(column);
+            }
 
             return new RibbonPanel { Source = source };
         }
 
-        /// <summary>
-        /// A family on one button: the primary on the face, its variants
-        /// one click down. POOL carries POOLCOVER and POOLDEMO, XFTCONV
-        /// carries XFTRECONV -- the same tool with one thing changed,
-        /// which is what a flyout is for and what keeps Layout's 37
-        /// commands down to 26 buttons without putting any of them out
-        /// of reach.
-        /// </summary>
-        private static RibbonSplitButton BuildSplitButton(
-            CommandCatalog.Item item, BitmapImage icon)
+        /// <summary>A routine's button: plain when it has no variants,
+        /// a split button carrying them when it has.</summary>
+        private static RibbonItem BuildItem(
+            CommandCatalog.Item item, bool large)
         {
-            RibbonButton primary = BuildButton(item.Primary, icon);
+            // Only a featured routine has a glyph of its own, and its
+            // variants share it: POOLCOVER is POOL with one answer
+            // changed, so POOL's picture is the right picture for it.
+            string stem = item.IsFeatured
+                ? "cmd-" + item.Primary.Command.ToLowerInvariant()
+                : null;
+            BitmapImage small = stem == null ? null : LoadIcon(stem + "-16.png");
+            BitmapImage big = stem == null ? null : LoadIcon(stem + "-32.png");
+
+            RibbonButton primary = BuildButton(item.Primary, large, small, big);
+            if (item.Variants.Length == 0)
+            {
+                return primary;
+            }
 
             var split = new RibbonSplitButton
             {
-                Text = item.Primary.Caption,
+                Text = item.Primary.Command,
                 ShowText = true,
-                ShowImage = icon != null,
-                Size = RibbonItemSize.Standard,
-                Orientation = Orientation.Horizontal,
+                ShowImage = big != null,
+                Size = large ? RibbonItemSize.Large : RibbonItemSize.Standard,
+                Orientation = large ? Orientation.Vertical
+                                    : Orientation.Horizontal,
                 IsSplit = true,
                 // The face follows the last pick, the way AutoCAD's own
                 // flyouts do: a drafter who works in cover sheets all
@@ -180,40 +264,60 @@ namespace Calofin.Ribbon
                 // the button.
                 IsSynchronizedWithCurrentItem = true,
             };
-            if (icon != null)
+            if (big != null)
             {
-                split.Image = icon;
-                split.LargeImage = icon;
+                split.Image = small ?? big;
+                split.LargeImage = big;
             }
 
             split.Items.Add(primary);
             foreach (CommandCatalog.Entry variant in item.Variants)
             {
-                split.Items.Add(BuildButton(variant, icon));
+                // Built at the SPLIT BUTTON's size, not at Standard:
+                // with IsSynchronizedWithCurrentItem the picked variant
+                // becomes the face, and a face built small inside a
+                // large button is a button that changes size when it is
+                // used.
+                split.Items.Add(BuildButton(variant, large, small, big));
             }
             split.Current = primary;
             return split;
         }
 
         private static RibbonButton BuildButton(
-            CommandCatalog.Entry entry, BitmapImage icon)
+            CommandCatalog.Entry entry, bool large,
+            BitmapImage small, BitmapImage big)
         {
             var button = new RibbonButton
             {
-                Text = entry.Caption,
+                // The COMMAND on the face, not the caption.  A ribbon
+                // button is roughly a word wide, and LAZPANEL's captions
+                // are sentences -- "Pool from a filled-in chart" is a
+                // fine thing to read in a list and an unaffordable thing
+                // to put on a strip shared with every other tab AutoCAD
+                // has.  The caption is the tooltip's title, one hover
+                // away, and the command name is what the drafter types
+                // anyway.
+                Text = entry.Command,
                 ShowText = true,
-                ShowImage = icon != null,
-                Size = RibbonItemSize.Standard,
-                Orientation = Orientation.Horizontal,
-                ToolTip = entry.Command + "  -  " + entry.Caption +
-                          "\n" + entry.Blurb,
+                ShowImage = big != null,
+                Size = large ? RibbonItemSize.Large : RibbonItemSize.Standard,
+                Orientation = large ? Orientation.Vertical
+                                    : Orientation.Horizontal,
+                ToolTip = new RibbonToolTip
+                {
+                    Command = entry.Command,
+                    Title = entry.Caption,
+                    Content = entry.Blurb,
+                    IsHelpEnabled = false,
+                },
                 CommandParameter = entry.Command,
                 CommandHandler = RunCommand.Instance,
             };
-            if (icon != null)
+            if (big != null)
             {
-                button.Image = icon;
-                button.LargeImage = icon;
+                button.Image = small ?? big;
+                button.LargeImage = big;
             }
             return button;
         }
@@ -224,25 +328,23 @@ namespace Calofin.Ribbon
             new Dictionary<string, BitmapImage>();
 
         /// <summary>
-        /// The category's icon, from icons\&lt;category&gt;.png beside
-        /// this assembly -- tools/gen_ribbon_icons.py writes it and the
-        /// project copies it on build, the same pattern
-        /// ui/calofin_net/Calofin.vbproj uses for assets\bottoms.  A
-        /// missing file leaves the button textual rather than failing
-        /// the whole tab: a panel with no picture is still a panel.
+        /// One icon, by file name, from icons\ beside this assembly --
+        /// tools/gen_ribbon_icons.py writes them and the project copies
+        /// them on build, the same pattern ui/calofin_net/Calofin.vbproj
+        /// uses for assets\bottoms.  A missing file leaves the button
+        /// textual rather than failing the whole tab: a button with no
+        /// picture is still a button, and a tab that threw is not a tab.
         /// </summary>
-        private static BitmapImage LoadIcon(string category)
+        private static BitmapImage LoadIcon(string fileName)
         {
-            if (IconCache.TryGetValue(category, out BitmapImage cached))
+            if (IconCache.TryGetValue(fileName, out BitmapImage cached))
             {
                 return cached;
             }
 
             string dir = Path.GetDirectoryName(
                 typeof(RibbonExtensionApplication).Assembly.Location);
-            string path = Path.Combine(
-                dir ?? string.Empty, "icons",
-                category.ToLowerInvariant() + ".png");
+            string path = Path.Combine(dir ?? string.Empty, "icons", fileName);
 
             BitmapImage image = null;
             if (File.Exists(path))
@@ -261,7 +363,7 @@ namespace Calofin.Ribbon
                     image = null;
                 }
             }
-            IconCache[category] = image;
+            IconCache[fileName] = image;
             return image;
         }
     }
@@ -284,7 +386,9 @@ namespace Calofin.Ribbon
 
         // A ribbon button's enabled state never changes here -- CanExecute
         // is asked once, at build time -- so the event exists to satisfy
-        // the interface and is never raised.
+        // the interface and is never raised.  Unlike the palette, this
+        // surface does not grey out a command the session has not
+        // loaded; see README.md, "what this does not do".
         public event EventHandler CanExecuteChanged
         {
             add { }
