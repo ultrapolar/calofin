@@ -922,6 +922,7 @@ TOOLS = {
             'lg:2d': 'cal:2d', 'lg:v+': 'cal:v+', 'lg:v-': 'cal:v-',
             'lg:v*': 'cal:v*', 'lg:dot': 'cal:dot',
             'lg:angnorm': 'cal:angnorm',
+            'lg:signed-dang': 'cal:signed-dang',
         },
         # the snapshot global travels with syssave/sysrestore
         'drop_globals': ['lg:*sysold*'],

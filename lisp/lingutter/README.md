@@ -28,12 +28,12 @@ notes. LINGUTTER guts one pool back in a single pass, straight through
    hopper. Instead every `LINE`, `ARC`, `LWPOLYLINE` and `POLYLINE`
    **in the highlight** becomes an edge of a graph, ends closer
    together than a snap tolerance count as one point, and the **outer
-   face** is walked: from the lowest point of each connected piece,
-   always taking the hardest available **right** turn. That rule is
-   what keeps it outside. Interior geometry — the hopper, the steps, a
-   bottom break, a tie line — is never stepped onto, because reaching
-   it always needs a left turn. Loose lines and arcs are as good an
-   input as a drawn polyline, and arcs keep their bulge.
+   face** is walked, always taking the hardest available **right**
+   turn. That rule is what keeps it outside. Interior geometry — the
+   hopper, the steps, a bottom break, a tie line — is never stepped
+   onto, because reaching it always needs a left turn. Loose lines and
+   arcs are as good an input as a drawn polyline, and arcs keep their
+   bulge.
 
    Three things fall out of it, and they are the three ways the old
    guess got it wrong:
@@ -46,6 +46,48 @@ notes. LINGUTTER guts one pool back in a single pass, straight through
    * **a stray tick hanging off the outline is pruned.** The true outer
      face really does run up it and back; left in, `PADDLE` would read
      it as a 180° inside corner and pad it.
+
+   Four more things the walk reads that are not lines on the outline,
+   and every one of them is a step or a bench a pool really has:
+
+   * **a T is a junction.** A drafter does not break the wall where a
+     tanning ledge meets it: the wall is one line the full height of
+     the pool and the ledge's two sides run up to the **middle** of
+     it. Every segment is split where another one's **end** lands on
+     it, at the same tolerance, before the graph is built. Only ends —
+     two lines that merely *cross* mid-span still are not a junction,
+     which costs nothing on a CAD outline and keeps the walk exact.
+   * **a block reference is geometry.** A fiberglass step is not drawn
+     line by line: it is an `FG_STEP` reference bolted to a wall, and
+     its three sides **are** the perimeter where it sits. A reference
+     contributes its definition's own geometry, carried onto the
+     insertion point — rotation, scale and mirror included, nesting
+     followed — and is then swept like anything else, because the new
+     perimeter replaces the step's lines the way it replaces the
+     pool's. `lg:*skipblocks*` is what keeps the two families that sit
+     *on* a pool rather than bounding it out of the trace: `PADDLE`'s
+     own pads (centred **on** a corner, half of each outside the loop,
+     so a pool gutted twice would trace round its own pads) and the
+     drain blocks.
+   * **which face, not where to start.** Which face a walk traces is
+     decided entirely by the dart it starts on, and that used to be a
+     guess: the shallowest edge at each piece's lowest *node*. One arc
+     leaving that node and dipping below it is enough to make the
+     guess wrong, and a walk going the other way round hugs the
+     **inside** — one turn tighter at every node, which is exactly
+     what "the hardest right turn" asks for. So nothing is guessed:
+     every face is walked and the one enclosing the most area wins,
+     which is the outer boundary of its piece and, across pieces, the
+     pool rather than the stray line beside it. It costs no more work
+     — each edge is still travelled once each way.
+   * **a run of one curve is one edge.** Splitting at a T puts a node
+     in the middle of a wall, and a step outline running past a
+     stepped corner comes back as seven pieces of one circle. A run of
+     consecutive edges that is one straight line, or one arc about one
+     centre, is welded back into a single edge, so what the drafter
+     gets is the outline they drew rather than a polyline carrying a
+     vertex for every tread that touched it — and `PADDLE` is not
+     offered a string of 180° corners to pad.
 2. **The snap ladder.** `lg:*snaps*` is tried in order — `0.05`, then
    `6.0`, then `24.0` drawing units — and the first rung whose exterior
    spans at least `lg:*cover*` (80%) of what you highlighted, both ways,
@@ -74,17 +116,39 @@ notes. LINGUTTER guts one pool back in a single pass, straight through
 
    | Kept | Rule |
    | --- | --- |
-   | any **radius or diameter** dimension | **on the perimeter** — regardless of its style. A corner radius under a foot lands in `STANDARD INCHES` like any other short measurement, and that call-out is not the thing to erase |
+   | any **radius or diameter** dimension | **of the perimeter** — regardless of its style, by any of the three shapes below. A corner radius under a foot lands in `STANDARD INCHES` like any other short measurement, and that call-out is not the thing to erase |
    | `CROSS DIM*` — matches `CROSS DIM`, `CROSS DIMENSIONS` and `CROSS DIMENSIONS 0.5` | only when **"Keep CROSS DIMENSIONS?"** is answered Yes, and only when it reads as a **genuine cross measurement of this pool** (below) |
-   | `STANDARD`, `SIDE STANDARD` | **only on the perimeter** — every one of its attachment points within `lg:*ontol*` of the loop |
+   | `STANDARD*`, `SIDE STANDARD*`, `ALT STANDARD*` | **only when it dimensions the perimeter** — every one of its attachment points within `lg:*ontol*` of the loop, **and** the two of them not a partial read along one single edge |
 
    A dimension's *attachment* points are DXF 13 and 14, the two measured
-   points of a linear, aligned, ordinate or angular dim. A radius or
-   diameter dim carries neither and hangs off group 10, where its arrow
-   lands on the curve. Group 11 (the text) and 15/16 (an angular dim's
-   second leg, a radius dim's centre) *place* the dimension rather than
-   attach it, and are not tested — a radius dim on a 3" fillet would
-   otherwise be judged by a centre point 3" inside the pool.
+   points of a linear, aligned, ordinate or angular dim. Group 11 (the
+   text) and 16 (an angular dim's arc) *place* the dimension rather than
+   attach it, and are not tested.
+
+   **A radius or diameter dim carries no 13/14 at all**, and group 10 is
+   **not** where its arrow lands: for a radius dim group 10 is the arc's
+   **centre** and group 15 is the point on the curve. (A diameter dim's
+   10 and 15 are the two ends of a diameter, both on the curve.) Reading
+   10 as the attachment point is why every corner-radius call-out on
+   every pool with a radius drawn on it used to be erased: the centre of
+   a 24" corner sits 24" inside the loop. So a radial dim is kept when
+   **any** of three things is true, and they are three real shapes on
+   these sheets:
+
+   * its **point on the curve** is within `lg:*ontol*` of the loop — an
+     arc the walk traced, with the arrow landing inside the swept part
+     of it;
+   * it **names an arc of the loop** — same centre, same radius, both
+     within `lg:*ontol*`. This is the one that matters most, because a
+     leader is routinely dragged round to where it reads well and its
+     arrow then lands on the same circle but *past the end* of the
+     drawn arc;
+   * its **centre sits on a vertex** of the loop — `R3 typ.` on a
+     corner that is drawn sharp and is meant to be filleted. A vertex,
+     not merely somewhere along an edge: the centre of a tread arc
+     inside a radius-cornered step sits exactly **on** the step outline
+     that runs past it, and that is an interior call-out, not a
+     perimeter one.
 
    *Every* attachment point has to pass its rule, not just one: a dim
    running from the pool edge in to the hopper is measuring the hopper,
@@ -198,9 +262,10 @@ needs different names.
 | `lg:*poollayer*` | `"POOL"` | layer the perimeter is drawn on |
 | `lg:*poolcolor*` | `4` (cyan) | its colour, when the layer has to be created |
 | `lg:*anystyles*` | `("CROSS DIM*")` | dim styles kept when "Keep CROSS DIMENSIONS?" is Yes and the dim reads as a genuine cross measurement of the pool, as wildcard patterns matched against the style name |
-| `lg:*perimstyles*` | `("STANDARD" "SIDE STANDARD")` | dim styles kept only on the perimeter |
+| `lg:*perimstyles*` | `("STANDARD*" "SIDE STANDARD*" "ALT STANDARD*")` | dim styles kept only when they dimension the perimeter — on it, and not a part of one side |
 | `lg:*keeplayers*` | `nil` | layers left alone entirely |
-| `lg:*skiplayers*` | `("DEFPOINTS" "DIMENSION")` | layers the perimeter is never traced from |
+| `lg:*skiplayers*` | `("DEFPOINTS" "DIMENSION")` | layers the perimeter is never traced from, inside a block reference as well as out |
+| `lg:*skipblocks*` | `("PAD*" "DRAIN*")` | block **names** the perimeter is never traced from, as wildcard patterns — what sits *on* a pool rather than bounding it |
 | `lg:*ontol*` | `1.0` | how far a dim's attachment point may sit off the perimeter and still count as on it |
 | `lg:*snaps*` | `(0.05 6.0 24.0)` | the snap ladder: how far apart two ends may be and still count as one point, tried tightest first |
 | `lg:*cover*` | `0.8` | how much of the highlight's extent a traced exterior must span before it is believed |
@@ -227,14 +292,20 @@ so an outline drawn closed still traces.
 
 ## Notes & limitations
 
-* **`STANDARD INCHES` is deliberately not in `lg:*perimstyles*`.** The
-  two styles kept on the perimeter are `STANDARD` and `SIDE STANDARD`.
-  A perimeter SIDE under 12" that `AUTODIM` put in `STANDARD INCHES`
-  therefore goes with the rest — reported by style, never silently. Add
-  the style to `lg:*perimstyles*` to keep those too. A RADIUS or
-  DIAMETER dim is not caught by this: `AUTODIM` puts a corner radius
-  under 12" in `STANDARD INCHES` too, and that one is kept, style
-  aside, whenever it sits on the perimeter.
+* **`lg:*perimstyles*` covers the whole `STANDARD` family**, by
+  wildcard. A perimeter side or a 1" corner chamfer that `AUTODIM` put
+  in `STANDARD INCHES` is kept; so is the `STANDARD-1` that AutoCAD
+  renames `STANDARD` to when a paste brings in a second definition, and
+  so are the half- and double-scale variants (`SIDE STANDARD 0.5`,
+  `STANDARD(2X)`). What stops that from keeping a **step's** dimensions
+  is the partial-read half of the rule, not the style list: a step built
+  against a pool wall has its risers and treads dimensioned *along* that
+  wall, so both ends of a 16" tread dim sit exactly on the perimeter.
+  "The start of one side to the end of it" is a side dimension; "two
+  points partway along one side" is a reading of something lying against
+  it, and it goes with the step. Narrow the list to `("STANDARD" "SIDE
+  STANDARD")` for the old behaviour — either way the report counts every
+  dropped dimension and says which of the two it failed.
 * **"Keep CROSS DIMENSIONS?" answered No** drops every `lg:*anystyles*`
   dimension like any other style not in `lg:*perimstyles*` — counted in
   the report, not silently.
@@ -267,9 +338,27 @@ so an outline drawn closed still traces.
   outline that was not closed, and the report names the rung so it is
   never a surprise.
 * The walk uses **endpoint connectivity only** — it does not compute
-  crossings. Two lines that cross mid-span without sharing an endpoint
-  are not a junction to it. CAD outlines meet at endpoints, so this
-  costs nothing in practice and keeps the walk fast and exact.
+  crossings. An **end** landing in the middle of another segment *is* a
+  junction and splits it (a T: a ledge meeting an unbroken wall), but
+  two lines that **cross** mid-span without sharing an endpoint are
+  not. CAD outlines meet at endpoints, so this costs nothing in
+  practice and keeps the walk fast and exact. One consequence worth
+  knowing: a pad block dropped onto a corner only crosses the walls,
+  so even with `lg:*skipblocks*` emptied it forms its own piece rather
+  than joining the pool's outline — and loses on area.
+* **A block reference is traced from and then swept**, like the lines it
+  replaces. `lg:*skipblocks*` is the list of names that are not outline:
+  `PADDLE`'s pads sit centred on a corner with half of each one outside
+  the loop, so a pool gutted a second time would trace round its own
+  pads. A reference scaled **unevenly** turns its arcs into ellipses,
+  which a bulge cannot hold: those arcs are read as their chords, and
+  that is the one place the reading is approximate. A mirrored one is
+  exact — the bulge changes sign with the turn.
+* **Welding a run** never moves the outline: a run only welds when the
+  edges are one curve to within a millionth of an inch, which is the
+  float noise of the split that made them, not a drafting tolerance. A
+  run the whole way round is never welded, because a full circle has no
+  bulge to carry it.
 * `PADDLE` lives in its own file. When this session has not loaded it,
   the gut still happens and LINGUTTER says so instead of dying on an
   undefined function. `tools/check_lisp.py` lists `c:PADDLE` under
@@ -301,15 +390,33 @@ built entity by entity: a pool with a hopper inside it, an arc corner
 that has to survive as a bulge, traces with a 3" gap and a 24" one,
 dimensions in all four styles on and off the perimeter, a radius dim, a
 dim with only one end on the edge, a viewport, `lg:*keeplayers*`, and
-the whole command end to end — the redrawn polyline, the five surviving
+the whole command end to end — the redrawn polyline, the six surviving
 dimensions, the undo group, the restored `OSMODE`, that it erases
 without asking, and `LINGUTTERSCAN` changing nothing.
+
+The four things the walk reads besides lines on the outline have
+sections of their own, each built as the thing it stands for: a tanning
+ledge meeting an **unbroken** wall mid-span (and the wall split exactly
+where it meets it, not before or after); a bottom break wall-to-wall
+whose two split points come back **out** again, and an arc split by a
+tie line coming back as **one** bulge; a bench drawn as an arc bulging
+out **over** the pool's own top edge, where the perimeter has to take
+the arc and not the chord, with a tie line up to it that is still
+interior; and a step as an `FG_STEP` block reference, plain and rotated,
+with a `Pad36x36` reference proving `lg:*skipblocks*` keeps a pad out
+and that emptying the knob is what changes that.
 
 A radius or diameter dim on the perimeter in a style that is neither
 `lg:*anystyles*` nor `lg:*perimstyles*` (`STANDARD INCHES`, the one
 `AUTODIM` actually uses under a foot) is its own section, and a short
 side of an L-shaped perimeter proves the same rule holds corner to
-corner regardless of style there too.
+corner regardless of style there too. So are the three shapes of a
+radial dim written the way AutoCAD writes one, with group 10 as the
+**centre**: the arrow landing on a traced arc, the arrow dragged round
+**past** the arc's end so that only the centre-and-radius match can
+keep it, `R3 typ.` on a corner drawn sharp, and — the false positive the
+vertex test has to avoid — an interior arc whose centre lands on the
+perimeter, which is not a perimeter call-out.
 
 "Keep CROSS DIMENSIONS?" is its own section as well: answered Yes, a
 cross dim corner to corner, one running side to side through the

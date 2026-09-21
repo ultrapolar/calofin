@@ -44,6 +44,7 @@ Usage:  python3 tests/test_lingutter.py
 
 import math
 import os
+import re
 import sys
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -132,6 +133,41 @@ def rdim(vm, style, p10, layer='DIMENSION'):
     return ent(vm, [Dot(0, 'DIMENSION'), Dot(8, layer), Dot(410, 'Model'),
                     Dot(70, 4), Dot(3, style),
                     [10, float(p10[0]), float(p10[1]), 0.0]])
+
+
+def rdim15(vm, style, cen, on, layer='DIMENSION', kind=4):
+    """A radius dim the way AutoCAD writes one: group 10 is the arc's
+    CENTRE and group 15 the point on the curve where the arrow lands.
+    kind=3 makes it a diameter dim, whose 10 and 15 are both on the
+    curve, at the two ends of a diameter."""
+    return ent(vm, [Dot(0, 'DIMENSION'), Dot(8, layer), Dot(410, 'Model'),
+                    Dot(70, kind), Dot(3, style),
+                    [10, float(cen[0]), float(cen[1]), 0.0],
+                    [15, float(on[0]), float(on[1]), 0.0]])
+
+
+def blockdef(vm, name, ents, base=(0.0, 0.0)):
+    """A block definition: its entities live in the block table, not in
+    the drawing, exactly as vm.blocks models it."""
+    vm.tables.setdefault('BLOCK', set()).add(name)
+    vm.blocks[name] = [list(e) for e in ents]
+    vm.blockhdr[name] = [Dot(0, 'BLOCK'), Dot(2, name), Dot(70, 0),
+                         [10, float(base[0]), float(base[1]), 0.0]]
+
+
+def blkline(p1, p2, layer='0'):
+    """One LINE, as an alist for blockdef (a definition holds alists)."""
+    return [Dot(0, 'LINE'), Dot(8, layer),
+            [10, float(p1[0]), float(p1[1]), 0.0],
+            [11, float(p2[0]), float(p2[1]), 0.0]]
+
+
+def insert(vm, name, at, rot=0.0, layer='POOL', sx=1.0, sy=1.0):
+    d = [Dot(0, 'INSERT'), Dot(8, layer), Dot(410, 'Model'), Dot(2, name),
+         [10, float(at[0]), float(at[1]), 0.0], Dot(50, float(rot))]
+    if sx != 1.0 or sy != 1.0:
+        d += [Dot(41, float(sx)), Dot(42, float(sy))]
+    return ent(vm, d)
 
 
 def other(vm, etype, layer='0', tab='Model'):
@@ -354,6 +390,178 @@ check("P2 no geometry, no perimeter", res['vts'] is None)
 check("P2 ...and nothing is queued for erasing", res['kill'] == [])
 
 
+# ------------------------- P2b. a T is a junction, and a run is one edge
+
+print("== P2b. something landing in the MIDDLE of a wall ==")
+
+# A drafter does not break the wall where a tanning ledge meets it: the
+# wall is ONE line the full height of the pool and the ledge's two sides
+# run up to the middle of it.  Endpoint connectivity alone cannot see
+# that, and the whole ledge -- with its dimensions and its corner radii
+# -- used to come back erased.
+def ledgevm():
+    vm = newvm()
+    line(vm, (0, 0), (300, 0))            # bottom
+    line(vm, (300, 0), (300, 200))        # the right wall, UNBROKEN
+    line(vm, (300, 200), (0, 200))        # top
+    line(vm, (0, 200), (0, 0))            # left
+    line(vm, (300, 60), (360, 60))        # the ledge, meeting it mid-span
+    line(vm, (360, 60), (360, 140))
+    line(vm, (360, 140), (300, 140))
+    return vm
+
+
+vts, tol, short = perim(ledgevm())
+xy = loop_xy(vts or [])
+check("P2b the ledge is part of the perimeter",
+      vts is not None and (360.0, 60.0) in xy and (360.0, 140.0) in xy, xy)
+check("P2b ...and the wall is split where it meets it, not before or after",
+      (300.0, 60.0) in xy and (300.0, 140.0) in xy, xy)
+check("P2b the wall's own ends are still corners", (300.0, 0.0) in xy
+      and (300.0, 200.0) in xy, xy)
+check("P2b eight vertices, no more", vts is not None and len(vts) == 8,
+      len(vts or []))
+check("P2b nothing had to be moved to get there", tol is None, tol)
+
+# and the other half of the same fix: a split that turns out to be in the
+# middle of a straight run comes back OUT, so the drafter is not handed a
+# polyline with a vertex for every hopper line that touched a wall
+vm = newvm()
+rectangle(vm, 0, 0, 300, 200)
+line(vm, (150, 0), (150, 200))            # a bottom break, wall to wall
+vts, tol, short = perim(vm)
+check("P2b a bottom break does not leave two vertices behind in the walls",
+      vts is not None and len(vts) == 4
+      and (150.0, 0.0) not in loop_xy(vts), loop_xy(vts or []))
+
+# the same for an arc: a run of pieces of ONE circle welds back into one
+# bulge, which is what a step outline running past a stepped corner does
+vm = newvm()
+line(vm, (0, 0), (300, 0))
+line(vm, (300, 0), (300, 100))
+arc(vm, (200, 100), 100.0, 0.0, math.pi / 2)      # the quarter-round end
+line(vm, (200, 200), (0, 200))
+line(vm, (0, 200), (0, 0))
+line(vm, (200, 100), (270.7106781186548, 170.7106781186548))  # a tie to it
+vts, tol, short = perim(vm)
+bent = [float(v[2]) for v in (vts or []) if abs(float(v[2])) > 1e-12]
+check("P2b an arc split by a tie line comes back as ONE bulge",
+      len(bent) == 1 and abs(bent[0] - math.tan(math.pi / 8)) < 1e-9, bent)
+
+
+# ----------------- P2c. an outer arc drawn over the pool's own chord
+
+print("== P2c. the bench and the step drawn OVER the pool's own edge ==")
+
+# A bench and a vinyl-covered step are drawn as arcs bulging OUT of the
+# pool, sharing both ends with the (nearly straight) edge of the pool's
+# own polyline.  The perimeter runs round the arc, not the chord.
+#
+# This is the case the old start-dart guess got backwards.  It left each
+# component's lowest NODE along the shallowest dart there, which is on
+# the outer face only while no arc leaving that node dips below it.  The
+# bottom of a free-form pool is full of arcs that do, and a walk started
+# the other way round hugs the INSIDE -- one turn tighter at every node,
+# which is exactly what "the hardest right turn" asks for.
+def benchvm(tie=False):
+    vm = newvm()
+    lwpl(vm, [(0, 0), (300, 0), (300, 200), (0, 200)])
+    # an arc over the top edge, bulging 40 out: chord 300, sagitta 40
+    r = (150.0 * 150.0 + 40.0 * 40.0) / (2.0 * 40.0)
+    cy = 200.0 + 40.0 - r
+    arc(vm, (150.0, cy), r,
+        math.atan2(200.0 - cy, 150.0), math.atan2(200.0 - cy, -150.0),
+        'POOL')
+    if tie:
+        line(vm, (150, 60), (150, 200))
+    return vm
+
+
+vm = benchvm()
+vts, tol, short = perim(vm)
+xy = loop_xy(vts or [])
+bent = [float(v[2]) for v in (vts or []) if abs(float(v[2])) > 1e-12]
+check("P2c the perimeter takes the arc, not the chord it was drawn over",
+      len(bent) == 1, [float(v[2]) for v in (vts or [])])
+check("P2c ...and it still has only the four corners", len(xy) == 4, xy)
+top = max(float(q[1]) for q in vm.loads(
+    '(lg:segs-pts (lg:vts->segs T (car (lg:perimeter'
+    ' (lg:trace-segs (ssget "_X"))))))'))
+check("P2c the traced loop really does reach the top of the arc",
+      abs(top - 240.0) < 1e-6, top)
+
+# the interior is still interior, arc or no arc
+vts, tol, short = perim(benchvm(tie=True))
+check("P2c a tie line up to the arc is walked past, not into",
+      vts is not None and len(vts) == 4
+      and (150.0, 60.0) not in loop_xy(vts), loop_xy(vts or []))
+
+
+# -------------------------- P2d. a step drawn as a BLOCK reference
+
+print("== P2d. a step bolted on as a block reference ==")
+
+# A fiberglass step is not drawn line by line: it is an FG_STEP
+# reference, and its three sides ARE the perimeter where it sits.  The
+# walk only ever saw LINEs, ARCs and polylines, so the step was not in
+# the trace, not in the report, and not padded.
+def fgvm(rot=0.0, at=(300.0, 100.0), name='FG_STEP'):
+    vm = newvm()
+    rectangle(vm, 0, 0, 300, 200)
+    blockdef(vm, name, [blkline((0, -48), (48, -48), 'FGStep'),
+                        blkline((48, -48), (48, 48), 'FGStep'),
+                        blkline((48, 48), (0, 48), 'FGStep')])
+    insert(vm, name, at, rot)
+    return vm
+
+
+vm = fgvm()
+vts, tol, short = perim(vm)
+xy = loop_xy(vts or [])
+check("P2d the block's own sides are part of the perimeter",
+      vts is not None and (348.0, 52.0) in xy and (348.0, 148.0) in xy, xy)
+check("P2d ...and the wall is split where it meets them",
+      (300.0, 52.0) in xy and (300.0, 148.0) in xy, xy)
+check("P2d eight vertices, nothing had to be moved",
+      vts is not None and len(vts) == 8 and tol is None, (len(vts or []), tol))
+
+# rotated, the same block lands on a different wall
+vm = fgvm(rot=math.pi / 2, at=(150.0, 200.0))
+vts, tol, short = perim(vm)
+xy = loop_xy(vts or [])
+check("P2d a rotated reference is carried round with it",
+      vts is not None and (198.0, 248.0) in xy and (102.0, 248.0) in xy, xy)
+
+# PADDLE's own pads sit centred ON a corner, half of each one outside the
+# loop: a pool gutted twice would otherwise trace round its own pads
+vm = newvm()
+for a, b in [((0, 0), (300, 0)), ((300, 0), (300, 200)),
+             ((300, 200), (150, 200)), ((150, 200), (150, 100)),
+             ((150, 100), (0, 100)), ((0, 100), (0, 0))]:
+    line(vm, a, b)
+blockdef(vm, 'Pad36x36', [blkline((0, 0), (36, 0), 'PadGreen'),
+                          blkline((36, 0), (36, 36), 'PadGreen'),
+                          blkline((36, 36), (0, 36), 'PadGreen'),
+                          blkline((0, 36), (0, 0), 'PadGreen')],
+         base=(18.0, 18.0))
+insert(vm, 'Pad36x36', (150.0, 100.0))
+vts, tol, short = perim(vm)
+check("P2d a pad block is never traced from (lg:*skipblocks*)",
+      vts is not None and len(vts) == 6
+      and (132.0, 82.0) not in loop_xy(vts), loop_xy(vts or []))
+
+nsegs = len(vm.loads('(lg:trace-segs (ssget "_X"))'))
+vm.loads('(setq lg:*skipblocks* nil)')
+check("P2d ...and that is the knob, not a rule: emptied, the pad's four"
+      " sides are read like anything else",
+      len(vm.loads('(lg:trace-segs (ssget "_X"))')) == nsegs + 4,
+      (nsegs, len(vm.loads('(lg:trace-segs (ssget "_X"))'))))
+vts, tol, short = perim(vm)
+check("P2d ...though a pad only CROSSES the walls, and a crossing is"
+      " still not a junction, so the pool is what wins on area",
+      vts is not None and len(vts) == 6, loop_xy(vts or []))
+
+
 # ------------------------------------------------ P3. the snap ladder
 
 print("== P3. an outline that will not close is snapped shut ==")
@@ -462,6 +670,10 @@ def keepvm():
         'std_hopper': dim(vm, "STANDARD", (100, 60), (200, 60)),
         'side_perim': dim(vm, "SIDE STANDARD", (0, 0), (0, 200)),
         'inches_perim': dim(vm, "STANDARD INCHES", (0, 0), (0, 200)),
+        # two points PARTWAY along one side: a step's tread dimension
+        # drawn against the pool wall has exactly this shape, and both
+        # its ends sit on the perimeter
+        'inches_partial': dim(vm, "STANDARD INCHES", (0, 40), (0, 90)),
         'radius_perim': rdim(vm, "SIDE STANDARD", (300, 100)),
         'std_halfway': dim(vm, "STANDARD", (0, 0), (150, 100)),
         'text': other(vm, 'TEXT', 'NOTES'),
@@ -482,8 +694,12 @@ check("P4 STANDARD on a perimeter side is kept", d['std_perim'] not in kill)
 check("P4 STANDARD across the hopper goes", d['std_hopper'] in kill)
 check("P4 SIDE STANDARD on a perimeter side is kept",
       d['side_perim'] not in kill)
-check("P4 STANDARD INCHES on the perimeter goes - not a kept style",
-      d['inches_perim'] in kill)
+check("P4 STANDARD INCHES on a full perimeter side is kept - the"
+      " lg:*perimstyles* wildcards cover the STANDARD family",
+      d['inches_perim'] not in kill)
+check("P4 ...but two points PARTWAY along one side read that side, not"
+      " the perimeter, and go",
+      d['inches_partial'] in kill)
 check("P4 a radius dim landing on the perimeter is kept",
       d['radius_perim'] not in kill)
 check("P4 a dim with only ONE end on the perimeter goes",
@@ -492,15 +708,17 @@ for name in ('text', 'point', 'insert'):
     check(f"P4 the {name} goes", d[name] in kill)
 check("P4 the traced geometry goes too", len(kill) == 14, len(kill))
 check("P4 two kept for their style", res['nany'] == 2, res['nany'])
-check("P4 two kept for sitting on the perimeter, by style",
-      res['nperim'] == 2, res['nperim'])
+check("P4 three kept for sitting on the perimeter, by style",
+      res['nperim'] == 3, res['nperim'])
 check("P4 ...and the radius dim is kept SEPARATELY, regardless of style",
       res['nrad'] == 1, res['nrad'])
 check("P4 eleven non-dimension objects erased",
       res['nother'] == 11, res['nother'])
-check("P4 the dropped dims are counted by reason",
-      res['dropped'] == {"STANDARD - not on the perimeter": 2,
-                         "STANDARD INCHES - style not kept": 1},
+check("P4 the dropped dims are counted by reason, and the two ways a"
+      " perimeter style can fail read differently",
+      res['dropped']
+      == {"STANDARD - not on the perimeter": 2,
+          "STANDARD INCHES - a part of one side, not the perimeter": 1},
       res['dropped'])
 
 # a viewport is never ours to erase
@@ -516,13 +734,17 @@ res = analyze(vm)
 check("P4 lg:*keeplayers* spares the text", d['text'] not in set(res['kill']))
 check("P4 ...and counts what it spared", res['nspared'] == 1, res['nspared'])
 
-# the styles are tunable, not baked in
+# the styles are tunable, not baked in -- narrowing the default back to
+# the two exact names is what a shop that wants STANDARD INCHES gone does
 vm, d = keepvm()
-vm.loads('(setq lg:*perimstyles* (list "STANDARD" "SIDE STANDARD"'
-         ' "STANDARD INCHES"))')
+vm.loads('(setq lg:*perimstyles* (list "STANDARD" "SIDE STANDARD"))')
 res = analyze(vm)
-check("P4 adding STANDARD INCHES to lg:*perimstyles* keeps it",
-      d['inches_perim'] not in set(res['kill']))
+check("P4 narrowing lg:*perimstyles* to exact names drops STANDARD INCHES"
+      " again",
+      d['inches_perim'] in set(res['kill']))
+check("P4 ...and its reason goes back to the style",
+      res['dropped'].get("STANDARD INCHES - style not kept") == 2,
+      res['dropped'])
 
 # the tolerance is what decides "on the perimeter"
 vm = newvm()
@@ -553,6 +775,65 @@ check("P4a a radius dim in STANDARD INCHES on the perimeter is kept",
 check("P4a ...counted regardless of style, not as a perimstyle dim",
       res['nrad'] == 1 and res['nperim'] == 0, (res['nrad'], res['nperim']))
 
+# THE OTHER HALF of the same bug, and the bigger one: group 10 of a
+# radius dim is the arc's CENTRE, not a point on it.  A 24" corner's
+# centre sits 24" INSIDE the loop, so every corner-radius call-out on
+# every pool with a drawn radius was erased.
+vm = newvm()
+line(vm, (0, 0), (300, 0))
+line(vm, (300, 0), (300, 150))
+arc(vm, (250, 150), 50.0, 0.0, math.pi / 2)       # the traced corner
+line(vm, (250, 200), (0, 200))
+line(vm, (0, 200), (0, 0))
+onarc = (250.0 + 50.0 * math.cos(math.pi / 4), 150.0 + 50.0 * math.sin(math.pi / 4))
+corner = rdim15(vm, "STANDARD INCHES", (250, 150), onarc)
+res = analyze(vm)
+check("P4a a radius dim on a TRACED arc is kept - its group 15 is the"
+      " point on the curve",
+      corner not in set(res['kill']) and res['nrad'] == 1, res['nrad'])
+
+# and the shape that needs the arc-match rule: a leader dragged round to
+# where it reads well puts the arrow on the same circle but PAST the end
+# of the drawn arc, so no point of the dim is on the perimeter at all
+vm = newvm()
+line(vm, (0, 0), (300, 0))
+line(vm, (300, 0), (300, 150))
+arc(vm, (250, 150), 50.0, 0.0, math.pi / 2)
+line(vm, (250, 200), (0, 200))
+line(vm, (0, 200), (0, 0))
+past = rdim15(vm, "STANDARD", (250, 150),
+              (250.0 + 50.0 * math.cos(math.pi), 150.0))   # 180deg, off the arc
+res = analyze(vm)
+check("P4a ...and one whose arrow lands past the arc's end is kept for"
+      " NAMING it: same centre, same radius",
+      past not in set(res['kill']) and res['nrad'] == 1, res['nrad'])
+
+# "R3 typ." on a corner drawn sharp: nothing is curved yet, and the
+# centre of the fillet-to-be is the corner itself
+vm = newvm()
+rectangle(vm, 0, 0, 300, 200)
+typ = rdim15(vm, "STANDARD INCHES", (300, 200), (302.1, 201.5))
+res = analyze(vm)
+check("P4a an R note on a SHARP corner is kept - its centre is that"
+      " corner", typ not in set(res['kill']) and res['nrad'] == 1,
+      res['nrad'])
+
+# the false positive the vertex test has to avoid: a tread arc INSIDE a
+# radius-cornered step has its centre sitting exactly on the step
+# outline that runs past it, by construction rather than by accident
+vm = newvm()
+line(vm, (0, 0), (300, 0))
+line(vm, (300, 0), (300, 150))
+arc(vm, (250, 150), 50.0, 0.0, math.pi / 2)
+line(vm, (250, 200), (0, 200))
+line(vm, (0, 200), (0, 0))
+oncurve = (250.0 + 50.0 * math.cos(math.pi / 4), 150.0 + 50.0 * math.sin(math.pi / 4))
+tread = rdim15(vm, "STANDARD", oncurve,                    # centre ON the arc
+               (oncurve[0] - 18.0, oncurve[1] - 18.0 * 0.0))
+res = analyze(vm)
+check("P4a an interior arc whose CENTRE lands on the perimeter is not a"
+      " perimeter call-out", tread in set(res['kill']), res['nrad'])
+
 # a diameter dim behaves the same way (DXF 70 low bits == 3)
 vm = newvm()
 rectangle(vm, 0, 0, 300, 200)
@@ -572,7 +853,7 @@ hopper_rad = rdim(vm, "SIDE STANDARD", (200, 100))      # on the hopper
 res = analyze(vm)
 check("P4a a radius dim off the perimeter still goes",
       hopper_rad in set(res['kill']))
-check("P4a ...it is judged by lg:on-perim-p like any other, not spared",
+check("P4a ...it is judged by lg:radial-on-perim-p, not spared",
       res['dropped'] == {"SIDE STANDARD - not on the perimeter": 1},
       res['dropped'])
 
@@ -691,7 +972,7 @@ except LispError as e:
 if ran:
     check("P5 c:LINGUTTER runs", True)
     left = alive(vm)
-    check("P5 six objects are left", len(left) == 6, len(left))
+    check("P5 seven objects are left", len(left) == 7, len(left))
     pls = alive_of(vm, 'LWPOLYLINE')
     check("P5 one of them is the new perimeter polyline", len(pls) == 1,
           len(pls))
@@ -704,9 +985,9 @@ if ran:
         check("P5 it has the four perimeter vertices", pd.get(90) == 4,
               pd.get(90))
     kept = sorted(dxf(vm, e).get(3) for e in alive_of(vm, 'DIMENSION'))
-    check("P5 the five kept dimensions are the ones analyze named",
+    check("P5 the six kept dimensions are the ones analyze named",
           kept == ["CROSS DIM", "CROSS DIMENSIONS", "SIDE STANDARD",
-                   "SIDE STANDARD", "STANDARD"], kept)
+                   "SIDE STANDARD", "STANDARD", "STANDARD INCHES"], kept)
     out = "".join(str(x) for x in vm.printed)
     check("P5 PADDLE is handed the result", "STUB-PADDLE-RAN" in out)
     check("P5 the run is one undo group",
@@ -716,7 +997,7 @@ if ran:
     check("P5 the user's OSMODE comes back", vm.sysvars['OSMODE'] == 4133,
           vm.sysvars['OSMODE'])
     check("P5 the report says what it kept and dropped",
-          "STANDARD INCHES - style not kept" in out
+          "STANDARD INCHES - a part of one side, not the perimeter" in out
           and "perimeter traced" in out)
 
 # the redrawn perimeter reads back as the loop it was traced from
@@ -981,7 +1262,7 @@ vm.loads('(setq lg:*ontol* -1.0)')
 res = analyze(vm)
 check("P11 a negative on-perimeter tolerance keeps no perimeter dim",
       res['nperim'] == 0, res['nperim'])
-check("P11 ...the radial-on-perimeter rule needs on-perim-p too, and goes",
+check("P11 ...the radial-on-perimeter rule reads the same tolerance, and goes",
       res['nrad'] == 0, res['nrad'])
 check("P11 ...and the ones genuinely INSIDE the perimeter are still kept",
       res['nany'] == 2, res['nany'])
@@ -1004,8 +1285,8 @@ SRC = open(LINGUTTER, encoding="utf-8").read()
 SRC_LINES = SRC.splitlines()
 KNOBS = ["lg:*poollayer*", "lg:*poolcolor*", "lg:*anystyles*",
          "lg:*perimstyles*", "lg:*keeplayers*", "lg:*skiplayers*",
-         "lg:*ontol*", "lg:*snaps*", "lg:*cover*", "lg:*crossspan*",
-         "lg:*runpaddle*"]
+         "lg:*skipblocks*", "lg:*ontol*", "lg:*snaps*", "lg:*cover*",
+         "lg:*crossspan*", "lg:*runpaddle*"]
 
 
 def setq_line(name):
@@ -1045,13 +1326,17 @@ check("P12 every knob carries an explanation at the knob", not unexplained,
 # not merely last in it, or a drafter reading the block top to bottom
 # takes it for one more thing to set.  A section rule between the two is
 # what "out of it" means here.
-sysold = setq_line("lg:*sysold*")
 last_knob = max(setq_line(k) for k in KNOBS if setq_line(k) is not None)
+NOTKNOBS = sorted(set(re.findall(r'^\(setq (lg:\*[^ ]+\*)', SRC, re.M))
+                  - set(KNOBS))
+inblock = [k for k in NOTKNOBS
+           if setq_line(k) is not None
+           and not any(ln.startswith(";;; ---")
+                       for ln in SRC_LINES[last_knob:setq_line(k)])]
 check("P12 working state is not sitting in the knob block",
-      sysold is None
-      or any(ln.startswith(";;; ---")
-             for ln in SRC_LINES[last_knob:sysold]),
-      f"lg:*sysold* at {sysold}, last knob at {last_knob}")
+      not inblock, f"{inblock} among the knobs (last knob at {last_knob})")
+check("P12 ...and the file really does have some, so that is not vacuous",
+      NOTKNOBS, NOTKNOBS)
 
 # the header's tunable list and the knobs cannot drift apart
 header = SRC.split(";;;  Notes", 1)[0]

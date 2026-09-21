@@ -201,6 +201,11 @@ class VM:
         self._entmakex = False   # entmake returning an ename, not a list
         self._blockdef = None    # name of the block being defined, if any
         self.blocks = {}         # block name -> its definition entities
+        self.blockhdr = {}       # block name -> its BLOCK header alist
+        self.blockents = {}      # block name -> (n, [Ent ... ENDBLK]), the
+                                 # definition as a walkable run; see
+                                 # _block_chain
+        self.blockof = {}        # Ent -> (block name, index in that run)
         self.script = []
         self.prompts = []        # (prompt, answer) log
         self.printed = []        # everything princ'd, in order
@@ -1232,6 +1237,47 @@ def _setvar(vm, a):
     return a[1]
 
 
+def _block_chain(vm, name):
+    """The definition of NAME as a run of entities entnext can walk, the
+    way AutoCAD hands one out: group -2 of the block table record is the
+    first entity, entnext steps along, and an ENDBLK ends the run.
+
+    They live in vm.entdata so entget reads them, and NOT in vm.entities,
+    because a block definition is not in the drawing: (ssget "_X"),
+    entlast and a bare (entnext) must never see one.  Rebuilt when the
+    definition grows, so a test that entmakes into a block after reading
+    it still gets the whole thing."""
+    key = _blockkey(vm, name)
+    if key is None:
+        return []
+    alists = vm.blocks.get(key, [])
+    have = vm.blockents.get(key)
+    if have is not None and have[0] == len(alists):
+        return have[1]
+    run = []
+    for alist in alists:
+        e = Ent()
+        vm.entdata[e] = list(alist)
+        run.append(e)
+    end = Ent()
+    vm.entdata[end] = [Dot(0, 'ENDBLK'), Dot(8, '0')]
+    run.append(end)
+    for i, e in enumerate(run):
+        vm.blockof[e] = (key, i)
+    vm.blockents[key] = (len(alists), run)
+    return run
+
+
+def _blockkey(vm, name):
+    """The spelling vm.blocks is keyed by, for a name given in any case."""
+    if name in vm.blocks:
+        return name
+    for k in vm.blocks:
+        if k.upper() == str(name).upper():
+            return k
+    return name if name in {x for x in vm.tables.get('BLOCK', set())} else None
+
+
 @bi('tblsearch')
 def _tblsearch(vm, a):
     """The symbol-table record as an assoc list, the way AutoLISP hands
@@ -1250,6 +1296,23 @@ def _tblsearch(vm, a):
     if table == 'LAYER':
         return [Dot(0, table), Dot(2, a[1]), Dot(70, 0),
                 Dot(62, 7), Dot(6, 'Continuous')]
+    if table == 'BLOCK':
+        key = _blockkey(vm, a[1])
+        hdr = dict()
+        for g in vm.blockhdr.get(key, []):
+            if isinstance(g, Dot):
+                hdr.setdefault(g.a, g.b)
+            elif isinstance(g, list) and g:
+                hdr.setdefault(g[0], g[1:] if len(g) > 2 else g[1])
+        base = hdr.get(10, [0.0, 0.0, 0.0])
+        if not isinstance(base, list):
+            base = [float(base), 0.0, 0.0]
+        base = [float(x) for x in (list(base) + [0.0, 0.0, 0.0])[:3]]
+        run = _block_chain(vm, a[1])
+        return [Dot(0, table), Dot(2, key if key else a[1]),
+                Dot(70, int(hdr.get(70, 0))),
+                [10] + base,
+                Dot(-2, run[0] if run else NIL)]
     return [Dot(0, table), Dot(2, a[1])]
 
 
@@ -1307,6 +1370,10 @@ def _entmake(vm, a):
         vm._blockdef = d.get(2, '')
         vm.tables.setdefault('BLOCK', set()).add(vm._blockdef)
         vm.blocks.setdefault(vm._blockdef, [])
+        # kept so tblsearch can hand back the record AutoCAD would --
+        # group 10 is the insertion BASE POINT, which a routine reading
+        # a definition's geometry has to subtract
+        vm.blockhdr[vm._blockdef] = list(alist)
         return alist
     if etype == 'ENDBLK':
         vm._blockdef = None
@@ -1440,6 +1507,12 @@ def _entnext(vm, a):
             if e not in vm.deleted:
                 return e
         return NIL
+    # inside a block definition entnext walks THAT run, not the drawing
+    where = vm.blockof.get(a[0])
+    if where is not None:
+        name, i = where
+        run = _block_chain(vm, name)
+        return run[i + 1] if i + 1 < len(run) else NIL
     try:
         i = vm.entities.index(a[0])
     except ValueError:

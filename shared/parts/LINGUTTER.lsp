@@ -38,20 +38,53 @@
 ;;;       object however it was drawn going in: one polyline, or fifty
 ;;;       loose lines and arcs.
 ;;;
+;;;       Four things the walk reads that are not lines on the outline,
+;;;       and every one of them is a step or a bench a pool really has:
+;;;         * a T.  A drafter does not break the wall where a tanning
+;;;           ledge meets it, so the wall is one line the full height
+;;;           of the pool and the ledge runs up to the MIDDLE of it.
+;;;           Every segment is split where another one's END lands on
+;;;           it before the graph is built (lg:split-tees).  Only ends:
+;;;           two lines that merely cross mid-span still are not a
+;;;           junction;
+;;;         * a BLOCK reference.  A fiberglass step is an FG_STEP
+;;;           reference bolted to a wall and its three sides ARE the
+;;;           perimeter there, so a reference contributes its
+;;;           definition's geometry carried onto the insertion point
+;;;           (lg:ins-segs).  lg:*skipblocks* keeps pads and drains out;
+;;;         * WHICH FACE.  Every face of every piece is walked and the
+;;;           one enclosing the most area wins (lg:all-faces), because
+;;;           which face a walk traces is decided by the dart it starts
+;;;           on and that used to be guessed.  Guessed wrong -- and an
+;;;           arc leaving a component's lowest node and dipping below
+;;;           it is enough to get it wrong -- the walk hugs the INSIDE,
+;;;           which is how a bench and a step drawn as arcs OVER the
+;;;           pool's own chords came back as the chords;
+;;;         * and a RUN.  Splitting at a T puts a node in the middle of
+;;;           a wall, so a run of edges that is one straight line or
+;;;           one arc about one centre is welded back into one edge
+;;;           (lg:weld).  The drafter gets the outline they drew, not a
+;;;           vertex for every tread that touched it.
+;;;
 ;;;       When no exterior can be walked at any tolerance it still draws
 ;;;       a perimeter: the convex hull of everything highlighted.  That
 ;;;       is reported as the wrap it is, because a hull has no concave
 ;;;       features and PADDLE will find nothing to pad.
 ;;;
-;;;    2. KEEP.  Three rules, and nothing else highlighted survives them:
-;;;         * a RADIUS or DIAMETER dimension that is ON the perimeter
-;;;           (its one attachment point, DXF 10, within lg:*ontol* of
-;;;           the loop) is kept regardless of its style.  A corner
-;;;           radius under a foot is put in "STANDARD INCHES" by
-;;;           AUTODIM like any other short measurement, and that style
-;;;           is not in lg:*perimstyles* -- without this rule the call-
-;;;           out for the very corner PADDLE is about to pad would be
-;;;           the thing erased;
+;;;;    2. KEEP.  Three rules, and nothing else highlighted survives them:
+;;;         * a RADIUS or DIAMETER dimension of the perimeter is kept
+;;;           regardless of its style.  Group 10 of a radius dim is the
+;;;           arc's CENTRE and group 15 is the point on the curve, so
+;;;           three shapes count as "of the perimeter": the point on
+;;;           the curve is on the loop, or the dim NAMES an arc of the
+;;;           loop (same centre, same radius -- a leader dragged round
+;;;           to read well puts its arrow past the end of the drawn
+;;;           arc), or its centre sits on a VERTEX of the loop ("R3
+;;;           typ." on a corner drawn sharp).  Without this rule the
+;;;           call-out for the very corner PADDLE is about to pad is
+;;;           the thing erased -- and it was, on every pool with a
+;;;           radius drawn on it, because a 24" corner's centre sits
+;;;           24" inside the loop;
 ;;;         * LINGUTTER asks once, "Keep CROSS DIMENSIONS?".  Answered
 ;;;           Yes, a dimension in a lg:*anystyles* style ("CROSS DIM*",
 ;;;           which catches "CROSS DIM", "CROSS DIMENSIONS" and "CROSS
@@ -68,11 +101,17 @@
 ;;;           of one side, not the pool.  Answered No, none of these
 ;;;           dimensions gets any exemption and each is judged like any
 ;;;           other style below;
-;;;         * a dimension in a lg:*perimstyles* style ("STANDARD",
-;;;           "SIDE STANDARD") is kept only when it is ON the perimeter
-;;;           -- every one of its attachment points within
-;;;           lg:*ontol* of the loop.  The same style measuring a
-;;;           hopper or a step goes with the rest.
+;;;         * a dimension in a lg:*perimstyles* style is kept only when
+;;;           it is a dimension OF the perimeter: every one of its
+;;;           attachment points within lg:*ontol* of the loop, AND the
+;;;           two of them not a partial read along one single edge.
+;;;           The same style measuring a hopper or a step goes with the
+;;;           rest -- including a step built against a pool wall, whose
+;;;           treads are dimensioned along that wall and so have both
+;;;           ends exactly on the perimeter.  The styles are wildcards
+;;;           and cover the whole STANDARD family: "STANDARD INCHES" is
+;;;           what AUTODIM puts a 1" corner chamfer in, and "STANDARD-1"
+;;;           is what AutoCAD renames STANDARD to on a paste.
 ;;;       Everything else highlighted is erased: text, blocks, points,
 ;;;       hatches, the geometry the perimeter was traced from, and
 ;;;       dimensions in any other style.  Name a layer in
@@ -114,9 +153,15 @@
 ;;;                      measurement of this pool (see lg:cross-ok-p
 ;;;                      and lg:*crossspan*), as wildcard patterns
 ;;;                      matched against the style name
-;;;    lg:*perimstyles*  dim styles kept only on the perimeter
+;;;    lg:*perimstyles*  dim styles kept only on the perimeter, and
+;;;                      only when the dim reads the WHOLE of a side
+;;;                      rather than a part of one
 ;;;    lg:*keeplayers*   layers left alone entirely (nil = none)
-;;;    lg:*skiplayers*   layers the perimeter is never traced from
+;;;    lg:*skiplayers*   layers the perimeter is never traced from,
+;;;                      inside a block reference as well as out
+;;;    lg:*skipblocks*   BLOCK NAMES the perimeter is never traced from
+;;;                      -- pads and drains, which sit on the pool
+;;;                      rather than bounding it
 ;;;    lg:*ontol*        how far a dimension's attachment point may sit
 ;;;                      off the perimeter and still count as on it
 ;;;    lg:*snaps*        the snap ladder: how far apart two ends may be
@@ -144,15 +189,21 @@
 ;;;      that it covers only part of what you showed it.  That warning is
 ;;;      never a veto -- the alternative to a partial answer is a convex
 ;;;      hull, which is worse.
-;;;    * "STANDARD INCHES" is deliberately NOT in lg:*perimstyles*: the
-;;;      request named STANDARD and SIDE STANDARD.  A perimeter SIDE
-;;;      under 12" that AUTODIM put in STANDARD INCHES therefore goes
-;;;      with the rest -- but it is never silent about it, the report
-;;;      counts every dropped dimension by style.  Add the style to
-;;;      lg:*perimstyles* to keep those too.  A RADIUS or DIAMETER dim
-;;;      is not caught by this: AUTODIM puts a corner radius under 12"
-;;;      in STANDARD INCHES too, and that one is kept, style aside,
-;;;      by the radial-on-the-perimeter rule above.
+;;;    * lg:*perimstyles* covers the STANDARD FAMILY by wildcard, so a
+;;;      perimeter side or a 1" corner chamfer that AUTODIM put in
+;;;      "STANDARD INCHES" is kept, and so is the "STANDARD-1" AutoCAD
+;;;      renames STANDARD to when a paste brings in a second definition.
+;;;      What stops that widening from keeping a step's tread dimensions
+;;;      is the partial-read half of the rule, not the style list: a
+;;;      step against a wall has both ends of every tread dim ON the
+;;;      perimeter.  Narrow the list to the two exact names to go back
+;;;      to the old behaviour; either way the report counts every
+;;;      dropped dimension and says which of the two it failed.
+;;;    * A block reference is TRACED FROM but still swept: the new
+;;;      perimeter replaces a step's own lines the way it replaces the
+;;;      pool's.  lg:*skipblocks* is what keeps PADDLE's pads out -- a
+;;;      pad sits centred ON a corner, half of it outside the loop, so
+;;;      a pool gutted twice would trace round its own pads.
 ;;;    * "Keep CROSS DIMENSIONS?" answered No drops every lg:*anystyles*
 ;;;      dimension like any other style not in lg:*perimstyles* -- counted
 ;;;      in the report, not silently.
@@ -178,7 +229,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.7")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.8")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -208,19 +259,47 @@
                                    ; dim styles kept WHEREVER they sit: a
                                    ; cross dim spans the pool, so most of
                                    ; it is nowhere near the edge
-(setq lg:*perimstyles* '("STANDARD" "SIDE STANDARD"))
+(setq lg:*perimstyles* '("STANDARD*" "SIDE STANDARD*" "ALT STANDARD*"))
                                    ; dim styles kept only ON the
                                    ; perimeter -- every attachment point
                                    ; within lg:*ontol* of the loop.  The
-                                   ; same style on a hopper or step goes
+                                   ; same style on a hopper or step goes.
+                                   ; Wildcards, and they cover the whole
+                                   ; STANDARD FAMILY on purpose:
+                                   ; "STANDARD INCHES" is what AUTODIM
+                                   ; puts a perimeter side or a 1" corner
+                                   ; chamfer in, "SIDE STANDARD 0.5" and
+                                   ; "STANDARD(2X)" are the same style at
+                                   ; another scale, and "STANDARD-1" is
+                                   ; what AutoCAD renames STANDARD to
+                                   ; when a paste brings in a second
+                                   ; definition.  A chamfer call-out on
+                                   ; the very corner PADDLE is about to
+                                   ; pad is not the thing to erase
 (setq lg:*keeplayers*  nil)        ; layers left alone entirely, even
                                    ; inside the highlight; nil = none,
                                    ; e.g. '("TITLEBLOCK") to spare one
 (setq lg:*skiplayers*  '("DEFPOINTS" "DIMENSION"))
                                    ; layers the perimeter is never traced
-                                   ; FROM.  They are still swept: this
-                                   ; keeps dimension geometry out of the
-                                   ; walk, it does not spare it
+                                   ; FROM -- inside a block reference as
+                                   ; well as out.  They are still swept:
+                                   ; this keeps dimension geometry out of
+                                   ; the walk, it does not spare it
+(setq lg:*skipblocks*  '("PAD*" "DRAIN*"))
+                                   ; BLOCK NAMES never traced from, as
+                                   ; wildcard patterns.  A block on the
+                                   ; pool is part of the pool -- a
+                                   ; fiberglass step bolted to a wall is
+                                   ; drawn as an FG_STEP reference and
+                                   ; its outline IS the perimeter there
+                                   ; -- but two families never are, and
+                                   ; both are ours: PADDLE's own pads sit
+                                   ; centred ON a corner, half of each
+                                   ; one outside the loop, so a pool
+                                   ; gutted twice would trace round its
+                                   ; own pads the second time; a drain
+                                   ; block sits in the floor.  They are
+                                   ; still swept like anything else
 (setq lg:*ontol*       1.0)        ; how far a dimension's attachment
                                    ; point may sit off the perimeter and
                                    ; still count as on it.  Drawing
@@ -428,6 +507,102 @@
      (setq cv (lg:plverts ent))
      (if cv (lg:vts->segs (car cv) (cdr cv))))))
 
+;;; -------------------- geometry inside a block -------------------------
+;;; A fiberglass step is not drawn line by line on the pool: it is an
+;;; FG_STEP reference bolted to the wall, and its three sides ARE the
+;;; perimeter where it sits.  Read straight past it and the step is not
+;;; in the trace, not in the report, and not padded -- which is what used
+;;; to happen, because the walk only ever saw LINEs, ARCs and polylines.
+;;;
+;;; So a block reference contributes its definition's own geometry,
+;;; carried onto the insertion point: p' = ins + R(rot) . S . (p - base).
+;;; lg:*skipblocks* is what keeps a pad out (see the knob), and
+;;; lg:*skiplayers* applies inside the definition exactly as it does
+;;; outside it.  Nesting recurses, capped, and a definition that contains
+;;; itself therefore stops rather than running the stack out.
+;;;
+;;; The reference itself is still swept: the traced perimeter replaces
+;;; the step's own lines the same way it replaces the pool's.
+
+(setq lg:*blkdepth* 4)             ; how deep nested block references are
+                                   ; followed.  Not a knob -- it is the
+                                   ; recursion guard, and four is deeper
+                                   ; than any pool drawing nests
+
+;; (ins cos sin sx sy) for INSERT data ED with block base point BASE:
+;; everything lg:xform-pt needs, measured once per reference.
+(defun lg:ins-xform (ed base / rot sx sy)
+  (setq rot (cond ((cdr (assoc 50 ed))) (0.0))
+        sx  (cond ((cdr (assoc 41 ed))) (1.0))
+        sy  (cond ((cdr (assoc 42 ed))) (1.0)))
+  (if (zerop sx) (setq sx 1.0))
+  (if (zerop sy) (setq sy 1.0))
+  (list (cal:2d (cdr (assoc 10 ed))) (cos rot) (sin rot) sx sy (cal:2d base)))
+
+(defun lg:xform-pt (p xf / q)
+  (setq q (list (* (nth 3 xf) (- (car (cal:2d p)) (car (nth 5 xf))))
+                (* (nth 4 xf) (- (cadr (cal:2d p)) (cadr (nth 5 xf))))))
+  (cal:v+ (car xf)
+         (list (- (* (nth 1 xf) (car q)) (* (nth 2 xf) (cadr q)))
+               (+ (* (nth 2 xf) (car q)) (* (nth 1 xf) (cadr q))))))
+
+;; SEGS carried through XF.  A rotation and a uniform scale keep an arc
+;; an arc, and a MIRROR (one scale negative) reverses which way it
+;; turns, so the bulge changes sign.  A block scaled unevenly turns its
+;; arcs into ellipses, which a bulge cannot hold: those become their own
+;; chords, which is the one place this reading is approximate.
+(defun lg:xform-segs (segs xf / s blg mir uni out)
+  (setq mir (< (* (nth 3 xf) (nth 4 xf)) 0.0)
+        uni (equal (abs (nth 3 xf)) (abs (nth 4 xf)) 1e-9))
+  (foreach s segs
+    (setq blg (caddr s))
+    (setq out (cons (list (lg:xform-pt (car s) xf)
+                          (lg:xform-pt (cadr s) xf)
+                          (cond ((not uni) 0.0)
+                                (mir (- blg))
+                                (t blg)))
+                    out)))
+  (reverse out))
+
+;; the block definition's base point, (0 0) when it has none
+(defun lg:blk-base (name / rec p)
+  (setq rec (tblsearch "BLOCK" name)
+        p   (and rec (cdr (assoc 10 rec))))
+  (if p (cal:2d p) '(0.0 0.0)))
+
+;; The definition's segments in the BLOCK's own coordinates.  Group -2 of
+;; the block table record is its first entity and entnext walks the rest,
+;; ENDBLK ending the run; a VERTEX or a SEQEND is stepped over here
+;; because lg:plverts reads a heavy polyline's vertices itself.
+(defun lg:blk-segs (name depth / rec e ed typ skip out)
+  (setq rec  (tblsearch "BLOCK" name)
+        e    (and rec (cdr (assoc -2 rec)))
+        skip (mapcar 'strcase lg:*skiplayers*))
+  (while (and e (setq ed (entget e))
+              (/= "ENDBLK" (cdr (assoc 0 ed))))
+    (setq typ (cdr (assoc 0 ed)))
+    (if (not (member (strcase (cond ((cdr (assoc 8 ed))) ("0"))) skip))
+      (cond
+        ((member typ '("LINE" "ARC" "LWPOLYLINE" "POLYLINE"))
+         (setq out (append out (lg:ent-segs e))))
+        ((= typ "INSERT")
+         (setq out (append out (lg:ins-segs e (1+ depth)))))))
+    (setq e (entnext e)))
+  out)
+
+;; A block reference's segments in world coordinates.  nil for a name in
+;; lg:*skipblocks*, a name with no definition, or a nest deeper than
+;; lg:*blkdepth*.
+(defun lg:ins-segs (ent depth / ed name)
+  (setq ed   (entget ent)
+        name (cdr (assoc 2 ed)))
+  (if (and name
+           (< depth lg:*blkdepth*)
+           (not (lg:stylep name lg:*skipblocks*))
+           (tblsearch "BLOCK" name))
+    (lg:xform-segs (lg:blk-segs name depth)
+                   (lg:ins-xform ed (lg:blk-base name)))))
+
 ;;; -------------------- tracing the exterior ----------------------------
 ;;; LINGUTTER does not look for a closed loop and hope one is the pool.
 ;;; It walks the OUTER FACE of the highlighted geometry and draws its own
@@ -480,6 +655,122 @@
   (foreach s segs (setq out (append (lg:seg-pts s) out)))
   out)
 
+;;; A drafter does not break a wall where something lands on it.  The
+;;; right-hand wall of a pool with a tanning ledge in it is ONE line the
+;;; full height of the pool, and the ledge's two sides run up to the
+;;; middle of it -- a T, not a corner.  Endpoint connectivity cannot see
+;;; a T: the wall has no node where the ledge meets it, so the walk runs
+;;; straight past and the ledge, with nothing but two loose ends, prunes
+;;; away as a spur.  That is how a pool came back as a plain rectangle
+;;; with its ledge, its four ledge dimensions and its two corner radii
+;;; all erased.
+;;;
+;;; So every segment is split wherever ANOTHER segment's END lands in the
+;;; middle of it, before the graph is built and at the same tolerance.
+;;; Only endpoints: two lines that merely CROSS mid-span still are not a
+;;; junction, which is the promise the walk has always made and costs
+;;; nothing on a CAD outline.
+
+(defun lg:seg-ends (segs / s out)
+  (foreach s segs (setq out (cons (car s) (cons (cadr s) out))))
+  out)
+
+;; OFFS as ascending offsets with none closer together than TOL, so a
+;; split cannot make a zero-length piece out of two ends landing together
+(defun lg:thin-offs (offs tol / o out last)
+  (setq offs (vl-sort offs '<))
+  (foreach o offs
+    (if (or (null last) (> (- o last) tol))
+      (setq out (cons o out) last o)))
+  (reverse out))
+
+;; T when P is inside the box A-B grown by TOL -- the cheap test that
+;; keeps the split below from projecting every end onto every segment
+(defun lg:near-box-p (p a b tol)
+  (and (>= (car p) (- (min (car a) (car b)) tol))
+       (<= (car p) (+ (max (car a) (car b)) tol))
+       (>= (cadr p) (- (min (cadr a) (cadr b)) tol))
+       (<= (cadr p) (+ (max (cadr a) (cadr b)) tol))))
+
+;; A -> B straight, split at every end in ENDS that lands on it
+(defun lg:split-line (a b ends tol / len v p u q offs out prev o)
+  (setq len (distance a b) v (cal:v- b a))
+  (if (<= len (* 2.0 tol))
+    (list (list a b 0.0))
+    (progn
+      (foreach p ends
+        (if (lg:near-box-p p a b tol)
+          (progn
+            (setq u (/ (cal:dot (cal:v- p a) v) (* len len)))
+            (if (and (> u 0.0) (< u 1.0))
+              (progn
+                (setq q (cal:v+ a (cal:v* v u)))
+                (if (and (<= (distance (cal:2d p) q) tol)
+                         (> (* u len) tol) (> (* (- 1.0 u) len) tol))
+                  (setq offs (cons (* u len) offs))))))))
+      (if (null offs)
+        (list (list a b 0.0))
+        (progn
+          (setq prev a)
+          (foreach o (lg:thin-offs offs tol)
+            (setq q    (cal:v+ a (cal:v* v (/ o len)))
+                  out  (cons (list prev q 0.0) out)
+                  prev q))
+          (reverse (cons (list prev b 0.0) out)))))))
+
+;; A -> B of bulge BLG, split the same way.  Offsets are swept ANGLES
+;; here and each piece keeps its own bulge, so an arc stays an arc.
+(defun lg:split-arc (a b blg ends tol / dat th r cen sa sgn sw p off q
+                                        offs out prev o pang)
+  (setq dat (lg:arcdata a b blg)
+        th  (car dat)
+        r   (cadr dat)
+        cen (caddr dat)
+        sa  (angle cen a)
+        sgn (if (> th 0.0) 1.0 -1.0)
+        sw  (abs th))
+  (if (or (<= (* sw r) (* 2.0 tol)) (<= r 1e-9))
+    (list (list a b blg))
+    (progn
+      (foreach p ends
+        ;; off the circle by more than TOL cannot be on the arc, and that
+        ;; is one distance instead of a point-on-arc projection
+        (if (<= (abs (- (distance cen (cal:2d p)) r)) tol)
+          (progn
+            (setq pang (angle cen (cal:2d p))
+                  off  (if (> th 0.0) (cal:angnorm (- pang sa))
+                                      (cal:angnorm (- sa pang))))
+            (if (and (> off 0.0) (< off sw))
+              (progn
+                (setq q (cal:v+ cen (cal:v* (lg:dir (+ sa (* sgn off))) r)))
+                (if (and (<= (distance (cal:2d p) q) tol)
+                         (> (* off r) tol) (> (* (- sw off) r) tol))
+                  (setq offs (cons off offs))))))))
+      (if (null offs)
+        (list (list a b blg))
+        (progn
+          (setq prev a o 0.0)
+          (foreach off (lg:thin-offs offs (/ tol r))
+            (setq q    (cal:v+ cen (cal:v* (lg:dir (+ sa (* sgn off))) r))
+                  out  (cons (list prev q (lg:bulge-of (* sgn (- off o))))
+                             out)
+                  prev q
+                  o    off))
+          (reverse (cons (list prev b (lg:bulge-of (* sgn (- sw o)))) out)))))))
+
+;; the bulge of an arc that sweeps TH radians (tan of a quarter of it --
+;; AutoLISP has no tan, the same way lg:ent-segs spells it)
+(defun lg:bulge-of (th) (/ (sin (/ th 4.0)) (cos (/ th 4.0))))
+
+(defun lg:split-tees (segs tol / ends s out)
+  (setq ends (lg:seg-ends segs))
+  (foreach s segs
+    (setq out (append out
+                      (if (equal (caddr s) 0.0 1e-12)
+                        (lg:split-line (car s) (cadr s) ends tol)
+                        (lg:split-arc (car s) (cadr s) (caddr s) ends tol)))))
+  out)
+
 ;; The index of the node at P, adding P as a new node when nothing within
 ;; TOL is already there.  Returns (index nodelist).
 (defun lg:node-of (p tol nodes / i n found)
@@ -516,26 +807,27 @@
       (setq dat (lg:arcdata a b blg))
       (list (nth 3 dat) (nth 4 dat)))))
 
-;; Every dart leaving node V, as (seg dir to departing arriving bulge).
-(defun lg:darts-at (v nodes segn / i s a b tg out)
+;; The dart for segment index I travelled DIR (1 = a->b, -1 = b->a):
+;; (seg dir to departing arriving bulge).
+(defun lg:dart (i dir seg nodes / a b blg tg)
+  (setq blg (if (= dir 1) (caddr seg) (- (caddr seg)))
+        a   (nth (if (= dir 1) (car seg) (cadr seg)) nodes)
+        b   (nth (if (= dir 1) (cadr seg) (car seg)) nodes)
+        tg  (lg:dart-tangents a b blg))
+  (list i dir (if (= dir 1) (cadr seg) (car seg))
+        (car tg) (cadr tg) blg))
+
+;; Every dart leaving node V.
+(defun lg:darts-at (v nodes segn / i s out)
   (setq i 0)
   (foreach s segn
-    (if (= (car s) v)
-      (progn
-        (setq a  (nth (car s) nodes)
-              b  (nth (cadr s) nodes)
-              tg (lg:dart-tangents a b (caddr s))
-              out (cons (list i 1 (cadr s) (car tg) (cadr tg) (caddr s))
-                        out))))
-    (if (= (cadr s) v)
-      (progn
-        (setq a  (nth (cadr s) nodes)
-              b  (nth (car s) nodes)
-              tg (lg:dart-tangents a b (- (caddr s)))
-              out (cons (list i -1 (car s) (car tg) (cadr tg) (- (caddr s)))
-                        out))))
+    (if (= (car s) v) (setq out (cons (lg:dart i 1 s nodes) out)))
+    (if (= (cadr s) v) (setq out (cons (lg:dart i -1 s nodes) out)))
     (setq i (1+ i)))
   (reverse out))
+
+;; One number per dart, so a face walk can mark the darts it used
+(defun lg:dart-id (d) (+ (* 2 (car d)) (if (= 1 (cadr d)) 0 1)))
 
 (defun lg:same-dart (a b)
   (and a b (= (car a) (car b)) (= (cadr a) (cadr b))))
@@ -557,62 +849,61 @@
     (if (or (null best) (< t2 bt)) (setq best d bt t2)))
   best)
 
-;; Every node reachable from V, so each connected piece of the highlight
-;; is walked once and only once.
-(defun lg:component (v segn / seen frontier nxt n s)
-  (setq seen (list v) frontier (list v))
-  (while frontier
-    (setq nxt nil)
-    (foreach n frontier
-      (foreach s segn
-        (cond
-          ((and (= (car s) n) (not (member (cadr s) seen)))
-           (setq seen (cons (cadr s) seen) nxt (cons (cadr s) nxt)))
-          ((and (= (cadr s) n) (not (member (car s) seen)))
-           (setq seen (cons (car s) seen) nxt (cons (car s) nxt))))))
-    (setq frontier nxt))
-  seen)
+;; Walk the face that lies to the left of FIRST, leaving node START
+;; along it.  Returns the darts travelled, each consed onto the node it
+;; left, or nil when the walk never closed (which a sound graph does not
+;; do -- the guard is there so a pathological one cannot hang AutoCAD).
+(defun lg:walk-from (start first nodes segn / cur v ain out done guard lim)
+  (setq cur   first
+        v     start
+        guard 0
+        lim   (+ 10 (* 4 (length segn))))
+  (while (not done)
+    (setq out   (cons (cons v cur) out)
+          ain   (nth 4 cur)
+          v     (nth 2 cur)
+          cur   (lg:next-dart v ain nodes segn)
+          guard (1+ guard))
+    (if (or (null cur) (> guard lim)
+            (and (= v start) (lg:same-dart cur first)))
+      (setq done T)))
+  (if (> guard lim) nil (reverse out)))
 
-;; Node indices lowest first, leftmost breaking a tie.  A component's
-;; lowest node is always on its outer boundary, which is why the walk
-;; starts there and leaves along the shallowest edge it can find.
-(defun lg:node-order (nodes / i n out)
+;; EVERY face of the graph, once each.
+;;
+;; Which face a walk traces is decided entirely by the dart it starts on:
+;; lg:next-dart keeps the same side all the way round, so one dart
+;; belongs to exactly one face and every dart belongs to one.  Guessing
+;; the right starting dart is what used to be done, and it was a guess:
+;; the shallowest dart at a component's lowest NODE is on the outer face
+;; only while no arc leaving that node dips below it.  One that does --
+;; the bottom of a free-form pool is full of them -- starts the walk the
+;; other way round, and a walk going the other way round hugs the INSIDE.
+;; That is how a pool came back without the bench and the step arcs that
+;; were drawn over its own chords: the inner route was one turn tighter
+;; at every node, which is exactly what the walk was asking for.
+;;
+;; So nothing is guessed.  Every face is walked, and lg:exterior keeps
+;; the one enclosing the most area -- which is the outer boundary of the
+;; whole component, since it is the face that contains all the others.
+;; It costs no more work: each dart is still travelled exactly once.
+(defun lg:all-faces (nodes segn / used i s dir d walk w out)
   (setq i 0)
-  (foreach n nodes
-    (setq out (cons (list (cadr n) (car n) i) out)
-          i   (1+ i)))
-  (mapcar 'caddr
-          (vl-sort out '(lambda (a b)
-                          (if (equal (car a) (car b) 1e-9)
-                            (< (cadr a) (cadr b))
-                            (< (car a) (car b)))))))
-
-;; Walk the outer face of the piece START belongs to.  Returns the darts
-;; travelled, each consed onto the node it left, or nil when the walk
-;; never closed (which a sound graph does not do -- the guard is there so
-;; a pathological one cannot hang AutoCAD).
-(defun lg:walk (start nodes segn / darts d first cur v ain out done guard lim)
-  (setq darts (lg:darts-at start nodes segn))
-  (if darts
-    (progn
-      (setq first (car darts))
-      (foreach d darts
-        (if (< (cal:angnorm (nth 3 d)) (cal:angnorm (nth 3 first)))
-          (setq first d)))
-      (setq cur   first
-            v     start
-            guard 0
-            lim   (+ 10 (* 4 (length segn))))
-      (while (not done)
-        (setq out   (cons (cons v cur) out)
-              ain   (nth 4 cur)
-              v     (nth 2 cur)
-              cur   (lg:next-dart v ain nodes segn)
-              guard (1+ guard))
-        (if (or (null cur) (> guard lim)
-                (and (= v start) (lg:same-dart cur first)))
-          (setq done T)))
-      (if (> guard lim) nil (reverse out)))))
+  (foreach s segn
+    (foreach dir '(1 -1)
+      (setq d (lg:dart i dir s nodes))
+      (if (not (member (lg:dart-id d) used))
+        (progn
+          (setq used (cons (lg:dart-id d) used)
+                walk (lg:walk-from (if (= dir 1) (car s) (cadr s))
+                                   d nodes segn))
+          (if walk
+            (progn
+              (foreach w walk
+                (setq used (cons (lg:dart-id (cdr w)) used)))
+              (setq out (cons walk out)))))))
+    (setq i (1+ i)))
+  (reverse out))
 
 ;; Drop every out-and-back excursion.  A dart followed by itself reversed
 ;; is a spur -- a tick mark, a stray line, or the whole of an outline that
@@ -642,27 +933,99 @@
           out (cons (list (car p) (cadr p) (nth 6 w)) out)))
   (reverse out))
 
+;;; Splitting at a T puts a node in the middle of a wall, and the walk
+;;; then reports the wall as two edges meeting dead straight -- or a
+;;; traced arc as seven pieces of one circle, which is what the bottom of
+;;; a radius-corner step does to the step outline running past it.  They
+;;; are the same curve, so they come back out: a run of consecutive edges
+;;; that is one straight line, or one arc about one centre, is welded
+;;; into a single edge.  What the drafter gets is the outline they drew,
+;;; not a polyline carrying a vertex for every tread that touched it --
+;;; and PADDLE is not offered a string of 180-degree corners to pad.
+
+(setq lg:*weldtol* 1.0e-6)         ; not a knob: how nearly two edges have
+                                   ; to BE one curve before they are welded
+                                   ; into one.  A millionth of an inch --
+                                   ; the split points it undoes are exact,
+                                   ; so this is float noise, not a
+                                   ; drafting tolerance
+
+;; T when edge A->B and edge B->C are one curve (A and B carry the
+;; bulges of the edges leaving them, as everywhere else here)
+(defun lg:weldable-p (a b c / b1 b2 d1 d2)
+  (setq b1 (caddr a) b2 (caddr b))
+  (cond
+    ((and (equal b1 0.0 1e-12) (equal b2 0.0 1e-12))
+     (<= (abs (cal:signed-dang (angle (cal:2d a) (cal:2d b))
+                              (angle (cal:2d b) (cal:2d c))))
+         1e-9))
+    ((or (equal b1 0.0 1e-12) (equal b2 0.0 1e-12)) nil)
+    ((< (* b1 b2) 0.0) nil)                ; turning opposite ways
+    (t
+     (setq d1 (lg:arcdata (cal:2d a) (cal:2d b) b1)
+           d2 (lg:arcdata (cal:2d b) (cal:2d c) b2))
+     (and (<= (distance (caddr d1) (caddr d2)) lg:*weldtol*)
+          (<= (abs (- (cadr d1) (cadr d2))) lg:*weldtol*)
+          ;; never weld a run the whole way round: a full circle has no
+          ;; bulge to carry it
+          (< (+ (abs (car d1)) (abs (car d2))) (- (+ pi pi) 1e-9))))))
+
+;; the bulge edge A->C needs once B is gone
+(defun lg:weld-blg (a b c / b1 b2)
+  (setq b1 (caddr a) b2 (caddr b))
+  (if (and (equal b1 0.0 1e-12) (equal b2 0.0 1e-12))
+    0.0
+    (lg:bulge-of (+ (car (lg:arcdata (cal:2d a) (cal:2d b) b1))
+                    (car (lg:arcdata (cal:2d b) (cal:2d c) b2))))))
+
+(defun lg:weld (vts / changed n i a b c out drops)
+  (setq changed T)
+  (while (and changed (> (length vts) 3))
+    (setq changed nil
+          n       (length vts)
+          drops   0
+          out     nil
+          a       (car vts)
+          i       1)
+    (while (< i n)
+      (setq b (nth i vts)
+            c (nth (rem (1+ i) n) vts))
+      ;; never below three vertices: a loop needs them, and a run that
+      ;; goes the whole way round has no bulge that could carry it
+      (if (and (> (- n drops) 3) (lg:weldable-p a b c))
+        (setq a       (list (car a) (cadr a) (lg:weld-blg a b c))
+              drops   (1+ drops)
+              changed T)
+        (setq out (cons a out) a b))
+      (setq i (1+ i)))
+    (setq vts (reverse (cons a out)))
+    ;; the sweep above never gets to drop the FIRST vertex, and a run
+    ;; that straddles the wrap has one there.  Turn the loop by one and
+    ;; the next pass meets it in the middle.
+    (if (and (> (length vts) 3)
+             (lg:weldable-p (last vts) (car vts) (cadr vts)))
+      (setq vts     (append (cdr vts) (list (car vts)))
+            changed T)))
+  vts)
+
 ;; The largest exterior the highlight can be walked round at tolerance
-;; TOL.  Every connected piece is traced and the one enclosing the most
-;; area wins -- a pool beside a stray line, or beside a second pool, comes
-;; out right without anything having to rank them.
-(defun lg:exterior (segs tol / g nodes segn seen v comp walk vts a
-                                best bestarea)
-  (setq g        (lg:build-graph segs tol)
+;; TOL.  Every face of every connected piece is walked and the one
+;; enclosing the most area wins -- which is both the outer boundary of
+;; its own piece and, across pieces, the pool rather than the stray line
+;; or the smaller second pool beside it.  Nothing has to rank them and
+;; nothing has to guess where to start.
+(defun lg:exterior (segs tol / g nodes segn face walk vts a best bestarea)
+  (setq g        (lg:build-graph (lg:split-tees segs tol) tol)
         nodes    (car g)
         segn     (cadr g)
         bestarea 0.0)
-  (foreach v (lg:node-order nodes)
-    (if (not (member v seen))
+  (foreach face (lg:all-faces nodes segn)
+    (setq walk (lg:prune face))
+    (if (> (length walk) 2)
       (progn
-        (setq comp (lg:component v segn)
-              seen (append seen comp)
-              walk (lg:prune (lg:walk v nodes segn)))
-        (if (and walk (> (length walk) 2))
-          (progn
-            (setq vts (lg:walk-vts walk nodes)
-                  a   (abs (lg:area vts)))
-            (if (> a bestarea) (setq bestarea a best vts)))))))
+        (setq vts (lg:weld (lg:walk-vts walk nodes))
+              a   (abs (lg:area vts)))
+        (if (> a bestarea) (setq bestarea a best vts)))))
   best)
 
 (defun lg:bbox (pts / p mnx mny mxx mxy)
@@ -812,29 +1175,101 @@
     (setq i (1+ i)))
   best)
 
-;; The definition points that say what a dimension is attached to.  13
-;; and 14 are the two measured points of a linear, aligned, ordinate or
-;; angular dim; a radius or diameter dim carries neither and hangs off
-;; 10, where its arrow lands on the curve.  Everything else in the
-;; entity -- 11 (the text), 15/16 (an angular dim's second leg, a radius
-;; dim's centre) -- places the dimension rather than attaching it, so it
-;; is not tested: a radius dim on a 3" fillet would otherwise be judged
-;; by a centre point 3" inside the pool.
+;; The definition points that say what a LINEAR dimension is attached
+;; to.  13 and 14 are the two measured points of a linear, aligned,
+;; ordinate or angular dim.  Everything else in the entity -- 11 (the
+;; text), 16 (an angular dim's arc) -- places the dimension rather than
+;; attaching it, so it is not tested.  A radius or diameter dim carries
+;; no 13/14 at all and is read by lg:radial-on-perim-p below instead --
+;; which is why the group 10 fallback here EXCLUDES a radial dim: 10 is
+;; that dim's centre, and a centre can sit exactly on the loop by
+;; coincidence (the centre of a radius-corner step's tread arcs sits on
+;; the step outline running past them), which would keep an interior
+;; call-out as a perimeter one.  The fallback is for a dim carrying
+;; neither, which a sound drawing does not produce.
 (defun lg:dim-pts (ed / out p c)
   (foreach c '(13 14)
     (if (setq p (cdr (assoc c ed))) (setq out (cons p out))))
-  (if (null out)
+  (if (and (null out) (not (lg:radial-p ed)))
     (if (setq p (cdr (assoc 10 ed))) (setq out (list p))))
   out)
 
 ;; T when ED is a RADIUS or DIAMETER dimension -- DXF 70's low three
-;; bits are 4 for radius, 3 for diameter, the two kinds lg:dim-pts hangs
-;; off group 10 rather than 13/14.  Read from the type flag rather than
-;; "has no 13/14": a malformed dim is then just "not radial", not a
-;; silent radial match.
+;; bits are 4 for radius, 3 for diameter.  Read from the type flag
+;; rather than "has no 13/14": a malformed dim is then just "not
+;; radial", not a silent radial match.
 (defun lg:radial-p (ed / k)
   (setq k (logand 7 (cdr (assoc 70 ed))))
   (or (= k 3) (= k 4)))
+
+;;; A radius dimension does NOT hang off group 10.  Group 10 is the
+;;; CENTRE of the arc it calls out and group 15 is the point on the
+;;; curve -- the other way round from what this file used to assume, and
+;;; the reason every corner-radius call-out on a pool was erased: the
+;;; centre of a 24" corner sits 24" inside the loop, so "within
+;;; lg:*ontol* of the perimeter" was never true of it.  (A DIAMETER
+;;; dim's 10 and 15 are the two ends of a diameter, both on the curve.)
+;;;
+;;; So a radial dim is kept when any one of three things is true, and
+;;; they are three real shapes on these sheets:
+;;;   * its point ON the curve is on the perimeter -- an arc the walk
+;;;     traced and the arrow landing inside the swept part of it;
+;;;   * it NAMES an arc of the perimeter -- same centre, same radius.
+;;;     This is the one that matters, because a leader is routinely
+;;;     dragged round to where it reads well and its arrow then lands
+;;;     on the same circle but past the end of the drawn arc;
+;;;   * its centre sits on a VERTEX of the perimeter -- "R3 typ." on a
+;;;     corner that is drawn sharp and is meant to be filleted.  A
+;;;     vertex, not merely somewhere along an edge: the centre of an
+;;;     interior tread arc can sit exactly ON an outer arc by
+;;;     coincidence, and does on a radius-corner step.
+
+;; (centre radius), or nil when ED does not carry enough to say
+(defun lg:radial-cr (ed / p10 p15 k)
+  (setq p10 (cdr (assoc 10 ed))
+        p15 (cdr (assoc 15 ed))
+        k   (logand 7 (cdr (assoc 70 ed))))
+  (if (and p10 p15)
+    (if (= k 3)
+      (list (cal:v* (cal:v+ p10 p15) 0.5) (/ (distance (cal:2d p10) (cal:2d p15))
+                                          2.0))
+      (list (cal:2d p10) (distance (cal:2d p10) (cal:2d p15))))))
+
+;; the points of ED that really are on the curve: 15 always, and 10 too
+;; for a diameter dim.  Group 10 alone when there is no 15 to go on.
+(defun lg:radial-pts (ed / p10 p15)
+  (setq p10 (cdr (assoc 10 ed))
+        p15 (cdr (assoc 15 ed)))
+  (cond
+    ((null p15) (if p10 (list p10)))
+    ((= 3 (logand 7 (cdr (assoc 70 ed)))) (list p15 p10))
+    (t (list p15))))
+
+;; T when VTS has an arc edge of centre CEN and radius R, both within
+;; lg:*ontol*
+(defun lg:loop-arc-p (cen r vts / n i a b blg dat hit)
+  (setq n (length vts) i 0)
+  (repeat n
+    (setq a   (nth i vts)
+          b   (nth (rem (1+ i) n) vts)
+          blg (caddr a))
+    (if (/= blg 0.0)
+      (progn
+        (setq dat (lg:arcdata (cal:2d a) (cal:2d b) blg))
+        (if (and (<= (distance (caddr dat) (cal:2d cen)) lg:*ontol*)
+                 (<= (abs (- (cadr dat) r)) lg:*ontol*))
+          (setq hit t))))
+    (setq i (1+ i)))
+  hit)
+
+(defun lg:radial-on-perim-p (ed vts / pts p cr ok)
+  (setq pts (lg:radial-pts ed)
+        cr  (lg:radial-cr ed))
+  (foreach p pts
+    (if (<= (lg:pt-loop-dist p vts) lg:*ontol*) (setq ok t)))
+  (if (and (not ok) cr (lg:loop-arc-p (car cr) (cadr cr) vts)) (setq ok t))
+  (if (and (not ok) cr (lg:at-vertex-p (car cr) vts)) (setq ok t))
+  ok)
 
 ;; T when every attachment point sits within lg:*ontol* of the loop.
 ;; Every, not any: a dim running from the pool edge in to the hopper is
@@ -916,6 +1351,24 @@
     (setq i (1+ i)))
   veto)
 
+;; T when a lg:*perimstyles* dimension is a dimension OF THE PERIMETER:
+;; every attachment point on the loop, and the two of them not a partial
+;; read along one single edge.
+;;
+;; The second half is the same test the cross-dim rule has always
+;; applied, and it is here for the same reason.  A step built against a
+;; pool wall has its risers and its treads dimensioned ALONG that wall,
+;; so both ends of a 16" tread dim sit exactly on the perimeter while the
+;; thing being measured is the step.  "The start of one side to the end
+;; of it" is a side dimension; "two points partway along one side" is a
+;; reading of something that happens to lie against it, and it goes with
+;; the rest of the step.
+(defun lg:perim-dim-p (ed vts / pts)
+  (setq pts (lg:dim-pts ed))
+  (and (lg:on-perim-p ed vts)
+       (or (/= (length pts) 2)
+           (not (lg:same-edge-partial-p (car pts) (cadr pts) vts)))))
+
 ;; T when P1-P2 spans at least lg:*crossspan* of the perimeter's own
 ;; bounding box, in X or in Y -- "goes full X" or "goes full Y", an
 ;; overall check dimension from one side to the other, corners or not.
@@ -980,16 +1433,21 @@
 ;; Why a highlighted DIMENSION in style STY would be dropped, for the
 ;; report's tally -- a reason, not a raw style name, is the whole point
 ;; of counting drops at all.  A style already ruled out by the caller
-;; (lg:radial-p and lg:on-perim-p, ahead of this in lg:analyze) never
-;; reaches here on THAT ground, so a lg:*anystyles* style always means
-;; either the CROSS DIMENSIONS question or lg:cross-ok-p is why it goes.
-(defun lg:drop-reason (sty keepcross)
+;; (lg:radial-p and lg:radial-on-perim-p, ahead of this in lg:analyze)
+;; never reaches here on THAT ground, so a lg:*anystyles* style always
+;; means either the CROSS DIMENSIONS question or lg:cross-ok-p is why it
+;; goes.  ONP is whether a lg:*perimstyles* dim reached the perimeter at
+;; all, so the two ways one of those can fail read differently in the
+;; tally: nowhere near the loop, or on it but reading a part of one side.
+(defun lg:drop-reason (sty keepcross onp)
   (strcat (if (= sty "") "(no style)" sty)
           (cond
             ((lg:stylep sty lg:*anystyles*)
              (if keepcross
                " - not a full span or a full perimeter edge"
                " - \"Keep CROSS DIMENSIONS?\" answered No"))
+            ((and (lg:stylep sty lg:*perimstyles*) onp)
+             " - a part of one side, not the perimeter")
             ((lg:stylep sty lg:*perimstyles*) " - not on the perimeter")
             (t " - style not kept"))))
 
@@ -1032,20 +1490,25 @@
             i   (1+ i))))
   (reverse out))
 
-;; the segments the perimeter may be traced from: the drawn geometry
-;; INSIDE the highlight, less the layers lg:*skiplayers* names
-(defun lg:trace-segs (ss / i out en ed)
-  (setq i 0)
+;; The segments the perimeter may be traced from: the drawn geometry
+;; INSIDE the highlight, less the layers lg:*skiplayers* names -- and a
+;; BLOCK REFERENCE's own geometry with it, because a step bolted to a
+;; wall is drawn as one (lg:ins-segs, and lg:*skipblocks* for the two
+;; families that are never part of the outline).
+(defun lg:trace-segs (ss / i out en ed typ skip)
+  (setq i 0 skip (mapcar 'strcase lg:*skiplayers*))
   (if ss
     (repeat (sslength ss)
-      (setq en (ssname ss i)
-            ed (entget en)
-            i  (1+ i))
-      (if (and (member (cdr (assoc 0 ed))
-                       '("LINE" "ARC" "LWPOLYLINE" "POLYLINE"))
-               (not (member (strcase (cdr (assoc 8 ed)))
-                            (mapcar 'strcase lg:*skiplayers*))))
-        (setq out (append out (lg:ent-segs en))))))
+      (setq en  (ssname ss i)
+            ed  (entget en)
+            typ (cdr (assoc 0 ed))
+            i   (1+ i))
+      (if (not (member (strcase (cond ((cdr (assoc 8 ed))) ("0"))) skip))
+        (cond
+          ((member typ '("LINE" "ARC" "LWPOLYLINE" "POLYLINE"))
+           (setq out (append out (lg:ent-segs en))))
+          ((= typ "INSERT")
+           (setq out (append out (lg:ins-segs en 0))))))))
   out)
 
 ;; Everything both commands need to know about the highlighted set SS,
@@ -1088,15 +1551,19 @@
         ((= typ "DIMENSION")
          (setq sty (lg:dim-style ed))
          (cond
-           ((and (lg:radial-p ed) (lg:on-perim-p ed vts))
+           ((and (lg:radial-p ed) (lg:radial-on-perim-p ed vts))
             (setq nrad (1+ nrad)))
            ((and keepcross (lg:stylep sty lg:*anystyles*)
                  (lg:cross-ok-p ed vts))
             (setq nany (1+ nany)))
-           ((and (lg:stylep sty lg:*perimstyles*) (lg:on-perim-p ed vts))
+           ((and (lg:stylep sty lg:*perimstyles*) (lg:perim-dim-p ed vts))
             (setq nperim (1+ nperim)))
            (t
-            (setq dropped (lg:tally (lg:drop-reason sty keepcross) dropped)
+            (setq dropped (lg:tally (lg:drop-reason
+                                      sty keepcross
+                                      (and (lg:stylep sty lg:*perimstyles*)
+                                           (lg:on-perim-p ed vts)))
+                                    dropped)
                   kill    (cons en kill)))))
         (t (setq nother (1+ nother)
                  kill   (cons en kill))))))
@@ -1178,10 +1645,11 @@
                        " No - dimensions in " (lg:names lg:*anystyles*)
                        " get no exemption.")))
       (princ (strcat "\nLINGUTTER: keeping " (itoa nperim) " dimension"
-                     (lg:s nperim) " on the perimeter in "
-                     (lg:names lg:*perimstyles*) "."))
+                     (lg:s nperim) " that dimension the perimeter, in "
+                     (lg:names lg:*perimstyles*)
+                     " - on it, and not a part of one side."))
       (princ (strcat "\nLINGUTTER: keeping " (itoa nrad) " radius/diameter"
-                     " dimension" (lg:s nrad) " on the perimeter,"
+                     " dimension" (lg:s nrad) " of the perimeter,"
                      " regardless of style."))
       (princ (strcat "\nLINGUTTER: erasing " (itoa (length kill))
                      " highlighted object" (lg:s (length kill)) " - "
