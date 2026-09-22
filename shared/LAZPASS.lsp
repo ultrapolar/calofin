@@ -56126,7 +56126,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.10")  ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -56348,7 +56348,7 @@
             p14 (cdr (assoc 14 ed)))
       (append (if p13 (list p13)) (if p14 (list p14))))))
 
-(defun cfchk:shared-anchors (dims / recs r e p found out)
+(defun cfchk:shared-anchors (dims / recs r e p found out tl)
   ;; Every spot where *cfchk-anchor-min* or more DIMENSIONS put a
   ;; definition point.  Dimensioning twice to the same spot is how a
   ;; drafter says that spot matters -- the usual case is the pair of
@@ -56359,10 +56359,14 @@
   ;; Returns the anchor points (WCS).
   (foreach e dims
     (foreach p (cfchk:dim-def-pts e)
-      (setq found nil)
-      (foreach r recs
-        (if (and (null found) (<= (distance p (car r)) *cfchk-anchor-tol*))
-          (setq found r)))
+      ;; the FIRST rec within tol, and stop there: the rest of recs
+      ;; cannot change which one that is
+      (setq found nil
+            tl    recs)
+      (while (and tl (null found))
+        (if (<= (distance p (caar tl)) *cfchk-anchor-tol*)
+          (setq found (car tl)))
+        (setq tl (cdr tl)))
       (cond
         ((null found) (setq recs (cons (list p e) recs)))
         ;; a dimension's own two points landing together is one
@@ -65553,7 +65557,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.25")
+(setq *cchk-version* "v1.26")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -65884,8 +65888,10 @@
 (defun cchk:stash-color (ent col / ed)
   ;; remember the entity's own colour in xdata so COVERCHECKRESCUE can
   ;; put it back even after a crash; an existing stash (from an
-  ;; interrupted run - the TRUE original) is never overwritten
-  (cchk:regapp)
+  ;; interrupted run - the TRUE original) is never overwritten.
+  ;; The caller registers the COVERCHECK app once, ahead of the
+  ;; grey-out loop that is this helper's one caller -- not once per
+  ;; entity.
   (setq ed (entget ent '("COVERCHECK")))
   (if (and ed (not (assoc -3 ed)))
     (entmod (append ed (list (list -3 (list "COVERCHECK"
@@ -66870,17 +66876,20 @@
   (setq a (angle (cchk:seg-p1 s) (cchk:seg-p2 s)))
   (if (>= a pi) (- a pi) a))
 
-(defun cchk:sort-recs (recs / out r pre rest)
-  ;; stable insertion sort by (car rec); keeps equal elements
-  (setq out nil)
-  (foreach r recs
-    (setq pre  nil
-          rest out)
-    (while (and rest (>= (car r) (caar rest)))
-      (setq pre  (cons (car rest) pre)
-            rest (cdr rest)))
-    (setq out (append (reverse pre) (list r) rest)))
-  out)
+(defun cchk:sort-recs (recs / i)
+  ;; stable sort by (car rec); keeps equal elements.  Each rec is
+  ;; tagged with its input position, which breaks every tie: equal
+  ;; offsets keep their input order (the order Merge's keep/delete
+  ;; choice reads), and vl-sort -- which DROPS items its test calls
+  ;; equal -- never sees two alike.  O(n log n), where the insertion
+  ;; sort this replaces was O(n^2) over a direction family.
+  (setq i -1)
+  (mapcar 'cdr
+          (vl-sort (mapcar '(lambda (r) (cons (setq i (1+ i)) r)) recs)
+                   '(lambda (a b)
+                      (or (< (cadr a) (cadr b))
+                          (and (= (cadr a) (cadr b))
+                               (< (car a) (car b))))))))
 
 ;; --- block & text helpers ------------------------------------------
 
@@ -66907,24 +66916,26 @@
     (cdr (assoc 2 (entget ent)))
     res))
 
-(defun cchk:blockdef-texts (bname depth / lst e et g)
+(defun cchk:blockdef-texts (bname depth / lst e ed et g)
   ;; TEXT/MTEXT/ATTDEF inside a block definition, following nested
-  ;; blocks down to depth so a title wrapped in a wrapper is found
+  ;; blocks down to depth so a title wrapped in a wrapper is found.
+  ;; One entget per definition entity: the type and the text/name
+  ;; groups are all read off ed.
   (setq e (tblobjname "BLOCK" bname))
   (if e
     (progn
       (setq e (entnext e))
-      (while (and e (/= "ENDBLK" (setq et (cdr (assoc 0 (entget e))))))
+      (while (and e (/= "ENDBLK" (setq et (cdr (assoc 0 (setq ed (entget e)))))))
         (cond
           ((member et '("TEXT" "ATTDEF"))
-           (setq lst (cons (cdr (assoc 1 (entget e))) lst)))
+           (setq lst (cons (cdr (assoc 1 ed)) lst)))
           ((= et "MTEXT")
-           (foreach g (entget e)
+           (foreach g ed
              (if (member (car g) '(1 3))
                (setq lst (cons (cdr g) lst)))))
           ((and (= et "INSERT") (> depth 1))
-           (setq lst (cons (cdr (assoc 2 (entget e))) lst)  ; nested block NAME
-                 lst (append (cchk:blockdef-texts (cdr (assoc 2 (entget e)))
+           (setq lst (cons (cdr (assoc 2 ed)) lst)  ; nested block NAME
+                 lst (append (cchk:blockdef-texts (cdr (assoc 2 ed))
                                                   (1- depth))
                              lst))))
         (setq e (entnext e)))))
@@ -67166,7 +67177,7 @@
             p14 (cdr (assoc 14 ed)))
       (append (if p13 (list p13)) (if p14 (list p14))))))
 
-(defun cchk:shared-anchors (dims / recs r e p found out)
+(defun cchk:shared-anchors (dims / recs r e p found out tl)
   ;; Every spot where *cchk-anchor-min* or more DIMENSIONS put a
   ;; definition point.  Dimensioning twice to the same spot is how a
   ;; drafter says that spot matters -- the usual case is the pair of
@@ -67179,10 +67190,14 @@
   ;; Returns the anchor points (WCS).
   (foreach e dims
     (foreach p (cchk:dim-def-pts e)
-      (setq found nil)
-      (foreach r recs
-        (if (and (null found) (<= (distance p (car r)) *cchk-anchor-tol*))
-          (setq found r)))
+      ;; the FIRST rec within tol, and stop there: the rest of recs
+      ;; cannot change which one that is
+      (setq found nil
+            tl    recs)
+      (while (and tl (null found))
+        (if (<= (distance p (caar tl)) *cchk-anchor-tol*)
+          (setq found (car tl)))
+        (setq tl (cdr tl)))
       (cond
         ((null found) (setq recs (cons (list p e) recs)))
         ;; a dimension's own two points landing together is one
@@ -68622,7 +68637,8 @@
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
-                      minx miny maxx maxy bb m dhdr right dimlay units datev carried cmv)
+                      minx miny maxx maxy bb m dhdr right dimlay units datev carried cmv
+                      ed col)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -68761,14 +68777,21 @@
         ;; be 'auto, and measuring the background per entity would
         ;; be a COM round trip per entity
         (setq grey (cal:ink *cchk-grey-color* 'fade))
+        ;; the app every stash below writes under, registered once
+        (cchk:regapp)
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
                 i (1+ i))
-          (if (entget e)
+          ;; one entget serves the test, the saved list and the stash
+          ;; (cchk:ent-color's read, inlined); set-color re-reads, as
+          ;; it must, after the stash's entmod
+          (if (setq ed (entget e))
             (progn
-              (setq saved (cons (cons e (cchk:ent-color e)) saved))
-              (cchk:stash-color e (cchk:ent-color e))
+              (setq col   (cdr (assoc 62 ed))
+                    col   (if col col 256)
+                    saved (cons (cons e col) saved))
+              (cchk:stash-color e col)
               (cchk:set-color e grey))))
 
         ;; --- dimensions, one at a time -----------------------------
@@ -72511,7 +72534,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.24")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.25")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -72760,8 +72783,9 @@
 (defun dchk:stash-color (ent col / ed)
   ;; remember the entity's own colour in xdata so DIMCHECKRESCUE can
   ;; put it back even after a crash; an existing stash (from an
-  ;; interrupted run - the TRUE original) is never overwritten
-  (dchk:regapp)
+  ;; interrupted run - the TRUE original) is never overwritten.
+  ;; The caller registers the DIMCHECK app once, ahead of the grey-out
+  ;; loop that is this helper's one caller -- not once per entity.
   (setq ed (entget ent '("DIMCHECK")))
   (if (and ed (not (assoc -3 ed)))
     (entmod (append ed (list (list -3 (list "DIMCHECK"
@@ -72851,11 +72875,6 @@
   (princ))
 
 ;; --- small helpers -------------------------------------------------
-
-(defun dchk:ent-color (ent / c)
-  ;; the entity's explicit colour, 256 (ByLayer) when it has none
-  (setq c (cdr (assoc 62 (entget ent))))
-  (if c c 256))
 
 (defun dchk:set-color (ent color / ed old)
   (setq ed  (entget ent)
@@ -73241,17 +73260,20 @@
   (setq a (angle (dchk:seg-p1 s) (dchk:seg-p2 s)))
   (if (>= a pi) (- a pi) a))
 
-(defun dchk:sort-recs (recs / out r pre rest)
-  ;; stable insertion sort by (car rec); keeps equal elements
-  (setq out nil)
-  (foreach r recs
-    (setq pre  nil
-          rest out)
-    (while (and rest (>= (car r) (caar rest)))
-      (setq pre  (cons (car rest) pre)
-            rest (cdr rest)))
-    (setq out (append (reverse pre) (list r) rest)))
-  out)
+(defun dchk:sort-recs (recs / i)
+  ;; stable sort by (car rec); keeps equal elements.  Each rec is
+  ;; tagged with its input position, which breaks every tie: equal
+  ;; offsets keep their input order (the order Merge's keep/delete
+  ;; choice reads), and vl-sort -- which DROPS items its test calls
+  ;; equal -- never sees two alike.  O(n log n), where the insertion
+  ;; sort this replaces was O(n^2) over a direction family.
+  (setq i -1)
+  (mapcar 'cdr
+          (vl-sort (mapcar '(lambda (r) (cons (setq i (1+ i)) r)) recs)
+                   '(lambda (a b)
+                      (or (< (cadr a) (cadr b))
+                          (and (= (cadr a) (cadr b))
+                               (< (car a) (car b))))))))
 
 (defun dchk:find-overlaps (segs / atol fams a placed fam recs e p1 p2 dx dy
                                 off s1 s2 tmp rest r q pairs seen key)
@@ -73407,7 +73429,7 @@
             p14 (cdr (assoc 14 ed)))
       (append (if p13 (list p13)) (if p14 (list p14))))))
 
-(defun dchk:shared-anchors (dims / recs r e p found out)
+(defun dchk:shared-anchors (dims / recs r e p found out tl)
   ;; Every spot where *dchk-anchor-min* or more DIMENSIONS put a
   ;; definition point.  Dimensioning twice to the same spot is how a
   ;; drafter says that spot matters -- the usual case is the pair of
@@ -73420,10 +73442,14 @@
   ;; Returns the anchor points (WCS).
   (foreach e dims
     (foreach p (dchk:dim-def-pts e)
-      (setq found nil)
-      (foreach r recs
-        (if (and (null found) (<= (distance p (car r)) *dchk-anchor-tol*))
-          (setq found r)))
+      ;; the FIRST rec within tol, and stop there: the rest of recs
+      ;; cannot change which one that is
+      (setq found nil
+            tl    recs)
+      (while (and tl (null found))
+        (if (<= (distance p (caar tl)) *dchk-anchor-tol*)
+          (setq found (car tl)))
+        (setq tl (cdr tl)))
       (cond
         ((null found) (setq recs (cons (list p e) recs)))
         ;; a dimension's own two points landing together is one
@@ -73805,7 +73831,8 @@
                       nomerged noflag noleft
                       rowtol sty pair dlines skiprest
                       laylist locked relock lay
-                      minx miny maxx maxy bb h m ins txt nlin ref hdr l carried cmv)
+                      minx miny maxx maxy bb h m ins txt nlin ref hdr l carried cmv
+                      ed col)
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
     ;; re-lock what we unlocked, clear markers, close the undo group
@@ -73943,14 +73970,21 @@
         ;; be 'auto, and measuring the background per entity would
         ;; be a COM round trip per entity
         (setq grey (cal:ink *dchk-grey-color* 'fade))
+        ;; the app every stash below writes under, registered once
+        (dchk:regapp)
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
                 i (1+ i))
-          (if (entget e)
+          ;; one entget serves the test, the saved list and the
+          ;; stash; set-color re-reads, as it must, after the
+          ;; stash's entmod
+          (if (setq ed (entget e))
             (progn
-              (setq saved (cons (cons e (dchk:ent-color e)) saved))
-              (dchk:stash-color e (dchk:ent-color e))
+              (setq col   (cdr (assoc 62 ed))
+                    col   (if col col 256)
+                    saved (cons (cons e col) saved))
+              (dchk:stash-color e col)
               (dchk:set-color e grey))))
 
         ;; --- dimensions, one at a time -----------------------------
@@ -86081,7 +86115,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.21")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.22")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -86403,8 +86437,10 @@
 (defun lfc:stash-color (ent col / ed)
   ;; remember the entity's own colour in xdata so LINFINCHECKRESCUE can
   ;; put it back even after a crash; an existing stash (from an
-  ;; interrupted run - the TRUE original) is never overwritten
-  (lfc:regapp)
+  ;; interrupted run - the TRUE original) is never overwritten.
+  ;; The caller registers the LINFINCHECK app once, ahead of the
+  ;; grey-out loop that is this helper's one caller -- not once per
+  ;; entity.
   (setq ed (entget ent '("LINFINCHECK")))
   (if (and ed (not (assoc -3 ed)))
     (entmod (append ed (list (list -3 (list "LINFINCHECK"
@@ -86494,11 +86530,6 @@
   (princ))
 
 ;; --- small helpers -------------------------------------------------
-
-(defun lfc:ent-color (ent / c)
-  ;; the entity's explicit colour, 256 (ByLayer) when it has none
-  (setq c (cdr (assoc 62 (entget ent))))
-  (if c c 256))
 
 (defun lfc:set-color (ent color / ed old)
   (setq ed  (entget ent)
@@ -87296,17 +87327,21 @@
   (setq a (angle (lfc:seg-p1 s) (lfc:seg-p2 s)))
   (if (>= a pi) (- a pi) a))
 
-(defun lfc:sort-recs (recs / out r pre rest)
-  ;; stable insertion sort by (car rec); keeps equal elements
-  (setq out nil)
-  (foreach r recs
-    (setq pre  nil
-          rest out)
-    (while (and rest (>= (car r) (caar rest)))
-      (setq pre  (cons (car rest) pre)
-            rest (cdr rest)))
-    (setq out (append (reverse pre) (list r) rest)))
-  out)
+(defun lfc:sort-recs (recs / i)
+  ;; stable sort by (car rec); keeps equal elements.  Each rec is
+  ;; tagged with its input position, which breaks every tie: equal
+  ;; offsets keep their input order (the order Merge's keep/delete
+  ;; choice reads), and vl-sort -- which DROPS items its test calls
+  ;; equal -- never sees two alike, not even a line drawn twice.
+  ;; O(n log n), where the insertion sort this replaces was O(n^2)
+  ;; over a direction family.
+  (setq i -1)
+  (mapcar 'cdr
+          (vl-sort (mapcar '(lambda (r) (cons (setq i (1+ i)) r)) recs)
+                   '(lambda (a b)
+                      (or (< (cadr a) (cadr b))
+                          (and (= (cadr a) (cadr b))
+                               (< (car a) (car b))))))))
 
 (defun lfc:step-groups (lns minlines / atol fams a placed recs pts p1 p2 dx dy
                              off s1 s2 tmp cur chains gap groups e fam r)
@@ -87496,24 +87531,26 @@
     (cdr (assoc 2 (entget ent)))
     res))
 
-(defun lfc:blockdef-texts (bname depth / lst e et g)
+(defun lfc:blockdef-texts (bname depth / lst e ed et g)
   ;; TEXT/MTEXT/ATTDEF inside a block definition, following nested
-  ;; blocks down to depth so a title wrapped in a wrapper is found
+  ;; blocks down to depth so a title wrapped in a wrapper is found.
+  ;; One entget per definition entity: the type and the text/name
+  ;; groups are all read off ed.
   (setq e (tblobjname "BLOCK" bname))
   (if e
     (progn
       (setq e (entnext e))
-      (while (and e (/= "ENDBLK" (setq et (cdr (assoc 0 (entget e))))))
+      (while (and e (/= "ENDBLK" (setq et (cdr (assoc 0 (setq ed (entget e)))))))
         (cond
           ((member et '("TEXT" "ATTDEF"))
-           (setq lst (cons (cdr (assoc 1 (entget e))) lst)))
+           (setq lst (cons (cdr (assoc 1 ed)) lst)))
           ((= et "MTEXT")
-           (foreach g (entget e)
+           (foreach g ed
              (if (member (car g) '(1 3))
                (setq lst (cons (cdr g) lst)))))
           ((and (= et "INSERT") (> depth 1))
-           (setq lst (cons (cdr (assoc 2 (entget e))) lst)  ; nested block NAME
-                 lst (append (lfc:blockdef-texts (cdr (assoc 2 (entget e)))
+           (setq lst (cons (cdr (assoc 2 ed)) lst)  ; nested block NAME
+                 lst (append (lfc:blockdef-texts (cdr (assoc 2 ed))
                                                   (1- depth))
                              lst))))
         (setq e (entnext e)))))
@@ -88151,7 +88188,7 @@
             p14 (cdr (assoc 14 ed)))
       (append (if p13 (list p13)) (if p14 (list p14))))))
 
-(defun lfc:shared-anchors (dims / recs r e p found out)
+(defun lfc:shared-anchors (dims / recs r e p found out tl)
   ;; Every spot where *lfc-anchor-min* or more DIMENSIONS put a
   ;; definition point.  Dimensioning twice to the same spot is how a
   ;; drafter says that spot matters -- the usual case is the pair of
@@ -88164,10 +88201,14 @@
   ;; Returns the anchor points (WCS).
   (foreach e dims
     (foreach p (lfc:dim-def-pts e)
-      (setq found nil)
-      (foreach r recs
-        (if (and (null found) (<= (distance p (car r)) *lfc-anchor-tol*))
-          (setq found r)))
+      ;; the FIRST rec within tol, and stop there: the rest of recs
+      ;; cannot change which one that is
+      (setq found nil
+            tl    recs)
+      (while (and tl (null found))
+        (if (<= (distance p (caar tl)) *lfc-anchor-tol*)
+          (setq found (car tl)))
+        (setq tl (cdr tl)))
       (cond
         ((null found) (setq recs (cons (list p e) recs)))
         ;; a dimension's own two points landing together is one
@@ -88561,7 +88602,8 @@
                       wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
                       dlines skiprest bordbb bordsum
-                      minx miny maxx maxy bb m dhdr right dimlay units carried cmv)
+                      minx miny maxx maxy bb m dhdr right dimlay units carried cmv
+                      ed col)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -88702,14 +88744,21 @@
         ;; be 'auto, and measuring the background per entity would
         ;; be a COM round trip per entity
         (setq grey (cal:ink *lfc-grey-color* 'fade))
+        ;; the app every stash below writes under, registered once
+        (lfc:regapp)
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
                 i (1+ i))
-          (if (entget e)
+          ;; one entget serves the test, the saved list and the
+          ;; stash; set-color re-reads, as it must, after the
+          ;; stash's entmod
+          (if (setq ed (entget e))
             (progn
-              (setq saved (cons (cons e (lfc:ent-color e)) saved))
-              (lfc:stash-color e (lfc:ent-color e))
+              (setq col   (cdr (assoc 62 ed))
+                    col   (if col col 256)
+                    saved (cons (cons e col) saved))
+              (lfc:stash-color e col)
               (lfc:set-color e grey))))
 
         ;; --- dimensions, one at a time -----------------------------
