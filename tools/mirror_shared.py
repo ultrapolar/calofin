@@ -22,6 +22,7 @@ behind fails the standards check rather than shipping.
 """
 
 import os
+import pathlib
 import re
 import sys
 
@@ -764,12 +765,14 @@ TOOLS = {
         # No OSMODE: SPACHECK changes no snap of its own, and a sysvar
         # list is a promise to write the value back -- it would put this
         # run's opening snapshot over any snap the drafter ticked on
-        # during the item-by-item walk.  Kept in step with the table in
-        # lisp/spacheck/SPACHECK.lsp by hand, which is why it is typed
-        # twice and why check_osnap.py reads both tiers.
+        # during the item-by-item walk.  No CLAYER either, since cd08238.
+        # Typed twice -- here and in lisp/spacheck/SPACHECK.lsp -- and
+        # check_expand_lists() below fails --check when the two part: it
+        # sat at CMDECHO CLAYER here for ten days after the source dropped
+        # CLAYER, with every twin check green.
         'expand': {
             '(cal:syssave)':
-                ['(cal:syssave \'("CMDECHO" "CLAYER"))'],
+                ['(cal:syssave \'("CMDECHO"))'],
         },
     },
     # POOL is the largest file in the tree and its twin was hand-mirrored
@@ -2506,9 +2509,61 @@ def mirror(tool, spec):
           % (tool, len(src.splitlines()), ndropped, nkw))
 
 
+def _source_sysvars(name, own_src):
+    """The quoted sysvar list the lisp/ defun NAME snapshots -- read from
+    OWN_SRC, or from whichever lisp/ file defines it when a tool calls
+    another file's helper (POOLDEMO and TUTORIALPOOL use POOL's) -- as a
+    list of strings, or None when it is not a literal '("..." ...)."""
+    pat = re.compile(r'\(defun\s+%s\s' % re.escape(name), re.I)
+    texts = [own_src] + [p.read_text(encoding='utf-8', errors='replace')
+                         for p in sorted(pathlib.Path(HERE, 'lisp').rglob('*'))
+                         if p.suffix.lower() == '.lsp']
+    for text in texts:
+        m = pat.search(text)
+        if not m:
+            continue
+        body = text[m.start():find_close(text, m.start())]
+        q = re.search(r"'\(((?:\s*\"[^\"]*\")+)\s*\)", body)
+        return re.findall(r'"([^"]*)"', q.group(1)) if q else None
+    return None
+
+
+def check_expand_lists(tools=None):
+    """A hand-typed (cal:syssave '("..." ...)) expand that no longer names
+    what the lisp/ helper it replaces snapshots.  SPACHECK's said CMDECHO
+    and CLAYER for ten days after cd08238 took CLAYER out of
+    spachk:syssave -- so the grouped build put the review's OPENING layer
+    back over one the drafter had switched to, the very bug that commit
+    fixed, while every twin check stayed green: the expand is the mirror's
+    own text, and it regenerated faithfully."""
+    problems = []
+    for tool in sorted(tools or TOOLS):
+        spec = TOOLS[tool]
+        forms = spec.get('expand', {}).get('(cal:syssave)')
+        local = [k for k, v in spec.get('swap', {}).items()
+                 if v == 'cal:syssave']
+        if not forms or not local:
+            continue
+        m = re.search(r"\(cal:syssave '\(([^)]*)\)\)", forms[0])
+        if not m:
+            continue                  # (cal:syssave (x:sysvars)) reads the source
+        typed = re.findall(r'"([^"]*)"', m.group(1))
+        src = pathlib.Path(HERE, spec['src']).read_text(
+            encoding='utf-8', errors='replace')
+        have = _source_sysvars(local[0], src)
+        if have is not None and have != typed:
+            problems.append(
+                "%s: the mirror's expand saves %s but %s in %s saves %s - "
+                "the grouped build would restore a different set than the "
+                "standalone one; make the expand match"
+                % (tool, " ".join(typed), local[0], spec['src'],
+                   " ".join(have)))
+    return problems
+
+
 def check(tools=None):
     """Tools whose twin on disk differs from a fresh generation."""
-    problems = []
+    problems = check_expand_lists(tools)
     for tool in sorted(tools or TOOLS):
         dst_path, src, _, _ = generate(tool, TOOLS[tool])
         try:
