@@ -532,6 +532,22 @@ python3 tools/check_color.py     # the drafter's CURRENT COLOUR and CURRENT
                                  # the command and colours everything
                                  # ByLayer on it for whoever opens the
                                  # drawing next
+python3 tools/check_perf.py      # an 'auto ink colour that costs a COM
+       [--list] [--tier T]       # round trip ('fade/'guide) is resolved
+                                 # OUTSIDE loops -- never reachable, even
+                                 # through a helper, from inside a
+                                 # foreach/repeat/while.  Reuses
+                                 # check_osnap's call-graph machinery to
+                                 # close over what a loop calls, as far
+                                 # as the tier defines it, and flags any
+                                 # reachable function that resolves the
+                                 # colour itself.  A plain lexical scan
+                                 # would have missed the bug it exists
+                                 # for: DIMCHECK/COVERCHECK/LINFINCHECK's
+                                 # unstage helpers re-resolved the grey
+                                 # fade colour on every reviewed entity
+                                 # instead of reusing the caller's
+                                 # already-hoisted value
 python3 tools/probe_report.py    # not a check: replays a failure report in
                    REPORT.dxf    # the VM and varies its inputs one at a
                                  # time, to say which one the failure is

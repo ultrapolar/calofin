@@ -29,6 +29,7 @@ check:
 	$(PY) tools/check_lazdiag.py
 	$(PY) tools/check_osnap.py
 	$(PY) tools/check_color.py
+	$(PY) tools/check_perf.py
 	$(PY) tools/check_vb.py
 	$(PY) tools/check_dcl.py
 
