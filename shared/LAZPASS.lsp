@@ -50766,7 +50766,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v2.2")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v2.3")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -51570,10 +51570,10 @@
 ;; the angle from its centre out through mid to the clear side, else
 ;; nil.  Radially out first, then radially in, the way a straight
 ;; segment's two sides are tried.
-(defun ad:arcang (centre mid diag eps ss / a)
+(defun ad:arcang (centre mid diag eps objs / a)
   (setq a (angle centre mid))
-  (cond ((ad:sideclear mid a diag eps ss) a)
-        ((ad:sideclear mid (+ a pi) diag eps ss) (+ a pi))))
+  (cond ((ad:sideclear mid a diag eps objs) a)
+        ((ad:sideclear mid (+ a pi) diag eps objs) (+ a pi))))
 
 ;; every straight segment of every entity in ss, as (p1 p2) pairs
 (defun ad:allsegs (ss / i en s out)
@@ -51625,42 +51625,52 @@
 
 ;; ------------------------------------------ part 1: perimeter dimensions
 
-;; T if nothing in ss lies between pt and pt + dist along direction ang
-(defun ad:sideclear (pt ang dist eps ss / lin lobj i rtn clear)
+;; One vla-object per entity of ss, in ss order; nil for no ss.  The
+;; side probes test every segment against every one of these, so the
+;; set is converted once per perimeter rather than once per probe.
+(defun ad:ss-objs (ss / i out)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq out (cons (vlax-ename->vla-object (ssname ss i)) out)
+            i   (1+ i))))
+  (reverse out))
+
+;; T if nothing in objs (ad:ss-objs of the selection) lies between pt
+;; and pt + dist along direction ang
+(defun ad:sideclear (pt ang dist eps objs / lin lobj rtn clear)
   ;; entlast is only OUR line if the entmake actually made one -- on a
   ;; failure it would name the user's own last-drawn entity, which the
   ;; entdel at the bottom would then erase
   (setq clear t
-        i     0
         lin   (if (entmake (list '(0 . "LINE")
                                  (cons 10 (polar pt ang eps))
                                  (cons 11 (polar pt ang dist))))
                 (entlast)))
   (if lin (setq lobj (vlax-ename->vla-object lin)))
-  (if (and lin ss)
-    (while (and clear (< i (sslength ss)))
-      (setq rtn (vl-catch-all-apply
-                  'vlax-invoke
-                  (list lobj 'IntersectWith
-                        (vlax-ename->vla-object (ssname ss i)) acextendnone)))
+  (if (and lin objs)
+    (while (and clear objs)
+      (setq rtn  (vl-catch-all-apply
+                   'vlax-invoke
+                   (list lobj 'IntersectWith (car objs) acextendnone))
+            objs (cdr objs))
       (if (and (not (vl-catch-all-error-p rtn)) rtn)
-        (setq clear nil))
-      (setq i (1+ i))))
+        (setq clear nil))))
   (if lin (entdel lin))
   clear)
 
 ;; if segment p1-p2 lies on the perimeter of the highlighted geometry,
 ;; return the angle pointing to its clear (outside) side, else nil
-(defun ad:perimang (p1 p2 diag eps ss / mid a)
+(defun ad:perimang (p1 p2 diag eps objs / mid a)
   (setq mid (cal:midn p1 p2)
         a   (angle p1 p2))
-  (cond ((ad:sideclear mid (+ a (* 0.5 pi)) diag eps ss) (+ a (* 0.5 pi)))
-        ((ad:sideclear mid (- a (* 0.5 pi)) diag eps ss) (- a (* 0.5 pi)))))
+  (cond ((ad:sideclear mid (+ a (* 0.5 pi)) diag eps objs) (+ a (* 0.5 pi)))
+        ((ad:sideclear mid (- a (* 0.5 pi)) diag eps objs) (- a (* 0.5 pi)))))
 
 ;; every straight segment on the perimeter of ss, as
 ;; (length p1 p2 where-its-dim-goes).  Length first, so the records
 ;; group by size.
-(defun ad:perimsegs (ss diag eps off / out i en seg len pa)
+(defun ad:perimsegs (ss diag eps off objs / out i en seg len pa)
   (setq out '()
         i   0)
   (repeat (sslength ss)
@@ -51669,7 +51679,7 @@
     (foreach seg (ad:segs en)
       (setq len (distance (car seg) (cadr seg)))
       (if (and (> len 1e-8)
-               (setq pa (ad:perimang (car seg) (cadr seg) diag eps ss)))
+               (setq pa (ad:perimang (car seg) (cadr seg) diag eps objs)))
         (setq out (cons (list len (car seg) (cadr seg)
                               (polar (cal:midn (car seg) (cadr seg)) pa off))
                         out)))))
@@ -51677,10 +51687,10 @@
 
 ;; every arc on the perimeter of ss, as
 ;; (radius entity point-on-it centre where-its-dim-goes)
-(defun ad:perimarcs (ss diag eps off / out rec pa)
+(defun ad:perimarcs (ss diag eps off objs / out rec pa)
   (setq out '())
   (foreach rec (ad:arcs ss)
-    (if (setq pa (ad:arcang (cadddr rec) (caddr rec) diag eps ss))
+    (if (setq pa (ad:arcang (cadddr rec) (caddr rec) diag eps objs))
       (setq out (cons (append rec (list (polar (caddr rec) pa off))) out))))
   (reverse out))
 
@@ -51724,7 +51734,7 @@
 ;; the sides in a settled order - but no group is collapsed onto its
 ;; first member.
 ;; Returns how many dimensions were placed.
-(defun ad:dimperim (ss all / box diag eps off cnt g rec)
+(defun ad:dimperim (ss all / box diag eps off cnt g rec objs)
   (setq box (cal:bbox-ss ss)
         cnt 0)
   (if box
@@ -51733,9 +51743,12 @@
             eps  (* 1e-6 diag)
             ;; at least ad:*perim-feet* away from the perimeter,
             ;; heading outwards
-            off  (max (ad:dimoff) (ad:feet ad:*perim-feet*)))
+            off  (max (ad:dimoff) (ad:feet ad:*perim-feet*))
+            ;; the side probes' targets, converted once for both walks
+            objs (ad:ss-objs ss))
       ;; the straight sides
-      (foreach g (ad:groupsame (ad:perimsegs ss diag eps off) (ad:dupetol))
+      (foreach g (ad:groupsame (ad:perimsegs ss diag eps off objs)
+                               (ad:dupetol))
         (if (and (not all) (>= (length g) ad:*typ-lines*))
           (setq rec (ad:linegrouprep g)
                 cnt (+ cnt (ad:putaligned (cadr rec) (caddr rec) (cadddr rec)
@@ -51744,7 +51757,8 @@
             (setq cnt (+ cnt (ad:putaligned (cadr rec) (caddr rec) (cadddr rec)
                                             ad:*style-plan* ""))))))
       ;; the arcs, by radius
-      (foreach g (ad:groupsame (ad:perimarcs ss diag eps off) (ad:dupetol))
+      (foreach g (ad:groupsame (ad:perimarcs ss diag eps off objs)
+                               (ad:dupetol))
         (if (and (not all) (>= (length g) ad:*typ-curves*))
           (setq rec (ad:radgrouprep g)
                 cnt (+ cnt (ad:putradius (car rec) (cadr rec) (caddr rec)
@@ -70169,7 +70183,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cleardim-version* "v3.1")   ; announced on load; release_lisp.py
+(setq *cleardim-version* "v3.2")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -71607,7 +71621,15 @@
 ;; index so that dimension alone ignores it; the extension lines are
 ;; tagged nil, because a text over one of those is unreadable whoever
 ;; drew it.
-(defun cd:static-obs (ss recs runs / out i n en ed typ lay own p r tag)
+;; Two halves, because only the second depends on where the rows put
+;; the dimensions: cd:plan-rows reads SS once with cd:ss-obs and hands
+;; that to cd:rec-obs on every try.
+(defun cd:static-obs (ss recs runs)
+  (cd:rec-obs (cd:ss-obs ss) recs runs))
+
+;; The entities in SS that are ink, as obstacles, tagged nil.  Reads
+;; the drawing and nothing else: an entget, the polygons, their boxes.
+(defun cd:ss-obs (ss / out i n en ed typ lay p)
   (setq out nil i 0 n (if ss (sslength ss) 0))
   (while (< i n)
     (setq en  (ssname ss i)
@@ -71618,6 +71640,13 @@
       (foreach p (cd:ent-polys en)
         (setq out (cons (cd:ob nil p) out))))
     (setq i (1+ i)))
+  out)
+
+;; BASE with what every dimension in RECS draws for itself consed onto
+;; its front.  BASE is only ever consed onto, never altered, so one
+;; cd:ss-obs list can stand under every try.
+(defun cd:rec-obs (base recs runs / out own p r tag)
+  (setq out base)
   (foreach r recs
     (setq own (cd:r-own r)
           tag (cond ((cd:run-of (cd:r-idx r) runs)) ((list (cd:r-idx r)))))
@@ -71831,15 +71860,20 @@
 ;; against, which carry the rows in their cd:r-shift and are what
 ;; cd:apply must be handed.
 (defun cd:plan-rows (ss recs / runs state tries going shifted static
-                        results score best bestrecs bestscore next)
+                        results score best bestrecs bestscore next base)
   (setq runs  (cd:runs recs)
         recs  (cd:bound-runs recs runs)
         state (mapcar 'cd:run-state runs)
         tries 0
         going T)
+  ;; The ink in SS is the same on every try, so it is read once.  That
+  ;; holds only while planning is read-only -- the one entmod is in
+  ;; cd:apply, after this returns.  Anything that ever changes the
+  ;; drawing between tries has to move this back inside the loop.
+  (setq base (cd:ss-obs ss))
   (while going
     (setq shifted (cd:shift-all recs (cd:state-rows state recs))
-          static  (cd:static-obs ss shifted runs)
+          static  (cd:rec-obs base shifted runs)
           results (cd:plan shifted static)
           score   (cd:score results state))
     ;; strictly better only, so a later arrangement that merely ties

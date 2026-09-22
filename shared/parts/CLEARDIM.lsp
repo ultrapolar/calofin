@@ -184,7 +184,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cleardim-version* "v3.1")   ; announced on load; release_lisp.py
+(setq *cleardim-version* "v3.2")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -1622,7 +1622,15 @@
 ;; index so that dimension alone ignores it; the extension lines are
 ;; tagged nil, because a text over one of those is unreadable whoever
 ;; drew it.
-(defun cd:static-obs (ss recs runs / out i n en ed typ lay own p r tag)
+;; Two halves, because only the second depends on where the rows put
+;; the dimensions: cd:plan-rows reads SS once with cd:ss-obs and hands
+;; that to cd:rec-obs on every try.
+(defun cd:static-obs (ss recs runs)
+  (cd:rec-obs (cd:ss-obs ss) recs runs))
+
+;; The entities in SS that are ink, as obstacles, tagged nil.  Reads
+;; the drawing and nothing else: an entget, the polygons, their boxes.
+(defun cd:ss-obs (ss / out i n en ed typ lay p)
   (setq out nil i 0 n (if ss (sslength ss) 0))
   (while (< i n)
     (setq en  (ssname ss i)
@@ -1633,6 +1641,13 @@
       (foreach p (cd:ent-polys en)
         (setq out (cons (cd:ob nil p) out))))
     (setq i (1+ i)))
+  out)
+
+;; BASE with what every dimension in RECS draws for itself consed onto
+;; its front.  BASE is only ever consed onto, never altered, so one
+;; cd:ss-obs list can stand under every try.
+(defun cd:rec-obs (base recs runs / out own p r tag)
+  (setq out base)
   (foreach r recs
     (setq own (cd:r-own r)
           tag (cond ((cd:run-of (cd:r-idx r) runs)) ((list (cd:r-idx r)))))
@@ -1846,15 +1861,20 @@
 ;; against, which carry the rows in their cd:r-shift and are what
 ;; cd:apply must be handed.
 (defun cd:plan-rows (ss recs / runs state tries going shifted static
-                        results score best bestrecs bestscore next)
+                        results score best bestrecs bestscore next base)
   (setq runs  (cd:runs recs)
         recs  (cd:bound-runs recs runs)
         state (mapcar 'cd:run-state runs)
         tries 0
         going T)
+  ;; The ink in SS is the same on every try, so it is read once.  That
+  ;; holds only while planning is read-only -- the one entmod is in
+  ;; cd:apply, after this returns.  Anything that ever changes the
+  ;; drawing between tries has to move this back inside the loop.
+  (setq base (cd:ss-obs ss))
   (while going
     (setq shifted (cd:shift-all recs (cd:state-rows state recs))
-          static  (cd:static-obs ss shifted runs)
+          static  (cd:rec-obs base shifted runs)
           results (cd:plan shifted static)
           score   (cd:score results state))
     ;; strictly better only, so a later arrangement that merely ties
