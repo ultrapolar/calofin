@@ -225,12 +225,14 @@ def answers(vm, kind):
 SETTINGS = [None, None, None, "None", "No", "No", "No"]
 
 
-def run(cut, extra=None, pts=None, keep="2"):
+def run(cut, extra=None, pts=None, keep="2", omit=None):
     """Drive c:CABHD once over the survey with CUT as the cutoff answer
-    and KEEP as the choice of fit.  EXTRA is appended after the choice
-    (a Redo's answers).  Returns the VM."""
+    and KEEP as the choice of fit.  OMIT is step 9's answers - the
+    points to leave out - and defaults to Enter, taking none.  EXTRA is
+    appended after the choice (a Redo's answers).  Returns the VM."""
     vm, ents = survey_vm(pts)
-    script = SETTINGS + [ents, cut, keep] + list(extra or [])
+    script = (SETTINGS + [ents, cut] + list(omit or []) + [None, keep]
+              + list(extra or []))
     vm.run('c:CABHD', script)
     return vm
 
@@ -349,7 +351,7 @@ check('All keeps every point (same as Enter)',
       and max(v[1] for v in kept_polyline(vm)) > 400.0)
 print('CABHD -- Pick reads a number off the drawing')
 vm, ents = survey_vm()
-vm.run('c:CABHD', SETTINGS + [ents, "Pick", POOL[17], "2"])
+vm.run('c:CABHD', SETTINGS + [ents, "Pick", POOL[17], None, "2"])
 verts = kept_polyline(vm)
 check('picking Pt.18 cuts exactly where typing 18 does',
       verts is not None and max(v[1] for v in verts) < 200.0)
@@ -357,7 +359,8 @@ check('picking Pt.18 cuts exactly where typing 18 does',
 # the point can be typed at the Pick, in any of PERPMARK's spellings,
 # and a click on nothing is re-asked where it stands - not snapped
 vm, ents = survey_vm()
-vm.run('c:CABHD', SETTINGS + [ents, "Pick", (9000.0, 9000.0), "Pt.18", "2"])
+vm.run('c:CABHD',
+       SETTINGS + [ents, "Pick", (9000.0, 9000.0), "Pt.18", None, "2"])
 verts = kept_polyline(vm)
 check('a Pick clicked on nothing is re-asked, and a typed number lands it',
       'No survey point there' in ''.join(vm.printed)
@@ -367,14 +370,14 @@ print('CABHD -- a declaration past the cutoff is dropped by name')
 vm, ents = survey_vm()
 vm.run('c:CABHD', [None, None, None, "None", "No", "No",
                    "Yes", "24", None,               # hold Pt.24: past the cutoff
-                   ents, 18, "2"])
+                   ents, 18, None, "2"])
 check('a held point past the cutoff is named, and dropped for that reason',
       'Pt.24 sits past the cutoff - the hold declared on it is dropped'
       in ''.join(vm.printed) and 'snapped' not in ''.join(vm.printed))
 
 print('CABHD -- a cutoff that starves the fit is refused and re-asked')
 vm, ents = survey_vm()
-vm.run('c:CABHD', SETTINGS + [ents, 2, 18, "2"])
+vm.run('c:CABHD', SETTINGS + [ents, 2, 18, None, "2"])
 check('the too-small answer was rejected, the second one used',
       len(answers(vm, 'Include points up to')) == 2)
 check('and the fit that came out is the pool',
@@ -385,7 +388,9 @@ print('CABHD -- the cutoff moves at a Redo')
 vm, ents = survey_vm()
 #            select   cut   Redo   omit:none  cutoff  walls corners holds
 #            then the three numbers again, then keep fit 2
-vm.run('c:CABHD', SETTINGS + [ents, 18, "Redo",
+vm.run('c:CABHD', SETTINGS + [ents, 18,
+                              None,            # step 9: nothing left out
+                              "Redo",
                               None,            # nothing to omit
                               "All",           # put every point back
                               "Keep", "Keep", "Keep",  # walls/corners/holds
@@ -398,7 +403,9 @@ check('the cutoff was asked twice - once per pass',
       len(answers(vm, 'Include points up to')) == 2)
 
 vm, ents = survey_vm()
-vm.run('c:CABHD', SETTINGS + [ents, None, "Redo",
+vm.run('c:CABHD', SETTINGS + [ents, None,
+                              None,            # step 9: nothing left out
+                              "Redo",
                               None,            # nothing to omit
                               18,              # now cut the steps off
                               "Keep", "Keep", "Keep",
@@ -407,6 +414,67 @@ vm.run('c:CABHD', SETTINGS + [ents, None, "Redo",
 verts = kept_polyline(vm)
 check('a cutoff typed at the Redo drops the step points',
       verts is not None and max(v[1] for v in verts) < 200.0)
+
+print('CABHD -- step 9 leaves points out, and they are called out')
+# The cutoff says where the pool edge STOPS; step 9 says which of the
+# pool's own shots the fit should not chase.  A left-out point is not
+# thrown away: it is ringed with the ones the fit missed and measured
+# against the line that was kept, because that number is what says
+# whether leaving it out was right.
+
+
+def _on_layer(vm, etype, lay):
+    out = []
+    for e in vm.entities:
+        if e in vm.deleted:
+            continue
+        if (group(vm, e, 0)[:1] == [etype]
+                and [str(x).upper() for x in group(vm, e, 8)[:1]]
+                    == [lay.upper()]):
+            out.append(e)
+    return out
+
+
+def _texts(vm, lay):
+    return [str(group(vm, e, 1)[0]) for e in _on_layer(vm, 'TEXT', lay)
+            if group(vm, e, 1)]
+
+
+vm = run(18, omit=["5"])
+out = ' '.join(vm.printed)
+check('step 9 is asked after the cutoff, and names what it took',
+      'Step 9 of 9 - any of those points to leave OUT' in out
+      and 'omitting Pt.5' in out)
+check('...and the fit was built without it',
+      '1 point(s) left out' in out)
+check('...but it is still measured against the line that was kept',
+      re.search(r"Pt\.5\s+off by .+\(left out\)", out) is not None)
+check('...and ringed on FGStep with the points the fit missed',
+      len(_on_layer(vm, 'CIRCLE', 'FGStep')) >= 1)
+
+drawn = _texts(vm, 'FGStep')
+check('the list beside the pool tags it as left out',
+      any(t.startswith('Pt.5') and '(left out)' in t for t in drawn))
+check('and the last line names every bad point in one sentence',
+      bool(drawn) and drawn[-1].startswith('- Pt.')
+      and drawn[-1].endswith(' bad.') and 'Pt.5' in drawn[-1])
+
+# what the CUTOFF dropped is not a bad point - it is not a pool-edge
+# shot at all, and ringing a bench shot as one is the report CABHD
+# exists to stop
+check('a point past the cutoff is in none of that',
+      not any('Pt.19' in t or 'Pt.20' in t for t in drawn))
+
+# the sentence itself: BPCALLOUT's wording, by count
+vm2 = VM()
+vm2.load(LSP)
+for names, want in ((['12'], '- Pt.12 is bad.'),
+                    (['12', '15'], '- Pt.12 and Pt.15 are bad.'),
+                    (['12', '15', '20'],
+                     '- Pt.12, Pt.15 and Pt.20 are bad.')):
+    got = vm2.loads('(cab:bad-phrase (list %s))'
+                    % ' '.join('"%s"' % n for n in names))
+    check('%d name(s) read "%s"' % (len(names), want), got == want)
 
 print('CABHD -- it stops at the perimeter')
 vm = run(18)
@@ -427,7 +495,7 @@ check('and it reported the cutoff it applied',
       any('Up to Pt.18' in s for s in vm.printed))
 
 vm, ents = survey_vm()
-vm.run('c:CABHD', SETTINGS + [ents, 18, "None"])
+vm.run('c:CABHD', SETTINGS + [ents, 18, None, "None"])
 check('erasing all three still signs off',
       'CABHD done (last step:' in ' '.join(vm.printed))
 
@@ -474,7 +542,7 @@ def with_refusal(colours, script):
     return vm
 
 
-vm = with_refusal({1}, lambda e: [e, 18, "2"])     # 1 = the tight fit
+vm = with_refusal({1}, lambda e: [e, 18, None, "2"])     # 1 = the tight fit
 said = ' '.join(vm.printed)
 check('the run carries on and keeps a fit that did draw',
       kept_polyline(vm) is not None)
@@ -482,13 +550,13 @@ check('the table says which candidate did not draw', 'would not draw' in said)
 check('and it does not claim three are on screen',
       '2 candidate fit(s) are now drawn' in said)
 
-vm = with_refusal({1}, lambda e: [e, 18, "1"])     # pick the missing one
+vm = with_refusal({1}, lambda e: [e, 18, None, "1"])  # pick the missing one
 said = ' '.join(vm.printed)
 check('picking the missing fit says so instead of reporting on it',
       'never drew - there is nothing to keep' in said)
 check('and nothing landed on the POOL layer', kept_polyline(vm) is None)
 
-vm = with_refusal({1, 2, 4}, lambda e: [e, 18])    # every one refused
+vm = with_refusal({1, 2, 4}, lambda e: [e, 18, None])  # every one refused
 said = ' '.join(vm.printed)
 check('no candidate drawing at all is explained, not swallowed',
       'none of the' in said and 'would draw' in said)
@@ -502,7 +570,7 @@ for p in SURVEY:
     vm.loads('(entmake \'((0 . "POINT") (8 . "POINTS")'
              ' (10 %.6f %.6f 0.0)))' % (p[0], p[1]))
     ents.append(vm.entities[-1])
-vm.run('c:CABHD', SETTINGS + [ents, 18, "2"])
+vm.run('c:CABHD', SETTINGS + [ents, 18, None, "2"])
 verts = kept_polyline(vm)
 check('the 18th selected point is the cutoff',
       verts is not None and max(v[1] for v in verts) < 200.0)
@@ -537,7 +605,8 @@ check("a typed number wins over the count",
       vm.loads('(cab:cap-for 18)') == 4)
 
 vm, ents = survey_vm()
-vm.run('c:CABHD', [None, None, None, None, "No", "No", "No", ents, 18, "2"])
+vm.run('c:CABHD',
+       [None, None, None, None, "No", "No", "No", ents, 18, None, "2"])
 check('Enter at the cap prompt caps the kept fit at the recommendation',
       kept_polyline(vm) is not None and len(kept_polyline(vm)) <= 6)
 
@@ -567,7 +636,7 @@ for i, (p_, label) in enumerate(
     ents.append(vm.entities[-1])
     vm.loads('(entmake \'((0 . "ATTRIB") (8 . "POINTS") (2 . "number")'
              ' (1 . "%s")))' % label)
-vm.run('c:CABHD', SETTINGS + [ents, 18, "2"])
+vm.run('c:CABHD', SETTINGS + [ents, 18, None, "2"])
 verts = kept_polyline(vm)
 check('the moved point is left out, and said so',
       '1 moved point(s)' in ''.join(vm.printed))
@@ -579,7 +648,8 @@ check('...so the outline still spans the pool it was given',
 
 print('CABHD -- pickfirst: a selection made before the command is used as-is')
 vm, ents = survey_vm()
-vm.run('c:CABHD', [ents, None, None, None, "No", "No", "No", 18, "2"])
+vm.run('c:CABHD',
+       [ents, None, None, None, "No", "No", "No", 18, None, "2"])
 check('the probe took the selection, the Select prompt was never asked',
       vm.prompts[0][0] == 'ssget _I'
       and not any(p == 'ssget' for p, _v in vm.prompts))

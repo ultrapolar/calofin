@@ -4466,7 +4466,7 @@ def test_the_command_wraps_the_fit():
     vm.pickfirst = ['<ss>'] + pts
     vm.run('c:FITABHD', SETTINGS)
     asked = ' '.join(p for p, _ in vm.prompts)
-    assert 'Step 7 of 7' not in ''.join(vm.printed), 'step 7 was still asked'
+    assert 'Step 7 of 8' not in ''.join(vm.printed), 'step 7 was still asked'
     assert not any(p == 'ssget' for p, _ in vm.prompts), vm.prompts
     print("  a pre-typed selection is taken and step 7 never asked")
 
@@ -4511,6 +4511,65 @@ def test_leaving_points_out_toggles():
     assert len(vm.loads("(fit:active)")) == 3
     assert vm.loads("fit-omit") is None
     print("  points can be left out of a Redo, and put back")
+
+
+def test_step_8_leaves_points_out_and_calls_them_bad():
+    """Step 8 asks which points to leave out with the whole survey in
+    hand - not only after a fit has been pulled out of square by one -
+    and what it takes is still ringed, measured and named."""
+    from lispvm import VM, Dot
+
+    vm = VM()
+    vm.load(LISP_FILE)
+    vm.loads('''(entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
+                    '(100 . "AcDbLayerTableRecord") '(2 . "POINTS")
+                    '(70 . 0) '(62 . 7) '(6 . "Continuous")))''')
+    # a rectangle, plus one shot thrown well clear of it
+    corners = [(0.0, 0.0), (120.0, 0.0), (240.0, 0.0), (240.0, 60.0),
+               (240.0, 120.0), (120.0, 120.0), (0.0, 120.0), (0.0, 60.0),
+               (150.0, 175.0)]
+    pts = []
+    for i, (x, y) in enumerate(corners, start=1):
+        vm.loads('(entmake (list \'(0 . "INSERT") \'(2 . "ab_pt")'
+                 ' \'(8 . "POINTS") (list 10 %r %r 0.0)))' % (x, y))
+        pts.append(vm.entities[-1])
+        vm.loads('(entmake (list \'(0 . "ATTRIB") \'(8 . "POINTS")'
+                 ' \'(2 . "number") (cons 1 "%d")))' % i)
+    vm.pickfirst = ['<ss>'] + pts
+    vm.run('c:FITABHD',
+           ["Rectangle", "Square", 1.0, 15, "Insquare", "No",
+            "9", None,            # step 8: leave Pt.9 out, then done
+            "Keep", "No"])        # keep the fit, no bottom
+    said = ''.join(vm.printed)
+    assert 'Step 8 of 8 - any of those points to leave OUT' in said, \
+        said[:400]
+    assert 'leaving out Pt.9' in said, said[:600]
+    assert '1 point(s) left out' in said, said[:600]
+    assert re.search(r"Pt\.9\s+off by .+\(left out\)", said), said[-800:]
+    assert 'POINTS YOU LEFT OUT (1)' in said, said[-800:]
+    assert '- Pt.9 is bad.' in said, said[-400:]
+
+    # ...and it is ringed on the miss layer, like a stray the fit missed
+    miss = vm.loads('fit:*miss-layer*')
+    rings = [e for e in vm.entities
+             if e not in vm.deleted
+             and any((isinstance(g, Dot) and g.a == 0 and g.b == 'CIRCLE')
+                     or (isinstance(g, list) and g[:2] == [0, 'CIRCLE'])
+                     for g in vm.entdata.get(e, []))
+             and str(vm.layer_of(e)).upper() == str(miss).upper()]
+    assert rings, 'the point left out was not ringed on ' + str(miss)
+
+    # the sentence itself: BPCALLOUT's wording, by count
+    vm2 = VM()
+    vm2.load(LISP_FILE)
+    for names, want in ((["12"], "- Pt.12 is bad."),
+                        (["12", "15"], "- Pt.12 and Pt.15 are bad."),
+                        (["12", "15", "20"],
+                         "- Pt.12, Pt.15 and Pt.20 are bad.")):
+        got = vm2.loads('(fit:bad-phrase (list %s))'
+                        % ' '.join('"%s"' % n for n in names))
+        assert got == want, (got, want)
+    print("  step 8 leaves a point out, and it is ringed, measured and named")
 
 
 def test_a_point_to_leave_out_is_named():
@@ -4801,6 +4860,7 @@ def main():
     test_the_questions_run_and_step_back()
     test_leaving_points_out_toggles()
     test_a_point_to_leave_out_is_named()
+    test_step_8_leaves_points_out_and_calls_them_bad()
     test_a_moved_point_is_not_a_survey_point()
     test_the_command_wraps_the_fit()
     print("\nall tests passed")

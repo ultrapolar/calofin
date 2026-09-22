@@ -277,7 +277,7 @@ for word, want in (('b', True), ('B', True), ('Back', True), ('BACK', True),
 
 # --------------------------------------------------- 4. ABHD walks back
 
-print("\nABHD: the seven-step chain, walked backwards")
+print("\nABHD: the eight-step chain, walked backwards")
 
 vm = newvm(('abhd', 'abhd.lsp'))
 layer(vm, 'POINTS')
@@ -300,17 +300,19 @@ vm.run('c:ABHD',
         RING[1], RING[7], 'No',      #         declare a different one
         'Back',                      # step 5  corners  -> step 4
         'No', 'No', 'No',            # steps 4, 5, 6
-        ents, 'None'])
+        ents,                        # step 7  the selection
+        None,                        # step 8  nothing left out
+        'None'])
 out = said(vm)
 
-check("Back at step 3 re-asks step 2", out.count("Step 2 of 7") >= 2)
-check("B is taken as Back at a numeric prompt", out.count("Step 3 of 7") >= 3)
-check("U is taken as Back at a keyword prompt", out.count("Step 4 of 7") >= 3)
+check("Back at step 3 re-asks step 2", out.count("Step 2 of 8") >= 2)
+check("B is taken as Back at a numeric prompt", out.count("Step 3 of 8") >= 3)
+check("U is taken as Back at a keyword prompt", out.count("Step 4 of 8") >= 3)
 check("the chain says which way it moved", "Stepping back one question" in out)
 check("Back in the wall loop takes back that wall",
       "Stepping back one wall" in out)
 check("a step re-opened from below drops what it collected",
-      "straight wall(s) noted" not in out.split("Step 5 of 7")[-1])
+      "straight wall(s) noted" not in out.split("Step 5 of 8")[-1])
 check("...markers included", not live(vm, lay='POOL-WALLS'),
       "%d left" % len(live(vm, lay='POOL-WALLS')))
 
@@ -324,18 +326,20 @@ vm.run('c:ABHD',
         'Back',                      #   ...at the first end: nothing to undo
         'No',                        # so step 4 asks again, answered No
         'No', 'No',                  # steps 5, 6
-        ents, 'None'])
+        ents,                        # step 7  the selection
+        None,                        # step 8  nothing left out
+        'None'])
 out = said(vm)
 check("Back at the first item of a loop says so",
       "Already at the first wall" in out)
 check("...and re-opens the question that started the loop",
-      out.count("Step 4 of 7") >= 2)
+      out.count("Step 4 of 8") >= 2)
 check("...leaving nothing declared", "straight wall(s) noted" not in out)
 
 
 # -------------------------------------------------- 5. CABHD walks back
 
-print("\nCABHD: the same chain, one step longer")
+print("\nCABHD: the same chain, one step longer again")
 
 vm = newvm(('cabhd', 'CABHD.lsp'))
 layer(vm, 'POINTS')
@@ -357,16 +361,18 @@ vm.run('c:CABHD',
         'No', 'No', 'No',           # steps 4, 5, 6
         ents, 'Back',               # step 8 cutoff -> re-open step 7
         ents, 'B',                  #   ...again, short form
-        ents, None, 'None'])        # selection, cutoff, keep nothing
+        ents, None,                 # selection, then the cutoff
+        None,                       # step 9  nothing left out
+        'None'])                    # keep nothing
 out = said(vm)
-check("Back at step 3 re-asks step 2", out.count("Step 2 of 8") >= 3)
+check("Back at step 3 re-asks step 2", out.count("Step 2 of 9") >= 3)
 check("B and U are both taken as Back",
-      out.count("Step 3 of 8") >= 3 and out.count("Step 4 of 8") >= 2)
+      out.count("Step 3 of 9") >= 3 and out.count("Step 4 of 9") >= 2)
 check("the chain says which way it moved", "Stepping back one question" in out)
 check("Back at the cutoff hands the selection back",
       "Stepping back to the selection" in out)
-check("...and step 7 is put again", out.count("Step 7 of 8") >= 3,
-      "%d" % out.count("Step 7 of 8"))
+check("...and step 7 is put again", out.count("Step 7 of 9") >= 3,
+      "%d" % out.count("Step 7 of 9"))
 
 
 # ---------------------------------------------------- 6. LHD walks back
@@ -683,7 +689,9 @@ ents = survey(vm, [(0.0, 0.0), (120.0, 0.0), (240.0, 0.0), (240.0, 90.0),
                    (240.0, 180.0), (120.0, 180.0), (0.0, 180.0), (0.0, 90.0)])
 vm.run('c:FITABHD',
        [None, "Rectangle", "Square", 1.0, 15, "Insquare", "No",
-        ents, "Keep",
+        ents,
+        None,                        # step 8: nothing left out
+        "Keep",
         "Yes",                       # add the bottom?
         'Back',                      #   ...the deep-end pick backs out of it
         "Yes",                       # asked again

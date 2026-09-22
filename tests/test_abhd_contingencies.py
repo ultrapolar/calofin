@@ -143,6 +143,12 @@ def survey_vm(pts=RING, block=True):
 #: corners or held points.
 SETTINGS = [None, None, None, None, 'No', 'No', 'No']
 
+#: step 8 - the points to leave out of the fit - is asked straight after
+#: the selection, so every script that gets that far carries an answer
+#: for it.  Enter takes none, which is the whole question in one
+#: keystroke; a script that leaves a point out names it here instead.
+NO_OMITS = None
+
 
 def said(vm):
     return ''.join(vm.printed)
@@ -199,13 +205,13 @@ check("nothing selected: says so, draws nothing",
       said(vm)[-120:])
 
 vm, ents = survey_vm(RING[:2])
-run(vm, 'c:ABHD', SETTINGS + [ents])
+run(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS])
 check("two points: names the three-point floor",
       'at least 3 distinct points' in said(vm))
 
 # five inserts on one spot: the fit sees ONE point, not five
 vm, ents = survey_vm([RING[0]] * 5)
-run(vm, 'c:ABHD', SETTINGS + [ents])
+run(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS])
 check("five duplicate points count as one",
       'at least 3 distinct points' in said(vm))
 
@@ -218,14 +224,14 @@ check("POOL geometry but no points: names the layer and the block",
 # a perimeter with a hole in it, and one whose ends never meet
 vm, ents = survey_vm()
 gap = [add_line(vm, RING[0], RING[1]), add_line(vm, RING[2], RING[3])]
-run(vm, 'c:ABHD', SETTINGS + [ents + gap])
+run(vm, 'c:ABHD', SETTINGS + [ents + gap, NO_OMITS])
 check("a gap in the perimeter is reported, not fitted",
       'gap in the POOL perimeter' in said(vm))
 
 vm, ents = survey_vm()
 open_pl = add_pline(vm, RING[:4], closed=False,
                     bulges=[0.2, 0.2, 0.2, 0.2])
-run(vm, 'c:ABHD', SETTINGS + [ents + [open_pl]])
+run(vm, 'c:ABHD', SETTINGS + [ents + [open_pl], NO_OMITS])
 check("a perimeter that does not close is reported",
       'does not close' in said(vm) or 'gap in the POOL' in said(vm),
       said(vm)[-160:])
@@ -239,14 +245,14 @@ vm, ents = survey_vm()
 vm.loads('(entmake (list \'(0 . "SPLINE") \'(8 . "POOL")'
          ' (list 10 0.0 0.0 0.0)))')
 spline = vm.entities[-1]
-run(vm, 'c:ABHD', SETTINGS + [ents + [spline], 'None'])
+run(vm, 'c:ABHD', SETTINGS + [ents + [spline], NO_OMITS, 'None'])
 check("a SPLINE on POOL is named, counted and skipped",
       'SPLINE/ELLIPSE object(s)' in said(vm)
       and 'explode or convert' in said(vm))
 
 vm, ents = survey_vm()
 tilted = add_pline(vm, RING, ext=(0.0, 0.7, 0.7))
-run(vm, 'c:ABHD', SETTINGS + [ents + [tilted], 'None'])
+run(vm, 'c:ABHD', SETTINGS + [ents + [tilted], NO_OMITS, 'None'])
 check("geometry drawn in a tilted UCS is called out",
       'not drawn in the world plane' in said(vm)
       and 'UCS to World' in said(vm))
@@ -258,7 +264,7 @@ vm, ents = survey_vm()
 run(vm, 'c:ABHD',
     [None, None, None, None,
      'Yes', (600.0, 300.0), RING[0], RING[6], 'No',  # a wall, first click far off
-     'No', 'No', ents, 'None'])
+     'No', 'No', ents, NO_OMITS, 'None'])
 check("a wall end clicked well off the survey is re-asked, not snapped",
       'No survey point there' in said(vm)
       and 'picked well away' not in said(vm)
@@ -272,7 +278,7 @@ run(vm, 'c:ABHD',
      'Yes', "Pt.1", "#7", 'No',
      'Yes', "pt 4", None,
      'Yes', "010", None,
-     ents, 'None'])
+     ents, NO_OMITS, 'None'])
 check("typed numbers name a wall's ends, a corner and a held point",
       'Wall Pt.1 - Pt.7' in said(vm) and 'Corner Pt.4' in said(vm)
       and 'Held Pt.10' in said(vm)
@@ -285,7 +291,7 @@ vm, ents = survey_vm()
 run(vm, 'c:ABHD',
     [None, None, None, None,
      'Yes', "99", "1", "7", 'No',
-     'No', 'No', ents, 'None'])
+     'No', 'No', ents, NO_OMITS, 'None'])
 check("a number no point carries is named and re-asked",
       'No survey point is numbered "99"' in said(vm)
       and 'Wall Pt.1 - Pt.7' in said(vm), said(vm)[-300:])
@@ -295,7 +301,7 @@ vm, ents = survey_vm()
 run(vm, 'c:ABHD',
     [None, None, None, None,
      'Yes', RING[0], RING[0], RING[6], 'No',        # both ends, one point
-     'No', 'No', ents, 'None'])
+     'No', 'No', ents, NO_OMITS, 'None'])
 check("a wall named on one point twice is refused and the end re-asked",
       'a wall needs two different points' in said(vm)
       and 'Wall Pt.1 - Pt.7' in said(vm), said(vm)[-300:])
@@ -308,7 +314,7 @@ run(vm, 'c:ABHD',
     [None, None, None, None,
      'Yes', "1", "7", 'No',
      'Yes', "4", None,
-     'No', ents[1:], 'None'])                       # Pt.1 not selected
+     'No', ents[1:], NO_OMITS, 'None'])              # Pt.1 not selected
 check("a wall declared on a point outside the selection is dropped by name",
       'Pt.1 is not among the selected points - the wall declared on it'
       ' is dropped' in said(vm)
@@ -323,24 +329,28 @@ check("...while the corner declared on a selected point stays",
 print("\nthe three numbers, at their edges")
 
 vm, ents = survey_vm()
-run(vm, 'c:ABHD', [None, 99.0, None, None, 'No', 'No', 'No', ents, 'None'])
+run(vm, 'c:ABHD',
+    [None, 99.0, None, None, 'No', 'No', 'No', ents, NO_OMITS, 'None'])
 check("a distance past the ceiling is pulled back to it, out loud",
       'no longer a trace of the points' in said(vm)
       and abs(vm.get(Sym('*pf-tol*')) - 2.0) < 1e-9,
       vm.get(Sym('*pf-tol*')))
 
 vm, ents = survey_vm()
-run(vm, 'c:ABHD', [None, None, 250, None, 'No', 'No', 'No', ents, 'None'])
+run(vm, 'c:ABHD',
+    [None, None, 250, None, 'No', 'No', 'No', ents, NO_OMITS, 'None'])
 check("a percentage over 100 is refused with a reason",
       'more than 100 makes no sense' in said(vm))
 
 vm, ents = survey_vm()
-run(vm, 'c:ABHD', [None, None, None, 6, 'No', 'No', 'No', ents, 'None'])
+run(vm, 'c:ABHD',
+    [None, None, None, 6, 'No', 'No', 'No', ents, NO_OMITS, 'None'])
 check("a curve cap is remembered for the session",
       vm.get(Sym('*pf-max-arcs*')) == 6, vm.get(Sym('*pf-max-arcs*')))
 
 vm, ents = survey_vm()
-run(vm, 'c:ABHD', [None, None, None, 'None', 'No', 'No', 'No', ents, 'None'])
+run(vm, 'c:ABHD',
+    [None, None, None, 'None', 'No', 'No', 'No', ents, NO_OMITS, 'None'])
 check("None removes the cap",
       vm.get(Sym('*pf-max-arcs*')) is None, vm.get(Sym('*pf-max-arcs*')))
 
@@ -365,13 +375,14 @@ check("a typed number wins over the count",
       vm.loads('(pf:cap-for 30)') == 4)
 
 vm, ents = survey_vm()
-run(vm, 'c:ABHD', [None, None, None, 'Auto', 'No', 'No', 'No', ents, 'None'])
+run(vm, 'c:ABHD',
+    [None, None, None, 'Auto', 'No', 'No', 'No', ents, NO_OMITS, 'None'])
 check("Auto is remembered for the session like a number would be",
       str(vm.get(Sym('*pf-max-arcs*'))).upper() == 'AUTO',
       vm.get(Sym('*pf-max-arcs*')))
 
 vm, ents = survey_vm()
-run(vm, 'c:ABHD', SETTINGS + [ents, '2', 'No'])
+run(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, '2', 'No'])
 check("Enter at the cap prompt caps the kept fit at the recommendation",
       len(live(vm, 'LWPOLYLINE', 'POOL')) == 1
       and len(pl_verts(vm, live(vm, 'LWPOLYLINE', 'POOL')[0]))
@@ -395,7 +406,7 @@ ents += add_points(vm, [(RING[0][0] - 12.0, RING[0][1])], start=1)
 # renumber that last one "1m" - the point it was worked out from
 vm.entdata[vm.entities[-1]] = [Dot(0, 'ATTRIB'), Dot(8, 'POINTS'),
                                Dot(2, 'number'), Dot(1, '1m')]
-run(vm, 'c:ABHD', SETTINGS + [ents, '2', 'No'])
+run(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, '2', 'No'])
 check("a moved point is left out, and the run says how many",
       '1 moved point(s)' in said(vm))
 check("...and no vertex of the kept fit sits on it",
@@ -414,12 +425,13 @@ print("\nSIMPABHD: the same run, no numbers asked, five fits drawn")
 SIMP = [None, 'No', 'No', 'No']
 
 vm, ents = survey_vm()
-run(vm, 'c:SIMPABHD', SIMP + [ents, '2', 'No'])
+run(vm, 'c:SIMPABHD', SIMP + [ents, NO_OMITS, '2', 'No'])
 out = said(vm)
-check("it asks four steps, not seven",
-      'Step 1 of 4 - does the pool edge' in out
-      and 'Step 4 of 4 - select the survey points' in out
-      and 'of 7' not in out)
+check("it asks five steps, not eight",
+      'Step 1 of 5 - does the pool edge' in out
+      and 'Step 4 of 5 - select the survey points' in out
+      and 'Step 5 of 5 - any of those points to leave OUT' in out
+      and 'of 8' not in out)
 check("...and none of them is a number",
       not any('Maximum distance' in p or 'Percent of points' in p
               or 'Maximum curves' in p for p, _v in vm.prompts),
@@ -451,13 +463,13 @@ check("the hit report names the kept row's own allowance",
       out[out.find('Points off within'):][:60])
 
 vm, ents = survey_vm()
-run(vm, 'c:SIMPABHD', SIMP + [ents, 'None'])
+run(vm, 'c:SIMPABHD', SIMP + [ents, NO_OMITS, 'None'])
 check("None erases all five and adds nothing",
       'All five erased' in said(vm)
       and not live(vm, 'LWPOLYLINE'))
 
 vm, ents = survey_vm()
-run(vm, 'c:SIMPABHD', SIMP + [ents, 'All'])
+run(vm, 'c:SIMPABHD', SIMP + [ents, NO_OMITS, 'All'])
 check("All keeps five outlines, on the preview layer",
       len(live(vm, 'LWPOLYLINE', 'POOL-FIT')) == 5,
       len(live(vm, 'LWPOLYLINE', 'POOL-FIT')))
@@ -467,17 +479,18 @@ check("All keeps five outlines, on the preview layer",
 # falling out of the run and skipping the fit.
 vm, ents = survey_vm()
 run(vm, 'c:SIMPABHD',
-    [None, 'Back', 'No', 'No', 'No', ents, 'None'])
+    [None, 'Back', 'No', 'No', 'No', ents, NO_OMITS, 'None'])
 check("Back at the first question re-opens it instead of leaving",
       'Already at the first question' in said(vm)
-      and said(vm).count('Step 1 of 4 - does the pool edge') == 2
+      and said(vm).count('Step 1 of 5 - does the pool edge') == 2
       and [p for p, _v in vm.prompts].count(
             '\n  Any straight lines? [Yes/No/Back] <No>: ') == 2)
 
 # the Redo has no numbers to re-ask
 vm, ents = survey_vm()
 run(vm, 'c:SIMPABHD',
-    SIMP + [ents, 'Redo', RING[0], None, None, None, None, 'None'])
+    SIMP + [ents, NO_OMITS, 'Redo', RING[0], None, None, None, None,
+            'None'])
 check("Redo omits a point and draws the five again, asking no numbers",
       'omitting Pt.' in said(vm)
       and 'there are no numbers to re-ask' in said(vm)
@@ -494,7 +507,7 @@ layer(vm, 'POOL', 4)
 ents = add_points(vm, RING)
 guide = add_pline(vm, RING, bulges=[math.tan(math.pi / (4 * len(RING)))]
                                    * len(RING))
-run(vm, 'c:SIMPABHD', SIMP + [ents + [guide], 'None'])
+run(vm, 'c:SIMPABHD', SIMP + [ents + [guide], NO_OMITS, 'None'])
 _rows = [ln for ln in said(vm).split('\n')
          if ln.startswith('   1  ') or ln.startswith('   5  ')]
 check("guided: the least-error row still threads the points",
@@ -508,7 +521,7 @@ ents = add_points(vm, RING)
 ents += add_points(vm, [(RING[0][0] - 12.0, RING[0][1])], start=1)
 vm.entdata[vm.entities[-1]] = [Dot(0, 'ATTRIB'), Dot(8, 'POINTS'),
                                Dot(2, 'number'), Dot(1, '1m')]
-run(vm, 'c:SIMPABHD', SIMP + [ents, '2', 'No'])
+run(vm, 'c:SIMPABHD', SIMP + [ents, NO_OMITS, '2', 'No'])
 check("a moved point is left out here too, named by the right command",
       'SIMPABHD: 1 moved point(s)' in said(vm))
 
@@ -518,19 +531,19 @@ check("a moved point is left out here too, named by the right command",
 print("\nthe mode is read off the selection")
 
 vm, ents = survey_vm()
-run(vm, 'c:ABHD', SETTINGS + [ents, 'None'])
+run(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, 'None'])
 check("points alone: ordered automatically",
       'ordering the points automatically' in said(vm))
 
 vm, ents = survey_vm()
 sketch = add_pline(vm, RING)                       # lines only
-run(vm, 'c:ABHD', SETTINGS + [ents + [sketch], 'None'])
+run(vm, 'c:ABHD', SETTINGS + [ents + [sketch], NO_OMITS, 'None'])
 check("a lines-only sketch only orders the points",
       'lines only - using it just to order' in said(vm))
 
 vm, ents = survey_vm()
 guide = add_pline(vm, RING, bulges=[0.15] * len(RING))
-run(vm, 'c:ABHD', SETTINGS + [ents + [guide], 'None'])
+run(vm, 'c:ABHD', SETTINGS + [ents + [guide], NO_OMITS, 'None'])
 check("a drawn perimeter with arcs is used as the guide",
       'drawn POOL perimeter as the guide' in said(vm))
 
@@ -540,20 +553,20 @@ check("a drawn perimeter with arcs is used as the guide",
 print("\nkeeping, keeping all, keeping none")
 
 vm, ents = survey_vm()
-run(vm, 'c:ABHD', SETTINGS + [ents, 'None'])
+run(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, 'None'])
 check("None leaves the drawing as it was",
       'nothing was added to the drawing' in said(vm)
       and not live(vm, 'LWPOLYLINE'),
       [str(e) for e in live(vm, 'LWPOLYLINE')])
 
 vm, ents = survey_vm()
-run(vm, 'c:ABHD', SETTINGS + [ents, 'All'])
+run(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, 'All'])
 check("All keeps three outlines, on the preview layer",
       len(live(vm, 'LWPOLYLINE', 'POOL-FIT')) == 3,
       len(live(vm, 'LWPOLYLINE', 'POOL-FIT')))
 
 vm, ents = survey_vm()
-run(vm, 'c:ABHD', SETTINGS + [ents, '2', 'No'])
+run(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, '2', 'No'])
 kept = live(vm, 'LWPOLYLINE', 'POOL')
 check("keeping one moves it to the POOL layer, alone",
       len(kept) == 1 and not live(vm, 'LWPOLYLINE', 'POOL-FIT'),
@@ -565,7 +578,7 @@ check("the report names the fit that was kept",
 # Enter at the keyword prompt offers a click; a click on nothing keeps
 # the standing default, which the file now names once
 vm, ents = survey_vm()
-run(vm, 'c:ABHD', SETTINGS + [ents, None, None, 'No'])
+run(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, None, None, 'No'])
 check("Enter then Enter keeps the default fit",
       'Keeping fit 2' in said(vm), said(vm)[-200:])
 
@@ -573,7 +586,7 @@ check("Enter then Enter keeps the default fit",
 # has to read the same one, or Enter would keep a fit nobody chose
 vm, ents = survey_vm()
 vm.loads('(setq *PF-DEFAULT-FIT* "3")')
-run(vm, 'c:ABHD', SETTINGS + [ents, None, None, 'No'])
+run(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, None, None, 'No'])
 check("moving *PF-DEFAULT-FIT* moves what Enter keeps",
       'Keeping fit 3' in said(vm), said(vm)[-200:])
 
@@ -781,7 +794,7 @@ for label, ring in (("counterclockwise", RING), ("clockwise", RING[::-1])):
 print("\ncover mode lasts exactly one run")
 
 vm, ents = survey_vm()
-run(vm, 'c:ABHDCOVER', SETTINGS + [ents, '2'])
+run(vm, 'c:ABHDCOVER', SETTINGS + [ents, NO_OMITS, '2'])
 check("ABHDCOVER answers the bottom question for you",
       'Cover sheet - skipping the bottom' in said(vm))
 check("...and clears the flag on the way out",
@@ -812,7 +825,7 @@ print("\nwhat it does to the drawing around it")
 # not called -- and the run still completes
 vm, ents = survey_vm()
 vm.sysvars['UNDOCTL'] = 0
-run(vm, 'c:ABHD', SETTINGS + [ents, '2', 'No'])
+run(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, '2', 'No'])
 check("with undo off it opens no group and still finishes",
       not [c for c in vm.commands if c and c[0] == '_.UNDO']
       and len(live(vm, 'LWPOLYLINE', 'POOL')) == 1)
@@ -822,7 +835,7 @@ vm, ents = survey_vm()
 vm.loads('(entmake (list \'(0 . "LAYER") \'(100 . "AcDbSymbolTableRecord")'
          ' \'(100 . "AcDbLayerTableRecord") \'(2 . "POOL-FIT") \'(70 . 5)'
          ' \'(62 . -3) \'(6 . "Continuous")))')
-run(vm, 'c:ABHD', SETTINGS + [ents, 'None'])
+run(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, 'None'])
 check("an off, frozen or locked output layer is restored, out loud",
       'was off, frozen or locked' in said(vm))
 
@@ -836,7 +849,7 @@ vm.loads('(pf:tag-mine (entlast))')
 vm.loads('(entmake (list \'(0 . "CIRCLE") \'(8 . "FGStep")'
          ' (list 10 600.0 600.0 0.0) \'(40 . 4.0)))')
 theirs = vm.entities[-1]
-run(vm, 'c:ABHD', SETTINGS + [ents, '2', 'No'])
+run(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, '2', 'No'])
 check("on a shared layer it erases its own marks and nothing else",
       mine in vm.deleted and theirs not in vm.deleted)
 
@@ -847,7 +860,7 @@ run(vm, 'c:ABHD',
      'Yes', RING[0], RING[6], 'No',                # a declared wall
      'Yes', RING[3], None,                         # a declared corner
      'Yes', RING[9], None,                         # a held point
-     ents, 'None'])
+     ents, NO_OMITS, 'None'])
 check("declared walls, corners and holds are noted",
       '1 straight wall(s) noted' in said(vm)
       and '1 corner(s) noted' in said(vm)
@@ -859,11 +872,111 @@ check("...and their markers sweep themselves at the end",
 
 # ------------------------------------------------------------ 9. the Redo
 
+print("\nstep 8: the points to leave out, and the bad-point callout")
+
+# The whole point of asking here rather than only at a Redo: the first
+# fit is built without the shot everybody could already see was wrong.
+
+
+def _text_on(vm, lay):
+    """Every TEXT string on LAY, in the order it was written."""
+    out = []
+    for e in live(vm, 'TEXT', lay):
+        for g in vm.entdata.get(e, []):
+            if isinstance(g, Dot) and g.a == 1:
+                out.append(str(g.b))
+            elif isinstance(g, list) and g and g[0] == 1:
+                out.append(str(g[1]))
+    return out
+
+
+# a survey with one shot thrown well off the ellipse: left out at step
+# 8, it must still be ringed, measured and named
+STRAY = list(RING[:4]) + [(RING[4][0] + 40.0, RING[4][1] + 40.0)] \
+        + list(RING[5:])
+
+vm, ents = survey_vm(STRAY)
+run(vm, 'c:ABHD', SETTINGS + [ents, "5", None, '2', 'No'])
+out = said(vm)
+check("step 8 is asked straight after the selection, and says so",
+      'Step 7 of 8 - select the survey points' in out
+      and 'Step 8 of 8 - any of those points to leave OUT' in out,
+      out[:400])
+check("the point named there is left out of the fit, before it is built",
+      'omitting Pt.5' in out
+      and '1 point(s) left out - 11 in the fit.' in out
+      and out.index('1 point(s) left out') < out.index('candidate fits'),
+      out[:400])
+check("...and it is MEASURED against the line that was kept",
+      re.search(r"Pt\.5\s+off by .+\(left out\)", out) is not None,
+      out[-700:])
+
+rings = live(vm, 'CIRCLE', 'FGStep')
+check("...and ringed on FGStep like a point the fit could not hold",
+      len(rings) >= 1, len(rings))
+
+drawn = _text_on(vm, 'FGStep')
+check("the list beside the pool counts the left-out point in",
+      any(t.startswith('POINTS OFF THE LINE (') for t in drawn), drawn)
+check("...names it with how far off it landed, tagged as left out",
+      any(t.startswith('Pt.5') and '(left out)' in t for t in drawn), drawn)
+check("...and the LAST line names every bad point in one sentence",
+      drawn and drawn[-1].startswith('- Pt.')
+      and drawn[-1].endswith(' bad.') and 'Pt.5' in drawn[-1], drawn[-3:])
+check("the same sentence is echoed at the command line",
+      drawn and ('\n  ' + drawn[-1]) in out, out[-300:])
+
+# the sentence itself: BPCALLOUT's wording, by count
+vm2 = newvm()
+for names, want in ((['12'], '- Pt.12 is bad.'),
+                    (['12', '15'], '- Pt.12 and Pt.15 are bad.'),
+                    (['12', '15', '20'],
+                     '- Pt.12, Pt.15 and Pt.20 are bad.')):
+    got = vm2.loads('(pf:bad-phrase (list %s))'
+                    % ' '.join('"%s"' % n for n in names))
+    check('%d name(s) read "%s"' % (len(names), want), got == want, got)
+
+# Enter at step 8 leaves nothing out - the callout still names the
+# points the fit could not hold, and nothing is tagged (left out)
+vm, ents = survey_vm()
+run(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, '2', 'No'])
+check("Enter at step 8 leaves every point in",
+      'point(s) left out' not in said(vm)
+      and 'left out of the fit' not in said(vm)
+      and not any('(left out)' in t for t in _text_on(vm, 'FGStep')),
+      said(vm)[-300:])
+
+# the omit prompt offers no Back - and a typed one is REFUSED where it
+# stands rather than killing the command.  Every prompt in front of it
+# offers Back, so typing it here is the obvious mistake to make, and
+# the sentinel used to reach (car ...) and take the run down with it.
+vm, ents = survey_vm()
+run(vm, 'c:ABHD', SETTINGS + [ents, 'Back', None, '2', 'No'])
+check("Back typed at step 8 is refused, not obeyed and not fatal",
+      'Nothing to go back to here' in said(vm)
+      and 'candidate fits are now drawn' in said(vm)
+      and 'point(s) left out' not in said(vm), said(vm)[-300:])
+
+# a wall declared on a point left out at step 8 is named and dropped
+# for THAT reason - not as one the selection missed
+vm, ents = survey_vm()
+run(vm, 'c:ABHD',
+    [None, None, None, None,
+     'Yes', "1", "7", 'No',                        # a wall on Pt.1 - Pt.7
+     'No', 'No',
+     ents, "1", None,                              # ...then leave Pt.1 out
+     'None'])
+check("a declaration on a point left out at step 8 says why it went",
+      'Pt.1 was left out of the fit - the wall declared on it is'
+      ' dropped' in said(vm)
+      and 'snapped' not in said(vm), said(vm)[-400:])
+
+
 print("\nRedo: omit a point, put it back, refit")
 
 vm, ents = survey_vm()
 run(vm, 'c:ABHD',
-    SETTINGS + [ents, 'Redo',
+    SETTINGS + [ents, NO_OMITS, 'Redo',
                      RING[4], None,                # omit one, then done
                      None, None, None,             # walls/corners/holds: Keep
                      None, None, None,             # the three numbers: Enter
@@ -874,7 +987,7 @@ check("Redo omits the point it was given, by name",
 
 vm, ents = survey_vm()
 run(vm, 'c:ABHD',
-    SETTINGS + [ents, 'Redo',
+    SETTINGS + [ents, NO_OMITS, 'Redo',
                      "5", None,                    # omit one BY NUMBER
                      None, None, None,
                      None, None, None,
@@ -885,7 +998,7 @@ check("a point to omit can be typed by its number",
 
 vm, ents = survey_vm()
 run(vm, 'c:ABHD',
-    SETTINGS + [ents, 'Redo',
+    SETTINGS + [ents, NO_OMITS, 'Redo',
                      RING[4], RING[4], None,       # omit it, then put it back
                      None, None, None,
                      None, None, None,
@@ -898,7 +1011,7 @@ check("picking a ringed point again puts it back in",
 # ends, or a corner, and Remove names the declared corner to drop
 vm, ents = survey_vm()
 run(vm, 'c:ABHD',
-    SETTINGS + [ents, 'Redo',
+    SETTINGS + [ents, NO_OMITS, 'Redo',
                      None,                         # omit nothing
                      'Add', "1", "7", None,        # a wall, typed, then Keep
                      'Add', "4", 'Remove', "Pt.4", None,   # a corner in, then out
@@ -915,7 +1028,7 @@ check("Redo's Add and Remove name their points, typed or clicked",
 # Add refuses the first end again for the second, and re-asks it
 vm, ents = survey_vm()
 run(vm, 'c:ABHD',
-    SETTINGS + [ents, 'Redo',
+    SETTINGS + [ents, NO_OMITS, 'Redo',
                      None,
                      'Add', "1", "1", "7", None,
                      None, None,
@@ -929,7 +1042,7 @@ check("Redo's Add refuses one point for both ends and re-asks the second",
 vm, ents = survey_vm()
 run(vm, 'c:ABHD',
     [None, None, None, None, 'Yes', RING[0], RING[6], 'No', 'No', 'No',
-     ents, 'Redo',
+     ents, NO_OMITS, 'Redo',
      RING[0], None,                                # omit one of its ends
      None, None, None,
      None, None, None,
@@ -940,7 +1053,7 @@ check("a declared wall that loses an end is dropped, with a note",
 # omitting down to two points is refused rather than fitted
 vm, ents = survey_vm(RING[:4])
 run(vm, 'c:ABHD',
-    SETTINGS + [ents, 'Redo', RING[0], RING[1], None])
+    SETTINGS + [ents, NO_OMITS, 'Redo', RING[0], RING[1], None])
 check("omitting below three points stops, and says nothing was redone",
       'Too few points remain' in said(vm))
 
@@ -951,7 +1064,7 @@ print("\nthe session, afterwards")
 
 vm, ents = survey_vm()
 before = dict(vm.sysvars)
-run(vm, 'c:ABHD', SETTINGS + [ents, '2', 'No'])
+run(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, '2', 'No'])
 changed = {k: (before.get(k), v) for k, v in vm.sysvars.items()
            if before.get(k) != v}
 check("a complete run changes no system variable", not changed, changed)
@@ -995,7 +1108,7 @@ layer(vm, 'POINTS')
 layer(vm, 'POOL', 4)
 ents = add_points(vm, RING, block=False)
 run(vm, 'c:ABHD',
-    SETTINGS + [ents, 'Redo', RING[4], None,
+    SETTINGS + [ents, NO_OMITS, 'Redo', RING[4], None,
                 None, None, None, None, None, None, 'None'])
 check("points with no number attribute are numbered in selection order",
       'omitting Pt.5' in said(vm), said(vm)[-160:])
@@ -1014,7 +1127,7 @@ guide = add_pline(vm, RING, bulges=[0.15] * len(RING))
 run(vm, 'c:ABHD',
     [None, None, None, None, 'No', 'No',
      'Yes', RING[3], None,                         # a held point
-     ents + [guide], 'None'])
+     ents + [guide], NO_OMITS, 'None'])
 check("guided mode says a held point only steers the points-built fit",
       'held points only bind the' in said(vm))
 
