@@ -392,7 +392,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.18")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.19")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -2009,10 +2009,10 @@
 ;; because what it rings is a REAL point already in the drawing, not a
 ;; place one might move to.  Scaffolding all the same - the suggestion
 ;; layer, swept at the end of the round.
-(defun abf:dupe-ring (p)
+(defun abf:dupe-ring (p ink)
   (entmake (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
                  (cons 8 abf:*sug-layer*)
-                 (cons 62 (abf:ink abf:*dupe-color* 'guide))
+                 (cons 62 ink)
                  '(100 . "AcDbCircle")
                  (list 10 (car p) (cadr p) 0.0)
                  (cons 40 abf:*dupe-radius*)))
@@ -2020,10 +2020,10 @@
 
 ;; The tag that says which one it is, up and to the right of the ring so
 ;; it clears both the ring and the point's own number underneath it.
-(defun abf:dupe-tag (p tag)
+(defun abf:dupe-tag (p tag ink)
   (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
                  (cons 8 abf:*sug-layer*)
-                 (cons 62 (abf:ink abf:*dupe-color* 'guide))
+                 (cons 62 ink)
                  '(100 . "AcDbText")
                  (list 10 (+ (car  p) abf:*dupe-radius*)
                           (+ (cadr p) abf:*dupe-radius*) 0.0)
@@ -2034,27 +2034,27 @@
 ;; AB line it belongs to.  The label is the answer, so two points on the
 ;; SAME line - a number a survey used twice, which is a drawing fault
 ;; rather than a second survey - are told apart by a letter after it.
-(defun abf:mark-dupe (p tag)
-  (append (abf:dupe-ring p) (abf:dupe-tag p tag)))
+(defun abf:mark-dupe (p tag ink)
+  (append (abf:dupe-ring p ink) (abf:dupe-tag p tag ink)))
 
 ;; One AB line drawn whole: both stakes ringed, the tie between them
 ;; dashed, and the line's tag at the middle of it.  This is what
 ;; ABPCREATE shows when it asks which line a point it is about to plot
 ;; belongs to - there is no point to ring yet, so the lines themselves
 ;; are what is picked between.
-(defun abf:mark-line (l / out)
+(defun abf:mark-line (l ink / out)
   (abf:ensure-dashed)
-  (setq out (append (abf:dupe-ring (abf:ln-a l))
-                    (abf:dupe-ring (abf:ln-b l))))
+  (setq out (append (abf:dupe-ring (abf:ln-a l) ink)
+                    (abf:dupe-ring (abf:ln-b l) ink)))
   (entmake (list '(0 . "LINE") '(100 . "AcDbEntity")
                  (cons 8 abf:*sug-layer*)
-                 (cons 62 (abf:ink abf:*dupe-color* 'guide))
+                 (cons 62 ink)
                  (cons 6 abf:*locus-ltype*) '(100 . "AcDbLine")
                  (list 10 (car (abf:ln-a l)) (cadr (abf:ln-a l)) 0.0)
                  (list 11 (car (abf:ln-b l)) (cadr (abf:ln-b l)) 0.0)))
   (setq out (append out (list (entlast))))
   (append out (abf:dupe-tag (abf:loc (abf:ln-a l) (abf:ln-b l) 0.0)
-                            (abf:ln-tag l))))
+                            (abf:ln-tag l) ink)))
 
 ;; How far a click landed from one of the things on screen: from the
 ;; point, or - for an AB line, which is given as its two stakes - from
@@ -2221,7 +2221,7 @@
 ;; furthest candidate one way round to the furthest the other, through
 ;; the point itself: a dashed grey line through all of them.  Returns
 ;; what it made, in a list, or nil when the group is empty.
-(defun abf:draw-locus (ctr rad pp sugs held / a0 lo hi c d)
+(defun abf:draw-locus (ctr rad pp sugs held ink / a0 lo hi c d)
   (setq a0 (angle (abf:2d ctr) (abf:2d pp))
         lo 0.0
         hi 0.0)
@@ -2237,7 +2237,7 @@
       (abf:ensure-dashed)
       (entmake (list '(0 . "ARC") '(100 . "AcDbEntity")
                      (cons 8 abf:*sug-layer*)
-                     (cons 62 (abf:ink abf:*locus-color* 'guide))
+                     (cons 62 ink)
                      (cons 6 abf:*locus-ltype*)
                      '(100 . "AcDbCircle")
                      (list 10 (car ctr) (cadr ctr) 0.0)
@@ -2301,7 +2301,8 @@
                        np newpt newnm tried lasthold ments ring note
                        npair spots hits h astep movep createp near ra rb
                        why fromfind built deft tmpl pents mk
-                       lines curln pend lsel dtag dupes l oldln snm)
+                       lines curln pend lsel dtag dupes l oldln snm
+                       dupeink locusink)
 
   (defun *error* (m)
     ;; user settings come back FIRST so nothing below can skip them
@@ -2515,7 +2516,12 @@
          (setq hist nil done nil made 0 moves 0 built 0 temps nil
                stage (cond ((and createp pend) 11)
                            (createp 6)
-                           (t 1)))
+                           (t 1))
+               ;; the two dupe-marker colours, resolved once for the
+               ;; whole run: each is a COM round trip if 'auto, and the
+               ;; stage loop below can re-ask either of them many times
+               dupeink  (abf:ink abf:*dupe-color*  'guide)
+               locusink (abf:ink abf:*locus-color* 'guide))
          (while (not done)
            (cond
 
@@ -2599,7 +2605,7 @@
                         (foreach c dtag
                           (setq temps (append temps
                                               (abf:mark-dupe (cadr c)
-                                                             (car c)))))
+                                                             (car c) dupeink))))
                         (princ (strcat "\n  " (itoa (length dupes))
                                        " points are numbered \""
                                        (abf:as-number ans)
@@ -2811,10 +2817,10 @@
                   (setq temps (append temps
                                       (abf:draw-locus
                                         pb (abf:dist pb pp) pp sugs
-                                        abf:*b-name*)
+                                        abf:*b-name* locusink)
                                       (abf:draw-locus
                                         pa (abf:dist pa pp) pp sugs
-                                        abf:*a-name*)))
+                                        abf:*a-name* locusink)))
                   (setq tried (+ (length (abf:deltas (abf:dist pa pp)))
                                  (length (abf:deltas (abf:dist pb pp)))))
                   (princ (strcat "\n\n  Where Pt." nm
@@ -2994,7 +3000,7 @@
               (abf:drop temps)
               (setq temps nil lsel nil)
               (foreach l lines
-                (setq temps (append temps (abf:mark-line l))))
+                (setq temps (append temps (abf:mark-line l dupeink))))
               (princ (strcat "\n  " (itoa (length lines)) " AB lines,"
                              " each ringed at its stakes and labelled on"
                              " the tie between them."))

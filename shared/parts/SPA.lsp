@@ -231,7 +231,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092126 REV27")
+(setq spa:*version* "092226 REV28")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -1597,9 +1597,9 @@
   (setq spa:*pvents* (cons e spa:*pvents*))
   e)
 
-(defun spa:pvline (p1 p2)
+(defun spa:pvline (p1 p2 ink)
   (spa:line p1 p2 spa:*lay-notes* nil)
-  (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))
+  (spa:setcol (entlast) ink))
 
 ;; Guide measuring line, drawn WHITE and DOTTED so it stands out from
 ;; the gray outline.
@@ -3014,7 +3014,10 @@
 ;; the picture matches what will be built.  gq = the guide quad,
 ;; corners = per-corner (type size) with the sizes already clamped for
 ;; display.  Returns the updated pv.
-(defun spa:pvcorners (pv gq corners / ce i k cc ent)
+(defun spa:pvcorners (pv gq corners / ce i k cc ent ink)
+  ;; the fade/guide colour, resolved once for the whole call: measuring
+  ;; it per side/corner would be a COM round trip each time
+  (setq ink (cal:ink spa:*pv-col* 'guide))
   (foreach k (list 'ab 'bc 'cd 'da)
     (spa:pvdel (cdr (assoc k pv))))
   (setq ce (spa:allends gq corners))
@@ -3022,7 +3025,7 @@
   (setq i 0)
   (foreach k (list 'ab 'bc 'cd 'da)
     (setq ent (spa:pvadd (spa:pvline (cadr (nth i ce))
-                                     (car (nth (rem (+ i 1) 4) ce))))
+                                     (car (nth (rem (+ i 1) 4) ce)) ink))
           pv (subst (cons k (list ent)) (assoc k pv) pv)
           i (1+ i)))
   ;; the corner treatments themselves
@@ -3030,11 +3033,11 @@
   (foreach cc corners
     (cond
       ((= (car cc) "Cut")
-       (spa:pvadd (spa:pvline (car (nth i ce)) (cadr (nth i ce)))))
+       (spa:pvadd (spa:pvline (car (nth i ce)) (cadr (nth i ce)) ink)))
       ((= (car cc) "Radius")
        (spa:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
                   spa:*lay-notes* nil)
-       (spa:pvadd (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))))
+       (spa:pvadd (spa:setcol (entlast) ink))))
     (setq i (1+ i)))
   pv)
 
@@ -3157,22 +3160,25 @@
 ;;; -------------------- rectangle flow ---------------------------------
 
 ;; Gray nominal rectangle with its corner letters.
-(defun spa:rectpreview ( / gq cen pr ent all pv)
+(defun spa:rectpreview ( / gq cen pr ent all pv ink)
+  ;; the fade/guide colour, resolved once for the whole preview: the
+  ;; label loop below would otherwise measure it once per corner
+  (setq ink (cal:ink spa:*pv-col* 'guide))
   (setq gq (list (list 0.0 0.0) (list spa:*pv-w* 0.0)
                  (list spa:*pv-w* spa:*pv-l*) (list 0.0 spa:*pv-l*))
         cen (list (* 0.5 spa:*pv-w*) (* 0.5 spa:*pv-l*))
         all nil pv nil)
-  (setq pv (list (cons 'ab (list (spa:pvline (nth 0 gq) (nth 1 gq))))
-                 (cons 'bc (list (spa:pvline (nth 1 gq) (nth 2 gq))))
-                 (cons 'cd (list (spa:pvline (nth 2 gq) (nth 3 gq))))
-                 (cons 'da (list (spa:pvline (nth 3 gq) (nth 0 gq)))))
+  (setq pv (list (cons 'ab (list (spa:pvline (nth 0 gq) (nth 1 gq) ink)))
+                 (cons 'bc (list (spa:pvline (nth 1 gq) (nth 2 gq) ink)))
+                 (cons 'cd (list (spa:pvline (nth 2 gq) (nth 3 gq) ink)))
+                 (cons 'da (list (spa:pvline (nth 3 gq) (nth 0 gq) ink))))
         all (apply 'append (mapcar 'cdr pv)))
   (foreach pr (list (list (nth 0 gq) "A") (list (nth 1 gq) "B")
                     (list (nth 2 gq) "C") (list (nth 3 gq) "D"))
     (spa:text (cal:v+ (car pr)
                       (cal:v* (spa:unit (cal:v- (car pr) cen)) spa:*pv-lbl*))
               spa:*pv-th* (cadr pr) spa:*lay-notes*)
-    (setq ent (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))
+    (setq ent (spa:setcol (entlast) ink)
           all (cons ent all)
           pv (cons (cons (spa:lblkey (cadr pr)) (list ent)) pv)))
   (setq spa:*pvents* all)
@@ -3568,20 +3574,23 @@
 ;; Gray nominal octagon (a regular one -- that is what the shape being
 ;; measured looks like) plus the overall-sheet ties.  Returns
 ;; (outline-pv . tie-pv).
-(defun spa:octpreview ( / npts cen e p q ent all pv k pvo)
+(defun spa:octpreview ( / npts cen e p q ent all pv k pvo ink)
+  ;; the fade/guide colour, resolved once for the whole preview: both
+  ;; loops below would otherwise measure it once per edge/corner
+  (setq ink (cal:ink spa:*pv-col* 'guide))
   (setq npts (spa:octpts 240.0 240.0 70.294 70.294)
         cen (spa:centroid npts)
         all nil pv nil)
   (foreach e spa:*octedges*
     (setq p (nth (car e) npts) q (nth (cadr e) npts)
-          ent (spa:pvline p q)
+          ent (spa:pvline p q ink)
           pv (cons (cons (list (car e) (cadr e)) (list ent)) pv)
           all (cons ent all)))
   (setq k 0)
   (foreach p npts
     (spa:text (spa:lbloff p cen npts spa:*pv-olbl*) spa:*pv-th*
               (nth k spa:*octnames*) spa:*lay-notes*)
-    (setq ent (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))
+    (setq ent (spa:setcol (entlast) ink)
           all (cons ent all)
           pv (cons (cons (spa:lblkey (nth k spa:*octnames*)) (list ent)) pv)
           k (1+ k)))

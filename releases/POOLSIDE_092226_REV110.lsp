@@ -61,7 +61,7 @@
 ;;;  A self-contained file: it carries its own helpers.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.9")
+(setq *poolside-version* "v1.10")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -331,9 +331,9 @@
 
 ;; Guide outline (gray) and guide measuring tie (white, so it reads
 ;; over the outline).
-(defun psd:pvline (p1 p2)
+(defun psd:pvline (p1 p2 ink)
   (psd:line p1 p2 "POOL-NOTES")
-  (psd:setcol (entlast) (psd:ink psd:*pv-col* 'guide)))
+  (psd:setcol (entlast) ink))
 
 (defun psd:pvtieline (p1 p2)
   (psd:line p1 p2 "POOL-NOTES")
@@ -1318,7 +1318,11 @@
 ;; sitting exactly on its neighbour (G answered 0 -- a slope bottom, or
 ;; a sport V) repeats a point, so zero-length segments are dropped
 ;; rather than special-cased per style.
-(defun psd:secdraw (total sta lay pvflag / pts prev p)
+(defun psd:secdraw (total sta lay pvflag / pts prev p ink)
+  ;; the fade/guide colour, resolved once for the whole run when this
+  ;; is a preview pass: measuring it per segment would be a COM round
+  ;; trip per segment
+  (setq ink (if pvflag (psd:ink psd:*pv-col* 'guide)))
   (setq pts (append (list (list 0.0 0.0) (list total 0.0))
                     (mapcar '(lambda (s) (list (car s) (- (cdr s))))
                             (reverse sta))
@@ -1327,7 +1331,7 @@
   (foreach p (cdr pts)
     (if (> (distance prev p) 1.0e-6)
         (if pvflag
-            (psd:pvadd (psd:pvline prev p))
+            (psd:pvadd (psd:pvline prev p ink))
             (psd:line prev p lay)))
     (setq prev p)))
 
