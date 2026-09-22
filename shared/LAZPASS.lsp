@@ -40159,7 +40159,7 @@
 ;;; the same one.
 ;;; ======================================================================
 
-(setq *squareup-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *squareup-version* "v1.1")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/
 
@@ -40485,21 +40485,26 @@
     ((= typ "POLYLINE") (sq:pl-spans en))
     (T nil)))
 
+;; The sampled points of a run of spans, span by span.  Each span's
+;; points are one chunk, and the chunks are joined once at the end
+;; rather than the growing list being copied again for every span.
+(defun sq:spans-pts (spans / s chunks)
+  (setq chunks nil)
+  (foreach s spans
+    (setq chunks (cons (sq:bulge-pts (car s) (cadr s) (caddr s)
+                                     sq:*arcsegs*)
+                       chunks)))
+  (apply 'append (reverse chunks)))
+
 ;; The sampled points of one entity -- what SPAN is measured over.  The
 ;; two curve types with no spans of their own answer here and nowhere
 ;; else.
-(defun sq:ent-pts (en / ed typ s out)
-  (setq ed  (entget en)
-        typ (cdr (assoc 0 ed))
-        out nil)
+(defun sq:ent-pts (en / typ)
+  (setq typ (cdr (assoc 0 (entget en))))
   (cond
     ((= typ "ELLIPSE") (sq:ellipse-pts en))
     ((= typ "SPLINE")  (sq:spline-pts en))
-    (t
-     (foreach s (sq:ent-spans en)
-       (setq out (append out (sq:bulge-pts (car s) (cadr s) (caddr s)
-                                           sq:*arcsegs*))))
-     out)))
+    (t (sq:spans-pts (sq:ent-spans en)))))
 
 ;;; -------------------- locked and frozen layers -------------------------
 ;;; ROTATE SKIPS AN OBJECT ON A LOCKED OR FROZEN LAYER, and says
@@ -40580,6 +40585,10 @@
 ;; end to end becomes the one span running from one extreme of it to
 ;; the other, whichever entity each piece came off.  A perimeter traced
 ;; as forty short segments has four walls, not forty.
+;;
+;; keep is gathered backwards and turned round once per pass, so rest
+;; is exactly the old order less the one span the pass merged -- the
+;; order matters, because the next pass takes the FIRST span that joins.
 (defun sq:merge-walls (spans / out a rest hit keep b)
   (setq out nil)
   (while spans
@@ -40592,28 +40601,31 @@
         (if (and (not hit) (sq:joins-p a b))
           (setq a   (sq:span-union a b)
                 hit T)
-          (setq keep (append keep (list b)))))
-      (setq rest keep))
-    (setq out   (append out (list a))
+          (setq keep (cons b keep))))
+      (setq rest (reverse keep)))
+    (setq out   (cons a out)
           spans rest))
-  out)
+  (reverse out))
 
 ;; (length direction p1 p2) per wall, longest first.  Spans shorter
 ;; than the fuzz are not walls -- a zero-length one has no direction to
 ;; read at all.
 (defun sq:walls (spans / straight s out)
   (setq straight nil)
+  ;; both lists are gathered backwards and turned round once, so each
+  ;; is in the order its source is in -- merge-walls and the sort below
+  ;; see exactly what they always did
   (foreach s spans
     (if (and (or (null (caddr s)) (< (abs (caddr s)) 1e-8))
              (>= (cal:dist (car s) (cadr s)) sq:*fuzz*))
-      (setq straight (append straight (list s)))))
-  (foreach s (sq:merge-walls straight)
+      (setq straight (cons s straight))))
+  (foreach s (sq:merge-walls (reverse straight))
     (if (>= (cal:dist (car s) (cadr s)) sq:*fuzz*)
-      (setq out (append out
-                        (list (list (cal:dist (car s) (cadr s))
-                                    (sq:dirfold (angle (car s) (cadr s)))
-                                    (car s) (cadr s)))))))
-  (vl-sort out '(lambda (p q) (> (car p) (car q)))))
+      (setq out (cons (list (cal:dist (car s) (cadr s))
+                            (sq:dirfold (angle (car s) (cadr s)))
+                            (car s) (cadr s))
+                      out))))
+  (vl-sort (reverse out) '(lambda (p q) (> (car p) (car q)))))
 
 ;;; -------------------- the span ----------------------------------------
 ;;; The widest measurement across a set of points is between two of its
@@ -40669,15 +40681,31 @@
       (list (* 0.5 (+ (apply 'min xs) (apply 'max xs)))
             (* 0.5 (+ (apply 'min ys) (apply 'max ys)))))))
 
-;; Every sampled point of a selection, and every span of it.
-(defun sq:read-ss (ss / i en pts spans)
-  (setq i 0 pts nil spans nil)
+;; Every sampled point of a selection, and every span of it.  An
+;; entity's spans are built ONCE and its points sampled off them; one
+;; with no spans -- an ELLIPSE or a SPLINE, which answer only for
+;; points -- is sampled by sq:ent-pts.  Each entity's points and spans
+;; are one chunk apiece, joined once at the end in entity order.
+(defun sq:read-ss (ss / i en s pchunks schunks)
+  (setq i 0 pchunks nil schunks nil)
   (while (< i (sslength ss))
-    (setq en    (ssname ss i)
-          pts   (append pts (sq:ent-pts en))
-          spans (append spans (sq:ent-spans en))
-          i     (1+ i)))
-  (list pts spans))
+    (setq en      (ssname ss i)
+          s       (sq:ent-spans en)
+          pchunks (cons (if s (sq:spans-pts s) (sq:ent-pts en)) pchunks)
+          schunks (cons s schunks)
+          i       (1+ i)))
+  (list (apply 'append (reverse pchunks))
+        (apply 'append (reverse schunks))))
+
+;; Every sampled point of a selection and nothing else -- what the
+;; middle of the whole highlight is taken over, which has no use for
+;; the spans sq:read-ss would build alongside.
+(defun sq:read-pts (ss / i chunks)
+  (setq i 0 chunks nil)
+  (while (< i (sslength ss))
+    (setq chunks (cons (sq:ent-pts (ssname ss i)) chunks)
+          i      (1+ i)))
+  (apply 'append (reverse chunks)))
 
 ;;; -------------------- saying what it measured -------------------------
 
@@ -40800,7 +40828,7 @@
              ;; no middle of its own and falls back to the perimeter's.
              (setq wpts  (if (eq sq:*about* 'work)
                            (sq:middle (mapcar '(lambda (p) (trans p 0 1))
-                                              (car (sq:read-ss work)))))
+                                              (sq:read-pts work))))
                    about (if wpts wpts (sq:middle pts)))
 
              ;; Already square comes FIRST, ahead of the question
@@ -109766,7 +109794,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.5")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -110015,15 +110043,18 @@
 
 ;; Written BEFORE the move, which is the only moment the object still
 ;; carries what the record is about.
-(defun soconv:stamp (ent lay obj / forced)
-  (regapp *soconv-xdata-app*)
+;;
+;; c:SOCONV registers the application ONCE, ahead of the loop that
+;; calls this, and reads each source layer's colour once; lcol is that
+;; colour, and a nil one is read off the table here, as it always was.
+(defun soconv:stamp (ent lay obj lcol / forced)
   (setq forced *soconv-force-bylayer*)
   (soconv:xput ent *soconv-xdata-app*
     (list (cons 1000 *soconv-xdata-app*)
           (cons 1000 *soconv-version*)
           (cons 1000 lay)
           (cons 1000 (if forced (vla-get-Linetype obj) ""))
-          (cons 1070 (soconv:layer-color lay))
+          (cons 1070 (cond (lcol) ((soconv:layer-color lay))))
           (cons 1070 (if forced 1 0))
           (cons 1070 (if forced (vla-get-Color obj) 256))
           (cons 1070 (if forced (vla-get-Lineweight obj) -1))))
@@ -110069,7 +110100,7 @@
 
 ;;; -------------------- the command -------------------------------------
 (defun c:SOCONV (/ *error* doc unlocked mark-open ss plan jobs srcs dests
-                   tally job dest obj)
+                   tally job dest obj lay soconv-laycols)
 
   ;; The handler is LOCAL to this command (STANDARDS 5): a handler
   ;; installed in the global *error* is the handler of whatever runs
@@ -110125,11 +110156,28 @@
         (cal:ensure-layer dest (soconv:color dest)))
       ;; unlock everything about to be touched, both ends of the move
       (setq unlocked (soconv:unlock-layers (append srcs dests) doc))
+      ;; What every record needs and is the same answer for all of
+      ;; them, read once here rather than once per object: the APPID
+      ;; (only by a run that writes a record, so a run that stamps
+      ;; nothing registers none) and each source layer's colour, read
+      ;; after ensure-layer and the unlock just as stamp read it --
+      ;; nothing below touches a layer record.
+      (if *soconv-record*
+        (progn
+          (regapp *soconv-xdata-app*)
+          (foreach lay srcs
+            (setq soconv-laycols
+                  (cons (cons (strcase lay) (soconv:layer-color lay))
+                        soconv-laycols)))))
       (foreach job jobs
         ;; the record first: after the move the object no longer
         ;; carries the layer, or the properties, it is about
         (setq obj (vlax-ename->vla-object (car job)))
-        (if *soconv-record* (soconv:stamp (car job) (soconv:layer-of (car job)) obj))
+        (if *soconv-record*
+          (progn
+            (setq lay (soconv:layer-of (car job)))
+            (soconv:stamp (car job) lay obj
+                          (cdr (assoc (strcase lay) soconv-laycols)))))
         (vla-put-Layer obj (cdr job))
         (if *soconv-force-bylayer*
           (soconv:force-bylayer obj)))
@@ -110365,7 +110413,7 @@
 ;;; so; nothing else about the round trip is approximate.
 ;;; ======================================================================
 
-(setq *vsconv-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *vsconv-version* "v1.5")   ; announced on load; release_lisp.py
                                  ; reads this banner and stamps the
                                  ; dated twin in releases/ from it
 
@@ -110636,13 +110684,19 @@
 
 ;; Written BEFORE the move and before the restyle, which is the only
 ;; moment the object still carries everything the record is about.
-(defun vsconv:stamp (ent lay obj / typ sty ovr)
-  (regapp *vsconv-xdata-app*)
-  (setq typ (cdr (assoc 0 (entget ent))))
+;;
+;; c:VSCONV registers the application ONCE, ahead of the loop that
+;; calls this, and reads each source layer's colour once; lcol is that
+;; colour, and a nil one is read off the table here, as it always was.
+;; One plain entget serves the type and the dimension style: nothing
+;; before xput's entmod writes to the object.
+(defun vsconv:stamp (ent lay obj lcol / ed typ sty ovr)
+  (setq ed  (entget ent)
+        typ (cdr (assoc 0 ed)))
   ;; only a DIMENSION has a style to lose or overrides to lose it to,
   ;; and group 3 means something else entirely on an MTEXT
   (if (= "DIMENSION" typ)
-    (setq sty (cdr (assoc 3 (entget ent)))
+    (setq sty (cdr (assoc 3 ed))
           ovr (if *vsconv-dim-xdata* (vsconv:xget ent *vsconv-dim-xdata*))))
   (vsconv:xput ent *vsconv-xdata-app*
     (append (list (cons 1000 *vsconv-xdata-app*)
@@ -110650,7 +110704,7 @@
                   (cons 1000 lay)
                   (cons 1000 (vla-get-Linetype obj))
                   (cons 1000 (if sty sty ""))
-                  (cons 1070 (vsconv:layer-color lay))
+                  (cons 1070 (cond (lcol) ((vsconv:layer-color lay))))
                   (cons 1070 (vla-get-Color obj))
                   (cons 1070 (vla-get-Lineweight obj))
                   (cons 1070 (if ovr 1 0)))
@@ -110708,7 +110762,7 @@
 ;;; -------------------- the command -------------------------------------
 (defun c:VSCONV (/ *error* doc unlocked mark-open srcs here plan froms
                    reached filter ss i ent ed lay dest obj dims empty p
-                   tally n-moved n-dim)
+                   tally n-moved n-dim vsconv-laycols)
 
   ;; The handler is LOCAL to this command (STANDARDS 5), as DRONE's and
   ;; TYDRN's are: it sees doc / unlocked / mark-open through dynamic
@@ -110782,6 +110836,20 @@
       ;; the selection.
       (setq unlocked (vsconv:unlock-layers (append froms reached) doc))
 
+      ;; What every record needs and is the same answer for all of
+      ;; them, read once here rather than once per object: the APPID
+      ;; and each source layer's colour, read after ensure-layer and
+      ;; the unlock just as stamp read it -- nothing below touches a
+      ;; layer record.  froms is empty exactly when no object has a
+      ;; destination, so a run that stamps nothing registers no APPID.
+      (if (and froms *vsconv-record*)
+        (progn
+          (regapp *vsconv-xdata-app*)
+          (foreach lay froms
+            (setq vsconv-laycols
+                  (cons (cons (strcase lay) (vsconv:layer-color lay))
+                        vsconv-laycols)))))
+
       ;; ------------------------------------------------------------
       ;; 1. The layer move, everything BYLAYER when asked (the default)
       ;; ------------------------------------------------------------
@@ -110799,7 +110867,9 @@
                 ;; object no longer carries the layer, the properties or
                 ;; the overrides it is about
                 (setq obj (vlax-ename->vla-object ent))
-                (if *vsconv-record* (vsconv:stamp ent lay obj))
+                (if *vsconv-record*
+                  (vsconv:stamp ent lay obj
+                                (cdr (assoc (strcase lay) vsconv-laycols))))
                 (vla-put-Layer obj dest)
                 (if *vsconv-force-bylayer* (vsconv:force-bylayer obj))
                 (setq tally   (vsconv:bump (strcase lay) tally)
@@ -111160,7 +111230,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *g2mconv-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *g2mconv-version* "v1.3")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -111401,10 +111471,6 @@
             (append ed (list (cons code val)))))
 )
 
-;; One DXF group off ENT, or DFLT when it has not got it.
-(defun g2m:group (ent code dflt / p)
-  (if (setq p (assoc code (entget ent))) (cdr p) dflt))
-
 ;;; -------------------- xdata -------------------------------------------
 
 ;; APP's items onto ENT, leaving every OTHER application's xdata alone.
@@ -111564,13 +111630,19 @@
 
 ;; Written BEFORE the move and before either restyle, which is the only
 ;; moment the object still carries everything the record is about.
-(defun g2m:stamp (ent lay obj / typ sty ovr tsty thgt)
-  (regapp *g2mconv-xdata-app*)
-  (setq typ (cdr (assoc 0 (entget ent))))
+;;
+;; c:G2MCONV registers the application ONCE, ahead of the loop that
+;; calls this, and reads each source layer's colour once; lcol is that
+;; colour, and a nil one is read off the table here, as it always was.
+;; One plain entget serves the type, the dimension style and the
+;; linetype scale: nothing before xput's entmod writes to the object.
+(defun g2m:stamp (ent lay obj lcol / ed typ sty ovr tsty thgt p)
+  (setq ed  (entget ent)
+        typ (cdr (assoc 0 ed)))
   ;; only a DIMENSION has a style to lose or overrides to lose it to,
   ;; and group 3 means something else entirely on an MTEXT
   (if (= "DIMENSION" typ)
-    (setq sty (cdr (assoc 3 (entget ent)))
+    (setq sty (cdr (assoc 3 ed))
           ovr (if *g2mconv-dim-xdata* (g2m:xget ent *g2mconv-dim-xdata*))))
   ;; and only a note has a text style and height to lose
   (if (g2m:text-p typ)
@@ -111583,11 +111655,11 @@
                   (cons 1000 (vla-get-Linetype obj))
                   (cons 1000 (if sty sty ""))
                   (cons 1000 (if tsty tsty ""))
-                  (cons 1070 (g2m:layer-color lay))
+                  (cons 1070 (cond (lcol) ((g2m:layer-color lay))))
                   (cons 1070 (vla-get-Color obj))
                   (cons 1070 (vla-get-Lineweight obj))
                   (cons 1070 (g2m:anno-flag ent))
-                  (cons 1040 (float (g2m:group ent 48 1.0)))
+                  (cons 1040 (float (if (setq p (assoc 48 ed)) (cdr p) 1.0)))
                   (cons 1040 (if thgt (float thgt) 0.0))
                   (cons 1070 (if ovr 1 0)))
             (if ovr ovr '())))
@@ -111684,8 +111756,8 @@
 
 ;;; -------------------- the command -------------------------------------
 (defun c:G2MCONV (/ *error* doc unlocked mark-open ss plan jobs srcs dests
-                    tally job rule dest ent obj typ dims notes lt
-                    missing-lt no-dimstyle no-textstyle)
+                    tally job rule dest ent ed lay obj typ dims notes lt
+                    missing-lt no-dimstyle no-textstyle g2m-laycols)
 
   ;; The handler is LOCAL to this command (STANDARDS 5): a handler
   ;; installed in the global *error* is the handler of whatever runs
@@ -111732,14 +111804,32 @@
       ;; unlock everything about to be touched, both ends of the move
       (setq unlocked (g2m:unlock-layers (append srcs dests) doc))
 
+      ;; What every record needs and is the same answer for all of
+      ;; them, read once here rather than once per object: the APPID
+      ;; (only by a run that writes a record, so a run that stamps
+      ;; nothing registers none) and each source layer's colour, read
+      ;; after ensure-layer and the unlock just as stamp read it --
+      ;; nothing below touches a layer record.
+      (if *g2mconv-record*
+        (progn
+          (regapp *g2mconv-xdata-app*)
+          (foreach lay srcs
+            (setq g2m-laycols (cons (cons (strcase lay) (g2m:layer-color lay))
+                                    g2m-laycols)))))
+
       (foreach job jobs
+        ;; one read of the object for its type and its layer, before
+        ;; anything below has written to it
         (setq ent  (car job)
               rule (cdr job)
-              typ  (cdr (assoc 0 (entget ent))))
+              ed   (entget ent)
+              typ  (cdr (assoc 0 ed))
+              lay  (cdr (assoc 8 ed)))
         ;; the record first: after the move and the restyles the object
         ;; no longer carries any of what the record is about
         (setq obj (vlax-ename->vla-object ent))
-        (if *g2mconv-record* (g2m:stamp ent (g2m:layer-of ent) obj))
+        (if *g2mconv-record*
+          (g2m:stamp ent lay obj (cdr (assoc (strcase lay) g2m-laycols))))
         ;; 1. the layer, and the appearance that has to follow it
         (vla-put-Layer obj (caddr rule))
         (if *g2mconv-force-bylayer*
@@ -113514,7 +113604,7 @@
 
 
 
-(setq *xft-version* "v1.17") ; printed on load and at command start so a
+(setq *xft-version* "v1.18") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -114200,7 +114290,9 @@
 ;;;  insert one replacement point
 ;;; -------------------------------------------------------------------
 
-(defun xft:insert (pt num / apt prev en)
+;; STY is the attribute's text style, xft:style's answer: the same for
+;; every point of a swap, so xft:swap reads it once and hands it in.
+(defun xft:insert (pt num sty / apt prev en)
   (setq apt  (list (+ (car pt) (car  *xft-att-offset*))
                    (+ (cadr pt) (cadr *xft-att-offset*))
                    (caddr pt))
@@ -114221,7 +114313,7 @@
                  (cons 10 apt)
                  (cons 40 *xft-att-height*)
                  (cons 1 num)
-                 (cons 7 (xft:style))
+                 (cons 7 sty)
                  '(100 . "AcDbAttribute")
                  (cons 2 *xft-att-tag*)
                  '(70 . 0)))
@@ -114267,8 +114359,12 @@
 ;; and its name text are still there to be read.
 (defun xft:swap (groups names reach strip / g nm ctr best bestd bestr rank
                                             txth lim d num made blank e
-                                            en spec recs)
+                                            en spec recs sty)
   (setq made 0 blank 0 recs '())
+  ;; the attribute style once for the whole swap rather than once per
+  ;; point: nothing in the loop makes a style or moves TEXTSTYLE.  Only
+  ;; when there is a point to insert, so an empty swap reads no table.
+  (if groups (setq sty (xft:style)))
   (foreach g groups
     (setq ctr   (car g)
           best  nil
@@ -114307,7 +114403,7 @@
       (progn
         (foreach e (cdr g) (setq spec (xft:join spec (xft:ser e))))
         (if best (setq spec (xft:join spec (xft:ser (nth 3 best)))))))
-    (setq en (xft:insert ctr num))
+    (setq en (xft:insert ctr num sty))
     (foreach e (cdr g) (entdel e))
     (if best (entdel (nth 3 best)))
     (if en (setq recs (cons (list en ctr spec) recs)))

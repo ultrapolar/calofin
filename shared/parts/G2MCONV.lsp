@@ -134,7 +134,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *g2mconv-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *g2mconv-version* "v1.3")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -375,10 +375,6 @@
             (append ed (list (cons code val)))))
 )
 
-;; One DXF group off ENT, or DFLT when it has not got it.
-(defun g2m:group (ent code dflt / p)
-  (if (setq p (assoc code (entget ent))) (cdr p) dflt))
-
 ;;; -------------------- xdata -------------------------------------------
 
 ;; APP's items onto ENT, leaving every OTHER application's xdata alone.
@@ -538,13 +534,19 @@
 
 ;; Written BEFORE the move and before either restyle, which is the only
 ;; moment the object still carries everything the record is about.
-(defun g2m:stamp (ent lay obj / typ sty ovr tsty thgt)
-  (regapp *g2mconv-xdata-app*)
-  (setq typ (cdr (assoc 0 (entget ent))))
+;;
+;; c:G2MCONV registers the application ONCE, ahead of the loop that
+;; calls this, and reads each source layer's colour once; lcol is that
+;; colour, and a nil one is read off the table here, as it always was.
+;; One plain entget serves the type, the dimension style and the
+;; linetype scale: nothing before xput's entmod writes to the object.
+(defun g2m:stamp (ent lay obj lcol / ed typ sty ovr tsty thgt p)
+  (setq ed  (entget ent)
+        typ (cdr (assoc 0 ed)))
   ;; only a DIMENSION has a style to lose or overrides to lose it to,
   ;; and group 3 means something else entirely on an MTEXT
   (if (= "DIMENSION" typ)
-    (setq sty (cdr (assoc 3 (entget ent)))
+    (setq sty (cdr (assoc 3 ed))
           ovr (if *g2mconv-dim-xdata* (g2m:xget ent *g2mconv-dim-xdata*))))
   ;; and only a note has a text style and height to lose
   (if (g2m:text-p typ)
@@ -557,11 +559,11 @@
                   (cons 1000 (vla-get-Linetype obj))
                   (cons 1000 (if sty sty ""))
                   (cons 1000 (if tsty tsty ""))
-                  (cons 1070 (g2m:layer-color lay))
+                  (cons 1070 (cond (lcol) ((g2m:layer-color lay))))
                   (cons 1070 (vla-get-Color obj))
                   (cons 1070 (vla-get-Lineweight obj))
                   (cons 1070 (g2m:anno-flag ent))
-                  (cons 1040 (float (g2m:group ent 48 1.0)))
+                  (cons 1040 (float (if (setq p (assoc 48 ed)) (cdr p) 1.0)))
                   (cons 1040 (if thgt (float thgt) 0.0))
                   (cons 1070 (if ovr 1 0)))
             (if ovr ovr '())))
@@ -658,8 +660,8 @@
 
 ;;; -------------------- the command -------------------------------------
 (defun c:G2MCONV (/ *error* doc unlocked mark-open ss plan jobs srcs dests
-                    tally job rule dest ent obj typ dims notes lt
-                    missing-lt no-dimstyle no-textstyle)
+                    tally job rule dest ent ed lay obj typ dims notes lt
+                    missing-lt no-dimstyle no-textstyle g2m-laycols)
 
   ;; The handler is LOCAL to this command (STANDARDS 5): a handler
   ;; installed in the global *error* is the handler of whatever runs
@@ -706,14 +708,32 @@
       ;; unlock everything about to be touched, both ends of the move
       (setq unlocked (g2m:unlock-layers (append srcs dests) doc))
 
+      ;; What every record needs and is the same answer for all of
+      ;; them, read once here rather than once per object: the APPID
+      ;; (only by a run that writes a record, so a run that stamps
+      ;; nothing registers none) and each source layer's colour, read
+      ;; after ensure-layer and the unlock just as stamp read it --
+      ;; nothing below touches a layer record.
+      (if *g2mconv-record*
+        (progn
+          (regapp *g2mconv-xdata-app*)
+          (foreach lay srcs
+            (setq g2m-laycols (cons (cons (strcase lay) (g2m:layer-color lay))
+                                    g2m-laycols)))))
+
       (foreach job jobs
+        ;; one read of the object for its type and its layer, before
+        ;; anything below has written to it
         (setq ent  (car job)
               rule (cdr job)
-              typ  (cdr (assoc 0 (entget ent))))
+              ed   (entget ent)
+              typ  (cdr (assoc 0 ed))
+              lay  (cdr (assoc 8 ed)))
         ;; the record first: after the move and the restyles the object
         ;; no longer carries any of what the record is about
         (setq obj (vlax-ename->vla-object ent))
-        (if *g2mconv-record* (g2m:stamp ent (g2m:layer-of ent) obj))
+        (if *g2mconv-record*
+          (g2m:stamp ent lay obj (cdr (assoc (strcase lay) g2m-laycols))))
         ;; 1. the layer, and the appearance that has to follow it
         (vla-put-Layer obj (caddr rule))
         (if *g2mconv-force-bylayer*

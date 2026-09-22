@@ -63,7 +63,7 @@
 
 
 
-(setq *xft-version* "v1.17") ; printed on load and at command start so a
+(setq *xft-version* "v1.18") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -789,7 +789,9 @@
 ;;;  insert one replacement point
 ;;; -------------------------------------------------------------------
 
-(defun xft:insert (pt num / apt prev en)
+;; STY is the attribute's text style, xft:style's answer: the same for
+;; every point of a swap, so xft:swap reads it once and hands it in.
+(defun xft:insert (pt num sty / apt prev en)
   (setq apt  (list (+ (car pt) (car  *xft-att-offset*))
                    (+ (cadr pt) (cadr *xft-att-offset*))
                    (caddr pt))
@@ -810,7 +812,7 @@
                  (cons 10 apt)
                  (cons 40 *xft-att-height*)
                  (cons 1 num)
-                 (cons 7 (xft:style))
+                 (cons 7 sty)
                  '(100 . "AcDbAttribute")
                  (cons 2 *xft-att-tag*)
                  '(70 . 0)))
@@ -856,8 +858,12 @@
 ;; and its name text are still there to be read.
 (defun xft:swap (groups names reach strip / g nm ctr best bestd bestr rank
                                             txth lim d num made blank e
-                                            en spec recs)
+                                            en spec recs sty)
   (setq made 0 blank 0 recs '())
+  ;; the attribute style once for the whole swap rather than once per
+  ;; point: nothing in the loop makes a style or moves TEXTSTYLE.  Only
+  ;; when there is a point to insert, so an empty swap reads no table.
+  (if groups (setq sty (xft:style)))
   (foreach g groups
     (setq ctr   (car g)
           best  nil
@@ -896,7 +902,7 @@
       (progn
         (foreach e (cdr g) (setq spec (xft:join spec (xft:ser e))))
         (if best (setq spec (xft:join spec (xft:ser (nth 3 best)))))))
-    (setq en (xft:insert ctr num))
+    (setq en (xft:insert ctr num sty))
     (foreach e (cdr g) (entdel e))
     (if best (entdel (nth 3 best)))
     (if en (setq recs (cons (list en ctr spec) recs)))

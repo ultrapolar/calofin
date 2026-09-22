@@ -727,7 +727,7 @@ vm.sysvars['OSMODE'] = 4133
 vm.sysvars['CMDECHO'] = 1
 # the insert blows up on an unbound function, the way a typo or a
 # missing helper dies at the command line
-vm.loads('(defun xft:insert (pt num) (xft:no-such-helper pt num))')
+vm.loads('(defun xft:insert (pt num sty) (xft:no-such-helper pt num))')
 ents = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P9"))
 vm.run('c:XFTCONV', [None, ents])
 check("aborted through *error*, not a crash",
