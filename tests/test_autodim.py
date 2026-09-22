@@ -920,6 +920,37 @@ assert not vm.loads('(ad:raddimmed-p (list 0.0 0.0 0.0) 24.0)')
 print('   a radius dim already in the drawing is read back and respected')
 
 
+print('== a repeat group already covered keeps its one dim, wherever it sits ==')
+#: Four arcs of the same radius are a repeat group (ad:*typ-curves* is
+#: 4): one of them - the SECOND ad:arcs comes across, not the first -
+#: already carries a radius dim from an earlier run.  ad:dimperim used
+#: to check only the group's first-found member for "already
+#: dimensioned"; with the covered arc sitting anywhere else in the
+#: group that check missed it, and this run placed a second "Typ." dim
+#: for a size the drawing already had one of.
+vm = fresh()
+vm.sysvars['DIMTXT'] = 0.125
+vm.sysvars['DIMSCALE'] = 48
+vm.loads(PERIM)
+# the arc at (80, 0) already has a matching radius dim
+vm.loads('(entmake (list (cons 0 "DIMENSION") (cons 410 "Model") '
+         '(cons 70 4) (cons 10 (list 80.0 0.0 0.0)) '
+         '(cons 15 (list 98.0 0.0 0.0))))')
+for cx, cy in [(0.0, 0.0), (80.0, 0.0), (160.0, 0.0), (0.0, 80.0)]:
+    vm.loads('(entmake (list (cons 0 "CIRCLE") (cons 10 (list %.4f %.4f 0.0)) '
+             '(cons 40 18.0)))' % (cx, cy))
+rescan(vm)
+circles = [e for e in vm.entities
+           if not any(isinstance(g, Dot) and g.a == 0 and g.b == 'DIMENSION'
+                      for g in vm.entdata.get(e, []))]
+vm.script = [circles]
+vm.loads('(setq SS (ssget))')
+n = vm.loads('(ad:dimperim SS nil)')
+assert n == 0, n
+assert vm.loads('ad:*skipped*') == 1, vm.loads('ad:*skipped*')
+print('   the covered arc is found wherever it sits in the group - no dupe')
+
+
 print('== the arc a polyline bulge describes ==')
 vm = fresh()
 # A bulge of 1 from (0,0) to (2,0) is a counter-clockwise semicircle:

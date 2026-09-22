@@ -345,7 +345,22 @@ setlocal
 
 set "SRC=%~dp0"
 if "%SRC:~-1%"=="\" set "SRC=%SRC:~0,-1%"
+
+rem  WHERE.  All three named below are folders AutoCAD's autoloader
+rem  scans; which one you want depends on your site's TRUSTEDPATHS
+rem  rather than on taste.
+rem
+rem      install.cmd                just you, no admin rights  (default)
+rem      install.cmd allusers       every user on this machine (admin)
+rem      install.cmd programfiles   every user, under Program Files (admin)
+rem      install.cmd "D:\some\dir"  a folder you name
+rem
+rem  A shop whose trusted location is a machine path wants one of the
+rem  middle two -- see the TRUSTEDPATHS note this prints at the end.
 set "TARGET=%APPDATA%\Autodesk\ApplicationPlugins"
+if /i "%~1"=="allusers"     set "TARGET=%PROGRAMDATA%\Autodesk\ApplicationPlugins"
+if /i "%~1"=="programfiles" set "TARGET=%PROGRAMFILES%\Autodesk\ApplicationPlugins"
+if not "%~1"=="" if /i not "%~1"=="allusers" if /i not "%~1"=="programfiles" set "TARGET=%~1"
 set "DEST=%TARGET%\Calofin.bundle"
 
 if not exist "%SRC%\PackageContents.xml" (
@@ -381,13 +396,23 @@ echo.
 echo   Installed:
 echo     %DEST%
 echo.
-echo   1. Start AutoCAD and type CALVER - it lists everything that
+echo   1. TRUSTED LOCATION.  AutoCAD will not load code from a folder it
+echo      does not trust (SECURELOAD), and that shows up as a warning
+echo      dialog - or as nothing loading at all.  If the folder above is
+echo      not already covered by your site's trusted paths, add it:
+echo.
+echo        OPTIONS  ^>  Files  ^>  Trusted Locations  ^>  Add...
+echo        %TARGET%
+echo.
+echo      Leave "subfolders" allowed - the bundle keeps its Lisp under
+echo      Contents\lisp and its DLLs under Contents\net.
+echo.
+echo   2. Start AutoCAD and type CALVER - it lists everything that
 echo      loaded.  LAZPANEL opens the tool panel.  That is the AutoLISP
 echo      half and it needs nothing else installed.
 echo.
-echo   2. For the ribbon tab and the palette, run build-net.cmd in the
-echo      folder above - pass your AutoCAD year if it is 2025 or later,
-echo      e.g.  build-net.cmd 2025  - then restart AutoCAD.
+echo   3. For the ribbon tab and the palette, run build-net.cmd in the
+echo      folder above, then restart AutoCAD.
 echo.
 pause
 exit /b 0
@@ -397,6 +422,9 @@ echo.
 echo   COULD NOT COPY.  Do it by hand - put the Calofin.bundle folder in:
 echo.
 echo     %TARGET%
+echo.
+echo   A machine folder needs elevation: right-click install.cmd and
+echo   pick "Run as administrator".
 echo.
 echo   To open that folder: press Win+R, paste the line above, press
 echo   Enter.  %%APPDATA%% works there even though AppData is hidden.
@@ -445,13 +473,64 @@ If you would rather not install anything at all, `APPLOAD` the one file
 `%(bundle)s\\Contents\\lisp\\LAZPASS.lsp` by hand.  It is self-contained;
 nothing else has to be found beside it.
 
-### If AutoCAD does not pick it up
+### Trusted locations -- read this one
+
+AutoCAD will not load code from a folder it does not trust.  That is
+`SECURELOAD`, it is on by default, and depending on how strictly it is
+set you either get a warning you can wave through or the load is simply
+refused.  A shop that has ever added a trusted path has a list that
+this folder is almost certainly not on.
+
+`(getvar "SECURELOAD")` says which mode you are in and
+`(getvar "TRUSTEDPATHS")` prints the list.
+
+Add it:
+
+```
+OPTIONS  >  Files  >  Trusted Locations  >  Add...
+```
+
+and point it at the folder `install.cmd` printed.  Keep subfolders
+allowed: the bundle holds its Lisp under `Contents\\lisp` and, once
+built, its DLLs under `Contents\\net`.
+
+The equivalent from the command line, if you would rather not click --
+note the trailing `\\...`, which is what includes subfolders:
+
+```
+(setvar "TRUSTEDPATHS"
+  (strcat (getvar "TRUSTEDPATHS") ";"
+          (strcat (getenv "APPDATA") "\\\\Autodesk\\\\ApplicationPlugins\\\\...")))
+```
+
+**Or put the bundle where you already trust.**  The autoloader scans
+three places, and any of them works -- pick the one your trusted list
+already covers:
+
+| | Where | `install.cmd` |
+| --- | --- | --- |
+| just you | `%%APPDATA%%\\Autodesk\\ApplicationPlugins` | `install.cmd` |
+| all users | `%%PROGRAMDATA%%\\Autodesk\\ApplicationPlugins` | `install.cmd allusers` |
+| all users | `%%PROGRAMFILES%%\\Autodesk\\ApplicationPlugins` | `install.cmd programfiles` |
+
+The last two need administrator rights -- right-click `install.cmd`,
+"Run as administrator".
+
+A folder **outside** those three is a different thing: AutoCAD will not
+autoload from it at all, whatever its trust setting, because the
+autoloader only looks in those paths.  If your trusted folder is
+somewhere else entirely, keep the bundle in one of the three above and
+trust that, or drop the autoloader and `APPLOAD`
+`Contents\\lisp\\LAZPASS.lsp` from wherever you like (Startup Suite
+makes that stick).
+
+### If AutoCAD still does not pick it up
 
 * The folder must keep the `.bundle` suffix -- that is what the loader
   scans for.
-* `OPTIONS > Files > Trusted Locations`: add the `ApplicationPlugins`
-  folder if your site has `SECURELOAD` set to 1 or 2.
 * `APPAUTOLOAD` must not be 0.
+* `SECURELOAD` 0 turns the check off entirely; that is your call to
+  make, not this file's.
 
 ## 2. The ribbon and the palette (one build)
 
