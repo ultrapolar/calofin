@@ -334,6 +334,23 @@ assert reportrow(vm, "TOP SIDE (D-C)")[1] == "404.00"     # taped, so a target
 assert reportrow(vm, "BOTTOM SIDE (A-B)")[1] == "N/A"     # derived, so none
 print("   the taped side stands; the missing one closes the overall")
 
+print("== R4d2. oval: overall AND both radii given -- the overall is held ==")
+# 9' sides, 15' ends, R7'-6" both ends, but a 23'-2" overall: the radii
+# alone would make it 24'-0".  The overall is the tape tip to tip, so
+# it is held and the ends give way, equally since the radii were equal
+vm = run(["Outofsquare", "Oval"] + BASE +
+         [108.0, 108.0, 180.0, 180.0,
+          278.0, 90.0, 90.0,
+          "NA", "NA",
+          "No"],
+         "R4d2")
+assert any(abs(_m.dist(c[1][:2], c[2][:2]) - 278.0) < 0.01 for c in dimcalls(vm))
+_tl = reportrow(vm, "TOTAL LENGTH")
+assert _tl[1] == "278.00" and _tl[2] == "278.00", _tl
+_lr, _rr = reportrow(vm, "LEFT RADIUS"), reportrow(vm, "RIGHT RADIUS")
+assert _lr[1] == "90.00" and _lr[2] != "90.00" and _lr[2] == _rr[2], (_lr, _rr)
+print("   tip to tip reads the overall; the radii report their own delta")
+
 print("== R4e. oval: a side NA makes the overall compulsory ==")
 vm = run(["Insquare", "Oval"] + BASE +
          ["NA", 240.0,            # side pair NOT taped

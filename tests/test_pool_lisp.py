@@ -1225,6 +1225,11 @@ def ovalends(totl,lraw,rraw,axis,lc,rc):
     notes=[]
     if lraw is not None and rraw is not None:
         sl,sr = sag(lraw,lc), sag(rraw,rc)
+        if totl is not None:
+            rem = totl-axis
+            if rem<=1e-6: notes.append("short")
+            elif abs(rem-(sl+sr))>1e-6:
+                k=rem/(sl+sr); sl,sr=sl*k,sr*k; notes.append("held")
     else:
         rem = totl-axis
         if lraw is None and rraw is None:
@@ -1254,6 +1259,13 @@ assert abs(sl+sr-120.0)<1e-9 and abs(lr-150.0)<1e-9
 lr,rr,sl,sr,tot,notes = ovalends(None,150.0,90.0,360.0,120.0,120.0)
 assert abs(lr-150.0)<1e-9 and abs(rr-90.0)<1e-9
 assert abs(tot-(sag(150.0,120.0)+360.0+sag(90.0,120.0)))<1e-9
+# all three given and disagreeing: the overall is HELD, the radii give
+# way in proportion to their own bulges (so equal radii stay equal)
+lr,rr,sl,sr,tot,notes = ovalends(278.0,90.0,90.0,108.0,180.0,180.0)
+assert notes==["held"] and abs(tot-278.0)<1e-9 and abs(lr-rr)<1e-9 and lr!=90.0
+# ...and when they agree nothing moves and nothing is said
+lr,rr,sl,sr,tot,notes = ovalends(288.0,90.0,90.0,108.0,180.0,180.0)
+assert not notes and abs(lr-90.0)<1e-9 and abs(tot-288.0)<1e-9
 # out-of-square: both NA still splits the bulge evenly, so unequal end
 # widths give unequal radii (same bulge) rather than a bogus fit
 lr,rr,sl,sr,tot,notes = ovalends(480.0,None,None,360.0,120.0,132.0)

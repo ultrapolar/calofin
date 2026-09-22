@@ -3557,7 +3557,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092226 REV38")
+(setq pool:*version* "092226 REV39")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -10042,11 +10042,29 @@
 ;;     i.e. both arcs the same -- exactly what an in-square oval is;
 ;;   * one radius NA -> it takes the remainder;
 ;;   * TOTAL NA      -> it is computed from the two radii.
+;; And when ALL THREE were given the overall is HELD: it is the one
+;; tip-to-tip tape, so the radii give way to it.  The remainder is
+;; shared between the ends in the proportion the given radii bulge,
+;; so two equal radii stay equal, and the report shows each radius
+;; against the one that was typed.  Only an overall that does not
+;; reach past the body at all falls back to the radii as given.
 ;; lc/rc are the end lengths (chords).  Returns (lrad rrad sl sr total notes).
 (defun pool:ovalends (totl lraw rraw axis lc rc / sl sr left notes lr rr)
   (if (and lraw rraw)
-      (setq sl (pool:sag lraw lc)
-            sr (pool:sag rraw rc))
+      (progn
+        (setq sl (pool:sag lraw lc)
+              sr (pool:sag rraw rc))
+        (if totl
+            (progn
+              (setq left (- totl axis))
+              (cond
+                ((<= left 1.0e-6)
+                 (setq notes (cons "TOTAL LENGTH DOES NOT REACH PAST THE SIDES - RADII USED AS GIVEN" notes)))
+                ((> (abs (- left (+ sl sr))) 1.0e-6)
+                 (setq left (/ left (+ sl sr))
+                       sl (* sl left)
+                       sr (* sr left)
+                       notes (cons "TOTAL LENGTH HELD - END RADII ADJUSTED TO FIT" notes)))))))
       (progn
         (setq left (- totl axis))       ; length left over for the ends
         (cond
@@ -10160,7 +10178,11 @@
               (progn
                 (setq left (- tot axis))
                 (cond
-                  ((and lr rr) nil)     ; both pinned; the total is a check
+                  ((and lr rr)          ; all given: the total is held
+                   (if (> left 1.0e-6)
+                       (setq left (/ left (+ extl extr))
+                             extl (* extl left)
+                             extr (* extr left))))
                   ((and (null lr) (null rr))
                    (if (> left 1.0e-6) (setq extl (* 0.5 left) extr extl)))
                   ((null lr)
