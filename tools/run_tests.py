@@ -43,17 +43,29 @@ TESTS = ROOT / "tests"
 #: test_spa_form.py, closed by spa:*form* and its hooks.)
 EXPECTED_FAILURES = {}
 
-#: Files that dominate the wall clock (over ~20s each); --fast skips
-#: them for the inner loop.  The full run still takes everything.
+#: Files that dominate the wall clock (over SLOW_SECS each); --fast
+#: skips them for the inner loop.  The full run still takes everything,
+#: and submits these FIRST within each tier: handed to the pool in
+#: alphabetical order, test_olauto.py (the longest file in the suite)
+#: started 78th of 122 and ran on alone while the other workers idled.
+#: The set is kept by hand, so a run names every file outside it that
+#: took longer than SLOW_SECS -- that note is how it stays current.
+SLOW_SECS = 20
 SLOW = {
     "test_fitabhd.py", "test_pool_runtime.py", "test_pool_form.py",
     "test_oasis.py", "test_cabhd.py", "test_lazform.py", "test_pool_fit.py",
     "test_abhd_runtime.py", "test_abhd_contingencies.py",
+    "test_olauto.py", "test_pool_ruler.py", "test_dialog_actions.py",
+    "test_lazpanel.py", "test_constellation.py", "test_undo_off.py",
+    "test_ablobf.py", "test_lazstep.py", "test_cleardim.py",
+    "test_steps_settings.py", "test_lazdiag_sweep.py",
 }
 
 #: A slow file gets longer before it is called hung: test_fitabhd.py
 #: alone runs close to five minutes on a quiet box, within a factor of
 #: two of the old 600 s, and a slower runner turned that into a kill.
+#: test_olauto.py runs close to eight minutes -- over three quarters of
+#: TIMEOUT, which it ran under until it joined SLOW.
 TIMEOUT = 600
 SLOW_TIMEOUT = 1200
 
@@ -86,12 +98,18 @@ def run_one(name, tier):
     return name, tier, code, time.monotonic() - t0, out
 
 
-def run_tier(files, tier, jobs):
+def run_tier(files, tier, jobs, overdue):
+    """Run FILES at TIER; append (name, tier, secs) to OVERDUE for every
+    file outside SLOW that took longer than SLOW_SECS."""
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
-        futures = [pool.submit(run_one, f, tier) for f in files]
+        # heavy first, so the longest files are not the last to start
+        futures = [pool.submit(run_one, f, tier)
+                   for f in sorted(files, key=lambda f: (f not in SLOW, f))]
         for fut in concurrent.futures.as_completed(futures):
             name, _, code, secs, out = fut.result()
+            if name not in SLOW and secs > SLOW_SECS:
+                overdue.append((name, tier, secs))
             expected = name in EXPECTED_FAILURES
             if code == 0 and not expected:
                 mark = "ok  "
@@ -132,11 +150,11 @@ def main(argv):
 
     tiers = ("lisp", "shared") if args.tier == "both" else (args.tier,)
     t0 = time.monotonic()
-    results = []
+    results, overdue = [], []
     for tier in tiers:
         print("== tier: %s (%d files, %d jobs) ==" %
               (tier, len(files), args.jobs))
-        results += run_tier(files, tier, args.jobs)
+        results += run_tier(files, tier, args.jobs, overdue)
 
     bad = []
     for name, tier, code, out in results:
@@ -153,6 +171,12 @@ def main(argv):
         print("\n---- %s: %s [%s] ----" % (kind, name, tier))
         tail = out.strip().splitlines()[-25:]
         print("\n".join(tail))
+
+    if overdue:
+        print("\nnote: over %ds but not in SLOW (tools/run_tests.py): %s"
+              % (SLOW_SECS, ", ".join("%s %.0fs [%s]" % (name, secs, tier)
+                                      for name, tier, secs
+                                      in sorted(overdue))))
 
     nxfail = sum(1 for n, _, c, _ in results
                  if c != 0 and n in EXPECTED_FAILURES)

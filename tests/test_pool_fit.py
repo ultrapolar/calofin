@@ -139,6 +139,19 @@ def arc_geom(p1, p2, b):
 def seg_dist(p, seg):
     """Distance from P to the segment (p1, p2, bulge)."""
     p1, p2, b = seg
+    return _seg_dist_g(p, seg, arc_geom(p1, p2, b))
+
+
+def _seg_dist_g(p, seg, g):
+    """seg_dist with the segment's arc_geom G already worked out.
+
+    The span helpers measure every point of a span against ONE segment,
+    and arc_geom - a circumcenter, two hypots, two atan2s - is most of
+    what a point costs, so they compute G once per segment and pass it
+    in.  The float operations are exactly seg_dist's, so the answers
+    are bit-identical.  (Deliberately not an lru_cache on arc_geom: it
+    would hand -0.0's result to 0.0, and atan2 tells those apart.)"""
+    p1, p2, b = seg
     if abs(b) < 1.0e-9:
         vx, vy = p2[0] - p1[0], p2[1] - p1[1]
         wx, wy = p[0] - p1[0], p[1] - p1[1]
@@ -147,7 +160,6 @@ def seg_dist(p, seg):
             return dist(p, p1)
         t = max(0.0, min(1.0, (wx * vx + wy * vy) / len2))
         return dist(p, (p1[0] + vx * t, p1[1] + vy * t))
-    g = arc_geom(p1, p2, b)
     if g is None:
         return min(dist(p, p1), dist(p, p2))
     c, r, a1, a2 = g
@@ -191,8 +203,14 @@ def nice_radius_p(r):
 # ---- span helpers ----------------------------------------------------
 
 
+# Each of these measures every point of QS against the one segment
+# (a, b, bul), so its arc_geom is worked out once, here, and not once per
+# point inside seg_dist (see _seg_dist_g).
+
+
 def span_dev(a, b, bul, qs):
-    return max((seg_dist(q, (a, b, bul)) for q in qs), default=0.0)
+    seg, g = (a, b, bul), arc_geom(a, b, bul)
+    return max((_seg_dist_g(q, seg, g) for q in qs), default=0.0)
 
 
 # The "on the shape" threshold in force for the current pass; mirrors
@@ -206,11 +224,13 @@ def on_eps_for(tol):
 
 
 def span_misses(a, b, bul, qs):
-    return sum(1 for q in qs if seg_dist(q, (a, b, bul)) > _ON_EPS)
+    seg, g = (a, b, bul), arc_geom(a, b, bul)
+    return sum(1 for q in qs if _seg_dist_g(q, seg, g) > _ON_EPS)
 
 
 def span_min(a, b, bul, qs):
-    return min((seg_dist(q, (a, b, bul)) for q in qs), default=None)
+    seg, g = (a, b, bul), arc_geom(a, b, bul)
+    return min((_seg_dist_g(q, seg, g) for q in qs), default=None)
 
 
 def span_turn(a, b, qs):
@@ -244,10 +264,10 @@ def span_score(a, b, bul, qs, tol):
     from shattering the span into stubs.  A point that misses by
     merely a little still counts against the fit, so the span stops at
     it as it always did.  The caller rations how many may go."""
-    seg = (a, b, bul)
+    seg, g = (a, b, bul), arc_geom(a, b, bul)
     drop, dev, mis = 0, 0.0, 0
     for q in qs:
-        d = seg_dist(q, seg)
+        d = _seg_dist_g(q, seg, g)
         if d > DROP_MULT * tol:
             drop += 1
         else:
@@ -259,7 +279,8 @@ def span_score(a, b, bul, qs, tol):
 
 def span_kept(a, b, bul, qs, tol):
     """The points of QS this arc actually holds (within TOL)."""
-    return [q for q in qs if seg_dist(q, (a, b, bul)) <= tol]
+    seg, g = (a, b, bul), arc_geom(a, b, bul)
+    return [q for q in qs if _seg_dist_g(q, seg, g) <= tol]
 
 
 def snap_arc(a, b, bl, qs, tol, left, win):

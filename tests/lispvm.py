@@ -176,13 +176,67 @@ def parse(tokens, k=0):
     return atom(val), k + 1
 
 
-def parse_all(src):
+def _parse_all(src):
     tokens = tokenize(src)
     out, k = [], 0
     while k < len(tokens):
         node, k = parse(tokens, k)
         out.append(node)
     return out
+
+
+#: Parsed trees of the larger sources, keyed by the source TEXT and never
+#: by path, so an edited file cannot be served a stale tree.  The suites
+#: that sweep the roster build a fresh VM per case and load the same
+#: files into each: test_undo_off parsed 155 MB of text out of 170
+#: distinct sources, and parsing was most of its wall clock.  Only text
+#: of _PARSE_CACHE_MIN characters or more is kept -- the one-off
+#: (setq ...) snippets the tests build are all different strings, and
+#: holding them would cost memory for no hit.
+_PARSED = {}
+_PARSE_CACHE_MIN = 4096
+
+
+def _copy_tree(x):
+    """A fresh copy of a parse tree, exactly as a fresh parse would have
+    built it.  Lists must be new because running code gets its hands on
+    parse-tree lists -- sf_quote returns them, ssdel mutates lists in
+    place, entmake keeps the inner (10 x y z) lists it was handed -- and
+    a Dot must be new because its car can be one of them.  Strings,
+    floats and ints must be new objects too, because eq compares them
+    with `is`: a fresh parse gives every literal its own object, so the
+    same literal read by two loads of one source is two objects, and
+    (eq) between them is nil.  Only Syms, which compare by value, and
+    the objects CPython itself shares (small ints, one-character and
+    empty strings -- shared by a fresh parse as well) are handed on."""
+    t = type(x)
+    if t is list:
+        return [_copy_tree(y) for y in x]
+    if t is Sym:
+        return x
+    if t is Dot:
+        return Dot(_copy_tree(x.a), _copy_tree(x.b))
+    if t is str:
+        return x[:1] + x[1:]
+    if t is float:
+        return x * 1.0
+    if t is int:
+        return x + 0
+    return x
+
+
+def parse_all(src):
+    """Every top-level form in SRC.  A large source is parsed once per
+    process and handed out as a fresh copy each time after that, so no
+    two callers ever share a list (tests/test_lispvm_cache.py)."""
+    if len(src) < _PARSE_CACHE_MIN:
+        return _parse_all(src)
+    tree = _PARSED.get(src)
+    if tree is None:
+        # get-then-store, not setdefault: setdefault's argument would be
+        # evaluated -- a full parse -- on every hit as well
+        tree = _PARSED[src] = _parse_all(src)
+    return [_copy_tree(f) for f in tree]
 
 
 def truthy(v):
@@ -372,30 +426,43 @@ class VM:
             return NIL
         head = x[0]
         if isinstance(head, Sym):
-            special = getattr(self, 'sf_' + head.replace(':', '_')
-                              .replace('-', '_').replace('*', '_')
-                              .replace('+', 'plus').replace('/', 'slash')
-                              .replace('=', 'eq').replace('<', 'lt')
-                              .replace('>', 'gt'), None)
-            if special is not None and head in SPECIAL:
-                return special(x[1:])
-            fn = self.get(head)
+            # This runs once per call form -- millions of times in the
+            # big suites -- so the special form's method name comes out
+            # of SF_NAME, mangled once at import, and the head is looked
+            # up in ONE pass over the frames instead of get() and then
+            # bound_local() walking them both.  The order is the one
+            # those two gave: a special form wins outright, then the
+            # innermost frame binding the name, then globals, then the
+            # built-ins.  tests/test_lispvm_dispatch.py pins it.
+            sf = SF_NAME.get(head)
+            if sf is not None:
+                special = getattr(self, sf, None)
+                if special is not None:
+                    return special(x[1:])
+            for frame in reversed(self.stack):
+                if head in frame:
+                    fn = frame[head]
+                    if isinstance(fn, tuple) and fn[0] == 'defun':
+                        return self.call_defun(
+                            head, fn, [self.eval(a) for a in x[1:]])
+                    # A LOCAL SHADOWS THE FUNCTION OF THE SAME NAME.
+                    # Declaring "last" in a defun's local list makes
+                    # (last ...) inside that call "no function
+                    # definition: LAST" in AutoCAD, even though last is
+                    # a built-in -- the local binding is what the name
+                    # resolves to.  Without this the VM would happily
+                    # call the built-in (or an outer defun) and a
+                    # routine that dies at the command line would pass
+                    # its tests.
+                    raise LispError(
+                        f"no function definition: {head.upper()} -- it is "
+                        f"declared as a local variable (or argument) of "
+                        f"the defun being run, which shadows the function",
+                        self)
+            fn = self.globals.get(head, NIL)
             if isinstance(fn, tuple) and fn[0] == 'defun':
                 return self.call_defun(head, fn,
                                        [self.eval(a) for a in x[1:]])
-            # A LOCAL SHADOWS THE FUNCTION OF THE SAME NAME.  Declaring
-            # "last" in a defun's local list makes (last ...) inside
-            # that call "no function definition: LAST" in AutoCAD, even
-            # though last is a built-in -- the local binding is what the
-            # name resolves to.  Without this the VM would happily call
-            # the built-in and a routine that dies at the command line
-            # would pass its tests.
-            if self.bound_local(head):
-                raise LispError(
-                    f"no function definition: {head.upper()} -- it is "
-                    f"declared as a local variable (or argument) of the "
-                    f"defun being run, which shadows the function",
-                    self)
             b = BUILTINS.get(head)
             if b is not None:
                 return b(self, [self.eval(a) for a in x[1:]])
@@ -668,6 +735,19 @@ class VM:
 SPECIAL = {Sym(s) for s in
            ['quote', 'function', 'setq', 'if', 'progn', 'cond', 'and', 'or',
             'while', 'repeat', 'foreach', 'defun', 'lambda']}
+
+
+def _sf_name(s):
+    """The VM method a special form dispatches to: sf_ plus its name with
+    the characters a Python identifier cannot hold spelled out."""
+    return 'sf_' + (s.replace(':', '_').replace('-', '_').replace('*', '_')
+                    .replace('+', 'plus').replace('/', 'slash')
+                    .replace('=', 'eq').replace('<', 'lt').replace('>', 'gt'))
+
+
+#: SPECIAL name -> its method name, mangled once here rather than on every
+#: call form eval sees.
+SF_NAME = {s: _sf_name(s) for s in SPECIAL}
 
 
 def split_params(plist):
