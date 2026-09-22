@@ -75,6 +75,7 @@ MOHAMADDLE        PADDLE's perimeter pads with a size pick first - 24in or 36in
 NORMIESTEP        Normie step layout
 OASIS             Continuous-tangent pool drawn live from envelope and radii
 OLAUTO            Best-fit overlay of a new perimeter on the original, worst error dimensioned
+OSR               Puts your object snaps back to the preset you chose in Options (LAZSET) - one word, no questions
 PADDLE            Paddle perimeter pads
 PERPMARK          Name a survey point, type what it measured: circle, perpendicular, dimension
 PERPPTS           Perpendicular offset points along a line or curve

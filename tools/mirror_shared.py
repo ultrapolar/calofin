@@ -2187,6 +2187,13 @@ TOOLS = {
             ";;; here is the one that is about a dimension rather than a"
             " vector.\n")],
     },
+    # Uses no library helper -- it sets one sysvar from one profile key.
+    # Listed so the twin is generated and can never drift.
+    'OSR': {
+        'src': 'lisp/osr/OSR.lsp',
+        'swap': {},
+        'drop_globals': [],
+    },
 }
 
 def expand_calls(src, table):

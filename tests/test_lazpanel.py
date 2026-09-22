@@ -2424,6 +2424,61 @@ print("   %d colour keys plus the theme and the two folders, all real"
       % len(inkkeys))
 
 
+print("== LAZSET: OSR's object-snap preset ==")
+# The Object snaps box is OSR's preset as AutoCAD's own fourteen tick
+# boxes plus Object Snap On.  Same rule as the rest of the page: the
+# profile is touched at OK and never before.
+vm = setvm([0])
+run(vm, 'c:LAZSET', 'set-osr-shown')
+assert tile(vm, 'osr_1') == '1' and tile(vm, 'osr_128') == '1' \
+    and tile(vm, 'osr_256') == '0' and tile(vm, 'osr_on') == '1', \
+    "an unset preset did not open on the shipped one: %r" \
+    % [tile(vm, k) for k in ('osr_1', 'osr_128', 'osr_256', 'osr_on')]
+assert prof(vm, 'CalofinOsnapPreset') == '', "cancel wrote the preset"
+print("   opens on the shipped preset, and Cancel writes nothing")
+
+vm = setvm([0], env={'CalofinOsnapPreset': '17152'})   # Nearest, Tangent, F3 off
+run(vm, 'c:LAZSET', 'set-osr-stored')
+assert tile(vm, 'osr_512') == '1' and tile(vm, 'osr_256') == '1' \
+    and tile(vm, 'osr_1') == '0' and tile(vm, 'osr_on') == '0', \
+    [tile(vm, k) for k in ('osr_512', 'osr_256', 'osr_1', 'osr_on')]
+print("   ...or on the stored one, Object Snap On unticked when it is off")
+
+vm = setvm([1], click='osr_4096', val='1')
+run(vm, 'c:LAZSET', 'set-osr-tick')
+assert prof(vm, 'CalofinOsnapPreset') == str(191 + 4096), \
+    prof(vm, 'CalofinOsnapPreset')
+print("   ticking Extension and accepting writes 191 + 4096")
+
+vm = setvm([1], click='osr_1', val='0', env={'CalofinOsnapPreset': '3'})
+run(vm, 'c:LAZSET', 'set-osr-untick')
+assert prof(vm, 'CalofinOsnapPreset') == '2', prof(vm, 'CalofinOsnapPreset')
+print("   unticking Endpoint takes its bit out")
+
+vm = setvm([1], click='osr_on', val='0')
+run(vm, 'c:LAZSET', 'set-osr-off')
+assert prof(vm, 'CalofinOsnapPreset') == str(191 + 16384), \
+    prof(vm, 'CalofinOsnapPreset')
+print("   unticking Object Snap On stores the modes with the OFF bit")
+
+vm = setvm([1], click='osr_current', env={'CalofinOsnapPreset': '1'})
+vm.sysvars['OSMODE'] = 519
+run(vm, 'c:LAZSET', 'set-osr-current')
+assert prof(vm, 'CalofinOsnapPreset') == '519', prof(vm, 'CalofinOsnapPreset')
+assert tile(vm, 'osr_512') == '1', "Use current did not repaint the boxes"
+print("   Use current takes the drawing's OSMODE and repaints the boxes")
+
+vm = setvm([1], click='osr_default', env={'CalofinOsnapPreset': '1'})
+run(vm, 'c:LAZSET', 'set-osr-default')
+assert prof(vm, 'CalofinOsnapPreset') == '191', prof(vm, 'CalofinOsnapPreset')
+print("   Default goes back to the shipped preset")
+
+vm = setvm([1], env={'CalofinOsnapPreset': 'junk'})
+run(vm, 'c:LAZSET', 'set-osr-junk')
+assert prof(vm, 'CalofinOsnapPreset') == '191', prof(vm, 'CalofinOsnapPreset')
+print("   a profile value that is not an OSMODE is shown and saved as the shipped one")
+
+
 print("== LAZNAME: names of the drafter's own, end to end ==")
 # Two things a drafter can rename per machine: the name they TYPE to
 # summon a tool, and the words its BUTTON says.  Neither touches the
@@ -3029,6 +3084,27 @@ out = ''.join(str(p) for p in vm.printed)
 assert out.count('Change which?') == 0  # it is a prompt, not printed prose
 assert 'Nothing changed' in out, out
 print("   Back re-asks Change which? instead of writing anything")
+
+vm = fresh()
+vm.sysvars['OSMODE'] = 4133
+vm.run('c:CALSET', ['Osnaps', None])
+out = ''.join(str(p) for p in vm.printed)
+assert vm.env.get('CalofinOsnapPreset') == '4133', vm.env
+assert 'OSR preset is now 4133' in out and 'Extension' in out, out
+print("   Osnaps -> Enter takes the drawing's current snaps as OSR's preset")
+
+vm = fresh()
+vm.run('c:CALSET', ['Osnaps', 'Default'])
+assert vm.env.get('CalofinOsnapPreset') == '191', vm.env
+vm = fresh()
+vm.run('c:CALSET', ['Osnaps', 3])
+assert vm.env.get('CalofinOsnapPreset') == '3', vm.env
+vm = fresh()
+vm.run('c:CALSET', ['Osnaps', 'Back', 'Quit'])
+assert 'CalofinOsnapPreset' not in vm.env, vm.env
+out = ''.join(str(p) for p in vm.printed)
+assert 'CalofinOsnapPreset -- what OSR puts back' in out, out
+print("   ...Default, a typed OSMODE, and Back all do what they say")
 
 # every role Itemcolors offers has to be a role cal:ink actually
 # resolves, or the override it writes would never be read back

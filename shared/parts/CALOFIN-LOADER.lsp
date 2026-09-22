@@ -131,7 +131,7 @@
                  "CORNERSTP.lsp" "HEMISTEP.lsp" "NORMIESTEP.lsp"
                  "LAZSTEP.lsp"
                  "covercheck.lsp" "CUSTBLOCK.lsp"
-                 "CLEARDIM.lsp"
+                 "CLEARDIM.lsp" "OSR.lsp"
                  "dimcheck.lsp" "dim_continue.lsp"
                  "DroneDistortion.lsp" "DroneHeightGPS.lsp"
                  "FITABHD.lsp" "lhd.lsp" "lincheck.lsp"
