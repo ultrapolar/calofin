@@ -114,7 +114,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.23")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.24")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -2067,7 +2067,7 @@
 ;;  except writing the report. Use it as a quick pre-flight, or when
 ;;  you want the findings without touching a released sheet.
 
-(defun c:DIMSCAN ( / *error* oldecho ss i e et ed cands dims arcs plns segs
+(defun c:DIMSCAN ( / *error* oldecho ss i e et ed sty meas cands dims arcs plns segs
                      lines olaps pr anchors
                      nd ndbad na nabad ndanch h m ins txt nlin ref hdr l
                      minx miny maxx maxy bb p13 p14 near q dq s bad held w)
@@ -2120,7 +2120,9 @@
      (foreach e (dchk:sort-dims dims (if (and miny maxy)
                                        (* *dchk-row-band* (- maxy miny))
                                        *dchk-row-flat*))
-       (setq ed  (entget e)
+       (setq ed   (entget e)
+             sty  (dchk:dim-style e)
+             meas (dchk:dim-meas e)
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
              p14 (cdr (assoc 14 ed))
@@ -2152,10 +2154,10 @@
        (if bad (setq ndbad (1+ ndbad)))
        (if held (setq ndanch (+ ndanch (length held))))
        (setq lines (cons (strcat "Dim " (cdr (assoc 5 ed))
-                                 (if (= (dchk:dim-style e) "") ""
-                                   (strcat " [" (dchk:dim-style e) "]"))
-                                 (if (dchk:dim-meas e)
-                                   (strcat " = " (dchk:dim-meas e)) "")
+                                 (if (= sty "") ""
+                                   (strcat " [" sty "]"))
+                                 (if meas
+                                   (strcat " = " meas) "")
                                  ": "
                                  (if bad
                                    (strcat "NOT attached - " (dchk:join bad ", "))
@@ -2169,14 +2171,15 @@
 
      ;; --- arcs: report unattached endpoints, move nothing
      (foreach e arcs
-       (setq na  (1+ na)
+       (setq ed  (entget e)
+             na  (1+ na)
              bad nil)
-       (if (dchk:planar-arc-p (entget e))
+       (if (dchk:planar-arc-p ed)
          (foreach s '(("start" . start) ("end" . end))
            (if (dchk:arc-end-target e (cdr s) cands)
              (setq bad (append bad (list (car s)))))))
        (if bad (setq nabad (1+ nabad)))
-       (setq lines (cons (strcat "Arc " (cdr (assoc 5 (entget e))) ": "
+       (setq lines (cons (strcat "Arc " (cdr (assoc 5 ed)) ": "
                                  (if bad
                                    (strcat (dchk:join bad " & ")
                                            " NOT attached to an object end")
