@@ -237,7 +237,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.23")
+(setq *cchk-version* "v1.24")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -2978,7 +2978,7 @@
   (cons (reverse out) nskip))
 
 (defun cchk:pool-loop (pents borrow / segs e bl res loops opens best
-                             bestarea a l)
+                             bestarea a l sg)
   ;; the pool outline: the largest closed loop chained from the
   ;; candidates' bulge-aware segments.  BORROW is ((layer . ents) ...)
   ;; read off *cchk-perim-layers* -- a stretch of the same perimeter
@@ -2997,10 +2997,13 @@
   ;; to an anchor, a loop of its own -- and it is neither the outline
   ;; nor a gap in it, so it is not measured and not counted.
   (foreach e pents
-    (setq segs (append segs (cchk:pv-tag-segs (cchk:pv-ent-segs e) nil))))
+    (foreach sg (cchk:pv-tag-segs (cchk:pv-ent-segs e) nil)
+      (setq segs (cons sg segs))))
   (foreach bl borrow
     (foreach e (cdr bl)
-      (setq segs (append segs (cchk:pv-tag-segs (cchk:pv-ent-segs e) (car bl))))))
+      (foreach sg (cchk:pv-tag-segs (cchk:pv-ent-segs e) (car bl))
+        (setq segs (cons sg segs)))))
+  (setq segs (reverse segs))
   ;; with nothing borrowed there is nothing to cut, and the walk is
   ;; the one it always was
   (if borrow
@@ -3967,7 +3970,7 @@
 (defun cchk:scan (lite / *error* oldecho name ss i e et ed cands dims arcs
                        plns segs blks lines olaps pr bb bad
                        nd ndbad na nabad ndanch anchors q dq held hdr dhdr l cres dimlay units datev
-                       minx miny maxx maxy p13 p14 near s)
+                       minx miny maxx maxy p13 p14 near s sty meas)
 
   (setq name (if lite "LITECOVERSCAN" "COVERSCAN"))
   (defun *error* (msg)
@@ -4030,7 +4033,9 @@
                   (cchk:sort-dims dims (if (and miny maxy)
                                          (* *cchk-row-band* (- maxy miny))
                                          *cchk-row-flat*)))
-       (setq ed  (entget e)
+       (setq ed   (entget e)
+             sty  (cchk:dim-style e)
+             meas (cchk:dim-meas e)
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
              p14 (cdr (assoc 14 ed))
@@ -4062,10 +4067,10 @@
        (if bad (setq ndbad (1+ ndbad)))
        (if held (setq ndanch (+ ndanch (length held))))
        (setq lines (cons (strcat "Dim " (cdr (assoc 5 ed))
-                                 (if (= (cchk:dim-style e) "") ""
-                                   (strcat " [" (cchk:dim-style e) "]"))
-                                 (if (cchk:dim-meas e)
-                                   (strcat " = " (cchk:dim-meas e)) "")
+                                 (if (= sty "") ""
+                                   (strcat " [" sty "]"))
+                                 (if meas
+                                   (strcat " = " meas) "")
                                  ": "
                                  (if bad
                                    (strcat "NOT attached - " (cchk:join bad ", "))
@@ -4079,14 +4084,15 @@
 
      ;; --- arcs: report unattached endpoints, move nothing
      (foreach e (if lite nil arcs)
-       (setq na  (1+ na)
+       (setq ed  (entget e)
+             na  (1+ na)
              bad nil)
-       (if (cchk:planar-arc-p (entget e))
+       (if (cchk:planar-arc-p ed)
          (foreach s '(("start" . start) ("end" . end))
            (if (cchk:arc-end-target e (cdr s) cands)
              (setq bad (append bad (list (car s)))))))
        (if bad (setq nabad (1+ nabad)))
-       (setq lines (cons (strcat "Arc " (cdr (assoc 5 (entget e))) ": "
+       (setq lines (cons (strcat "Arc " (cdr (assoc 5 ed)) ": "
                                  (if bad
                                    (strcat (cchk:join bad " & ")
                                            " NOT attached to an object end")
