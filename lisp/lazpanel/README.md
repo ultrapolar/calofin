@@ -338,6 +338,28 @@ its own error handler runs, the panel stays closed, and `LAZPANEL`
 brings it back. That is the right way round: the alternative is a panel
 bouncing back in front of the error you are trying to read.
 
+**One shop decision, one action.** A `lisp/` file is self-contained --
+it may not read another tool's global -- so a rule several tools act on
+is several knobs: the survey points' layer is `*point-layer*` in
+**twelve** files, the concave pad cap PADDLE, MOHAMADDLE and COVERCHECK
+share is three. That is right for the code and wrong for the person:
+one decision should not be twelve edits, and a drafter who changes some
+and not the rest gets two tools disagreeing about one drawing --
+COVERCHECK suggesting pads PADDLE would not place, which is the state
+the tree was really in when that cap moved from 4'-6" to 4'-0".
+
+So `LAZTUNE` knows which names are one decision. `lzp:*knobfam*` is
+generated beside the catalog by `tools/gen_knobs.py`: knobs whose names
+agree once each tool's own prefix is off them **and** which ship the
+same value -- the shared value being what says they are one rule rather
+than a coincidence of naming. Pick any member and the state line says
+which tools carry it; **Set everywhere** queues your value for all of
+them. It queues rather than writes, so each one goes through the same
+kind-check a typed value does and `Cancel` still throws the lot away.
+254 families cover about half the catalog. A knob only one tool has --
+`pool:*half-ratio*`, `spa:*gapdflt*` -- has no family and the button
+greys.
+
 **The Options button.** Beside Close, on every page including Find, an
 `Options...` button opens `LAZSET` -- the settings as a **dialog**, with
 the theme on a dropdown, a family dropdown and a hex box for each of

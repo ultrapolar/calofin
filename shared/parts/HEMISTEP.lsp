@@ -290,9 +290,32 @@
 (if (not (boundp '*cs-tread-ladder*)) (setq *cs-tread-ladder* '(6.0 36.0 6.0)))
 (if (not (boundp '*cs-drop-ladder*)) (setq *cs-drop-ladder* '(6.0 12.0 1.0)))
 
+;; What Enter answers at "Dimension the steps?".  "No" makes a bare
+;; run the quick one and leaves the dims to be asked for by name.
+(if (not (boundp '*cs-dims-default*)) (setq *cs-dims-default* "Yes"))
+
+;; HEMISTEP only.  What Enter answers at "Draw the reconstructed
+;; boundary through the step ends?".  "No" leaves the steps standing
+;; on their own and rebuilds no hemisphere through them.
+(if (not (boundp '*cs-boundary-default*)) (setq *cs-boundary-default* "Yes"))
+
+;; What Enter answers at "Add a side profile?".  "No" ends a run at
+;; the plan, so the step-depth questions behind it are reached only by
+;; typing Yes.
+(if (not (boundp '*cs-profile-default*)) (setq *cs-profile-default* "Yes"))
+
+;; What Enter answers at "Bead the steps?".  "No" suits a shop that
+;; runs AUTOBEAD itself once the drawing is finished.
+(if (not (boundp '*cs-bead-default*)) (setq *cs-bead-default* "Yes"))
+
+;; What Enter answers at the side-wall question once beading is on:
+;; "All", "Some" (which then asks which step numbers) or "None", which
+;; beads the step faces and leaves the walls bare.
+(if (not (boundp '*cs-beadsides-default*)) (setq *cs-beadsides-default* "All"))
+
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.20") ; printed on load and at command start so a
+(setq *hs-version* "v3.21") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -674,6 +697,17 @@
 ;; not.
 (defun hs-num (v dflt) (if (numberp v) v dflt))
 
+;; A setting that has to be one of a prompt's KEYWORDS: the canonical
+;; spelling S stands for, in any case, or nil for anything that is not
+;; one of them, so the caller can fall back to the word it ships with.
+;; hs-fkw and a bare Enter both hand a default straight back unchecked,
+;; and "no" set in acaddoc.lsp must not reach a (/= "No" fkey) test
+;; unspelled.
+(defun hs-kwcanon (s kws / u out w)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w kws (if (= u (strcase w)) (setq out w)))
+  out)
+
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
 ;; a string where a value would be a list or a number.
@@ -981,7 +1015,7 @@
                       wallA wallB lastwid kx fx
                       tlist srt treads pv drops dd jx tcount ptop
                       px py totrun totdrop td cnrs pfo pgap fsteps fkey
-                      wnoun bstep s hstep rl rr)
+                      wnoun bstep s hstep rl rr dflt)
 
   (defun *error* (msg)
     (hs-fclear)                     ; both exits clear the form store
@@ -1222,11 +1256,13 @@
   (while (<= hstep 2)
     (cond
       ((= hstep 1)
-       (if (null (setq fkey (hs-fkw 'dims "Yes No" "Yes")))
+       (setq dflt (or (hs-kwcanon *cs-dims-default* '("Yes" "No")) "Yes"))
+       (if (null (setq fkey (hs-fkw 'dims "Yes No" dflt)))
          (progn
            (initget "Yes No")
-           (setq fkey (getkword "\nDimension the steps? [Yes/No] <Yes>: "))
-           (if lzd:ask (lzd:ask "\nDimension the steps? [Yes/No] <Yes>: " fkey) fkey)))
+           (setq fkey (getkword (strcat "\nDimension the steps? [Yes/No] <" dflt ">: ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+           (if (null fkey) (setq fkey dflt))))
        (setq dimflag (/= "No" fkey))
        (if dimflag
          (progn
@@ -1482,13 +1518,16 @@
                 kx  (if crown
                       (+ (length ea) (if wallA 1 0)))))
         (progn
-          (if (null (setq fkey (hs-fkw 'boundary "Yes No" "Yes")))
+          (setq dflt (or (hs-kwcanon *cs-boundary-default* '("Yes" "No"))
+                         "Yes"))
+          (if (null (setq fkey (hs-fkw 'boundary "Yes No" dflt)))
             (progn
               (initget "Yes No")
               (setq fkey (getkword (strcat "\nDraw the reconstructed boundary"
                                            " through the step ends? [Yes/No]"
-                                           " <Yes>: ")))
-              (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)))
+                                           " <" dflt ">: ")))
+              (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+              (if (null fkey) (setq fkey dflt))))
           (if (/= "No" fkey)
             ;; Deepest step - side A - across the first step - side B.
             ;; The start point is NOT made a vertex: near the crown the
@@ -1525,11 +1564,13 @@
       ;; what the run starts at, and so what the flight starts at: the
       ;; wall in base-line mode, the curve itself in the curve modes
       (setq wnoun (if cmode "the curve" "the wall"))
-      (if (null (setq fkey (hs-fkw 'profile "Yes No" "Yes")))
+      (setq dflt (or (hs-kwcanon *cs-profile-default* '("Yes" "No")) "Yes"))
+      (if (null (setq fkey (hs-fkw 'profile "Yes No" dflt)))
         (progn
           (initget "Yes No")
-          (setq fkey (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))
-          (if lzd:ask (lzd:ask "\nAdd a side profile? [Yes/No] <Yes>: " fkey) fkey)))
+          (setq fkey (getkword (strcat "\nAdd a side profile? [Yes/No] <" dflt ">: ")))
+          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+          (if (null fkey) (setq fkey dflt))))
       (if (/= "No" fkey)
         (progn
           ;; step treads, top step first: sort the logged axis distances
@@ -1711,11 +1752,14 @@
         (while (<= bstep 4)
           (cond
             ((= bstep 1)
-             (if (null (setq fkey (hs-fkw 'bead "Yes No" "Yes")))
+             (setq dflt (or (hs-kwcanon *cs-bead-default* '("Yes" "No"))
+                            "Yes"))
+             (if (null (setq fkey (hs-fkw 'bead "Yes No" dflt)))
                (progn
                  (initget "Yes No")
-                 (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))
-                 (if lzd:ask (lzd:ask "\nBead the steps? [Yes/No] <Yes>: " fkey) fkey)))
+                 (setq fkey (getkword (strcat "\nBead the steps? [Yes/No] <" dflt ">: ")))
+                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+                 (if (null fkey) (setq fkey dflt))))
              (setq bstep (if (/= "No" fkey) 2 5)))
             ((= bstep 2)
              (setq btreads (hs-treadents slog)
@@ -1730,16 +1774,19 @@
                  ;; not reachable from a form answer -- there is no
                  ;; prompt to step back from, and the question above it
                  ;; came off the same sheet
+                 (setq dflt (or (hs-kwcanon *cs-beadsides-default*
+                                            '("All" "Some" "None"))
+                                "All"))
                  (if (null (setq bside (hs-fkw 'beadsides
-                                               "All Some None" "All")))
+                                               "All Some None" dflt)))
                    (progn
                      (initget "All Some None Back Undo")
                      (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
                                           (getkword (strcat "\nWhich steps have"
                                                             " beaded side walls?"
                                                             " [All/Some/None/Back]"
-                                                            " <All>: "))))
-                                       ("All")))))
+                                                            " <" dflt ">: "))))
+                                       (dflt)))))
                  (if (member bside '("Back" "Undo"))
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 1))

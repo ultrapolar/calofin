@@ -331,9 +331,40 @@
 (if (not (boundp '*cs-corner-ladder*))
   (setq *cs-corner-ladder* '(3.0 24.0 3.0)))
 
+;; NORMIESTEP only.  What the FIRST corner-treatment question offers
+;; on Enter - one of "Square", "Radius", "Cut" or "NotGiven", in any
+;; case.  A re-ask behind a size question still offers the answer
+;; before it, as it always has; this only decides where that chain
+;; starts.
+(if (not (boundp '*cs-treat-default*)) (setq *cs-treat-default* "Square"))
+
+;; NORMIESTEP only.  Which of a Cut corner's two sizes Enter asks for:
+;; the "Offset" back along each line, or the "Cut" face across them.
+;; Either gives the other, so this is the one the shop's order sheets
+;; quote.
+(if (not (boundp '*cs-cut-given-default*)) (setq *cs-cut-given-default* "Offset"))
+
+;; What Enter answers at "Dimension the steps?".  "No" makes a bare
+;; run the quick one and leaves the dims to be asked for by name.
+(if (not (boundp '*cs-dims-default*)) (setq *cs-dims-default* "Yes"))
+
+;; What Enter answers at "Add a side profile?".  "No" ends a run at
+;; the plan, so the step-depth questions behind it are reached only by
+;; typing Yes.
+(if (not (boundp '*cs-profile-default*)) (setq *cs-profile-default* "Yes"))
+
+;; What Enter answers at "Bead the steps?".  "No" suits a shop that
+;; runs AUTOBEAD itself once the drawing is finished.
+(if (not (boundp '*cs-bead-default*)) (setq *cs-bead-default* "Yes"))
+
+;; What Enter answers at the side-wall question once beading is on:
+;; "All", "Some" (which then asks which step numbers) or "None", which
+;; beads the step faces and leaves the walls bare.
+(if (not (boundp '*cs-beadsides-default*)) (setq *cs-beadsides-default* "All"))
+
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.15") ; printed on load and at command start so a
+(setq *ns-version* "v3.16") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -652,6 +683,17 @@
 ;; A setting that has to be a number: V when it is one, DFLT when it is
 ;; not.
 (defun ns-num (v dflt) (if (numberp v) v dflt))
+
+;; A setting that has to be one of a prompt's KEYWORDS: the canonical
+;; spelling S stands for, in any case, or nil for anything that is not
+;; one of them, so the caller can fall back to the word it ships with.
+;; ns-fkw, ns-askkw and a bare Enter all hand a default straight back
+;; unchecked, and "radius" set in acaddoc.lsp must not reach the
+;; corner table unspelled.
+(defun ns-kwcanon (s kws / u out w)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w kws (if (= u (strcase w)) (setq out w)))
+  out)
 
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
@@ -1173,7 +1215,7 @@
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt totrun totdrop px0 cx cy
                         tt cnrs ca cb pfo pgap lastinn fsteps fkey
-                        bstep rredo rl rr szv)
+                        bstep rredo rl rr szv dflt)
 
   (defun *error* (msg)
     (ns-fclear)                     ; both exits clear the form store
@@ -1488,10 +1530,17 @@
       (setq rtype nil)
       (progn
         ;; the subject reads like prose, as STANDARDS.md section 2 has it
+        ;; the chain reads the knob only here: a re-ask below offers
+        ;; the answer before it, the way it always has
         (setq rsubj (if (= mode "LINE")
                       "the corners of the last step"
                       "the back corners")
-              rtype (ns-ftreat rsubj "Square" (/= mode "U")))
+              rtype (ns-ftreat rsubj
+                               (or (ns-kwcanon *cs-treat-default*
+                                               '("Square" "Radius"
+                                                 "Cut" "NotGiven"))
+                                   "Square")
+                               (/= mode "U")))
         (if (eq rtype 'CAL-BACK)
           (setq wid nil rtype nil treatback T)))))
 
@@ -1536,13 +1585,17 @@
          ;; the offset and the cut face are the two legs and the
          ;; hypotenuse of the same 45 degree triangle, so either one
          ;; gives the other; cutgiven says which one treat-sz is
-         (if (null (setq fkey (ns-fkw 'cutgiven "Offset Cut" "Offset")))
+         (setq dflt (or (ns-kwcanon *cs-cut-given-default*
+                                    '("Offset" "Cut"))
+                        "Offset"))
+         (if (null (setq fkey (ns-fkw 'cutgiven "Offset Cut" dflt)))
            (progn
              (initget "Offset Cut Back Undo")
              (setq fkey (getkword
                           (strcat "\nIs the cut given as its"
-                                  " [Offset/Cut/Back] <Offset>: ")))
-             (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)))
+                                  " [Offset/Cut/Back] <" dflt ">: ")))
+             (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+             (if (null fkey) (setq fkey dflt))))
          (if (member fkey '("Back" "Undo"))
            (progn (princ "\n  Stepping back one question.")
                   (setq rtype (ns-ftreat rsubj rtype nil)
@@ -1593,11 +1646,13 @@
               (setq bc1 nil bc2 nil rtype "Square")))))))
 
   ;; ---- 4. dimension the steps? -----------------------------------------
-  (if (null (setq fkey (ns-fkw 'dims "Yes No" "Yes")))
+  (setq dflt (or (ns-kwcanon *cs-dims-default* '("Yes" "No")) "Yes"))
+  (if (null (setq fkey (ns-fkw 'dims "Yes No" dflt)))
     (progn
       (initget "Yes No")
-      (setq fkey (getkword "\nDimension the steps? [Yes/No] <Yes>: "))
-      (if lzd:ask (lzd:ask "\nDimension the steps? [Yes/No] <Yes>: " fkey) fkey)))
+      (setq fkey (getkword (strcat "\nDimension the steps? [Yes/No] <" dflt ">: ")))
+      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+      (if (null fkey) (setq fkey dflt))))
   (setq dimflag (/= "No" fkey))
   (if dimflag
     (progn
@@ -1889,11 +1944,13 @@
   ;; the depth dim style like the tread chain.
   (if (> drawn 0)
     (progn
-      (if (null (setq fkey (ns-fkw 'profile "Yes No" "Yes")))
+      (setq dflt (or (ns-kwcanon *cs-profile-default* '("Yes" "No")) "Yes"))
+      (if (null (setq fkey (ns-fkw 'profile "Yes No" dflt)))
         (progn
           (initget "Yes No")
-          (setq fkey (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))
-          (if lzd:ask (lzd:ask "\nAdd a side profile? [Yes/No] <Yes>: " fkey) fkey)))
+          (setq fkey (getkword (strcat "\nAdd a side profile? [Yes/No] <" dflt ">: ")))
+          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+          (if (null fkey) (setq fkey dflt))))
       (if (/= "No" fkey)
         (progn
           ;; the treads, top step first: sort the recorded distances
@@ -2072,11 +2129,14 @@
         (while (<= bstep 4)
           (cond
             ((= bstep 1)
-             (if (null (setq fkey (ns-fkw 'bead "Yes No" "Yes")))
+             (setq dflt (or (ns-kwcanon *cs-bead-default* '("Yes" "No"))
+                            "Yes"))
+             (if (null (setq fkey (ns-fkw 'bead "Yes No" dflt)))
                (progn
                  (initget "Yes No")
-                 (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))
-                 (if lzd:ask (lzd:ask "\nBead the steps? [Yes/No] <Yes>: " fkey) fkey)))
+                 (setq fkey (getkword (strcat "\nBead the steps? [Yes/No] <" dflt ">: ")))
+                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+                 (if (null fkey) (setq fkey dflt))))
              (setq bstep (if (/= "No" fkey) 2 5)))
             ((= bstep 2)
              (setq btreads (ns-treadents slog)
@@ -2091,16 +2151,19 @@
                  ;; not reachable from a form answer -- there is no
                  ;; prompt to step back from, and the question above it
                  ;; came off the same sheet
+                 (setq dflt (or (ns-kwcanon *cs-beadsides-default*
+                                            '("All" "Some" "None"))
+                                "All"))
                  (if (null (setq bside (ns-fkw 'beadsides
-                                               "All Some None" "All")))
+                                               "All Some None" dflt)))
                    (progn
                      (initget "All Some None Back Undo")
                      (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
                                           (getkword (strcat "\nWhich steps have"
                                                             " beaded side walls?"
                                                             " [All/Some/None/Back]"
-                                                            " <All>: "))))
-                                       ("All")))))
+                                                            " <" dflt ">: "))))
+                                       (dflt)))))
                  (if (member bside '("Back" "Undo"))
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 1))
