@@ -107394,7 +107394,7 @@
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
-(setq *drone-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *drone-version* "v1.6")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -107587,6 +107587,7 @@
         (vla-put-StyleName obj *drone-text-style*)
         (vla-put-Height obj *drone-text-height*)
         (drone:force-bylayer obj)
+        (vl-catch-all-apply 'drone:orient (list obj))
         (setq n-text (1+ n-text)
               i      (1+ i)))))
 
@@ -107622,20 +107623,6 @@
         (vla-put-Color obj *drone-pink*)
         (setq n-anch (1+ n-anch)
               i      (1+ i)))))
-
-  ;; ------------------------------------------------------------
-  ;; 5. Orient the converted text to read west -> east, right side
-  ;;    up, each label pivoting about its insertion point (= the
-  ;;    point it labels).
-  ;; ------------------------------------------------------------
-  (if ss-text
-    (progn
-      (setq i 0)
-      (while (< i (sslength ss-text))
-        (vl-catch-all-apply
-          'drone:orient
-          (list (vlax-ename->vla-object (ssname ss-text i))))
-        (setq i (1+ i)))))
 
   ;; Re-lock whatever we unlocked and close the undo group.
   (drone:relock-layers unlocked)
@@ -107718,7 +107705,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.7")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -107892,6 +107879,7 @@
         (vla-put-StyleName obj *tydrn-text-style*)
         (vla-put-Height obj *tydrn-text-height*)
         (tydrn:force-bylayer obj)
+        (vl-catch-all-apply 'tydrn:orient (list obj))
         (setq n-text (1+ n-text)
               i      (1+ i)))))
 
@@ -107915,20 +107903,6 @@
         (vla-put-Color obj *tydrn-pink*)
         (setq n-anch (1+ n-anch)
               i      (1+ i)))))
-
-  ;; ------------------------------------------------------------
-  ;; 4. Orient the converted text to read west -> east, right side
-  ;;    up, each label pivoting about its insertion point (= the
-  ;;    point it labels).
-  ;; ------------------------------------------------------------
-  (if ss-text
-    (progn
-      (setq i 0)
-      (while (< i (sslength ss-text))
-        (vl-catch-all-apply
-          'tydrn:orient
-          (list (vlax-ename->vla-object (ssname ss-text i))))
-        (setq i (1+ i)))))
 
   ;; Re-lock whatever we unlocked and close the undo group.
   (tydrn:relock-layers unlocked)
