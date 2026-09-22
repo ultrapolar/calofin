@@ -48806,7 +48806,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.9"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.10"     ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -49020,9 +49020,11 @@
         (setq i (1+ i)))
       best)))
 
-(defun autobead-ixpoints (bead step / o1 o2 v a l res)
-  ;; WCS points where 'step' (extended to infinity) crosses 'bead'.
-  (setq o1 (vlax-ename->vla-object bead)
+(defun autobead-ixpoints (beadobj step / o1 o2 v a l res)
+  ;; WCS points where 'step' (extended to infinity) crosses the bead
+  ;; BEADOBJ is already a vla-object -- the caller's, converted once
+  ;; per bead rather than once per step it is tested against
+  (setq o1 beadobj
         o2 (vlax-ename->vla-object step)
         v  (vl-catch-all-apply 'vla-IntersectWith (list o1 o2 2))) ; 2 = acExtendOtherEntity
   (setq res '())
@@ -49085,7 +49087,7 @@
                          beadcount failcount c e i src dup drift
                          gaps g sp ep perimchains stepchains steplines
                          perimbeads bps pieces mp kept culled filtered
-                         misses brks dirw hit p)
+                         misses brks dirw hit p eobj)
 
   (setq beadoff *autobead-offset*
         layname *autobead-layer*
@@ -49256,10 +49258,13 @@
            (progn
              (setq filtered T)
              (foreach e perimbeads
-               (setq bps '())
+               ;; e is constant across the brks loop below -- converted
+               ;; once per bead here, not once per step it is tested
+               ;; against
+               (setq bps '() eobj (vlax-ename->vla-object e))
                (foreach c brks
                  (if (entget (car c))
-                   (setq bps (append bps (autobead-ixpoints e (car c))))))
+                   (setq bps (append bps (autobead-ixpoints eobj (car c))))))
                (setq pieces (list e))
                (foreach g bps
                  (setq pieces (autobead-break-at pieces g)))
