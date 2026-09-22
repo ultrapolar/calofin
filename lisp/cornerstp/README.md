@@ -193,6 +193,7 @@ The knobs one file keeps to itself:
 | `*cs-direction-default*` | CORNERSTP | `"Inside"` | Which way Enter draws the run: `"Inside"` starts at the corner and builds out toward the pool, `"Outside"` places the outermost step first and walks back in. Only what Enter answers moves -- both words stay on the prompt |
 | `*cs-measure-default*` | CORNERSTP | `"Middle"` | Where Enter measures the step treads from when a corner diagonal or fillet arc came in with the walls: `"Middle"` of that diagonal, or the `"True"` corner the two walls would meet at |
 | `*cs-treadmode-default*` | CORNERSTP | `"Parallel"` | Which way Enter runs the treads when a diagonal came in with the walls: `"Parallel"` to the diagonal, or square to the true corner -- the answer the outside-in prompt spells `Equidistant` and the inside-out one `True`, so either word sets the same thing whichever way the run goes |
+| `*cs-bench-default*` | CORNERSTP | `"No"` | What Enter answers at "Add a bench along a wall?", the question an inside-out run asks before it draws. `"Yes"` goes straight on to picking the wall, so a shop that benches most runs stops typing the word; both words stay on the prompt either way |
 | `*cs-boundary-default*` | HEMISTEP | `"Yes"` | What Enter answers at "Draw the reconstructed boundary through the step ends?". `"No"` leaves the steps standing on their own and rebuilds no hemisphere through them |
 | `*cs-treat-default*` | NORMIESTEP | `"Square"` | What the FIRST corner-treatment question offers on Enter -- one of `"Square"`, `"Radius"`, `"Cut"` or `"NotGiven"`, in any case. A re-ask behind a size question still offers the answer before it, as it always has; this only decides where that chain starts |
 | `*cs-cut-given-default*` | NORMIESTEP | `"Offset"` | Which of a Cut corner's two sizes Enter asks for: the `"Offset"` back along each line, or the `"Cut"` face across them. Either gives the other, so this is the one the shop's order sheets quote |
@@ -209,7 +210,7 @@ value it shipped with rather than failing mid-run, and
 the one the settings block sets and the one its reader falls back to --
 together.
 
-**What Enter answers.** The nine `...-default*` knobs above are the
+**What Enter answers.** The eleven `...-default*` knobs above are the
 reply each prompt takes when you just press Enter -- the shop's habit,
 written down once instead of typed every run. Nothing else changes:
 the question still offers the same words in the same order. Each is

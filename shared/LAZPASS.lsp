@@ -55988,6 +55988,12 @@
 ;; the same thing whichever way the run goes.
 (if (not (boundp '*cs-treadmode-default*)) (setq *cs-treadmode-default* "Parallel"))
 
+;; CORNERSTP only.  What Enter answers at "Add a bench along a wall?",
+;; the question an inside-out run asks before it draws.  "Yes" goes
+;; straight on to picking the wall, so a shop that benches most runs
+;; stops typing the word; both words stay on the prompt either way.
+(if (not (boundp '*cs-bench-default*)) (setq *cs-bench-default* "No"))
+
 ;; What Enter answers at "Dimension the steps?".  "No" makes a bare
 ;; run the quick one and leaves the dims to be asked for by name.
 (if (not (boundp '*cs-dims-default*)) (setq *cs-dims-default* "Yes"))
@@ -56008,7 +56014,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.10") ; printed on load and at command start so a
+(setq *cs-version* "v4.11") ; printed on load and at command start so a
                             ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -57028,11 +57034,14 @@
        (if outflag
          (setq qstep (+ qstep qdir))
          (progn
-           (if (null (setq fkey (cs-fkw 'bench "Yes No" "No")))
+           (setq dflt (or (cs-kwcanon *cs-bench-default* '("Yes" "No")) "No"))
+           (if (null (setq fkey (cs-fkw 'bench "Yes No" dflt)))
              (progn
                (initget "Yes No Back Undo")
-               (setq fkey (getkword "\nAdd a bench along a wall? [Yes/No/Back] <No>: "))
-               (if lzd:ask (lzd:ask "\nAdd a bench along a wall? [Yes/No/Back] <No>: " fkey) fkey)))
+               (setq fkey (getkword (strcat "\nAdd a bench along a wall? [Yes/No/Back] <"
+                                            dflt ">: ")))
+               (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+               (if (null fkey) (setq fkey dflt))))
            (cond
              ((member fkey '("Back" "Undo"))
               (princ "\n  Stepping back one question.")
@@ -125603,6 +125612,7 @@
      ("*cs-direction-default*" "\"Inside\"" "CORNERSTP only. Which way Enter draws the run: \"Inside\" starts at the corner and builds out toward the pool...")
      ("*cs-measure-default*" "\"Middle\"" "CORNERSTP only. Where Enter measures the step treads from when a corner diagonal or fillet arc came in with...")
      ("*cs-treadmode-default*" "\"Parallel\"" "CORNERSTP only. Which way Enter runs the treads when a diagonal came in with the walls: \"Parallel\" to the d...")
+     ("*cs-bench-default*" "\"No\"" "CORNERSTP only. What Enter answers at \"Add a bench along a wall?\", the question an inside-out run asks befo...")
      ("*cs-dims-default*" "\"Yes\"" "What Enter answers at \"Dimension the steps?\". \"No\" makes a bare run the quick one and leaves the dims to be...")
      ("*cs-profile-default*" "\"Yes\"" "What Enter answers at \"Add a side profile?\". \"No\" ends a run at the plan, so the step-depth questions behin...")
      ("*cs-bead-default*" "\"Yes\"" "What Enter answers at \"Bead the steps?\". \"No\" suits a shop that runs AUTOBEAD itself once the drawing is fi...")

@@ -4658,6 +4658,7 @@
      ("*cs-direction-default*" "\"Inside\"" "CORNERSTP only. Which way Enter draws the run: \"Inside\" starts at the corner and builds out toward the pool...")
      ("*cs-measure-default*" "\"Middle\"" "CORNERSTP only. Where Enter measures the step treads from when a corner diagonal or fillet arc came in with...")
      ("*cs-treadmode-default*" "\"Parallel\"" "CORNERSTP only. Which way Enter runs the treads when a diagonal came in with the walls: \"Parallel\" to the d...")
+     ("*cs-bench-default*" "\"No\"" "CORNERSTP only. What Enter answers at \"Add a bench along a wall?\", the question an inside-out run asks befo...")
      ("*cs-dims-default*" "\"Yes\"" "What Enter answers at \"Dimension the steps?\". \"No\" makes a bare run the quick one and leaves the dims to be...")
      ("*cs-profile-default*" "\"Yes\"" "What Enter answers at \"Add a side profile?\". \"No\" ends a run at the plan, so the step-depth questions behin...")
      ("*cs-bead-default*" "\"Yes\"" "What Enter answers at \"Bead the steps?\". \"No\" suits a shop that runs AUTOBEAD itself once the drawing is fi...")

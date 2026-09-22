@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_092226_REV410-321-316.lsp
+;;; STEPS_092226_REV411-321-316.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,7 +8,7 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v4.10 -> REV410   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
+;;;     CORNERSTP.lsp   v4.11 -> REV411   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
 ;;;     HEMISTEP.lsp    v3.21 -> REV321   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
 ;;;     NORMIESTEP.lsp  v3.16 -> REV316   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
 ;;;
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v4.10) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v4.11) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -346,6 +346,12 @@
 ;; the same thing whichever way the run goes.
 (if (not (boundp '*cs-treadmode-default*)) (setq *cs-treadmode-default* "Parallel"))
 
+;; CORNERSTP only.  What Enter answers at "Add a bench along a wall?",
+;; the question an inside-out run asks before it draws.  "Yes" goes
+;; straight on to picking the wall, so a shop that benches most runs
+;; stops typing the word; both words stay on the prompt either way.
+(if (not (boundp '*cs-bench-default*)) (setq *cs-bench-default* "No"))
+
 ;; What Enter answers at "Dimension the steps?".  "No" makes a bare
 ;; run the quick one and leaves the dims to be asked for by name.
 (if (not (boundp '*cs-dims-default*)) (setq *cs-dims-default* "Yes"))
@@ -366,7 +372,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.10") ; printed on load and at command start so a
+(setq *cs-version* "v4.11") ; printed on load and at command start so a
                             ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -1850,11 +1856,14 @@
        (if outflag
          (setq qstep (+ qstep qdir))
          (progn
-           (if (null (setq fkey (cs-fkw 'bench "Yes No" "No")))
+           (setq dflt (or (cs-kwcanon *cs-bench-default* '("Yes" "No")) "No"))
+           (if (null (setq fkey (cs-fkw 'bench "Yes No" dflt)))
              (progn
                (initget "Yes No Back Undo")
-               (setq fkey (getkword "\nAdd a bench along a wall? [Yes/No/Back] <No>: "))
-               (if lzd:ask (lzd:ask "\nAdd a bench along a wall? [Yes/No/Back] <No>: " fkey) fkey)))
+               (setq fkey (getkword (strcat "\nAdd a bench along a wall? [Yes/No/Back] <"
+                                            dflt ">: ")))
+               (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+               (if (null fkey) (setq fkey dflt))))
            (cond
              ((member fkey '("Back" "Undo"))
               (princ "\n  Stepping back one question.")
