@@ -1451,6 +1451,11 @@ TOOLS = {
         'expand': {
             '(cal:dedupe pts)':
                 ['(cal:dedupe pts *CAB-EXACT-EPS*)'],
+            # cab:omit-loop dedupes what cab:live-pts hands back rather
+            # than a variable, so the epsilon has to be added to that
+            # spelling of the call too -- expand matches literal text
+            '(cal:dedupe (cab:live-pts))':
+                ['(cal:dedupe (cab:live-pts) *CAB-EXACT-EPS*)'],
         },
         'symbols': {'CAB-BACK': 'CAL-BACK'},
     },

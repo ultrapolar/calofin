@@ -42011,7 +42011,7 @@
                       "  Point to omit, or a ringed one to restore - pick it or type its number"
                       "Enter = done" nil
                       (cab:cands-of
-                        (append (cal:dedupe (cab:live-pts))
+                        (append (cal:dedupe (cab:live-pts) *CAB-EXACT-EPS*)
                                 (mapcar 'car cab-omitted)))
                       *CAB-SNAP*))
     ;; the prompt offers no Back: there is nothing behind a list you
