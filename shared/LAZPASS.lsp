@@ -64489,7 +64489,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.22")
+(setq *cchk-version* "v1.23")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -65024,10 +65024,12 @@
   (if (and (entget ent) (not (member ent keep)))
     (cchk:set-color ent (cdr (assoc ent saved)))))
 
-(defun cchk:unstage (ent keep)
-  ;; send a reviewed entity back into the grey background
+(defun cchk:unstage (ent keep grey)
+  ;; send a reviewed entity back into the grey background -- grey is
+  ;; the caller's already-hoisted (cal:ink *cchk-grey-color* 'fade),
+  ;; never resolved here: that would be a COM round trip per entity
   (if (and (entget ent) (not (member ent keep)))
-    (cchk:set-color ent (cal:ink *cchk-grey-color* 'fade))))
+    (cchk:set-color ent grey)))
 
 (defun cchk:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -67828,12 +67830,12 @@
           (setq res (cchk:review-olap (car pr) (cadr pr) n total))
           (cond
             ((null res)                       ; absorbed by an earlier merge
-             (cchk:unstage e1 keep)
-             (cchk:unstage e2 keep))
+             (cchk:unstage e1 keep grey)
+             (cchk:unstage e2 keep grey))
             ((eq (caddr res) 'left)
              (setq noleft (1+ noleft))
-             (cchk:unstage e1 keep)
-             (cchk:unstage e2 keep)
+             (cchk:unstage e1 keep grey)
+             (cchk:unstage e2 keep grey)
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
             (t
              (if (eq (caddr res) 'merged)
@@ -71248,7 +71250,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.22")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.23")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -71699,10 +71701,12 @@
   (if (and (entget ent) (not (member ent keep)))
     (dchk:set-color ent (cdr (assoc ent saved)))))
 
-(defun dchk:unstage (ent keep)
-  ;; send a reviewed entity back into the grey background
+(defun dchk:unstage (ent keep grey)
+  ;; send a reviewed entity back into the grey background -- grey is
+  ;; the caller's already-hoisted (cal:ink *dchk-grey-color* 'fade),
+  ;; never resolved here: that would be a COM round trip per entity
   (if (and (entget ent) (not (member ent keep)))
-    (dchk:set-color ent (cal:ink *dchk-grey-color* 'fade))))
+    (dchk:set-color ent grey)))
 
 (defun dchk:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -72815,12 +72819,12 @@
           (setq res (dchk:review-olap (car pr) (cadr pr) n total))
           (cond
             ((null res)                       ; absorbed by an earlier merge
-             (dchk:unstage e1 keep)
-             (dchk:unstage e2 keep))
+             (dchk:unstage e1 keep grey)
+             (dchk:unstage e2 keep grey))
             ((eq (caddr res) 'left)
              (setq noleft (1+ noleft))
-             (dchk:unstage e1 keep)
-             (dchk:unstage e2 keep)
+             (dchk:unstage e1 keep grey)
+             (dchk:unstage e2 keep grey)
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
             (t
              (if (eq (caddr res) 'merged)
@@ -84679,7 +84683,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.18")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.19")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -85203,10 +85207,12 @@
   (if (and (entget ent) (not (member ent keep)))
     (lfc:set-color ent (cdr (assoc ent saved)))))
 
-(defun lfc:unstage (ent keep)
-  ;; send a reviewed entity back into the grey background
+(defun lfc:unstage (ent keep grey)
+  ;; send a reviewed entity back into the grey background -- grey is
+  ;; the caller's already-hoisted (cal:ink *lfc-grey-color* 'fade),
+  ;; never resolved here: that would be a COM round trip per entity
   (if (and (entget ent) (not (member ent keep)))
-    (lfc:set-color ent (cal:ink *lfc-grey-color* 'fade))))
+    (lfc:set-color ent grey)))
 
 (defun lfc:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -87434,12 +87440,12 @@
           (setq res (lfc:review-olap (car pr) (cadr pr) n total))
           (cond
             ((null res)                       ; absorbed by an earlier merge
-             (lfc:unstage e1 keep)
-             (lfc:unstage e2 keep))
+             (lfc:unstage e1 keep grey)
+             (lfc:unstage e2 keep grey))
             ((eq (caddr res) 'left)
              (setq noleft (1+ noleft))
-             (lfc:unstage e1 keep)
-             (lfc:unstage e2 keep)
+             (lfc:unstage e1 keep grey)
+             (lfc:unstage e2 keep grey)
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
             (t
              (if (eq (caddr res) 'merged)
@@ -87512,7 +87518,7 @@
                             (rtos *lfc-step-maxgap*) " apart."))
              (setq ans (cal:ask-yn "\n  Are these lines steps?" "Yes"))
              (foreach e (lfc:group-ents g) (if (entget e) (redraw e 4)))
-             (foreach e (lfc:group-ents g) (lfc:unstage e keep))
+             (foreach e (lfc:group-ents g) (lfc:unstage e keep grey))
              (redraw)
              (if ans
                (setq stepsp  T
@@ -87555,7 +87561,7 @@
                     (redraw)
                     (if ans
                       (progn
-                        (lfc:unstage b keep)
+                        (lfc:unstage b keep grey)
                         (setq lines (cons (strcat "Step Attachment "
                                                   (cdr (assoc 5 (entget b)))
                                                   ": confirmed correct")

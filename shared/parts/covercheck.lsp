@@ -241,7 +241,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.22")
+(setq *cchk-version* "v1.23")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -776,10 +776,12 @@
   (if (and (entget ent) (not (member ent keep)))
     (cchk:set-color ent (cdr (assoc ent saved)))))
 
-(defun cchk:unstage (ent keep)
-  ;; send a reviewed entity back into the grey background
+(defun cchk:unstage (ent keep grey)
+  ;; send a reviewed entity back into the grey background -- grey is
+  ;; the caller's already-hoisted (cal:ink *cchk-grey-color* 'fade),
+  ;; never resolved here: that would be a COM round trip per entity
   (if (and (entget ent) (not (member ent keep)))
-    (cchk:set-color ent (cal:ink *cchk-grey-color* 'fade))))
+    (cchk:set-color ent grey)))
 
 (defun cchk:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -3580,12 +3582,12 @@
           (setq res (cchk:review-olap (car pr) (cadr pr) n total))
           (cond
             ((null res)                       ; absorbed by an earlier merge
-             (cchk:unstage e1 keep)
-             (cchk:unstage e2 keep))
+             (cchk:unstage e1 keep grey)
+             (cchk:unstage e2 keep grey))
             ((eq (caddr res) 'left)
              (setq noleft (1+ noleft))
-             (cchk:unstage e1 keep)
-             (cchk:unstage e2 keep)
+             (cchk:unstage e1 keep grey)
+             (cchk:unstage e2 keep grey)
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
             (t
              (if (eq (caddr res) 'merged)

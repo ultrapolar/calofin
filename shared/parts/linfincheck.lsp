@@ -278,7 +278,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.18")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.19")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -802,10 +802,12 @@
   (if (and (entget ent) (not (member ent keep)))
     (lfc:set-color ent (cdr (assoc ent saved)))))
 
-(defun lfc:unstage (ent keep)
-  ;; send a reviewed entity back into the grey background
+(defun lfc:unstage (ent keep grey)
+  ;; send a reviewed entity back into the grey background -- grey is
+  ;; the caller's already-hoisted (cal:ink *lfc-grey-color* 'fade),
+  ;; never resolved here: that would be a COM round trip per entity
   (if (and (entget ent) (not (member ent keep)))
-    (lfc:set-color ent (cal:ink *lfc-grey-color* 'fade))))
+    (lfc:set-color ent grey)))
 
 (defun lfc:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -3033,12 +3035,12 @@
           (setq res (lfc:review-olap (car pr) (cadr pr) n total))
           (cond
             ((null res)                       ; absorbed by an earlier merge
-             (lfc:unstage e1 keep)
-             (lfc:unstage e2 keep))
+             (lfc:unstage e1 keep grey)
+             (lfc:unstage e2 keep grey))
             ((eq (caddr res) 'left)
              (setq noleft (1+ noleft))
-             (lfc:unstage e1 keep)
-             (lfc:unstage e2 keep)
+             (lfc:unstage e1 keep grey)
+             (lfc:unstage e2 keep grey)
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
             (t
              (if (eq (caddr res) 'merged)
@@ -3111,7 +3113,7 @@
                             (rtos *lfc-step-maxgap*) " apart."))
              (setq ans (cal:ask-yn "\n  Are these lines steps?" "Yes"))
              (foreach e (lfc:group-ents g) (if (entget e) (redraw e 4)))
-             (foreach e (lfc:group-ents g) (lfc:unstage e keep))
+             (foreach e (lfc:group-ents g) (lfc:unstage e keep grey))
              (redraw)
              (if ans
                (setq stepsp  T
@@ -3154,7 +3156,7 @@
                     (redraw)
                     (if ans
                       (progn
-                        (lfc:unstage b keep)
+                        (lfc:unstage b keep grey)
                         (setq lines (cons (strcat "Step Attachment "
                                                   (cdr (assoc 5 (entget b)))
                                                   ": confirmed correct")

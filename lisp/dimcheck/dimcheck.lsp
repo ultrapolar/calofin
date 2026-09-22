@@ -114,7 +114,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.22")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.23")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -721,10 +721,12 @@
   (if (and (entget ent) (not (member ent keep)))
     (dchk:set-color ent (cdr (assoc ent saved)))))
 
-(defun dchk:unstage (ent keep)
-  ;; send a reviewed entity back into the grey background
+(defun dchk:unstage (ent keep grey)
+  ;; send a reviewed entity back into the grey background -- grey is
+  ;; the caller's already-hoisted (dchk:ink *dchk-grey-color* 'fade),
+  ;; never resolved here: that would be a COM round trip per entity
   (if (and (entget ent) (not (member ent keep)))
-    (dchk:set-color ent (dchk:ink *dchk-grey-color* 'fade))))
+    (dchk:set-color ent grey)))
 
 (defun dchk:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -1918,12 +1920,12 @@
           (setq res (dchk:review-olap (car pr) (cadr pr) n total))
           (cond
             ((null res)                       ; absorbed by an earlier merge
-             (dchk:unstage e1 keep)
-             (dchk:unstage e2 keep))
+             (dchk:unstage e1 keep grey)
+             (dchk:unstage e2 keep grey))
             ((eq (caddr res) 'left)
              (setq noleft (1+ noleft))
-             (dchk:unstage e1 keep)
-             (dchk:unstage e2 keep)
+             (dchk:unstage e1 keep grey)
+             (dchk:unstage e2 keep grey)
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
             (t
              (if (eq (caddr res) 'merged)
