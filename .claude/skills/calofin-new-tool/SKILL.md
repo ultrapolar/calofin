@@ -18,9 +18,23 @@ family the tool belongs to.
 
 ## 1. Write the file
 
-Start from `TEMPLATE.lsp` in this skill directory — it is a complete,
-standards-compliant skeleton that passes `check_lisp`, `check_scope`,
-`check_lazdiag`, `check_osnap` and `check_color` as written.
+Start from `TEMPLATE.lsp` in this skill directory. It has been built
+into a real tool, mirrored and run in the VM at **both tiers** — a clean
+run, a Back and an Esc each put OSMODE and CLAYER back — and it passes
+`check_lisp`, `check_scope`, `check_lazdiag`, `check_osnap`,
+`check_color` and `check_perf` as written. Two checks it cannot pass
+until you do something only a real tool can (section 7): `check_back`
+wants a baseline line for its first question, and `test_theme` wants
+its copy count bumped.
+
+The four helpers the mirror swaps for the library — `ink` with its
+`inkoverride`, `ensure-layer`, `syssave`, `sysrestore` — are the
+library's own bodies under the `tool:` prefix, **not** look-alikes. That
+is what makes the swap safe: the mirror may only swap a helper the
+library reproduces exactly, or the two builds stop answering alike.
+`ink` in particular is DIMCHECK's complete copy; most of the tree's
+other copies (POOL, SPA, LOBF…) lack the per-role override and would
+make your standalone build ignore a colour the drafter set in CALSET.
 
 ```bash
 mkdir -p lisp/<tool>
@@ -73,6 +87,7 @@ Add an entry keyed by the **twin's file stem**:
         'tool:askkw': 'cal:askkw',
         'tool:askyn': 'cal:askyn',
         'tool:ink': 'cal:ink',
+        'tool:inkoverride': 'cal:inkoverride',
         'tool:ensure-layer': 'cal:ensure-layer',
         'tool:syssave': 'cal:syssave',
         'tool:sysrestore': 'cal:sysrestore',
@@ -83,11 +98,30 @@ Add an entry keyed by the **twin's file stem**:
     # silently stop working in the grouped build while every other
     # check still passes.
     'symbols': {'TOOL-BACK': 'CAL-BACK'},
+    # REQUIRED for the template's askkw.  It takes HIDDEN aliases third
+    # (the STANDARDS reference shape); cal:askkw takes the SHOWN bracket
+    # text third.  Without this the mirror renames the call and passes
+    # nil where cal:askkw strcats a string -- the grouped build dies at
+    # its first keyword question, and make check stays GREEN.
+    'askkw_hidden': True,
 },
 ```
 
 `swap` and `drop_globals` are **required keys**; `expand`, `collapse`,
-`rewrite`, `replace`, `symbols` and `askkw_hidden` are optional.
+`rewrite`, `replace`, `symbols` and `askkw_hidden` are optional in
+general — but not for a tool built from this template.
+
+**`askkw_hidden` is the one that bites.** Without it, this is what the
+grouped build does at the first direct `askkw` call:
+`strcat: bad argument type: stringp nil`. The standalone build works,
+`check_lisp`, `check_scope` and `check_standards` all pass the broken
+twin, and the mirror prints "0 askkw call sites translated" without
+complaint. Only a shared-tier test that reaches a keyword question sees
+it. With the key set, the mirror writes the bracket out
+(`"Yes No"` → `"Yes/No"`) and says "N askkw call sites translated" —
+check that N counts your direct `askkw` calls. The translation needs a
+literal `nil` in the hidden slot; a call passing hidden aliases stops
+the mirror with an error, which is the loud failure you want.
 
 Note `cal:syssave` takes its sysvars as an argument where some tools
 baked them in, and the library keeps the dimension-style save/restore in
@@ -180,12 +214,33 @@ there is no list to update. See
 `../calofin-lisp/reference/testing.md` for the idiom; the tier switch at
 the top of the file is mandatory, or `make parity` proves nothing.
 
+**Drive every keyword question at the shared tier.** It is the only
+thing that catches a mis-translated `askkw` (section 2). And test the
+Esc path with `vm.handle_errors = True` — without it the VM never runs
+your `*error*` handler, and a restore test proves nothing.
+
 ## 7. Check and test
 
 ```bash
 bash .claude/skills/calofin-lisp/scripts/precheck.sh lisp/<tool>/<TOOL>.lsp
 make check && make parity
 ```
+
+Two failures here are expected on a new tool, and are yours to settle
+rather than bugs:
+
+- **`check_back`** names the command's first question (the template's
+  `Insertion base point`). The first question of a command never offers
+  Back, so accept it:
+  `python3 tools/check_back.py --update-baseline`, then **read the line
+  it wrote** in `tools/back_baseline.txt`. For a first question the
+  reason it infers — `first question of its command or branch` — is
+  already right; for anything else it is only a starting point.
+- **`test_theme.py`** counts the tools whose swap map carries
+  `cal:ink`, and fails its copy-count check (`the mirror says N copies exist`) the moment
+  yours joins them. Bump both counts in its `COPIES` block, and the
+  comment above them. The per-copy check below it is the one that
+  matters — it must say your `tool:ink == cal:ink`.
 
 `check_dcl.py` is the one to watch on a new tool: every tool not on
 Pool, Cover or Spa lands on the `Rest` page, so `Rest` is the page each

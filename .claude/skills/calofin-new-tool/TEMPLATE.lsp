@@ -57,32 +57,105 @@
 ;; overwrite an existing snapshot: a second save mid-run would capture
 ;; the muted OSMODE and "restore" 0 for ever.
 (defun tool:syssave (vars / v)
-  (if (not tool:*sysold*)
-    (setq tool:*sysold*
-          (mapcar '(lambda (v) (cons v (getvar v))) vars))))
+  (foreach v vars
+    (if (and (not (assoc v tool:*sysold*))
+             (/= nil (getvar v)))
+        (setq tool:*sysold*
+              (append tool:*sysold* (list (cons v (getvar v))))))))
+
 
 ;; Put them back and DROP the snapshot.  The drop must not sit behind
 ;; anything that can throw, or every later run restores this run's
 ;; values over whatever the drafter has changed since.
-(defun tool:sysrestore ( / v p)
-  (foreach v tool:*sysvars*
-    (setq p (assoc v tool:*sysold*))
-    (if p (setvar v (cdr p))))
+(defun tool:sysrestore ( / p)
+  (foreach p tool:*sysold* (setvar (car p) (cdr p)))
   (setq tool:*sysold* nil))
+
 
 ;;; -------------------- colour -------------------------------------------
 
-;; Resolve a colour knob.  'auto picks one that reads against whatever
-;; background the drafter is on; a number is used exactly as given.
-;; Copy the library's cal:ink body here -- do not invent a table.
-;; Resolve ONCE into a local before a loop: the measurement is a COM
-;; round trip.
-(defun tool:ink (knob role)
-  (if (= (type knob) 'INT)
-    knob
-    (cond ((eq role 'fade) 8)
-          ((eq role 'guide) 7)
-          (t 7))))
+;; A drafter's own colour for one cue ROLE, set through CALSET's
+;; Itemcolors menu or LAZSET's Item colours box (the CalofinInk-<ROLE>
+;; profile string).  nil when unset.  Wins over the table below, never
+;; over a knob left as a plain number.
+(defun tool:inkoverride (role / q v)
+  (setq q (assoc role '((fade . "FADE") (guide . "GUIDE") (dim . "DIM")
+                         (hi . "HI") (flag . "FLAG") (arc . "ARC")
+                         (olap . "OLAP") (orig . "ORIG") (sugg . "SUGG")
+                         (point . "POINT") (constr . "CONSTR")
+                         (report . "REPORT"))))
+  (if q
+    (progn
+      (setq v (getenv (strcat "CalofinInk-" (cdr q))))
+      (if (and v (/= v "")) (atoi v)))))
+
+;; Resolve a colour knob.  'auto answers per ROLE: fade/guide against
+;; the drawing's background, dim/hi against the interface theme, and
+;; the eight kind-roles (flag arc olap orig sugg point constr report)
+;; as fixed ACI.  A NUMBER is used exactly as given.
+;;
+;; This pair is the complete standalone copy (from DIMCHECK), and it
+;; must answer exactly what cal:ink answers -- the mirror swaps it for
+;; the library's, so any difference is a standalone-vs-grouped split.
+;; tests/test_theme.py holds every swapped copy to the library.  Do not
+;; take a copy from POOL, SPA, LOBF or the other eight tools without
+;; the override: they ignore a drafter's per-role colour standalone.
+;; Resolve ONCE into a local before a loop: behind 'auto is a COM round
+;; trip, and tools/check_perf.py follows the call graph for it.
+(defun tool:ink (knob role / v th c lum ov)
+  ;; numberp, not (eq knob 'auto): a knob is a colour NUMBER used
+  ;; exactly as given, or it is resolved.  Testing for 'auto instead
+  ;; would hand back whatever a mistyped knob holds -- nil, or the
+  ;; symbol AUOT -- and that reaches entmake as a DXF group 62, where
+  ;; it dies a long way from the line that caused it.
+  (cond
+    ((numberp knob) knob)
+    ((setq ov (tool:inkoverride role)) ov)
+    ((setq ov (assoc role '((flag . 1) (arc . 6) (olap . 4) (orig . 1)
+                             (sugg . 3) (point . 2) (constr . 2)
+                             (report . 3))))
+     (cdr ov))
+    (t
+      ;; trimmed: this is typed by a person, and " dark " meaning
+      ;; nothing at all would be a silent no-op to stare at
+      (setq v  (getenv "CalofinTheme")
+            v  (if (and v (/= v "")) (strcase (vl-string-trim " \t" v))
+                   "AUTO")
+            th (cond
+                 ((= v "DARK") 'dark)
+                 ((= v "LIGHT") 'light)
+                 ((member role '(dim hi))
+                  (cond ((null (setq c (getvar "COLORTHEME"))) nil)
+                        ((= c 0) 'dark)
+                        (t 'light)))
+                 (t
+                  (setq c (vl-catch-all-apply
+                            '(lambda ()
+                               (vl-load-com)
+                               (vla-get-GraphicsWinModelBackgrndColor
+                                 (vla-get-Display
+                                   (vla-get-Preferences
+                                     (vlax-get-acad-object)))))
+                            nil))
+                  (if (or (vl-catch-all-error-p c) (not (numberp c)))
+                    nil
+                    (progn
+                      ;; an OLE colour is packed low byte first: R, G, B
+                      (setq c   (fix c)
+                            lum (+ (* 0.30 (rem c 256))
+                                   (* 0.59 (rem (/ c 256) 256))
+                                   (* 0.11 (rem (/ c 65536) 256))))
+                      (if (< lum 128.0) 'dark 'light))))))
+      (cond
+        ((eq role 'fade)
+         (cond ((eq th 'dark) 251) ((eq th 'light) 254) (t 8)))
+        ((eq role 'guide)
+         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+        ((eq role 'dim)
+         (cond ((eq th 'dark) 253) ((eq th 'light) 8) (t 8)))
+        ((eq role 'hi)
+         (cond ((eq th 'dark) 4) ((eq th 'light) 5) (t 5)))
+        (t 7)))))
 
 ;;; -------------------- layers -------------------------------------------
 
@@ -111,9 +184,11 @@
       (if fixed
         (progn
           (entmod ed)
-          (princ (strcat "\nTOOLNAME: layer " name
+          (princ (strcat "\nLayer " name
                          " was off, frozen or locked - restored so the"
-                         " result is visible.")))))))
+                         " result is visible."))))))
+  name)
+
 
 ;;; -------------------- asking -------------------------------------------
 

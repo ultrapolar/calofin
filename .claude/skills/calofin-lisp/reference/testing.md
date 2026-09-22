@@ -90,7 +90,7 @@ element per interactive call (`getpoint`, `getkword`, `getdist`,
 
 Two ways `run()` fails you on purpose:
 
-- **`SCRIPT EXHAUSTED at <kind> prompt` ** — the command asked more than
+- **`SCRIPT EXHAUSTED at <kind> prompt`** — the command asked more than
   you scripted. Usually a prompt you added.
 - **`N scripted answers left over`** — it asked fewer. Usually a prompt
   you removed, or a branch not taken.
@@ -106,8 +106,19 @@ the drafter runs.
 def esc(vm):
     raise LispError('Function cancelled', vm)
 
+vm = fresh()
+vm.handle_errors = True          # REQUIRED -- see below
 vm.run('c:SQUAREUP', [None, es, esc])
+check("the cancel went through the handler",
+      vm.handled_errors and 'cancelled' in vm.handled_errors[0])
 ```
+
+**`*error*` dispatch is opt-in.** With `vm.handle_errors` left at its
+default `False`, the raised error propagates straight out of `run()` and
+the command's handler **never runs** -- so an assertion that OSMODE came
+back is testing nothing, or failing for the wrong reason. Set it, and
+assert on `vm.handled_errors` first so the test proves the handler ran
+before it checks what the handler did.
 
 This is how you test the `*error*` path — and you should, because Esc at
 a prompt is the likeliest way out of a prompting command and the only
@@ -197,7 +208,7 @@ tests/test_back_nav.py
 | --- | --- |
 | `test_shared.py` | the whole grouped build in one session + the bundle; fails if a held-back command leaks in |
 | `test_ruler_copies.py` | every embedded length-ruler copy, byte for byte against the library |
-| `test_theme.py` | the `ink` colour table and all fifteen copies |
+| `test_theme.py` | the `ink` colour table, and every standalone copy against the library |
 | `test_tunables.py` | the tunables block: one block, knobs in it, state out of it |
 | `test_back_nav.py` | Undo beside every Back, the typed predicate, threaded chains walked backwards |
 | `test_lazpanel.py` | the panel roster against `headline_commands()` |

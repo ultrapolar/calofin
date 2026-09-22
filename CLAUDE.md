@@ -17,7 +17,7 @@ holds the working subset, distilled and task-scoped:
 | `calofin-checks` | a red check or test — message to cause to fix |
 
 They carry four scripts that replace opening a 9,000-line file or
-running the 95-second full check:
+running the full check:
 
 ```bash
 S=.claude/skills/calofin-lisp/scripts
@@ -25,7 +25,7 @@ python3 $S/whereis.py SQUAREUP            # every file and registration site
 python3 $S/lspshow.py --map lisp/pool/POOL.LSP   # a file's forms, one line each
 python3 $S/lspshow.py pool:askcorner      # one defun, with its comment block
 bash   $S/retier.sh SQUAREUP              # mirror + regenerate every tier
-bash   $S/precheck.sh lisp/squareup/SQUAREUP.lsp  # the scoped checks, ~23s
+bash   $S/precheck.sh lisp/squareup/SQUAREUP.lsp  # the scoped checks, a third of the time
 ```
 
 The rules below are still the authority; the skills are the map to them.
