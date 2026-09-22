@@ -36,7 +36,7 @@
 ;;;  change CHECK made. Tunables are just below.
 ;;; ------------------------------------------------------------------
 
-(setq *checkdrawing-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.10")  ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -314,7 +314,7 @@
             p14 (cdr (assoc 14 ed)))
       (append (if p13 (list p13)) (if p14 (list p14))))))
 
-(defun cfchk:shared-anchors (dims / recs r e p found out)
+(defun cfchk:shared-anchors (dims / recs r e p found out tl)
   ;; Every spot where *cfchk-anchor-min* or more DIMENSIONS put a
   ;; definition point.  Dimensioning twice to the same spot is how a
   ;; drafter says that spot matters -- the usual case is the pair of
@@ -325,10 +325,14 @@
   ;; Returns the anchor points (WCS).
   (foreach e dims
     (foreach p (cfchk:dim-def-pts e)
-      (setq found nil)
-      (foreach r recs
-        (if (and (null found) (<= (distance p (car r)) *cfchk-anchor-tol*))
-          (setq found r)))
+      ;; the FIRST rec within tol, and stop there: the rest of recs
+      ;; cannot change which one that is
+      (setq found nil
+            tl    recs)
+      (while (and tl (null found))
+        (if (<= (distance p (caar tl)) *cfchk-anchor-tol*)
+          (setq found (car tl)))
+        (setq tl (cdr tl)))
       (cond
         ((null found) (setq recs (cons (list p e) recs)))
         ;; a dimension's own two points landing together is one

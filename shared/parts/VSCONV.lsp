@@ -82,7 +82,7 @@
 ;;; so; nothing else about the round trip is approximate.
 ;;; ======================================================================
 
-(setq *vsconv-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *vsconv-version* "v1.5")   ; announced on load; release_lisp.py
                                  ; reads this banner and stamps the
                                  ; dated twin in releases/ from it
 
@@ -353,13 +353,19 @@
 
 ;; Written BEFORE the move and before the restyle, which is the only
 ;; moment the object still carries everything the record is about.
-(defun vsconv:stamp (ent lay obj / typ sty ovr)
-  (regapp *vsconv-xdata-app*)
-  (setq typ (cdr (assoc 0 (entget ent))))
+;;
+;; c:VSCONV registers the application ONCE, ahead of the loop that
+;; calls this, and reads each source layer's colour once; lcol is that
+;; colour, and a nil one is read off the table here, as it always was.
+;; One plain entget serves the type and the dimension style: nothing
+;; before xput's entmod writes to the object.
+(defun vsconv:stamp (ent lay obj lcol / ed typ sty ovr)
+  (setq ed  (entget ent)
+        typ (cdr (assoc 0 ed)))
   ;; only a DIMENSION has a style to lose or overrides to lose it to,
   ;; and group 3 means something else entirely on an MTEXT
   (if (= "DIMENSION" typ)
-    (setq sty (cdr (assoc 3 (entget ent)))
+    (setq sty (cdr (assoc 3 ed))
           ovr (if *vsconv-dim-xdata* (vsconv:xget ent *vsconv-dim-xdata*))))
   (vsconv:xput ent *vsconv-xdata-app*
     (append (list (cons 1000 *vsconv-xdata-app*)
@@ -367,7 +373,7 @@
                   (cons 1000 lay)
                   (cons 1000 (vla-get-Linetype obj))
                   (cons 1000 (if sty sty ""))
-                  (cons 1070 (vsconv:layer-color lay))
+                  (cons 1070 (cond (lcol) ((vsconv:layer-color lay))))
                   (cons 1070 (vla-get-Color obj))
                   (cons 1070 (vla-get-Lineweight obj))
                   (cons 1070 (if ovr 1 0)))
@@ -425,7 +431,7 @@
 ;;; -------------------- the command -------------------------------------
 (defun c:VSCONV (/ *error* doc unlocked mark-open srcs here plan froms
                    reached filter ss i ent ed lay dest obj dims empty p
-                   tally n-moved n-dim)
+                   tally n-moved n-dim vsconv-laycols)
 
   ;; The handler is LOCAL to this command (STANDARDS 5), as DRONE's and
   ;; TYDRN's are: it sees doc / unlocked / mark-open through dynamic
@@ -499,6 +505,20 @@
       ;; the selection.
       (setq unlocked (vsconv:unlock-layers (append froms reached) doc))
 
+      ;; What every record needs and is the same answer for all of
+      ;; them, read once here rather than once per object: the APPID
+      ;; and each source layer's colour, read after ensure-layer and
+      ;; the unlock just as stamp read it -- nothing below touches a
+      ;; layer record.  froms is empty exactly when no object has a
+      ;; destination, so a run that stamps nothing registers no APPID.
+      (if (and froms *vsconv-record*)
+        (progn
+          (regapp *vsconv-xdata-app*)
+          (foreach lay froms
+            (setq vsconv-laycols
+                  (cons (cons (strcase lay) (vsconv:layer-color lay))
+                        vsconv-laycols)))))
+
       ;; ------------------------------------------------------------
       ;; 1. The layer move, everything BYLAYER when asked (the default)
       ;; ------------------------------------------------------------
@@ -516,7 +536,9 @@
                 ;; object no longer carries the layer, the properties or
                 ;; the overrides it is about
                 (setq obj (vlax-ename->vla-object ent))
-                (if *vsconv-record* (vsconv:stamp ent lay obj))
+                (if *vsconv-record*
+                  (vsconv:stamp ent lay obj
+                                (cdr (assoc (strcase lay) vsconv-laycols))))
                 (vla-put-Layer obj dest)
                 (if *vsconv-force-bylayer* (vsconv:force-bylayer obj))
                 (setq tally   (vsconv:bump (strcase lay) tally)

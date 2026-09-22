@@ -1943,7 +1943,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.3")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.4")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -3130,16 +3130,23 @@
   (setq r (vl-catch-all-apply 'lzd:logpath '()))
   (if (vl-catch-all-error-p r) nil r))
 
-(defun lzd:logtail (n / path fp line buf)
+;; The window is trimmed in batches: K lines are held, newest first, and
+;; only when that reaches 2N is it cut back to the newest N.  Trimming
+;; on every line measured and copied the window once per line read --
+;; inside *error*, over a log that grows by a line a run.  Still never
+;; more than 2N lines held, and the last cut takes the newest N.
+(defun lzd:logtail (n / path fp line buf k)
   (setq path (lzd:logpath))
   (if (or (null path) (null (setq fp (open path "r"))))
     nil
     (progn
+      (setq k 0)
       (while (setq line (read-line fp))
-        (setq buf (cons line buf))
-        (if (> (length buf) n) (setq buf (lzd:firstn buf n))))
+        (setq buf (cons line buf)
+              k   (1+ k))
+        (if (>= k (* 2 n)) (setq buf (lzd:firstn buf n) k n)))
       (close fp)
-      (reverse buf))))
+      (reverse (lzd:firstn buf n)))))
 
 ;;; -------------------- what the user is told ---------------------------
 
@@ -40152,7 +40159,7 @@
 ;;; the same one.
 ;;; ======================================================================
 
-(setq *squareup-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *squareup-version* "v1.1")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/
 
@@ -40478,21 +40485,26 @@
     ((= typ "POLYLINE") (sq:pl-spans en))
     (T nil)))
 
+;; The sampled points of a run of spans, span by span.  Each span's
+;; points are one chunk, and the chunks are joined once at the end
+;; rather than the growing list being copied again for every span.
+(defun sq:spans-pts (spans / s chunks)
+  (setq chunks nil)
+  (foreach s spans
+    (setq chunks (cons (sq:bulge-pts (car s) (cadr s) (caddr s)
+                                     sq:*arcsegs*)
+                       chunks)))
+  (apply 'append (reverse chunks)))
+
 ;; The sampled points of one entity -- what SPAN is measured over.  The
 ;; two curve types with no spans of their own answer here and nowhere
 ;; else.
-(defun sq:ent-pts (en / ed typ s out)
-  (setq ed  (entget en)
-        typ (cdr (assoc 0 ed))
-        out nil)
+(defun sq:ent-pts (en / typ)
+  (setq typ (cdr (assoc 0 (entget en))))
   (cond
     ((= typ "ELLIPSE") (sq:ellipse-pts en))
     ((= typ "SPLINE")  (sq:spline-pts en))
-    (t
-     (foreach s (sq:ent-spans en)
-       (setq out (append out (sq:bulge-pts (car s) (cadr s) (caddr s)
-                                           sq:*arcsegs*))))
-     out)))
+    (t (sq:spans-pts (sq:ent-spans en)))))
 
 ;;; -------------------- locked and frozen layers -------------------------
 ;;; ROTATE SKIPS AN OBJECT ON A LOCKED OR FROZEN LAYER, and says
@@ -40573,6 +40585,10 @@
 ;; end to end becomes the one span running from one extreme of it to
 ;; the other, whichever entity each piece came off.  A perimeter traced
 ;; as forty short segments has four walls, not forty.
+;;
+;; keep is gathered backwards and turned round once per pass, so rest
+;; is exactly the old order less the one span the pass merged -- the
+;; order matters, because the next pass takes the FIRST span that joins.
 (defun sq:merge-walls (spans / out a rest hit keep b)
   (setq out nil)
   (while spans
@@ -40585,28 +40601,31 @@
         (if (and (not hit) (sq:joins-p a b))
           (setq a   (sq:span-union a b)
                 hit T)
-          (setq keep (append keep (list b)))))
-      (setq rest keep))
-    (setq out   (append out (list a))
+          (setq keep (cons b keep))))
+      (setq rest (reverse keep)))
+    (setq out   (cons a out)
           spans rest))
-  out)
+  (reverse out))
 
 ;; (length direction p1 p2) per wall, longest first.  Spans shorter
 ;; than the fuzz are not walls -- a zero-length one has no direction to
 ;; read at all.
 (defun sq:walls (spans / straight s out)
   (setq straight nil)
+  ;; both lists are gathered backwards and turned round once, so each
+  ;; is in the order its source is in -- merge-walls and the sort below
+  ;; see exactly what they always did
   (foreach s spans
     (if (and (or (null (caddr s)) (< (abs (caddr s)) 1e-8))
              (>= (cal:dist (car s) (cadr s)) sq:*fuzz*))
-      (setq straight (append straight (list s)))))
-  (foreach s (sq:merge-walls straight)
+      (setq straight (cons s straight))))
+  (foreach s (sq:merge-walls (reverse straight))
     (if (>= (cal:dist (car s) (cadr s)) sq:*fuzz*)
-      (setq out (append out
-                        (list (list (cal:dist (car s) (cadr s))
-                                    (sq:dirfold (angle (car s) (cadr s)))
-                                    (car s) (cadr s)))))))
-  (vl-sort out '(lambda (p q) (> (car p) (car q)))))
+      (setq out (cons (list (cal:dist (car s) (cadr s))
+                            (sq:dirfold (angle (car s) (cadr s)))
+                            (car s) (cadr s))
+                      out))))
+  (vl-sort (reverse out) '(lambda (p q) (> (car p) (car q)))))
 
 ;;; -------------------- the span ----------------------------------------
 ;;; The widest measurement across a set of points is between two of its
@@ -40662,15 +40681,31 @@
       (list (* 0.5 (+ (apply 'min xs) (apply 'max xs)))
             (* 0.5 (+ (apply 'min ys) (apply 'max ys)))))))
 
-;; Every sampled point of a selection, and every span of it.
-(defun sq:read-ss (ss / i en pts spans)
-  (setq i 0 pts nil spans nil)
+;; Every sampled point of a selection, and every span of it.  An
+;; entity's spans are built ONCE and its points sampled off them; one
+;; with no spans -- an ELLIPSE or a SPLINE, which answer only for
+;; points -- is sampled by sq:ent-pts.  Each entity's points and spans
+;; are one chunk apiece, joined once at the end in entity order.
+(defun sq:read-ss (ss / i en s pchunks schunks)
+  (setq i 0 pchunks nil schunks nil)
   (while (< i (sslength ss))
-    (setq en    (ssname ss i)
-          pts   (append pts (sq:ent-pts en))
-          spans (append spans (sq:ent-spans en))
-          i     (1+ i)))
-  (list pts spans))
+    (setq en      (ssname ss i)
+          s       (sq:ent-spans en)
+          pchunks (cons (if s (sq:spans-pts s) (sq:ent-pts en)) pchunks)
+          schunks (cons s schunks)
+          i       (1+ i)))
+  (list (apply 'append (reverse pchunks))
+        (apply 'append (reverse schunks))))
+
+;; Every sampled point of a selection and nothing else -- what the
+;; middle of the whole highlight is taken over, which has no use for
+;; the spans sq:read-ss would build alongside.
+(defun sq:read-pts (ss / i chunks)
+  (setq i 0 chunks nil)
+  (while (< i (sslength ss))
+    (setq chunks (cons (sq:ent-pts (ssname ss i)) chunks)
+          i      (1+ i)))
+  (apply 'append (reverse chunks)))
 
 ;;; -------------------- saying what it measured -------------------------
 
@@ -40793,7 +40828,7 @@
              ;; no middle of its own and falls back to the perimeter's.
              (setq wpts  (if (eq sq:*about* 'work)
                            (sq:middle (mapcar '(lambda (p) (trans p 0 1))
-                                              (car (sq:read-ss work)))))
+                                              (sq:read-pts work))))
                    about (if wpts wpts (sq:middle pts)))
 
              ;; Already square comes FIRST, ahead of the question
@@ -50766,7 +50801,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v2.2")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v2.3")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -51570,10 +51605,10 @@
 ;; the angle from its centre out through mid to the clear side, else
 ;; nil.  Radially out first, then radially in, the way a straight
 ;; segment's two sides are tried.
-(defun ad:arcang (centre mid diag eps ss / a)
+(defun ad:arcang (centre mid diag eps objs / a)
   (setq a (angle centre mid))
-  (cond ((ad:sideclear mid a diag eps ss) a)
-        ((ad:sideclear mid (+ a pi) diag eps ss) (+ a pi))))
+  (cond ((ad:sideclear mid a diag eps objs) a)
+        ((ad:sideclear mid (+ a pi) diag eps objs) (+ a pi))))
 
 ;; every straight segment of every entity in ss, as (p1 p2) pairs
 (defun ad:allsegs (ss / i en s out)
@@ -51625,42 +51660,52 @@
 
 ;; ------------------------------------------ part 1: perimeter dimensions
 
-;; T if nothing in ss lies between pt and pt + dist along direction ang
-(defun ad:sideclear (pt ang dist eps ss / lin lobj i rtn clear)
+;; One vla-object per entity of ss, in ss order; nil for no ss.  The
+;; side probes test every segment against every one of these, so the
+;; set is converted once per perimeter rather than once per probe.
+(defun ad:ss-objs (ss / i out)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq out (cons (vlax-ename->vla-object (ssname ss i)) out)
+            i   (1+ i))))
+  (reverse out))
+
+;; T if nothing in objs (ad:ss-objs of the selection) lies between pt
+;; and pt + dist along direction ang
+(defun ad:sideclear (pt ang dist eps objs / lin lobj rtn clear)
   ;; entlast is only OUR line if the entmake actually made one -- on a
   ;; failure it would name the user's own last-drawn entity, which the
   ;; entdel at the bottom would then erase
   (setq clear t
-        i     0
         lin   (if (entmake (list '(0 . "LINE")
                                  (cons 10 (polar pt ang eps))
                                  (cons 11 (polar pt ang dist))))
                 (entlast)))
   (if lin (setq lobj (vlax-ename->vla-object lin)))
-  (if (and lin ss)
-    (while (and clear (< i (sslength ss)))
-      (setq rtn (vl-catch-all-apply
-                  'vlax-invoke
-                  (list lobj 'IntersectWith
-                        (vlax-ename->vla-object (ssname ss i)) acextendnone)))
+  (if (and lin objs)
+    (while (and clear objs)
+      (setq rtn  (vl-catch-all-apply
+                   'vlax-invoke
+                   (list lobj 'IntersectWith (car objs) acextendnone))
+            objs (cdr objs))
       (if (and (not (vl-catch-all-error-p rtn)) rtn)
-        (setq clear nil))
-      (setq i (1+ i))))
+        (setq clear nil))))
   (if lin (entdel lin))
   clear)
 
 ;; if segment p1-p2 lies on the perimeter of the highlighted geometry,
 ;; return the angle pointing to its clear (outside) side, else nil
-(defun ad:perimang (p1 p2 diag eps ss / mid a)
+(defun ad:perimang (p1 p2 diag eps objs / mid a)
   (setq mid (cal:midn p1 p2)
         a   (angle p1 p2))
-  (cond ((ad:sideclear mid (+ a (* 0.5 pi)) diag eps ss) (+ a (* 0.5 pi)))
-        ((ad:sideclear mid (- a (* 0.5 pi)) diag eps ss) (- a (* 0.5 pi)))))
+  (cond ((ad:sideclear mid (+ a (* 0.5 pi)) diag eps objs) (+ a (* 0.5 pi)))
+        ((ad:sideclear mid (- a (* 0.5 pi)) diag eps objs) (- a (* 0.5 pi)))))
 
 ;; every straight segment on the perimeter of ss, as
 ;; (length p1 p2 where-its-dim-goes).  Length first, so the records
 ;; group by size.
-(defun ad:perimsegs (ss diag eps off / out i en seg len pa)
+(defun ad:perimsegs (ss diag eps off objs / out i en seg len pa)
   (setq out '()
         i   0)
   (repeat (sslength ss)
@@ -51669,7 +51714,7 @@
     (foreach seg (ad:segs en)
       (setq len (distance (car seg) (cadr seg)))
       (if (and (> len 1e-8)
-               (setq pa (ad:perimang (car seg) (cadr seg) diag eps ss)))
+               (setq pa (ad:perimang (car seg) (cadr seg) diag eps objs)))
         (setq out (cons (list len (car seg) (cadr seg)
                               (polar (cal:midn (car seg) (cadr seg)) pa off))
                         out)))))
@@ -51677,10 +51722,10 @@
 
 ;; every arc on the perimeter of ss, as
 ;; (radius entity point-on-it centre where-its-dim-goes)
-(defun ad:perimarcs (ss diag eps off / out rec pa)
+(defun ad:perimarcs (ss diag eps off objs / out rec pa)
   (setq out '())
   (foreach rec (ad:arcs ss)
-    (if (setq pa (ad:arcang (cadddr rec) (caddr rec) diag eps ss))
+    (if (setq pa (ad:arcang (cadddr rec) (caddr rec) diag eps objs))
       (setq out (cons (append rec (list (polar (caddr rec) pa off))) out))))
   (reverse out))
 
@@ -51724,7 +51769,7 @@
 ;; the sides in a settled order - but no group is collapsed onto its
 ;; first member.
 ;; Returns how many dimensions were placed.
-(defun ad:dimperim (ss all / box diag eps off cnt g rec)
+(defun ad:dimperim (ss all / box diag eps off cnt g rec objs)
   (setq box (cal:bbox-ss ss)
         cnt 0)
   (if box
@@ -51733,9 +51778,12 @@
             eps  (* 1e-6 diag)
             ;; at least ad:*perim-feet* away from the perimeter,
             ;; heading outwards
-            off  (max (ad:dimoff) (ad:feet ad:*perim-feet*)))
+            off  (max (ad:dimoff) (ad:feet ad:*perim-feet*))
+            ;; the side probes' targets, converted once for both walks
+            objs (ad:ss-objs ss))
       ;; the straight sides
-      (foreach g (ad:groupsame (ad:perimsegs ss diag eps off) (ad:dupetol))
+      (foreach g (ad:groupsame (ad:perimsegs ss diag eps off objs)
+                               (ad:dupetol))
         (if (and (not all) (>= (length g) ad:*typ-lines*))
           (setq rec (ad:linegrouprep g)
                 cnt (+ cnt (ad:putaligned (cadr rec) (caddr rec) (cadddr rec)
@@ -51744,7 +51792,8 @@
             (setq cnt (+ cnt (ad:putaligned (cadr rec) (caddr rec) (cadddr rec)
                                             ad:*style-plan* ""))))))
       ;; the arcs, by radius
-      (foreach g (ad:groupsame (ad:perimarcs ss diag eps off) (ad:dupetol))
+      (foreach g (ad:groupsame (ad:perimarcs ss diag eps off objs)
+                               (ad:dupetol))
         (if (and (not all) (>= (length g) ad:*typ-curves*))
           (setq rec (ad:radgrouprep g)
                 cnt (+ cnt (ad:putradius (car rec) (cadr rec) (caddr rec)
@@ -56112,7 +56161,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.10")  ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -56334,7 +56383,7 @@
             p14 (cdr (assoc 14 ed)))
       (append (if p13 (list p13)) (if p14 (list p14))))))
 
-(defun cfchk:shared-anchors (dims / recs r e p found out)
+(defun cfchk:shared-anchors (dims / recs r e p found out tl)
   ;; Every spot where *cfchk-anchor-min* or more DIMENSIONS put a
   ;; definition point.  Dimensioning twice to the same spot is how a
   ;; drafter says that spot matters -- the usual case is the pair of
@@ -56345,10 +56394,14 @@
   ;; Returns the anchor points (WCS).
   (foreach e dims
     (foreach p (cfchk:dim-def-pts e)
-      (setq found nil)
-      (foreach r recs
-        (if (and (null found) (<= (distance p (car r)) *cfchk-anchor-tol*))
-          (setq found r)))
+      ;; the FIRST rec within tol, and stop there: the rest of recs
+      ;; cannot change which one that is
+      (setq found nil
+            tl    recs)
+      (while (and tl (null found))
+        (if (<= (distance p (caar tl)) *cfchk-anchor-tol*)
+          (setq found (car tl)))
+        (setq tl (cdr tl)))
       (cond
         ((null found) (setq recs (cons (list p e) recs)))
         ;; a dimension's own two points landing together is one
@@ -65539,7 +65592,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.25")
+(setq *cchk-version* "v1.26")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -65870,8 +65923,10 @@
 (defun cchk:stash-color (ent col / ed)
   ;; remember the entity's own colour in xdata so COVERCHECKRESCUE can
   ;; put it back even after a crash; an existing stash (from an
-  ;; interrupted run - the TRUE original) is never overwritten
-  (cchk:regapp)
+  ;; interrupted run - the TRUE original) is never overwritten.
+  ;; The caller registers the COVERCHECK app once, ahead of the
+  ;; grey-out loop that is this helper's one caller -- not once per
+  ;; entity.
   (setq ed (entget ent '("COVERCHECK")))
   (if (and ed (not (assoc -3 ed)))
     (entmod (append ed (list (list -3 (list "COVERCHECK"
@@ -66856,17 +66911,20 @@
   (setq a (angle (cchk:seg-p1 s) (cchk:seg-p2 s)))
   (if (>= a pi) (- a pi) a))
 
-(defun cchk:sort-recs (recs / out r pre rest)
-  ;; stable insertion sort by (car rec); keeps equal elements
-  (setq out nil)
-  (foreach r recs
-    (setq pre  nil
-          rest out)
-    (while (and rest (>= (car r) (caar rest)))
-      (setq pre  (cons (car rest) pre)
-            rest (cdr rest)))
-    (setq out (append (reverse pre) (list r) rest)))
-  out)
+(defun cchk:sort-recs (recs / i)
+  ;; stable sort by (car rec); keeps equal elements.  Each rec is
+  ;; tagged with its input position, which breaks every tie: equal
+  ;; offsets keep their input order (the order Merge's keep/delete
+  ;; choice reads), and vl-sort -- which DROPS items its test calls
+  ;; equal -- never sees two alike.  O(n log n), where the insertion
+  ;; sort this replaces was O(n^2) over a direction family.
+  (setq i -1)
+  (mapcar 'cdr
+          (vl-sort (mapcar '(lambda (r) (cons (setq i (1+ i)) r)) recs)
+                   '(lambda (a b)
+                      (or (< (cadr a) (cadr b))
+                          (and (= (cadr a) (cadr b))
+                               (< (car a) (car b))))))))
 
 ;; --- block & text helpers ------------------------------------------
 
@@ -66893,24 +66951,26 @@
     (cdr (assoc 2 (entget ent)))
     res))
 
-(defun cchk:blockdef-texts (bname depth / lst e et g)
+(defun cchk:blockdef-texts (bname depth / lst e ed et g)
   ;; TEXT/MTEXT/ATTDEF inside a block definition, following nested
-  ;; blocks down to depth so a title wrapped in a wrapper is found
+  ;; blocks down to depth so a title wrapped in a wrapper is found.
+  ;; One entget per definition entity: the type and the text/name
+  ;; groups are all read off ed.
   (setq e (tblobjname "BLOCK" bname))
   (if e
     (progn
       (setq e (entnext e))
-      (while (and e (/= "ENDBLK" (setq et (cdr (assoc 0 (entget e))))))
+      (while (and e (/= "ENDBLK" (setq et (cdr (assoc 0 (setq ed (entget e)))))))
         (cond
           ((member et '("TEXT" "ATTDEF"))
-           (setq lst (cons (cdr (assoc 1 (entget e))) lst)))
+           (setq lst (cons (cdr (assoc 1 ed)) lst)))
           ((= et "MTEXT")
-           (foreach g (entget e)
+           (foreach g ed
              (if (member (car g) '(1 3))
                (setq lst (cons (cdr g) lst)))))
           ((and (= et "INSERT") (> depth 1))
-           (setq lst (cons (cdr (assoc 2 (entget e))) lst)  ; nested block NAME
-                 lst (append (cchk:blockdef-texts (cdr (assoc 2 (entget e)))
+           (setq lst (cons (cdr (assoc 2 ed)) lst)  ; nested block NAME
+                 lst (append (cchk:blockdef-texts (cdr (assoc 2 ed))
                                                   (1- depth))
                              lst))))
         (setq e (entnext e)))))
@@ -67152,7 +67212,7 @@
             p14 (cdr (assoc 14 ed)))
       (append (if p13 (list p13)) (if p14 (list p14))))))
 
-(defun cchk:shared-anchors (dims / recs r e p found out)
+(defun cchk:shared-anchors (dims / recs r e p found out tl)
   ;; Every spot where *cchk-anchor-min* or more DIMENSIONS put a
   ;; definition point.  Dimensioning twice to the same spot is how a
   ;; drafter says that spot matters -- the usual case is the pair of
@@ -67165,10 +67225,14 @@
   ;; Returns the anchor points (WCS).
   (foreach e dims
     (foreach p (cchk:dim-def-pts e)
-      (setq found nil)
-      (foreach r recs
-        (if (and (null found) (<= (distance p (car r)) *cchk-anchor-tol*))
-          (setq found r)))
+      ;; the FIRST rec within tol, and stop there: the rest of recs
+      ;; cannot change which one that is
+      (setq found nil
+            tl    recs)
+      (while (and tl (null found))
+        (if (<= (distance p (caar tl)) *cchk-anchor-tol*)
+          (setq found (car tl)))
+        (setq tl (cdr tl)))
       (cond
         ((null found) (setq recs (cons (list p e) recs)))
         ;; a dimension's own two points landing together is one
@@ -68608,7 +68672,8 @@
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
-                      minx miny maxx maxy bb m dhdr right dimlay units datev carried cmv)
+                      minx miny maxx maxy bb m dhdr right dimlay units datev carried cmv
+                      ed col)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -68747,14 +68812,21 @@
         ;; be 'auto, and measuring the background per entity would
         ;; be a COM round trip per entity
         (setq grey (cal:ink *cchk-grey-color* 'fade))
+        ;; the app every stash below writes under, registered once
+        (cchk:regapp)
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
                 i (1+ i))
-          (if (entget e)
+          ;; one entget serves the test, the saved list and the stash
+          ;; (cchk:ent-color's read, inlined); set-color re-reads, as
+          ;; it must, after the stash's entmod
+          (if (setq ed (entget e))
             (progn
-              (setq saved (cons (cons e (cchk:ent-color e)) saved))
-              (cchk:stash-color e (cchk:ent-color e))
+              (setq col   (cdr (assoc 62 ed))
+                    col   (if col col 256)
+                    saved (cons (cons e col) saved))
+              (cchk:stash-color e col)
               (cchk:set-color e grey))))
 
         ;; --- dimensions, one at a time -----------------------------
@@ -70169,7 +70241,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cleardim-version* "v3.1")   ; announced on load; release_lisp.py
+(setq *cleardim-version* "v3.2")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -71607,7 +71679,15 @@
 ;; index so that dimension alone ignores it; the extension lines are
 ;; tagged nil, because a text over one of those is unreadable whoever
 ;; drew it.
-(defun cd:static-obs (ss recs runs / out i n en ed typ lay own p r tag)
+;; Two halves, because only the second depends on where the rows put
+;; the dimensions: cd:plan-rows reads SS once with cd:ss-obs and hands
+;; that to cd:rec-obs on every try.
+(defun cd:static-obs (ss recs runs)
+  (cd:rec-obs (cd:ss-obs ss) recs runs))
+
+;; The entities in SS that are ink, as obstacles, tagged nil.  Reads
+;; the drawing and nothing else: an entget, the polygons, their boxes.
+(defun cd:ss-obs (ss / out i n en ed typ lay p)
   (setq out nil i 0 n (if ss (sslength ss) 0))
   (while (< i n)
     (setq en  (ssname ss i)
@@ -71618,6 +71698,13 @@
       (foreach p (cd:ent-polys en)
         (setq out (cons (cd:ob nil p) out))))
     (setq i (1+ i)))
+  out)
+
+;; BASE with what every dimension in RECS draws for itself consed onto
+;; its front.  BASE is only ever consed onto, never altered, so one
+;; cd:ss-obs list can stand under every try.
+(defun cd:rec-obs (base recs runs / out own p r tag)
+  (setq out base)
   (foreach r recs
     (setq own (cd:r-own r)
           tag (cond ((cd:run-of (cd:r-idx r) runs)) ((list (cd:r-idx r)))))
@@ -71831,15 +71918,20 @@
 ;; against, which carry the rows in their cd:r-shift and are what
 ;; cd:apply must be handed.
 (defun cd:plan-rows (ss recs / runs state tries going shifted static
-                        results score best bestrecs bestscore next)
+                        results score best bestrecs bestscore next base)
   (setq runs  (cd:runs recs)
         recs  (cd:bound-runs recs runs)
         state (mapcar 'cd:run-state runs)
         tries 0
         going T)
+  ;; The ink in SS is the same on every try, so it is read once.  That
+  ;; holds only while planning is read-only -- the one entmod is in
+  ;; cd:apply, after this returns.  Anything that ever changes the
+  ;; drawing between tries has to move this back inside the loop.
+  (setq base (cd:ss-obs ss))
   (while going
     (setq shifted (cd:shift-all recs (cd:state-rows state recs))
-          static  (cd:static-obs ss shifted runs)
+          static  (cd:rec-obs base shifted runs)
           results (cd:plan shifted static)
           score   (cd:score results state))
     ;; strictly better only, so a later arrangement that merely ties
@@ -72477,7 +72569,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.24")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.25")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -72726,8 +72818,9 @@
 (defun dchk:stash-color (ent col / ed)
   ;; remember the entity's own colour in xdata so DIMCHECKRESCUE can
   ;; put it back even after a crash; an existing stash (from an
-  ;; interrupted run - the TRUE original) is never overwritten
-  (dchk:regapp)
+  ;; interrupted run - the TRUE original) is never overwritten.
+  ;; The caller registers the DIMCHECK app once, ahead of the grey-out
+  ;; loop that is this helper's one caller -- not once per entity.
   (setq ed (entget ent '("DIMCHECK")))
   (if (and ed (not (assoc -3 ed)))
     (entmod (append ed (list (list -3 (list "DIMCHECK"
@@ -72817,11 +72910,6 @@
   (princ))
 
 ;; --- small helpers -------------------------------------------------
-
-(defun dchk:ent-color (ent / c)
-  ;; the entity's explicit colour, 256 (ByLayer) when it has none
-  (setq c (cdr (assoc 62 (entget ent))))
-  (if c c 256))
 
 (defun dchk:set-color (ent color / ed old)
   (setq ed  (entget ent)
@@ -73207,17 +73295,20 @@
   (setq a (angle (dchk:seg-p1 s) (dchk:seg-p2 s)))
   (if (>= a pi) (- a pi) a))
 
-(defun dchk:sort-recs (recs / out r pre rest)
-  ;; stable insertion sort by (car rec); keeps equal elements
-  (setq out nil)
-  (foreach r recs
-    (setq pre  nil
-          rest out)
-    (while (and rest (>= (car r) (caar rest)))
-      (setq pre  (cons (car rest) pre)
-            rest (cdr rest)))
-    (setq out (append (reverse pre) (list r) rest)))
-  out)
+(defun dchk:sort-recs (recs / i)
+  ;; stable sort by (car rec); keeps equal elements.  Each rec is
+  ;; tagged with its input position, which breaks every tie: equal
+  ;; offsets keep their input order (the order Merge's keep/delete
+  ;; choice reads), and vl-sort -- which DROPS items its test calls
+  ;; equal -- never sees two alike.  O(n log n), where the insertion
+  ;; sort this replaces was O(n^2) over a direction family.
+  (setq i -1)
+  (mapcar 'cdr
+          (vl-sort (mapcar '(lambda (r) (cons (setq i (1+ i)) r)) recs)
+                   '(lambda (a b)
+                      (or (< (cadr a) (cadr b))
+                          (and (= (cadr a) (cadr b))
+                               (< (car a) (car b))))))))
 
 (defun dchk:find-overlaps (segs / atol fams a placed fam recs e p1 p2 dx dy
                                 off s1 s2 tmp rest r q pairs seen key)
@@ -73373,7 +73464,7 @@
             p14 (cdr (assoc 14 ed)))
       (append (if p13 (list p13)) (if p14 (list p14))))))
 
-(defun dchk:shared-anchors (dims / recs r e p found out)
+(defun dchk:shared-anchors (dims / recs r e p found out tl)
   ;; Every spot where *dchk-anchor-min* or more DIMENSIONS put a
   ;; definition point.  Dimensioning twice to the same spot is how a
   ;; drafter says that spot matters -- the usual case is the pair of
@@ -73386,10 +73477,14 @@
   ;; Returns the anchor points (WCS).
   (foreach e dims
     (foreach p (dchk:dim-def-pts e)
-      (setq found nil)
-      (foreach r recs
-        (if (and (null found) (<= (distance p (car r)) *dchk-anchor-tol*))
-          (setq found r)))
+      ;; the FIRST rec within tol, and stop there: the rest of recs
+      ;; cannot change which one that is
+      (setq found nil
+            tl    recs)
+      (while (and tl (null found))
+        (if (<= (distance p (caar tl)) *dchk-anchor-tol*)
+          (setq found (car tl)))
+        (setq tl (cdr tl)))
       (cond
         ((null found) (setq recs (cons (list p e) recs)))
         ;; a dimension's own two points landing together is one
@@ -73771,7 +73866,8 @@
                       nomerged noflag noleft
                       rowtol sty pair dlines skiprest
                       laylist locked relock lay
-                      minx miny maxx maxy bb h m ins txt nlin ref hdr l carried cmv)
+                      minx miny maxx maxy bb h m ins txt nlin ref hdr l carried cmv
+                      ed col)
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
     ;; re-lock what we unlocked, clear markers, close the undo group
@@ -73909,14 +74005,21 @@
         ;; be 'auto, and measuring the background per entity would
         ;; be a COM round trip per entity
         (setq grey (cal:ink *dchk-grey-color* 'fade))
+        ;; the app every stash below writes under, registered once
+        (dchk:regapp)
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
                 i (1+ i))
-          (if (entget e)
+          ;; one entget serves the test, the saved list and the
+          ;; stash; set-color re-reads, as it must, after the
+          ;; stash's entmod
+          (if (setq ed (entget e))
             (progn
-              (setq saved (cons (cons e (dchk:ent-color e)) saved))
-              (dchk:stash-color e (dchk:ent-color e))
+              (setq col   (cdr (assoc 62 ed))
+                    col   (if col col 256)
+                    saved (cons (cons e col) saved))
+              (dchk:stash-color e col)
               (dchk:set-color e grey))))
 
         ;; --- dimensions, one at a time -----------------------------
@@ -86047,7 +86150,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.21")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.22")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -86369,8 +86472,10 @@
 (defun lfc:stash-color (ent col / ed)
   ;; remember the entity's own colour in xdata so LINFINCHECKRESCUE can
   ;; put it back even after a crash; an existing stash (from an
-  ;; interrupted run - the TRUE original) is never overwritten
-  (lfc:regapp)
+  ;; interrupted run - the TRUE original) is never overwritten.
+  ;; The caller registers the LINFINCHECK app once, ahead of the
+  ;; grey-out loop that is this helper's one caller -- not once per
+  ;; entity.
   (setq ed (entget ent '("LINFINCHECK")))
   (if (and ed (not (assoc -3 ed)))
     (entmod (append ed (list (list -3 (list "LINFINCHECK"
@@ -86460,11 +86565,6 @@
   (princ))
 
 ;; --- small helpers -------------------------------------------------
-
-(defun lfc:ent-color (ent / c)
-  ;; the entity's explicit colour, 256 (ByLayer) when it has none
-  (setq c (cdr (assoc 62 (entget ent))))
-  (if c c 256))
 
 (defun lfc:set-color (ent color / ed old)
   (setq ed  (entget ent)
@@ -87262,17 +87362,21 @@
   (setq a (angle (lfc:seg-p1 s) (lfc:seg-p2 s)))
   (if (>= a pi) (- a pi) a))
 
-(defun lfc:sort-recs (recs / out r pre rest)
-  ;; stable insertion sort by (car rec); keeps equal elements
-  (setq out nil)
-  (foreach r recs
-    (setq pre  nil
-          rest out)
-    (while (and rest (>= (car r) (caar rest)))
-      (setq pre  (cons (car rest) pre)
-            rest (cdr rest)))
-    (setq out (append (reverse pre) (list r) rest)))
-  out)
+(defun lfc:sort-recs (recs / i)
+  ;; stable sort by (car rec); keeps equal elements.  Each rec is
+  ;; tagged with its input position, which breaks every tie: equal
+  ;; offsets keep their input order (the order Merge's keep/delete
+  ;; choice reads), and vl-sort -- which DROPS items its test calls
+  ;; equal -- never sees two alike, not even a line drawn twice.
+  ;; O(n log n), where the insertion sort this replaces was O(n^2)
+  ;; over a direction family.
+  (setq i -1)
+  (mapcar 'cdr
+          (vl-sort (mapcar '(lambda (r) (cons (setq i (1+ i)) r)) recs)
+                   '(lambda (a b)
+                      (or (< (cadr a) (cadr b))
+                          (and (= (cadr a) (cadr b))
+                               (< (car a) (car b))))))))
 
 (defun lfc:step-groups (lns minlines / atol fams a placed recs pts p1 p2 dx dy
                              off s1 s2 tmp cur chains gap groups e fam r)
@@ -87462,24 +87566,26 @@
     (cdr (assoc 2 (entget ent)))
     res))
 
-(defun lfc:blockdef-texts (bname depth / lst e et g)
+(defun lfc:blockdef-texts (bname depth / lst e ed et g)
   ;; TEXT/MTEXT/ATTDEF inside a block definition, following nested
-  ;; blocks down to depth so a title wrapped in a wrapper is found
+  ;; blocks down to depth so a title wrapped in a wrapper is found.
+  ;; One entget per definition entity: the type and the text/name
+  ;; groups are all read off ed.
   (setq e (tblobjname "BLOCK" bname))
   (if e
     (progn
       (setq e (entnext e))
-      (while (and e (/= "ENDBLK" (setq et (cdr (assoc 0 (entget e))))))
+      (while (and e (/= "ENDBLK" (setq et (cdr (assoc 0 (setq ed (entget e)))))))
         (cond
           ((member et '("TEXT" "ATTDEF"))
-           (setq lst (cons (cdr (assoc 1 (entget e))) lst)))
+           (setq lst (cons (cdr (assoc 1 ed)) lst)))
           ((= et "MTEXT")
-           (foreach g (entget e)
+           (foreach g ed
              (if (member (car g) '(1 3))
                (setq lst (cons (cdr g) lst)))))
           ((and (= et "INSERT") (> depth 1))
-           (setq lst (cons (cdr (assoc 2 (entget e))) lst)  ; nested block NAME
-                 lst (append (lfc:blockdef-texts (cdr (assoc 2 (entget e)))
+           (setq lst (cons (cdr (assoc 2 ed)) lst)  ; nested block NAME
+                 lst (append (lfc:blockdef-texts (cdr (assoc 2 ed))
                                                   (1- depth))
                              lst))))
         (setq e (entnext e)))))
@@ -88117,7 +88223,7 @@
             p14 (cdr (assoc 14 ed)))
       (append (if p13 (list p13)) (if p14 (list p14))))))
 
-(defun lfc:shared-anchors (dims / recs r e p found out)
+(defun lfc:shared-anchors (dims / recs r e p found out tl)
   ;; Every spot where *lfc-anchor-min* or more DIMENSIONS put a
   ;; definition point.  Dimensioning twice to the same spot is how a
   ;; drafter says that spot matters -- the usual case is the pair of
@@ -88130,10 +88236,14 @@
   ;; Returns the anchor points (WCS).
   (foreach e dims
     (foreach p (lfc:dim-def-pts e)
-      (setq found nil)
-      (foreach r recs
-        (if (and (null found) (<= (distance p (car r)) *lfc-anchor-tol*))
-          (setq found r)))
+      ;; the FIRST rec within tol, and stop there: the rest of recs
+      ;; cannot change which one that is
+      (setq found nil
+            tl    recs)
+      (while (and tl (null found))
+        (if (<= (distance p (caar tl)) *lfc-anchor-tol*)
+          (setq found (car tl)))
+        (setq tl (cdr tl)))
       (cond
         ((null found) (setq recs (cons (list p e) recs)))
         ;; a dimension's own two points landing together is one
@@ -88527,7 +88637,8 @@
                       wallvals wallvar wallmany htskip wallzero wallask
                       laylist locked relock lay tlist tbest cx cy tvals s d
                       dlines skiprest bordbb bordsum
-                      minx miny maxx maxy bb m dhdr right dimlay units carried cmv)
+                      minx miny maxx maxy bb m dhdr right dimlay units carried cmv
+                      ed col)
 
   (defun *error* (msg)
     ;; put the greys back (flagged/moved items keep their colour),
@@ -88668,14 +88779,21 @@
         ;; be 'auto, and measuring the background per entity would
         ;; be a COM round trip per entity
         (setq grey (cal:ink *lfc-grey-color* 'fade))
+        ;; the app every stash below writes under, registered once
+        (lfc:regapp)
         (setq i 0)
         (repeat (sslength ss)
           (setq e (ssname ss i)
                 i (1+ i))
-          (if (entget e)
+          ;; one entget serves the test, the saved list and the
+          ;; stash; set-color re-reads, as it must, after the
+          ;; stash's entmod
+          (if (setq ed (entget e))
             (progn
-              (setq saved (cons (cons e (lfc:ent-color e)) saved))
-              (lfc:stash-color e (lfc:ent-color e))
+              (setq col   (cdr (assoc 62 ed))
+                    col   (if col col 256)
+                    saved (cons (cons e col) saved))
+              (lfc:stash-color e col)
               (lfc:set-color e grey))))
 
         ;; --- dimensions, one at a time -----------------------------
@@ -90604,7 +90722,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.15")
+(setq *paddle-version* "v1.16")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -90869,18 +90987,26 @@
 
 ;; The first segment in SEGS with an end on PT (within *paddle-fuzz*),
 ;; turned so that it LEAVES pt, and the rest of SEGS without it, in
-;; order: (segment rest).  (nil rest) when nothing touches pt.
-(defun paddle--take (segs pt / found rest s)
-  (setq found nil rest nil)
-  (foreach s segs
-    (if found
-        (setq rest (cons s rest))
-        (cond
-          ((<= (distance pt (car s)) *paddle-fuzz*) (setq found s))
-          ((<= (distance pt (cadr s)) *paddle-fuzz*) ; reversed
-           (setq found (paddle--revseg s)))
-          (T (setq rest (cons s rest))))))
-  (list found (reverse rest)))
+;; order: (segment rest).  (nil segs) when nothing touches pt.
+;;
+;; The scan stops at the hit, and only the segments before it are
+;; copied: the ones after it are handed back as they stand.  The next
+;; segment of a polyline sits at the front of the pool, so most takes
+;; look at one segment and copy none -- where rebuilding the whole pool
+;; on every step made chaining a sheet quadratic in its segments.
+(defun paddle--take (segs pt / found before at s)
+  (setq found nil before nil at segs)
+  (while (and at (not found))
+    (setq s  (car at)
+          at (cdr at))
+    (cond
+      ((<= (distance pt (car s)) *paddle-fuzz*) (setq found s))
+      ((<= (distance pt (cadr s)) *paddle-fuzz*) ; reversed
+       (setq found (paddle--revseg s)))
+      (T (setq before (cons s before)))))
+  (if found
+      (list found (append (reverse before) at))
+      (list nil segs)))
 
 ;; Chains touching segments (ends within *paddle-fuzz*) end-to-end.
 ;; Returns (loops opens): each loop is a vertex list (x y bulge), and
@@ -90895,13 +91021,25 @@
 ;; segment already taken.  Two chains meeting at a point that is not a
 ;; gap is not what the drawing says -- there is one loop with one hole
 ;; in it, and the arrow belongs at the hole.
-(defun paddle--chain (segs / loops opens chain head tail done found rest)
+;;
+;; CHAIN holds the seed and what grew at the head, in order; what grew
+;; at the tail is kept newest first in GROWN and put on the end once,
+;; when the chain is finished -- appending each one as it came copied
+;; the whole chain every step.  N counts the segments for the same
+;; reason.  And once nothing leaves the tail nothing ever will in this
+;; chain: the tail does not move again and the pool only shrinks, so
+;; TDEAD skips the scan that is bound to fail on every head step after.
+(defun paddle--chain (segs / loops opens chain head tail done found rest
+                             grown n tdead)
   ;; drop degenerate slivers
   (setq segs (vl-remove-if
                '(lambda (s) (<= (distance (car s) (cadr s)) *paddle-fuzz*))
                segs))
   (while segs
     (setq chain (list (car segs))
+          grown nil
+          n     1
+          tdead nil
           head  (car (car segs))
           tail  (cadr (car segs))
           segs  (cdr segs)
@@ -90909,29 +91047,35 @@
     (while (not done)
       (cond
         ;; loop closed back onto its start?
-        ((and (> (length chain) 1) (<= (distance tail head) *paddle-fuzz*))
-         (setq loops (cons (mapcar '(lambda (s) (list (car (car s)) (cadr (car s)) (caddr s)))
+        ((and (> n 1) (<= (distance tail head) *paddle-fuzz*))
+         (setq chain (append chain (reverse grown))
+               loops (cons (mapcar '(lambda (s) (list (car (car s)) (cadr (car s)) (caddr s)))
                                    chain)
                            loops)
                done  T))
         (T ;; a segment leaving the tail, else one arriving at the head
-         (setq rest  (paddle--take segs tail)
-               found (car rest)
-               rest  (cadr rest))
+         (if tdead
+             (setq found nil)
+             (setq rest  (paddle--take segs tail)
+                   found (car rest)
+                   rest  (cadr rest)))
          (cond
-           (found (setq chain (append chain (list found))
+           (found (setq grown (cons found grown)
+                        n     (1+ n)
                         tail  (cadr found)
                         segs  rest))
            (T
-            (setq rest  (paddle--take segs head)
+            (setq tdead T
+                  rest  (paddle--take segs head)
                   found (car rest)
                   rest  (cadr rest))
             (if found
                 (setq found (paddle--revseg found) ; turned to arrive at head
                       chain (cons found chain)
+                      n     (1+ n)
                       head  (car found)
                       segs  rest)
-                (setq opens (cons chain opens) ; dead end both ways
+                (setq opens (cons (append chain (reverse grown)) opens) ; dead end both ways
                       done  T))))))))
   (list (reverse loops) (reverse opens)))
 
@@ -91223,32 +91367,45 @@
 ;; together than *paddle-fuzz* are already chained and are not a gap
 ;; either, and an end already spoken for cannot be paired twice.  What
 ;; comes back is a set of disjoint pairs, each (end-a end-b distance).
-(defun paddle--pairs (ends / cand taken out best a b d p)
-  (foreach a ends
-    (foreach b ends
-      (if (and (< (paddle--endkey a) (paddle--endkey b)) ; each pair once
-               (> (setq d (distance (car a) (car b))) *paddle-fuzz*)
+(defun paddle--pairs (ends / cand taken out at a b ka d p)
+  ;; each pair once: B runs over the ends AFTER A.  paddle--endlist
+  ;; hands them back in key order, so that is every pair with the
+  ;; smaller key first, and each candidate is (d key-a key-b a b).
+  (setq at ends)
+  (while at
+    (setq a  (car at)
+          ka (paddle--endkey a))
+    (foreach b (cdr at)
+      (if (and (> (setq d (distance (car a) (car b))) *paddle-fuzz*)
                (<= d *paddle-gapmax*))
-          (setq cand (cons (list d a b) cand)))))
-  ;; then take them closest first.  The pick is a scan rather than a
-  ;; vl-sort because vl-sort DROPS an element that compares equal to
-  ;; another under the predicate it is given -- and two gaps exactly as
-  ;; wide as each other is not an oddity here, it is what the two ends
-  ;; of a wall left short at both of them look like.  Sorting them
-  ;; would quietly lose one, and a ring with a gap missing is not a
-  ;; ring, so the arrow would never be drawn.
-  (repeat (length cand)
-    (setq best nil)
-    (foreach p cand
-      (if (and (not (member (paddle--endkey (cadr p)) taken))
-               (not (member (paddle--endkey (caddr p)) taken))
-               (or (null best) (< (car p) (car best))))
-          (setq best p)))
-    (if best
-        (setq a     (cadr best)
-              b     (caddr best)
-              taken (cons (paddle--endkey a) (cons (paddle--endkey b) taken))
-              out   (cons (list a b (car best)) out))))
+          (setq cand (cons (list d ka (paddle--endkey b) a b) cand))))
+    (setq at (cdr at)))
+  ;; then take them closest first: sort once, and walk the sorted list
+  ;; taking every pair whose two ends are both still free.  A pair
+  ;; passed over has an end already spoken for, and a taken end is
+  ;; never freed, so the walk takes exactly what rescanning for the
+  ;; closest free pair after every pick would.
+  ;;
+  ;; The sort is on the distance AND the two keys, never the distance
+  ;; alone: vl-sort DROPS an element that compares equal to another
+  ;; under the predicate it is given -- and two gaps exactly as wide as
+  ;; each other is not an oddity here, it is what the two ends of a
+  ;; wall left short at both of them look like.  Losing one would leave
+  ;; a ring with a gap missing, which is not a ring, so the arrow would
+  ;; never be drawn.  No two pairs share both keys, so nothing compares
+  ;; equal; and keys taken LARGEST first settle a tie in favour of the
+  ;; pair nearest the front of CAND (the last one found above), which
+  ;; is the one a closest-first scan of CAND comes to first.
+  (foreach p (vl-sort cand
+                      '(lambda (x y)
+                         (cond ((< (car x) (car y)) T)
+                               ((< (car y) (car x)) nil)
+                               ((/= (cadr x) (cadr y)) (> (cadr x) (cadr y)))
+                               (T (> (caddr x) (caddr y))))))
+    (if (and (not (member (cadr p) taken))
+             (not (member (caddr p) taken)))
+        (setq taken (cons (cadr p) (cons (caddr p) taken))
+              out   (cons (list (nth 3 p) (nth 4 p) (car p)) out))))
   (reverse out))
 
 ;; The end paired with E, or nil.
@@ -91525,7 +91682,7 @@
 ;; gap layer are skipped -- those are PADDLE's own arrows, and a run
 ;; that read its own marks back as geometry would pad them.
 (defun paddle--perimeters (ss / auto i en ed segs res loops opens nflat best
-                              bestarea a l)
+                              bestarea a l s)
   (setq auto (not ss))
   (if auto
       (setq ss (ssget "_X" (list '(0 . "LWPOLYLINE,POLYLINE,LINE,ARC")
@@ -91537,14 +91694,16 @@
           (setq en (ssname ss i)
                 i  (1+ i))
           ;; entget is nil for an entity a fillet consumed, and this
-          ;; same set is read again after the gap pass has filleted
+          ;; same set is read again after the gap pass has filleted.
+          ;; SEGS is collected newest first and turned round once
+          ;; below: appending each entity's segments onto the end
+          ;; copied everything read so far, once per entity.
           (if (and (setq ed (entget en))
                    (/= (strcase (cdr (assoc 8 ed)))
                        (strcase *paddle-gap-layer*)))
-              (setq segs (append segs
-                                 (mapcar '(lambda (s) (append s (list en)))
-                                         (paddle--ent-segs en))))))
-        (setq res   (paddle--chain segs)
+              (foreach s (paddle--ent-segs en)
+                (setq segs (cons (append s (list en)) segs)))))
+        (setq res   (paddle--chain (reverse segs))
               loops (paddle--solid-loops (car res))
               nflat (- (length (car res)) (length loops))
               opens (cadr res))
@@ -92055,7 +92214,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *mohamaddle-version* "v1.2")
+(setq *mohamaddle-version* "v1.3")
 
 ;; --- the pad itself ---
 ;; Pad sizes MOHAMADDLE offers, in the order shown at the prompt.  Each
@@ -92331,18 +92490,26 @@
 
 ;; The first segment in SEGS with an end on PT (within *mohamaddle-fuzz*),
 ;; turned so that it LEAVES pt, and the rest of SEGS without it, in
-;; order: (segment rest).  (nil rest) when nothing touches pt.
-(defun mohamaddle--take (segs pt / found rest s)
-  (setq found nil rest nil)
-  (foreach s segs
-    (if found
-        (setq rest (cons s rest))
-        (cond
-          ((<= (distance pt (car s)) *mohamaddle-fuzz*) (setq found s))
-          ((<= (distance pt (cadr s)) *mohamaddle-fuzz*) ; reversed
-           (setq found (mohamaddle--revseg s)))
-          (T (setq rest (cons s rest))))))
-  (list found (reverse rest)))
+;; order: (segment rest).  (nil segs) when nothing touches pt.
+;;
+;; The scan stops at the hit, and only the segments before it are
+;; copied: the ones after it are handed back as they stand.  The next
+;; segment of a polyline sits at the front of the pool, so most takes
+;; look at one segment and copy none -- where rebuilding the whole pool
+;; on every step made chaining a sheet quadratic in its segments.
+(defun mohamaddle--take (segs pt / found before at s)
+  (setq found nil before nil at segs)
+  (while (and at (not found))
+    (setq s  (car at)
+          at (cdr at))
+    (cond
+      ((<= (distance pt (car s)) *mohamaddle-fuzz*) (setq found s))
+      ((<= (distance pt (cadr s)) *mohamaddle-fuzz*) ; reversed
+       (setq found (mohamaddle--revseg s)))
+      (T (setq before (cons s before)))))
+  (if found
+      (list found (append (reverse before) at))
+      (list nil segs)))
 
 ;; Chains touching segments (ends within *mohamaddle-fuzz*) end-to-end.
 ;; Returns (loops opens): each loop is a vertex list (x y bulge), and
@@ -92357,13 +92524,25 @@
 ;; segment already taken.  Two chains meeting at a point that is not a
 ;; gap is not what the drawing says -- there is one loop with one hole
 ;; in it, and the arrow belongs at the hole.
-(defun mohamaddle--chain (segs / loops opens chain head tail done found rest)
+;;
+;; CHAIN holds the seed and what grew at the head, in order; what grew
+;; at the tail is kept newest first in GROWN and put on the end once,
+;; when the chain is finished -- appending each one as it came copied
+;; the whole chain every step.  N counts the segments for the same
+;; reason.  And once nothing leaves the tail nothing ever will in this
+;; chain: the tail does not move again and the pool only shrinks, so
+;; TDEAD skips the scan that is bound to fail on every head step after.
+(defun mohamaddle--chain (segs / loops opens chain head tail done found rest
+                             grown n tdead)
   ;; drop degenerate slivers
   (setq segs (vl-remove-if
                '(lambda (s) (<= (distance (car s) (cadr s)) *mohamaddle-fuzz*))
                segs))
   (while segs
     (setq chain (list (car segs))
+          grown nil
+          n     1
+          tdead nil
           head  (car (car segs))
           tail  (cadr (car segs))
           segs  (cdr segs)
@@ -92371,29 +92550,35 @@
     (while (not done)
       (cond
         ;; loop closed back onto its start?
-        ((and (> (length chain) 1) (<= (distance tail head) *mohamaddle-fuzz*))
-         (setq loops (cons (mapcar '(lambda (s) (list (car (car s)) (cadr (car s)) (caddr s)))
+        ((and (> n 1) (<= (distance tail head) *mohamaddle-fuzz*))
+         (setq chain (append chain (reverse grown))
+               loops (cons (mapcar '(lambda (s) (list (car (car s)) (cadr (car s)) (caddr s)))
                                    chain)
                            loops)
                done  T))
         (T ;; a segment leaving the tail, else one arriving at the head
-         (setq rest  (mohamaddle--take segs tail)
-               found (car rest)
-               rest  (cadr rest))
+         (if tdead
+             (setq found nil)
+             (setq rest  (mohamaddle--take segs tail)
+                   found (car rest)
+                   rest  (cadr rest)))
          (cond
-           (found (setq chain (append chain (list found))
+           (found (setq grown (cons found grown)
+                        n     (1+ n)
                         tail  (cadr found)
                         segs  rest))
            (T
-            (setq rest  (mohamaddle--take segs head)
+            (setq tdead T
+                  rest  (mohamaddle--take segs head)
                   found (car rest)
                   rest  (cadr rest))
             (if found
                 (setq found (mohamaddle--revseg found) ; turned to arrive at head
                       chain (cons found chain)
+                      n     (1+ n)
                       head  (car found)
                       segs  rest)
-                (setq opens (cons chain opens) ; dead end both ways
+                (setq opens (cons (append chain (reverse grown)) opens) ; dead end both ways
                       done  T))))))))
   (list (reverse loops) (reverse opens)))
 
@@ -92685,32 +92870,45 @@
 ;; together than *mohamaddle-fuzz* are already chained and are not a gap
 ;; either, and an end already spoken for cannot be paired twice.  What
 ;; comes back is a set of disjoint pairs, each (end-a end-b distance).
-(defun mohamaddle--pairs (ends / cand taken out best a b d p)
-  (foreach a ends
-    (foreach b ends
-      (if (and (< (mohamaddle--endkey a) (mohamaddle--endkey b)) ; each pair once
-               (> (setq d (distance (car a) (car b))) *mohamaddle-fuzz*)
+(defun mohamaddle--pairs (ends / cand taken out at a b ka d p)
+  ;; each pair once: B runs over the ends AFTER A.  mohamaddle--endlist
+  ;; hands them back in key order, so that is every pair with the
+  ;; smaller key first, and each candidate is (d key-a key-b a b).
+  (setq at ends)
+  (while at
+    (setq a  (car at)
+          ka (mohamaddle--endkey a))
+    (foreach b (cdr at)
+      (if (and (> (setq d (distance (car a) (car b))) *mohamaddle-fuzz*)
                (<= d *mohamaddle-gapmax*))
-          (setq cand (cons (list d a b) cand)))))
-  ;; then take them closest first.  The pick is a scan rather than a
-  ;; vl-sort because vl-sort DROPS an element that compares equal to
-  ;; another under the predicate it is given -- and two gaps exactly as
-  ;; wide as each other is not an oddity here, it is what the two ends
-  ;; of a wall left short at both of them look like.  Sorting them
-  ;; would quietly lose one, and a ring with a gap missing is not a
-  ;; ring, so the arrow would never be drawn.
-  (repeat (length cand)
-    (setq best nil)
-    (foreach p cand
-      (if (and (not (member (mohamaddle--endkey (cadr p)) taken))
-               (not (member (mohamaddle--endkey (caddr p)) taken))
-               (or (null best) (< (car p) (car best))))
-          (setq best p)))
-    (if best
-        (setq a     (cadr best)
-              b     (caddr best)
-              taken (cons (mohamaddle--endkey a) (cons (mohamaddle--endkey b) taken))
-              out   (cons (list a b (car best)) out))))
+          (setq cand (cons (list d ka (mohamaddle--endkey b) a b) cand))))
+    (setq at (cdr at)))
+  ;; then take them closest first: sort once, and walk the sorted list
+  ;; taking every pair whose two ends are both still free.  A pair
+  ;; passed over has an end already spoken for, and a taken end is
+  ;; never freed, so the walk takes exactly what rescanning for the
+  ;; closest free pair after every pick would.
+  ;;
+  ;; The sort is on the distance AND the two keys, never the distance
+  ;; alone: vl-sort DROPS an element that compares equal to another
+  ;; under the predicate it is given -- and two gaps exactly as wide as
+  ;; each other is not an oddity here, it is what the two ends of a
+  ;; wall left short at both of them look like.  Losing one would leave
+  ;; a ring with a gap missing, which is not a ring, so the arrow would
+  ;; never be drawn.  No two pairs share both keys, so nothing compares
+  ;; equal; and keys taken LARGEST first settle a tie in favour of the
+  ;; pair nearest the front of CAND (the last one found above), which
+  ;; is the one a closest-first scan of CAND comes to first.
+  (foreach p (vl-sort cand
+                      '(lambda (x y)
+                         (cond ((< (car x) (car y)) T)
+                               ((< (car y) (car x)) nil)
+                               ((/= (cadr x) (cadr y)) (> (cadr x) (cadr y)))
+                               (T (> (caddr x) (caddr y))))))
+    (if (and (not (member (cadr p) taken))
+             (not (member (caddr p) taken)))
+        (setq taken (cons (cadr p) (cons (caddr p) taken))
+              out   (cons (list (nth 3 p) (nth 4 p) (car p)) out))))
   (reverse out))
 
 ;; The end paired with E, or nil.
@@ -92987,7 +93185,7 @@
 ;; gap layer are skipped -- those are the pad tools' own arrows, and a run
 ;; that read its own marks back as geometry would pad them.
 (defun mohamaddle--perimeters (ss / auto i en ed segs res loops opens nflat best
-                              bestarea a l)
+                              bestarea a l s)
   (setq auto (not ss))
   (if auto
       (setq ss (ssget "_X" (list '(0 . "LWPOLYLINE,POLYLINE,LINE,ARC")
@@ -92999,14 +93197,16 @@
           (setq en (ssname ss i)
                 i  (1+ i))
           ;; entget is nil for an entity a fillet consumed, and this
-          ;; same set is read again after the gap pass has filleted
+          ;; same set is read again after the gap pass has filleted.
+          ;; SEGS is collected newest first and turned round once
+          ;; below: appending each entity's segments onto the end
+          ;; copied everything read so far, once per entity.
           (if (and (setq ed (entget en))
                    (/= (strcase (cdr (assoc 8 ed)))
                        (strcase *mohamaddle-gap-layer*)))
-              (setq segs (append segs
-                                 (mapcar '(lambda (s) (append s (list en)))
-                                         (mohamaddle--ent-segs en))))))
-        (setq res   (mohamaddle--chain segs)
+              (foreach s (mohamaddle--ent-segs en)
+                (setq segs (cons (append s (list en)) segs)))))
+        (setq res   (mohamaddle--chain (reverse segs))
               loops (mohamaddle--solid-loops (car res))
               nflat (- (length (car res)) (length loops))
               opens (cadr res))
@@ -94699,7 +94899,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.10")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.11")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -95256,15 +95456,18 @@
   out)
 
 ;; The index of the node at P, adding P as a new node when nothing within
-;; TOL is already there.  Returns (index nodelist).
-(defun lg:node-of (p tol nodes / i n found)
-  (setq i 0 found nil)
-  (foreach n nodes
-    (if (and (null found) (<= (distance (cal:2d p) n) tol)) (setq found i))
-    (setq i (1+ i)))
+;; TOL is already there.  Returns (index nodelist).  Scanned oldest
+;; first and stopped at the first hit, so when two nodes are both within
+;; TOL the lower index is the one P joins; a walk that runs off the end
+;; has counted the list, which is the index a new node gets.
+(defun lg:node-of (p tol nodes / q i rest found)
+  (setq q (cal:2d p) i 0 rest nodes found nil)
+  (while (and rest (null found))
+    (if (<= (distance q (car rest)) tol) (setq found i))
+    (setq i (1+ i) rest (cdr rest)))
   (if found
     (list found nodes)
-    (list (length nodes) (append nodes (list (cal:2d p))))))
+    (list i (append nodes (list q)))))
 
 ;; SEGS as a graph at snap tolerance TOL: (nodes segments), where each
 ;; segment is (node-a node-b bulge).  A segment whose two ends land on
@@ -95301,17 +95504,40 @@
   (list i dir (if (= dir 1) (cadr seg) (car seg))
         (car tg) (cadr tg) blg))
 
-;; Every dart leaving node V.
-(defun lg:darts-at (v nodes segn / i s out)
-  (setq i 0)
-  (foreach s segn
-    (if (= (car s) v) (setq out (cons (lg:dart i 1 s nodes) out)))
-    (if (= (cadr s) v) (setq out (cons (lg:dart i -1 s nodes) out)))
-    (setq i (1+ i)))
-  (reverse out))
-
 ;; One number per dart, so a face walk can mark the darts it used
 (defun lg:dart-id (d) (+ (* 2 (car d)) (if (= 1 (cadr d)) 0 1)))
+
+;; Every dart leaving every node, built once per graph: (nth V table) is
+;; the darts leaving node V in segment order, which is the order
+;; lg:next-dart's strict < breaks a tie in.  A face walk used to rescan
+;; every segment at every step to find them -- the whole graph once per
+;; dart travelled, on every rung of the snap ladder.
+;;
+;; AutoLISP has no array to push into, so each dart is tagged with its
+;; node and its lg:dart-id, sorted on the pair -- unique, so vl-sort
+;; drops nothing -- and cut into one slot per node, nil where nothing
+;; leaves (a node whose only segment was too short to keep).
+(defun lg:dart-table (nodes segn / i s d tagged v slot out)
+  (setq i 0)
+  (foreach s segn
+    (setq d      (lg:dart i 1 s nodes)
+          tagged (cons (list (car s) (lg:dart-id d) d) tagged)
+          d      (lg:dart i -1 s nodes)
+          tagged (cons (list (cadr s) (lg:dart-id d) d) tagged)
+          i      (1+ i)))
+  (setq tagged (vl-sort tagged '(lambda (a b)
+                                  (if (= (car a) (car b))
+                                    (< (cadr a) (cadr b))
+                                    (< (car a) (car b)))))
+        v      0)
+  (repeat (length nodes)
+    (setq slot nil)
+    (while (and tagged (= (caar tagged) v))
+      (setq slot   (cons (caddr (car tagged)) slot)
+            tagged (cdr tagged)))
+    (setq out (cons (reverse slot) out)
+          v   (1+ v)))
+  (reverse out))
 
 (defun lg:same-dart (a b)
   (and a b (= (car a) (car b)) (= (cadr a) (cadr b))))
@@ -95324,9 +95550,9 @@
 ;; way back (AIN + pi) round to the dart's departing tangent, taken over
 ;; (0, 2pi] so that turning straight back is the last resort rather than
 ;; the first choice.  Swap the sense of this one comparison and the same
-;; walk traces interior faces instead.
-(defun lg:next-dart (v ain nodes segn / darts d t2 best bt)
-  (setq darts (lg:darts-at v nodes segn))
+;; walk traces interior faces instead.  ADJ is lg:dart-table's.
+(defun lg:next-dart (v ain adj / darts d t2 best bt)
+  (setq darts (nth v adj))
   (foreach d darts
     (setq t2 (cal:angnorm (- (nth 3 d) ain pi)))
     (if (<= t2 1e-9) (setq t2 (+ t2 pi pi)))
@@ -95337,7 +95563,8 @@
 ;; along it.  Returns the darts travelled, each consed onto the node it
 ;; left, or nil when the walk never closed (which a sound graph does not
 ;; do -- the guard is there so a pathological one cannot hang AutoCAD).
-(defun lg:walk-from (start first nodes segn / cur v ain out done guard lim)
+;; ADJ is the graph's lg:dart-table; SEGN is there only to size the guard.
+(defun lg:walk-from (start first adj segn / cur v ain out done guard lim)
   (setq cur   first
         v     start
         guard 0
@@ -95346,7 +95573,7 @@
     (setq out   (cons (cons v cur) out)
           ain   (nth 4 cur)
           v     (nth 2 cur)
-          cur   (lg:next-dart v ain nodes segn)
+          cur   (lg:next-dart v ain adj)
           guard (1+ guard))
     (if (or (null cur) (> guard lim)
             (and (= v start) (lg:same-dart cur first)))
@@ -95371,8 +95598,9 @@
 ;; the one enclosing the most area -- which is the outer boundary of the
 ;; whole component, since it is the face that contains all the others.
 ;; It costs no more work: each dart is still travelled exactly once.
-(defun lg:all-faces (nodes segn / used i s dir d walk w out)
-  (setq i 0)
+(defun lg:all-faces (nodes segn / adj used i s dir d walk w out)
+  (setq adj (lg:dart-table nodes segn)
+        i   0)
   (foreach s segn
     (foreach dir '(1 -1)
       (setq d (lg:dart i dir s nodes))
@@ -95380,7 +95608,7 @@
         (progn
           (setq used (cons (lg:dart-id d) used)
                 walk (lg:walk-from (if (= dir 1) (car s) (cadr s))
-                                   d nodes segn))
+                                   d adj segn))
           (if walk
             (progn
               (foreach w walk
@@ -109566,7 +109794,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.5")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -109815,15 +110043,18 @@
 
 ;; Written BEFORE the move, which is the only moment the object still
 ;; carries what the record is about.
-(defun soconv:stamp (ent lay obj / forced)
-  (regapp *soconv-xdata-app*)
+;;
+;; c:SOCONV registers the application ONCE, ahead of the loop that
+;; calls this, and reads each source layer's colour once; lcol is that
+;; colour, and a nil one is read off the table here, as it always was.
+(defun soconv:stamp (ent lay obj lcol / forced)
   (setq forced *soconv-force-bylayer*)
   (soconv:xput ent *soconv-xdata-app*
     (list (cons 1000 *soconv-xdata-app*)
           (cons 1000 *soconv-version*)
           (cons 1000 lay)
           (cons 1000 (if forced (vla-get-Linetype obj) ""))
-          (cons 1070 (soconv:layer-color lay))
+          (cons 1070 (cond (lcol) ((soconv:layer-color lay))))
           (cons 1070 (if forced 1 0))
           (cons 1070 (if forced (vla-get-Color obj) 256))
           (cons 1070 (if forced (vla-get-Lineweight obj) -1))))
@@ -109869,7 +110100,7 @@
 
 ;;; -------------------- the command -------------------------------------
 (defun c:SOCONV (/ *error* doc unlocked mark-open ss plan jobs srcs dests
-                   tally job dest obj)
+                   tally job dest obj lay soconv-laycols)
 
   ;; The handler is LOCAL to this command (STANDARDS 5): a handler
   ;; installed in the global *error* is the handler of whatever runs
@@ -109925,11 +110156,28 @@
         (cal:ensure-layer dest (soconv:color dest)))
       ;; unlock everything about to be touched, both ends of the move
       (setq unlocked (soconv:unlock-layers (append srcs dests) doc))
+      ;; What every record needs and is the same answer for all of
+      ;; them, read once here rather than once per object: the APPID
+      ;; (only by a run that writes a record, so a run that stamps
+      ;; nothing registers none) and each source layer's colour, read
+      ;; after ensure-layer and the unlock just as stamp read it --
+      ;; nothing below touches a layer record.
+      (if *soconv-record*
+        (progn
+          (regapp *soconv-xdata-app*)
+          (foreach lay srcs
+            (setq soconv-laycols
+                  (cons (cons (strcase lay) (soconv:layer-color lay))
+                        soconv-laycols)))))
       (foreach job jobs
         ;; the record first: after the move the object no longer
         ;; carries the layer, or the properties, it is about
         (setq obj (vlax-ename->vla-object (car job)))
-        (if *soconv-record* (soconv:stamp (car job) (soconv:layer-of (car job)) obj))
+        (if *soconv-record*
+          (progn
+            (setq lay (soconv:layer-of (car job)))
+            (soconv:stamp (car job) lay obj
+                          (cdr (assoc (strcase lay) soconv-laycols)))))
         (vla-put-Layer obj (cdr job))
         (if *soconv-force-bylayer*
           (soconv:force-bylayer obj)))
@@ -110165,7 +110413,7 @@
 ;;; so; nothing else about the round trip is approximate.
 ;;; ======================================================================
 
-(setq *vsconv-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *vsconv-version* "v1.5")   ; announced on load; release_lisp.py
                                  ; reads this banner and stamps the
                                  ; dated twin in releases/ from it
 
@@ -110436,13 +110684,19 @@
 
 ;; Written BEFORE the move and before the restyle, which is the only
 ;; moment the object still carries everything the record is about.
-(defun vsconv:stamp (ent lay obj / typ sty ovr)
-  (regapp *vsconv-xdata-app*)
-  (setq typ (cdr (assoc 0 (entget ent))))
+;;
+;; c:VSCONV registers the application ONCE, ahead of the loop that
+;; calls this, and reads each source layer's colour once; lcol is that
+;; colour, and a nil one is read off the table here, as it always was.
+;; One plain entget serves the type and the dimension style: nothing
+;; before xput's entmod writes to the object.
+(defun vsconv:stamp (ent lay obj lcol / ed typ sty ovr)
+  (setq ed  (entget ent)
+        typ (cdr (assoc 0 ed)))
   ;; only a DIMENSION has a style to lose or overrides to lose it to,
   ;; and group 3 means something else entirely on an MTEXT
   (if (= "DIMENSION" typ)
-    (setq sty (cdr (assoc 3 (entget ent)))
+    (setq sty (cdr (assoc 3 ed))
           ovr (if *vsconv-dim-xdata* (vsconv:xget ent *vsconv-dim-xdata*))))
   (vsconv:xput ent *vsconv-xdata-app*
     (append (list (cons 1000 *vsconv-xdata-app*)
@@ -110450,7 +110704,7 @@
                   (cons 1000 lay)
                   (cons 1000 (vla-get-Linetype obj))
                   (cons 1000 (if sty sty ""))
-                  (cons 1070 (vsconv:layer-color lay))
+                  (cons 1070 (cond (lcol) ((vsconv:layer-color lay))))
                   (cons 1070 (vla-get-Color obj))
                   (cons 1070 (vla-get-Lineweight obj))
                   (cons 1070 (if ovr 1 0)))
@@ -110508,7 +110762,7 @@
 ;;; -------------------- the command -------------------------------------
 (defun c:VSCONV (/ *error* doc unlocked mark-open srcs here plan froms
                    reached filter ss i ent ed lay dest obj dims empty p
-                   tally n-moved n-dim)
+                   tally n-moved n-dim vsconv-laycols)
 
   ;; The handler is LOCAL to this command (STANDARDS 5), as DRONE's and
   ;; TYDRN's are: it sees doc / unlocked / mark-open through dynamic
@@ -110582,6 +110836,20 @@
       ;; the selection.
       (setq unlocked (vsconv:unlock-layers (append froms reached) doc))
 
+      ;; What every record needs and is the same answer for all of
+      ;; them, read once here rather than once per object: the APPID
+      ;; and each source layer's colour, read after ensure-layer and
+      ;; the unlock just as stamp read it -- nothing below touches a
+      ;; layer record.  froms is empty exactly when no object has a
+      ;; destination, so a run that stamps nothing registers no APPID.
+      (if (and froms *vsconv-record*)
+        (progn
+          (regapp *vsconv-xdata-app*)
+          (foreach lay froms
+            (setq vsconv-laycols
+                  (cons (cons (strcase lay) (vsconv:layer-color lay))
+                        vsconv-laycols)))))
+
       ;; ------------------------------------------------------------
       ;; 1. The layer move, everything BYLAYER when asked (the default)
       ;; ------------------------------------------------------------
@@ -110599,7 +110867,9 @@
                 ;; object no longer carries the layer, the properties or
                 ;; the overrides it is about
                 (setq obj (vlax-ename->vla-object ent))
-                (if *vsconv-record* (vsconv:stamp ent lay obj))
+                (if *vsconv-record*
+                  (vsconv:stamp ent lay obj
+                                (cdr (assoc (strcase lay) vsconv-laycols))))
                 (vla-put-Layer obj dest)
                 (if *vsconv-force-bylayer* (vsconv:force-bylayer obj))
                 (setq tally   (vsconv:bump (strcase lay) tally)
@@ -110960,7 +111230,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *g2mconv-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *g2mconv-version* "v1.3")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -111201,10 +111471,6 @@
             (append ed (list (cons code val)))))
 )
 
-;; One DXF group off ENT, or DFLT when it has not got it.
-(defun g2m:group (ent code dflt / p)
-  (if (setq p (assoc code (entget ent))) (cdr p) dflt))
-
 ;;; -------------------- xdata -------------------------------------------
 
 ;; APP's items onto ENT, leaving every OTHER application's xdata alone.
@@ -111364,13 +111630,19 @@
 
 ;; Written BEFORE the move and before either restyle, which is the only
 ;; moment the object still carries everything the record is about.
-(defun g2m:stamp (ent lay obj / typ sty ovr tsty thgt)
-  (regapp *g2mconv-xdata-app*)
-  (setq typ (cdr (assoc 0 (entget ent))))
+;;
+;; c:G2MCONV registers the application ONCE, ahead of the loop that
+;; calls this, and reads each source layer's colour once; lcol is that
+;; colour, and a nil one is read off the table here, as it always was.
+;; One plain entget serves the type, the dimension style and the
+;; linetype scale: nothing before xput's entmod writes to the object.
+(defun g2m:stamp (ent lay obj lcol / ed typ sty ovr tsty thgt p)
+  (setq ed  (entget ent)
+        typ (cdr (assoc 0 ed)))
   ;; only a DIMENSION has a style to lose or overrides to lose it to,
   ;; and group 3 means something else entirely on an MTEXT
   (if (= "DIMENSION" typ)
-    (setq sty (cdr (assoc 3 (entget ent)))
+    (setq sty (cdr (assoc 3 ed))
           ovr (if *g2mconv-dim-xdata* (g2m:xget ent *g2mconv-dim-xdata*))))
   ;; and only a note has a text style and height to lose
   (if (g2m:text-p typ)
@@ -111383,11 +111655,11 @@
                   (cons 1000 (vla-get-Linetype obj))
                   (cons 1000 (if sty sty ""))
                   (cons 1000 (if tsty tsty ""))
-                  (cons 1070 (g2m:layer-color lay))
+                  (cons 1070 (cond (lcol) ((g2m:layer-color lay))))
                   (cons 1070 (vla-get-Color obj))
                   (cons 1070 (vla-get-Lineweight obj))
                   (cons 1070 (g2m:anno-flag ent))
-                  (cons 1040 (float (g2m:group ent 48 1.0)))
+                  (cons 1040 (float (if (setq p (assoc 48 ed)) (cdr p) 1.0)))
                   (cons 1040 (if thgt (float thgt) 0.0))
                   (cons 1070 (if ovr 1 0)))
             (if ovr ovr '())))
@@ -111484,8 +111756,8 @@
 
 ;;; -------------------- the command -------------------------------------
 (defun c:G2MCONV (/ *error* doc unlocked mark-open ss plan jobs srcs dests
-                    tally job rule dest ent obj typ dims notes lt
-                    missing-lt no-dimstyle no-textstyle)
+                    tally job rule dest ent ed lay obj typ dims notes lt
+                    missing-lt no-dimstyle no-textstyle g2m-laycols)
 
   ;; The handler is LOCAL to this command (STANDARDS 5): a handler
   ;; installed in the global *error* is the handler of whatever runs
@@ -111532,14 +111804,32 @@
       ;; unlock everything about to be touched, both ends of the move
       (setq unlocked (g2m:unlock-layers (append srcs dests) doc))
 
+      ;; What every record needs and is the same answer for all of
+      ;; them, read once here rather than once per object: the APPID
+      ;; (only by a run that writes a record, so a run that stamps
+      ;; nothing registers none) and each source layer's colour, read
+      ;; after ensure-layer and the unlock just as stamp read it --
+      ;; nothing below touches a layer record.
+      (if *g2mconv-record*
+        (progn
+          (regapp *g2mconv-xdata-app*)
+          (foreach lay srcs
+            (setq g2m-laycols (cons (cons (strcase lay) (g2m:layer-color lay))
+                                    g2m-laycols)))))
+
       (foreach job jobs
+        ;; one read of the object for its type and its layer, before
+        ;; anything below has written to it
         (setq ent  (car job)
               rule (cdr job)
-              typ  (cdr (assoc 0 (entget ent))))
+              ed   (entget ent)
+              typ  (cdr (assoc 0 ed))
+              lay  (cdr (assoc 8 ed)))
         ;; the record first: after the move and the restyles the object
         ;; no longer carries any of what the record is about
         (setq obj (vlax-ename->vla-object ent))
-        (if *g2mconv-record* (g2m:stamp ent (g2m:layer-of ent) obj))
+        (if *g2mconv-record*
+          (g2m:stamp ent lay obj (cdr (assoc (strcase lay) g2m-laycols))))
         ;; 1. the layer, and the appearance that has to follow it
         (vla-put-Layer obj (caddr rule))
         (if *g2mconv-force-bylayer*
@@ -113314,7 +113604,7 @@
 
 
 
-(setq *xft-version* "v1.17") ; printed on load and at command start so a
+(setq *xft-version* "v1.18") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -114000,7 +114290,9 @@
 ;;;  insert one replacement point
 ;;; -------------------------------------------------------------------
 
-(defun xft:insert (pt num / apt prev en)
+;; STY is the attribute's text style, xft:style's answer: the same for
+;; every point of a swap, so xft:swap reads it once and hands it in.
+(defun xft:insert (pt num sty / apt prev en)
   (setq apt  (list (+ (car pt) (car  *xft-att-offset*))
                    (+ (cadr pt) (cadr *xft-att-offset*))
                    (caddr pt))
@@ -114021,7 +114313,7 @@
                  (cons 10 apt)
                  (cons 40 *xft-att-height*)
                  (cons 1 num)
-                 (cons 7 (xft:style))
+                 (cons 7 sty)
                  '(100 . "AcDbAttribute")
                  (cons 2 *xft-att-tag*)
                  '(70 . 0)))
@@ -114067,8 +114359,12 @@
 ;; and its name text are still there to be read.
 (defun xft:swap (groups names reach strip / g nm ctr best bestd bestr rank
                                             txth lim d num made blank e
-                                            en spec recs)
+                                            en spec recs sty)
   (setq made 0 blank 0 recs '())
+  ;; the attribute style once for the whole swap rather than once per
+  ;; point: nothing in the loop makes a style or moves TEXTSTYLE.  Only
+  ;; when there is a point to insert, so an empty swap reads no table.
+  (if groups (setq sty (xft:style)))
   (foreach g groups
     (setq ctr   (car g)
           best  nil
@@ -114107,7 +114403,7 @@
       (progn
         (foreach e (cdr g) (setq spec (xft:join spec (xft:ser e))))
         (if best (setq spec (xft:join spec (xft:ser (nth 3 best)))))))
-    (setq en (xft:insert ctr num))
+    (setq en (xft:insert ctr num sty))
     (foreach e (cdr g) (entdel e))
     (if best (entdel (nth 3 best)))
     (if en (setq recs (cons (list en ctr spec) recs)))

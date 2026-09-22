@@ -202,6 +202,20 @@ def rev_of(text):
     return None
 
 
+#: One string literal or one ``;`` comment, whichever starts first.  A
+#: backslash in a string escapes the character after it, a newline
+#: included (hence re.S), and a string with no closing quote runs to
+#: the end of the text; a comment runs to the newline, which it leaves.
+#: This is the character loop decomment used to be, as one regex scan:
+#: tests/test_decomment.py keeps that loop and holds the two together.
+_STRING_OR_COMMENT = re.compile(r'"(?:\\.|[^"\\])*"?|;[^\n]*', re.S)
+
+
+def _blank_comment(m):
+    s = m.group()
+    return s if s[0] == '"' else " " * len(s)
+
+
 def decomment(src):
     """SRC with ``;`` comments blanked to spaces, everything else --
     string literals included -- left exactly where it was.
@@ -211,30 +225,7 @@ def decomment(src):
     banner, ``"_Begin"``, ``ssget "_I"``.  Offsets and line numbers are
     preserved either way, so the two are interchangeable as inputs to a
     span finder."""
-    out = list(src)
-    i, n = 0, len(src)
-    instr = False
-    while i < n:
-        ch = src[i]
-        if instr:
-            if ch == "\\" and i + 1 < n:
-                i += 2
-                continue
-            if ch == '"':
-                instr = False
-            i += 1
-            continue
-        if ch == '"':
-            instr = True
-            i += 1
-            continue
-        if ch == ";":
-            while i < n and src[i] != "\n":
-                out[i] = " "
-                i += 1
-            continue
-        i += 1
-    return "".join(out)
+    return _STRING_OR_COMMENT.sub(_blank_comment, src)
 
 
 def top_level_forms(src):

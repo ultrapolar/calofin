@@ -370,6 +370,13 @@ def code_only(src, mask, lo, hi):
     return "".join(src[i] if mask[i] else " " for i in range(lo, hi))
 
 
+#: a whole token of blanked code, as a call site delimits a name: after
+#: "(", whitespace or a quote, before whitespace or ")"
+_TOKEN = re.compile(r"(?<=[(\s'])[^\s()']+(?=[\s)])")
+#: a character no such token holds
+_NOT_A_TOKEN = re.compile(r"[\s()']")
+
+
 def _defuns(src, mask):
     out = []
     for m in DEFUN_ANY.finditer(src):
@@ -392,11 +399,22 @@ def unprotected(src, mask, path):
     names = {n for n, _, _ in ds}
     owners = {h["cmd_lo"] for h in handlers(src, mask, path)}
     handled = {n for n, lo, _ in ds if lo in owners}
+    # The whole file blanked ONCE: code[lo:hi] is code_only(src, mask,
+    # lo, hi), and a defun's calls are read off its own tokens instead
+    # of one regex search per defun name in the file (a square that was
+    # most of this script's run).  A delimited name is exactly a whole
+    # token, so the two agree -- for a name that could itself hold a
+    # delimiter, which DEFUN_ANY allows only for a quote, the old
+    # search is kept.
+    code = code_only(src, mask, 0, len(src))
+    odd = {c for c in names if _NOT_A_TOKEN.search(c)}
     calls, risky = {}, {}
     for n, lo, hi in ds:
-        body = code_only(src, mask, lo, hi)
-        calls[n] = {c for c in names
-                    if re.search(r"[(\s']" + re.escape(c) + r"[\s)]", body)} - {n}
+        body = code[lo:hi]
+        calls[n] = ((names & set(_TOKEN.findall(body))) |
+                    {c for c in odd
+                     if re.search(r"[(\s']" + re.escape(c) + r"[\s)]",
+                                  body)}) - {n}
         risky[n] = bool(RISKY.search(body))
 
     def walk(n, want, seen):

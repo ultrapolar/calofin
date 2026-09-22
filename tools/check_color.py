@@ -63,7 +63,7 @@ sys.path.insert(0, str(HERE))
 
 import check_osnap as co  # noqa: E402
 import knobs  # noqa: E402
-from callib import LISP_DIR, PARTS_DIR, RELEASES_DIR, decomment, lsp_files  # noqa: E402
+from callib import LISP_DIR, PARTS_DIR, RELEASES_DIR, lsp_files  # noqa: E402
 
 #: the drafter's own environment: what a line drawn after the command
 #: inherits.  CECOLOR is the colour, CLAYER the layer (whose colour it
@@ -78,9 +78,7 @@ def saved_symbols(paths, var):
     lowercased -- the names a restore is written with."""
     out = set()
     for path in paths:
-        forms = co.sexp(decomment(path.read_text(encoding="utf-8",
-                                                 errors="replace")))
-        for form in forms:
+        for form in co.read_forms(path):
             for f in co.walk(form):
                 if not (isinstance(f, list) and co.head(f) == "setq"):
                     continue
@@ -124,9 +122,7 @@ def table_names(paths, var):
     alone) cannot see it."""
     out = set()
     for path in paths:
-        forms = co.sexp(decomment(path.read_text(encoding="utf-8",
-                                                 errors="replace")))
-        for form in forms:
+        for form in co.read_forms(path):
             for f in co.walk(form):
                 if isinstance(f, list) and f and all(co.is_str(x) for x in f) \
                         and any(x[1].upper() == var for x in f):
@@ -152,7 +148,8 @@ def unmoved(tier, var, named):
         for cmd in sorted(n for n in dmap if n.startswith("c:")):
             if cmd.endswith("ver"):
                 continue
-            scope = co.reach(co.called(dmap[cmd][0]), tier.dmap) | {cmd}
+            scope = co.reach(co.called(dmap[cmd][0]), tier.dmap,
+                             tier.calls) | {cmd}
             if (scope & savers) and not (scope & tier.muters):
                 out.append((path, cmd))
     return out
@@ -176,8 +173,7 @@ def layer_ink(paths):
     and the call site is where the intent is readable."""
     out = []
     for path in paths:
-        text = decomment(path.read_text(encoding="utf-8", errors="replace"))
-        for form in co.sexp(text):
+        for form in co.read_forms(path):
             for f in co.walk(form):
                 if not isinstance(f, list):
                     continue
@@ -218,8 +214,7 @@ def layer_knob(paths):
             continue
         if not block:
             continue
-        text = decomment(path.read_text(encoding="utf-8", errors="replace"))
-        for form in co.sexp(text):
+        for form in co.read_forms(path):
             for f in co.walk(form):
                 if not isinstance(f, list) or len(f) < 3:
                     continue
@@ -235,14 +230,14 @@ def layer_knob(paths):
     return out
 
 
-def read_tier(paths, var):
-    """A check_osnap Tier read for VAR: the module is pointed at the
-    sysvar and given this file's move/restore rules before the tier is
-    built, since Tier classifies every defun as it reads it."""
+def read_tier(paths, var, core=None):
+    """A check_osnap Tier read for VAR, handed this file's move/restore
+    rules -- as arguments, never by re-pointing check_osnap's own
+    globals, which would leave that module auditing the wrong sysvar.
+    CORE is the tier's sysvar-independent half (check_osnap.Core), when
+    the caller builds it once for both VARS."""
     saved = saved_symbols(paths, var)
-    co.OSMODE = var
-    co.mutes, co.restores_direct = rules(var, saved)
-    return co.Tier(paths)
+    return co.Tier(paths, var=var, rules=rules(var, saved), core=core)
 
 
 def tiers(which):
@@ -256,9 +251,9 @@ def tiers(which):
     return out
 
 
-def check(paths, label, var):
+def check(paths, label, var, core=None):
     what = WHAT[var]
-    tier = read_tier(paths, var)
+    tier = read_tier(paths, var, core)
     problems = []
     rows = co.audit(tier)
     for r in rows:
@@ -318,8 +313,9 @@ def main(argv=None):
     problems = []
     for paths, label in tiers(a.tier):
         moved = 0
+        core = co.Core(paths)            # read once, asked for both VARS
         for var in VARS:
-            rows, probs = check(paths, label, var)
+            rows, probs = check(paths, label, var, core)
             problems += probs
             moved += len(rows)
             if a.list:

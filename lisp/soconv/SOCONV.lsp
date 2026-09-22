@@ -76,7 +76,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.5")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -353,15 +353,18 @@
 
 ;; Written BEFORE the move, which is the only moment the object still
 ;; carries what the record is about.
-(defun soconv:stamp (ent lay obj / forced)
-  (regapp *soconv-xdata-app*)
+;;
+;; c:SOCONV registers the application ONCE, ahead of the loop that
+;; calls this, and reads each source layer's colour once; lcol is that
+;; colour, and a nil one is read off the table here, as it always was.
+(defun soconv:stamp (ent lay obj lcol / forced)
   (setq forced *soconv-force-bylayer*)
   (soconv:xput ent *soconv-xdata-app*
     (list (cons 1000 *soconv-xdata-app*)
           (cons 1000 *soconv-version*)
           (cons 1000 lay)
           (cons 1000 (if forced (vla-get-Linetype obj) ""))
-          (cons 1070 (soconv:layer-color lay))
+          (cons 1070 (cond (lcol) ((soconv:layer-color lay))))
           (cons 1070 (if forced 1 0))
           (cons 1070 (if forced (vla-get-Color obj) 256))
           (cons 1070 (if forced (vla-get-Lineweight obj) -1))))
@@ -407,7 +410,7 @@
 
 ;;; -------------------- the command -------------------------------------
 (defun c:SOCONV (/ *error* doc unlocked mark-open ss plan jobs srcs dests
-                   tally job dest obj)
+                   tally job dest obj lay soconv-laycols)
 
   ;; The handler is LOCAL to this command (STANDARDS 5): a handler
   ;; installed in the global *error* is the handler of whatever runs
@@ -463,11 +466,28 @@
         (soconv:ensure-layer dest (soconv:color dest)))
       ;; unlock everything about to be touched, both ends of the move
       (setq unlocked (soconv:unlock-layers (append srcs dests) doc))
+      ;; What every record needs and is the same answer for all of
+      ;; them, read once here rather than once per object: the APPID
+      ;; (only by a run that writes a record, so a run that stamps
+      ;; nothing registers none) and each source layer's colour, read
+      ;; after ensure-layer and the unlock just as stamp read it --
+      ;; nothing below touches a layer record.
+      (if *soconv-record*
+        (progn
+          (regapp *soconv-xdata-app*)
+          (foreach lay srcs
+            (setq soconv-laycols
+                  (cons (cons (strcase lay) (soconv:layer-color lay))
+                        soconv-laycols)))))
       (foreach job jobs
         ;; the record first: after the move the object no longer
         ;; carries the layer, or the properties, it is about
         (setq obj (vlax-ename->vla-object (car job)))
-        (if *soconv-record* (soconv:stamp (car job) (soconv:layer-of (car job)) obj))
+        (if *soconv-record*
+          (progn
+            (setq lay (soconv:layer-of (car job)))
+            (soconv:stamp (car job) lay obj
+                          (cdr (assoc (strcase lay) soconv-laycols)))))
         (vla-put-Layer obj (cdr job))
         (if *soconv-force-bylayer*
           (soconv:force-bylayer obj)))

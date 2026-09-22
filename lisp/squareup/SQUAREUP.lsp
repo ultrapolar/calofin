@@ -71,7 +71,7 @@
 ;;; the same one.
 ;;; ======================================================================
 
-(setq *squareup-version* "v1.0")   ; announced on load; release_lisp.py
+(setq *squareup-version* "v1.1")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/
 
@@ -453,21 +453,26 @@
     ((= typ "POLYLINE") (sq:pl-spans en))
     (T nil)))
 
+;; The sampled points of a run of spans, span by span.  Each span's
+;; points are one chunk, and the chunks are joined once at the end
+;; rather than the growing list being copied again for every span.
+(defun sq:spans-pts (spans / s chunks)
+  (setq chunks nil)
+  (foreach s spans
+    (setq chunks (cons (sq:bulge-pts (car s) (cadr s) (caddr s)
+                                     sq:*arcsegs*)
+                       chunks)))
+  (apply 'append (reverse chunks)))
+
 ;; The sampled points of one entity -- what SPAN is measured over.  The
 ;; two curve types with no spans of their own answer here and nowhere
 ;; else.
-(defun sq:ent-pts (en / ed typ s out)
-  (setq ed  (entget en)
-        typ (cdr (assoc 0 ed))
-        out nil)
+(defun sq:ent-pts (en / typ)
+  (setq typ (cdr (assoc 0 (entget en))))
   (cond
     ((= typ "ELLIPSE") (sq:ellipse-pts en))
     ((= typ "SPLINE")  (sq:spline-pts en))
-    (t
-     (foreach s (sq:ent-spans en)
-       (setq out (append out (sq:bulge-pts (car s) (cadr s) (caddr s)
-                                           sq:*arcsegs*))))
-     out)))
+    (t (sq:spans-pts (sq:ent-spans en)))))
 
 ;;; -------------------- locked and frozen layers -------------------------
 ;;; ROTATE SKIPS AN OBJECT ON A LOCKED OR FROZEN LAYER, and says
@@ -548,6 +553,10 @@
 ;; end to end becomes the one span running from one extreme of it to
 ;; the other, whichever entity each piece came off.  A perimeter traced
 ;; as forty short segments has four walls, not forty.
+;;
+;; keep is gathered backwards and turned round once per pass, so rest
+;; is exactly the old order less the one span the pass merged -- the
+;; order matters, because the next pass takes the FIRST span that joins.
 (defun sq:merge-walls (spans / out a rest hit keep b)
   (setq out nil)
   (while spans
@@ -560,28 +569,31 @@
         (if (and (not hit) (sq:joins-p a b))
           (setq a   (sq:span-union a b)
                 hit T)
-          (setq keep (append keep (list b)))))
-      (setq rest keep))
-    (setq out   (append out (list a))
+          (setq keep (cons b keep))))
+      (setq rest (reverse keep)))
+    (setq out   (cons a out)
           spans rest))
-  out)
+  (reverse out))
 
 ;; (length direction p1 p2) per wall, longest first.  Spans shorter
 ;; than the fuzz are not walls -- a zero-length one has no direction to
 ;; read at all.
 (defun sq:walls (spans / straight s out)
   (setq straight nil)
+  ;; both lists are gathered backwards and turned round once, so each
+  ;; is in the order its source is in -- merge-walls and the sort below
+  ;; see exactly what they always did
   (foreach s spans
     (if (and (or (null (caddr s)) (< (abs (caddr s)) 1e-8))
              (>= (sq:dist (car s) (cadr s)) sq:*fuzz*))
-      (setq straight (append straight (list s)))))
-  (foreach s (sq:merge-walls straight)
+      (setq straight (cons s straight))))
+  (foreach s (sq:merge-walls (reverse straight))
     (if (>= (sq:dist (car s) (cadr s)) sq:*fuzz*)
-      (setq out (append out
-                        (list (list (sq:dist (car s) (cadr s))
-                                    (sq:dirfold (angle (car s) (cadr s)))
-                                    (car s) (cadr s)))))))
-  (vl-sort out '(lambda (p q) (> (car p) (car q)))))
+      (setq out (cons (list (sq:dist (car s) (cadr s))
+                            (sq:dirfold (angle (car s) (cadr s)))
+                            (car s) (cadr s))
+                      out))))
+  (vl-sort (reverse out) '(lambda (p q) (> (car p) (car q)))))
 
 ;;; -------------------- the span ----------------------------------------
 ;;; The widest measurement across a set of points is between two of its
@@ -637,15 +649,31 @@
       (list (* 0.5 (+ (apply 'min xs) (apply 'max xs)))
             (* 0.5 (+ (apply 'min ys) (apply 'max ys)))))))
 
-;; Every sampled point of a selection, and every span of it.
-(defun sq:read-ss (ss / i en pts spans)
-  (setq i 0 pts nil spans nil)
+;; Every sampled point of a selection, and every span of it.  An
+;; entity's spans are built ONCE and its points sampled off them; one
+;; with no spans -- an ELLIPSE or a SPLINE, which answer only for
+;; points -- is sampled by sq:ent-pts.  Each entity's points and spans
+;; are one chunk apiece, joined once at the end in entity order.
+(defun sq:read-ss (ss / i en s pchunks schunks)
+  (setq i 0 pchunks nil schunks nil)
   (while (< i (sslength ss))
-    (setq en    (ssname ss i)
-          pts   (append pts (sq:ent-pts en))
-          spans (append spans (sq:ent-spans en))
-          i     (1+ i)))
-  (list pts spans))
+    (setq en      (ssname ss i)
+          s       (sq:ent-spans en)
+          pchunks (cons (if s (sq:spans-pts s) (sq:ent-pts en)) pchunks)
+          schunks (cons s schunks)
+          i       (1+ i)))
+  (list (apply 'append (reverse pchunks))
+        (apply 'append (reverse schunks))))
+
+;; Every sampled point of a selection and nothing else -- what the
+;; middle of the whole highlight is taken over, which has no use for
+;; the spans sq:read-ss would build alongside.
+(defun sq:read-pts (ss / i chunks)
+  (setq i 0 chunks nil)
+  (while (< i (sslength ss))
+    (setq chunks (cons (sq:ent-pts (ssname ss i)) chunks)
+          i      (1+ i)))
+  (apply 'append (reverse chunks)))
 
 ;;; -------------------- saying what it measured -------------------------
 
@@ -768,7 +796,7 @@
              ;; no middle of its own and falls back to the perimeter's.
              (setq wpts  (if (eq sq:*about* 'work)
                            (sq:middle (mapcar '(lambda (p) (trans p 0 1))
-                                              (car (sq:read-ss work)))))
+                                              (sq:read-pts work))))
                    about (if wpts wpts (sq:middle pts)))
 
              ;; Already square comes FIRST, ahead of the question

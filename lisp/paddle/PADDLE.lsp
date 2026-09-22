@@ -78,7 +78,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.15")
+(setq *paddle-version* "v1.16")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -352,18 +352,26 @@
 
 ;; The first segment in SEGS with an end on PT (within *paddle-fuzz*),
 ;; turned so that it LEAVES pt, and the rest of SEGS without it, in
-;; order: (segment rest).  (nil rest) when nothing touches pt.
-(defun paddle--take (segs pt / found rest s)
-  (setq found nil rest nil)
-  (foreach s segs
-    (if found
-        (setq rest (cons s rest))
-        (cond
-          ((<= (distance pt (car s)) *paddle-fuzz*) (setq found s))
-          ((<= (distance pt (cadr s)) *paddle-fuzz*) ; reversed
-           (setq found (paddle--revseg s)))
-          (T (setq rest (cons s rest))))))
-  (list found (reverse rest)))
+;; order: (segment rest).  (nil segs) when nothing touches pt.
+;;
+;; The scan stops at the hit, and only the segments before it are
+;; copied: the ones after it are handed back as they stand.  The next
+;; segment of a polyline sits at the front of the pool, so most takes
+;; look at one segment and copy none -- where rebuilding the whole pool
+;; on every step made chaining a sheet quadratic in its segments.
+(defun paddle--take (segs pt / found before at s)
+  (setq found nil before nil at segs)
+  (while (and at (not found))
+    (setq s  (car at)
+          at (cdr at))
+    (cond
+      ((<= (distance pt (car s)) *paddle-fuzz*) (setq found s))
+      ((<= (distance pt (cadr s)) *paddle-fuzz*) ; reversed
+       (setq found (paddle--revseg s)))
+      (T (setq before (cons s before)))))
+  (if found
+      (list found (append (reverse before) at))
+      (list nil segs)))
 
 ;; Chains touching segments (ends within *paddle-fuzz*) end-to-end.
 ;; Returns (loops opens): each loop is a vertex list (x y bulge), and
@@ -378,13 +386,25 @@
 ;; segment already taken.  Two chains meeting at a point that is not a
 ;; gap is not what the drawing says -- there is one loop with one hole
 ;; in it, and the arrow belongs at the hole.
-(defun paddle--chain (segs / loops opens chain head tail done found rest)
+;;
+;; CHAIN holds the seed and what grew at the head, in order; what grew
+;; at the tail is kept newest first in GROWN and put on the end once,
+;; when the chain is finished -- appending each one as it came copied
+;; the whole chain every step.  N counts the segments for the same
+;; reason.  And once nothing leaves the tail nothing ever will in this
+;; chain: the tail does not move again and the pool only shrinks, so
+;; TDEAD skips the scan that is bound to fail on every head step after.
+(defun paddle--chain (segs / loops opens chain head tail done found rest
+                             grown n tdead)
   ;; drop degenerate slivers
   (setq segs (vl-remove-if
                '(lambda (s) (<= (distance (car s) (cadr s)) *paddle-fuzz*))
                segs))
   (while segs
     (setq chain (list (car segs))
+          grown nil
+          n     1
+          tdead nil
           head  (car (car segs))
           tail  (cadr (car segs))
           segs  (cdr segs)
@@ -392,29 +412,35 @@
     (while (not done)
       (cond
         ;; loop closed back onto its start?
-        ((and (> (length chain) 1) (<= (distance tail head) *paddle-fuzz*))
-         (setq loops (cons (mapcar '(lambda (s) (list (car (car s)) (cadr (car s)) (caddr s)))
+        ((and (> n 1) (<= (distance tail head) *paddle-fuzz*))
+         (setq chain (append chain (reverse grown))
+               loops (cons (mapcar '(lambda (s) (list (car (car s)) (cadr (car s)) (caddr s)))
                                    chain)
                            loops)
                done  T))
         (T ;; a segment leaving the tail, else one arriving at the head
-         (setq rest  (paddle--take segs tail)
-               found (car rest)
-               rest  (cadr rest))
+         (if tdead
+             (setq found nil)
+             (setq rest  (paddle--take segs tail)
+                   found (car rest)
+                   rest  (cadr rest)))
          (cond
-           (found (setq chain (append chain (list found))
+           (found (setq grown (cons found grown)
+                        n     (1+ n)
                         tail  (cadr found)
                         segs  rest))
            (T
-            (setq rest  (paddle--take segs head)
+            (setq tdead T
+                  rest  (paddle--take segs head)
                   found (car rest)
                   rest  (cadr rest))
             (if found
                 (setq found (paddle--revseg found) ; turned to arrive at head
                       chain (cons found chain)
+                      n     (1+ n)
                       head  (car found)
                       segs  rest)
-                (setq opens (cons chain opens) ; dead end both ways
+                (setq opens (cons (append chain (reverse grown)) opens) ; dead end both ways
                       done  T))))))))
   (list (reverse loops) (reverse opens)))
 
@@ -706,32 +732,45 @@
 ;; together than *paddle-fuzz* are already chained and are not a gap
 ;; either, and an end already spoken for cannot be paired twice.  What
 ;; comes back is a set of disjoint pairs, each (end-a end-b distance).
-(defun paddle--pairs (ends / cand taken out best a b d p)
-  (foreach a ends
-    (foreach b ends
-      (if (and (< (paddle--endkey a) (paddle--endkey b)) ; each pair once
-               (> (setq d (distance (car a) (car b))) *paddle-fuzz*)
+(defun paddle--pairs (ends / cand taken out at a b ka d p)
+  ;; each pair once: B runs over the ends AFTER A.  paddle--endlist
+  ;; hands them back in key order, so that is every pair with the
+  ;; smaller key first, and each candidate is (d key-a key-b a b).
+  (setq at ends)
+  (while at
+    (setq a  (car at)
+          ka (paddle--endkey a))
+    (foreach b (cdr at)
+      (if (and (> (setq d (distance (car a) (car b))) *paddle-fuzz*)
                (<= d *paddle-gapmax*))
-          (setq cand (cons (list d a b) cand)))))
-  ;; then take them closest first.  The pick is a scan rather than a
-  ;; vl-sort because vl-sort DROPS an element that compares equal to
-  ;; another under the predicate it is given -- and two gaps exactly as
-  ;; wide as each other is not an oddity here, it is what the two ends
-  ;; of a wall left short at both of them look like.  Sorting them
-  ;; would quietly lose one, and a ring with a gap missing is not a
-  ;; ring, so the arrow would never be drawn.
-  (repeat (length cand)
-    (setq best nil)
-    (foreach p cand
-      (if (and (not (member (paddle--endkey (cadr p)) taken))
-               (not (member (paddle--endkey (caddr p)) taken))
-               (or (null best) (< (car p) (car best))))
-          (setq best p)))
-    (if best
-        (setq a     (cadr best)
-              b     (caddr best)
-              taken (cons (paddle--endkey a) (cons (paddle--endkey b) taken))
-              out   (cons (list a b (car best)) out))))
+          (setq cand (cons (list d ka (paddle--endkey b) a b) cand))))
+    (setq at (cdr at)))
+  ;; then take them closest first: sort once, and walk the sorted list
+  ;; taking every pair whose two ends are both still free.  A pair
+  ;; passed over has an end already spoken for, and a taken end is
+  ;; never freed, so the walk takes exactly what rescanning for the
+  ;; closest free pair after every pick would.
+  ;;
+  ;; The sort is on the distance AND the two keys, never the distance
+  ;; alone: vl-sort DROPS an element that compares equal to another
+  ;; under the predicate it is given -- and two gaps exactly as wide as
+  ;; each other is not an oddity here, it is what the two ends of a
+  ;; wall left short at both of them look like.  Losing one would leave
+  ;; a ring with a gap missing, which is not a ring, so the arrow would
+  ;; never be drawn.  No two pairs share both keys, so nothing compares
+  ;; equal; and keys taken LARGEST first settle a tie in favour of the
+  ;; pair nearest the front of CAND (the last one found above), which
+  ;; is the one a closest-first scan of CAND comes to first.
+  (foreach p (vl-sort cand
+                      '(lambda (x y)
+                         (cond ((< (car x) (car y)) T)
+                               ((< (car y) (car x)) nil)
+                               ((/= (cadr x) (cadr y)) (> (cadr x) (cadr y)))
+                               (T (> (caddr x) (caddr y))))))
+    (if (and (not (member (cadr p) taken))
+             (not (member (caddr p) taken)))
+        (setq taken (cons (cadr p) (cons (caddr p) taken))
+              out   (cons (list (nth 3 p) (nth 4 p) (car p)) out))))
   (reverse out))
 
 ;; The end paired with E, or nil.
@@ -1008,7 +1047,7 @@
 ;; gap layer are skipped -- those are PADDLE's own arrows, and a run
 ;; that read its own marks back as geometry would pad them.
 (defun paddle--perimeters (ss / auto i en ed segs res loops opens nflat best
-                              bestarea a l)
+                              bestarea a l s)
   (setq auto (not ss))
   (if auto
       (setq ss (ssget "_X" (list '(0 . "LWPOLYLINE,POLYLINE,LINE,ARC")
@@ -1020,14 +1059,16 @@
           (setq en (ssname ss i)
                 i  (1+ i))
           ;; entget is nil for an entity a fillet consumed, and this
-          ;; same set is read again after the gap pass has filleted
+          ;; same set is read again after the gap pass has filleted.
+          ;; SEGS is collected newest first and turned round once
+          ;; below: appending each entity's segments onto the end
+          ;; copied everything read so far, once per entity.
           (if (and (setq ed (entget en))
                    (/= (strcase (cdr (assoc 8 ed)))
                        (strcase *paddle-gap-layer*)))
-              (setq segs (append segs
-                                 (mapcar '(lambda (s) (append s (list en)))
-                                         (paddle--ent-segs en))))))
-        (setq res   (paddle--chain segs)
+              (foreach s (paddle--ent-segs en)
+                (setq segs (cons (append s (list en)) segs)))))
+        (setq res   (paddle--chain (reverse segs))
               loops (paddle--solid-loops (car res))
               nflat (- (length (car res)) (length loops))
               opens (cadr res))

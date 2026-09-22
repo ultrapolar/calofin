@@ -238,7 +238,7 @@
 ;;;      group is opened or closed; the run goes ahead without one.
 ;;; ======================================================================
 
-(setq *autodim-version* "v2.2")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v2.3")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -1068,10 +1068,10 @@
 ;; the angle from its centre out through mid to the clear side, else
 ;; nil.  Radially out first, then radially in, the way a straight
 ;; segment's two sides are tried.
-(defun ad:arcang (centre mid diag eps ss / a)
+(defun ad:arcang (centre mid diag eps objs / a)
   (setq a (angle centre mid))
-  (cond ((ad:sideclear mid a diag eps ss) a)
-        ((ad:sideclear mid (+ a pi) diag eps ss) (+ a pi))))
+  (cond ((ad:sideclear mid a diag eps objs) a)
+        ((ad:sideclear mid (+ a pi) diag eps objs) (+ a pi))))
 
 ;; every straight segment of every entity in ss, as (p1 p2) pairs
 (defun ad:allsegs (ss / i en s out)
@@ -1139,42 +1139,52 @@
 
 ;; ------------------------------------------ part 1: perimeter dimensions
 
-;; T if nothing in ss lies between pt and pt + dist along direction ang
-(defun ad:sideclear (pt ang dist eps ss / lin lobj i rtn clear)
+;; One vla-object per entity of ss, in ss order; nil for no ss.  The
+;; side probes test every segment against every one of these, so the
+;; set is converted once per perimeter rather than once per probe.
+(defun ad:ss-objs (ss / i out)
+  (setq i 0)
+  (if ss
+    (repeat (sslength ss)
+      (setq out (cons (vlax-ename->vla-object (ssname ss i)) out)
+            i   (1+ i))))
+  (reverse out))
+
+;; T if nothing in objs (ad:ss-objs of the selection) lies between pt
+;; and pt + dist along direction ang
+(defun ad:sideclear (pt ang dist eps objs / lin lobj rtn clear)
   ;; entlast is only OUR line if the entmake actually made one -- on a
   ;; failure it would name the user's own last-drawn entity, which the
   ;; entdel at the bottom would then erase
   (setq clear t
-        i     0
         lin   (if (entmake (list '(0 . "LINE")
                                  (cons 10 (polar pt ang eps))
                                  (cons 11 (polar pt ang dist))))
                 (entlast)))
   (if lin (setq lobj (vlax-ename->vla-object lin)))
-  (if (and lin ss)
-    (while (and clear (< i (sslength ss)))
-      (setq rtn (vl-catch-all-apply
-                  'vlax-invoke
-                  (list lobj 'IntersectWith
-                        (vlax-ename->vla-object (ssname ss i)) acextendnone)))
+  (if (and lin objs)
+    (while (and clear objs)
+      (setq rtn  (vl-catch-all-apply
+                   'vlax-invoke
+                   (list lobj 'IntersectWith (car objs) acextendnone))
+            objs (cdr objs))
       (if (and (not (vl-catch-all-error-p rtn)) rtn)
-        (setq clear nil))
-      (setq i (1+ i))))
+        (setq clear nil))))
   (if lin (entdel lin))
   clear)
 
 ;; if segment p1-p2 lies on the perimeter of the highlighted geometry,
 ;; return the angle pointing to its clear (outside) side, else nil
-(defun ad:perimang (p1 p2 diag eps ss / mid a)
+(defun ad:perimang (p1 p2 diag eps objs / mid a)
   (setq mid (ad:mid p1 p2)
         a   (angle p1 p2))
-  (cond ((ad:sideclear mid (+ a (* 0.5 pi)) diag eps ss) (+ a (* 0.5 pi)))
-        ((ad:sideclear mid (- a (* 0.5 pi)) diag eps ss) (- a (* 0.5 pi)))))
+  (cond ((ad:sideclear mid (+ a (* 0.5 pi)) diag eps objs) (+ a (* 0.5 pi)))
+        ((ad:sideclear mid (- a (* 0.5 pi)) diag eps objs) (- a (* 0.5 pi)))))
 
 ;; every straight segment on the perimeter of ss, as
 ;; (length p1 p2 where-its-dim-goes).  Length first, so the records
 ;; group by size.
-(defun ad:perimsegs (ss diag eps off / out i en seg len pa)
+(defun ad:perimsegs (ss diag eps off objs / out i en seg len pa)
   (setq out '()
         i   0)
   (repeat (sslength ss)
@@ -1183,7 +1193,7 @@
     (foreach seg (ad:segs en)
       (setq len (distance (car seg) (cadr seg)))
       (if (and (> len 1e-8)
-               (setq pa (ad:perimang (car seg) (cadr seg) diag eps ss)))
+               (setq pa (ad:perimang (car seg) (cadr seg) diag eps objs)))
         (setq out (cons (list len (car seg) (cadr seg)
                               (polar (ad:mid (car seg) (cadr seg)) pa off))
                         out)))))
@@ -1191,10 +1201,10 @@
 
 ;; every arc on the perimeter of ss, as
 ;; (radius entity point-on-it centre where-its-dim-goes)
-(defun ad:perimarcs (ss diag eps off / out rec pa)
+(defun ad:perimarcs (ss diag eps off objs / out rec pa)
   (setq out '())
   (foreach rec (ad:arcs ss)
-    (if (setq pa (ad:arcang (cadddr rec) (caddr rec) diag eps ss))
+    (if (setq pa (ad:arcang (cadddr rec) (caddr rec) diag eps objs))
       (setq out (cons (append rec (list (polar (caddr rec) pa off))) out))))
   (reverse out))
 
@@ -1238,7 +1248,7 @@
 ;; the sides in a settled order - but no group is collapsed onto its
 ;; first member.
 ;; Returns how many dimensions were placed.
-(defun ad:dimperim (ss all / box diag eps off cnt g rec)
+(defun ad:dimperim (ss all / box diag eps off cnt g rec objs)
   (setq box (ad:ssbox ss)
         cnt 0)
   (if box
@@ -1247,9 +1257,12 @@
             eps  (* 1e-6 diag)
             ;; at least ad:*perim-feet* away from the perimeter,
             ;; heading outwards
-            off  (max (ad:dimoff) (ad:feet ad:*perim-feet*)))
+            off  (max (ad:dimoff) (ad:feet ad:*perim-feet*))
+            ;; the side probes' targets, converted once for both walks
+            objs (ad:ss-objs ss))
       ;; the straight sides
-      (foreach g (ad:groupsame (ad:perimsegs ss diag eps off) (ad:dupetol))
+      (foreach g (ad:groupsame (ad:perimsegs ss diag eps off objs)
+                               (ad:dupetol))
         (if (and (not all) (>= (length g) ad:*typ-lines*))
           (setq rec (ad:linegrouprep g)
                 cnt (+ cnt (ad:putaligned (cadr rec) (caddr rec) (cadddr rec)
@@ -1258,7 +1271,8 @@
             (setq cnt (+ cnt (ad:putaligned (cadr rec) (caddr rec) (cadddr rec)
                                             ad:*style-plan* ""))))))
       ;; the arcs, by radius
-      (foreach g (ad:groupsame (ad:perimarcs ss diag eps off) (ad:dupetol))
+      (foreach g (ad:groupsame (ad:perimarcs ss diag eps off objs)
+                               (ad:dupetol))
         (if (and (not all) (>= (length g) ad:*typ-curves*))
           (setq rec (ad:radgrouprep g)
                 cnt (+ cnt (ad:putradius (car rec) (cadr rec) (caddr rec)
