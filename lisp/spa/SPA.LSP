@@ -228,7 +228,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092226 REV29")
+(setq spa:*version* "092226 REV30")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -4670,7 +4670,7 @@
               (setq spa:*sysold* (append spa:*sysold* (list (cons v (getvar v)))))))
         (setq spa:*odstyle* (getvar "DIMSTYLE")))))
 
-(defun spa:sysrestore ( / v p)
+(defun spa:sysrestore ( / v p doc)
   ;; OSMODE first -- object snaps are the setting the user misses most
   ;; if a cleanup is ever cut short partway
   (foreach v (spa:sysvars)
@@ -4685,11 +4685,21 @@
   ;; silently undoing whatever the drafter had since ticked in Drafting
   ;; Settings.  Sticky, session-long, and invisible.
   (setq spa:*sysold* nil)
-  ;; the current dimension style is read-only, so it takes a command --
-  ;; and this runs from *error*, where a bare one can itself fail
+  ;; The style comes back through ActiveX, not -DIMSTYLE.  This runs from
+  ;; *error* handlers, some of which PUSH the error mode, and under a push
+  ;; AutoCAD refuses command-s outright -- "INTERNAL error in FAIL, message
+  ;; lost, reset to top" -- which vl-catch-all-apply cannot catch: the handler
+  ;; died here, the undo group stayed open, the mode stayed pushed and
+  ;; the failure was never reported.  A property put drives no command,
+  ;; so it is legal in every error mode and a throw from it IS caught.
   (if (and spa:*odstyle* (tblsearch "DIMSTYLE" spa:*odstyle*))
-      (vl-catch-all-apply 'command-s
-                          (list "_.-DIMSTYLE" "_Restore" spa:*odstyle*)))
+      (vl-catch-all-apply
+        '(lambda ()
+           (vl-load-com)
+           (setq doc (vla-get-activedocument (vlax-get-acad-object)))
+           (vla-put-activedimstyle
+             doc (vla-item (vla-get-dimstyles doc) spa:*odstyle*)))
+        '()))
   (setq spa:*odstyle* nil))
 
 ;;; -------------------- main command -----------------------------------

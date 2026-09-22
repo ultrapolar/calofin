@@ -226,7 +226,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v9.1")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v9.2")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -1569,21 +1569,26 @@
 (defun oasis:osdown () (setvar "OSMODE" 0))
 
 ;; The current dimension style is read-only to setvar, so it has its own
-;; snapshot pair and comes back through a command.
+;; snapshot pair and comes back through ActiveX.
 (defun oasis:dimstysave ()
   (if (not oasis:*odstyle*) (setq oasis:*odstyle* (getvar "DIMSTYLE"))))
 
-(defun oasis:dimstyrestore ()
-  ;; called from *error*, where a bare (command ...) can itself fail --
-  ;; so command-s under vl-catch-all-apply (STANDARDS section 5), the
-  ;; same shape CDCREATE, CUSTBLOCK, PERPMARK, SPACHECK, OLAUTO and the
-  ;; perp_points pair all use.  Unwrapped, this was the ONE dimension
-  ;; style restore in the standalone tier that could throw inside a
-  ;; handler -- and it sat ahead of the sysvar restore, so the throw
-  ;; took the drafter's object snaps down with it.
+(defun oasis:dimstyrestore ( / doc)
+  ;; The style comes back through ActiveX, not -DIMSTYLE.  This runs from
+  ;; *error* handlers, some of which PUSH the error mode, and under a push
+  ;; AutoCAD refuses command-s outright -- "INTERNAL error in FAIL, message
+  ;; lost, reset to top" -- which vl-catch-all-apply cannot catch: the handler
+  ;; died here, the undo group stayed open, the mode stayed pushed and
+  ;; the failure was never reported.  A property put drives no command,
+  ;; so it is legal in every error mode and a throw from it IS caught.
   (if (and oasis:*odstyle* (tblsearch "DIMSTYLE" oasis:*odstyle*))
-      (vl-catch-all-apply 'command-s
-                          (list "_.-DIMSTYLE" "_Restore" oasis:*odstyle*)))
+      (vl-catch-all-apply
+        '(lambda ()
+           (vl-load-com)
+           (setq doc (vla-get-activedocument (vlax-get-acad-object)))
+           (vla-put-activedimstyle
+             doc (vla-item (vla-get-dimstyles doc) oasis:*odstyle*)))
+        '()))
   (setq oasis:*odstyle* nil))
 
 ;; Make the cross-dimension style current for the dims about to be drawn.

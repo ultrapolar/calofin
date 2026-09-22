@@ -25,7 +25,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v2.3")
+(setq cal:*version* "v2.4")
 
 
 ;;  WHAT IS LOADED, AND AT WHICH VERSION.  Seventy-two commands report
@@ -245,12 +245,22 @@
 (defun cal:dimstysave ()
   (if (not cal:*odstyle*) (setq cal:*odstyle* (getvar "DIMSTYLE"))))
 
-(defun cal:dimstyrestore ()
-  ;; called from *error* handlers, where a bare (command ...) can itself
-  ;; fail -- so command-s under vl-catch-all-apply (STANDARDS section 5)
+(defun cal:dimstyrestore ( / doc)
+  ;; The style comes back through ActiveX, not -DIMSTYLE.  This runs from
+  ;; *error* handlers, some of which PUSH the error mode, and under a push
+  ;; AutoCAD refuses command-s outright -- "INTERNAL error in FAIL, message
+  ;; lost, reset to top" -- which vl-catch-all-apply cannot catch: the handler
+  ;; died here, the undo group stayed open, the mode stayed pushed and
+  ;; the failure was never reported.  A property put drives no command,
+  ;; so it is legal in every error mode and a throw from it IS caught.
   (if (and cal:*odstyle* (tblsearch "DIMSTYLE" cal:*odstyle*))
-      (vl-catch-all-apply 'command-s
-        (list "_.-DIMSTYLE" "_Restore" cal:*odstyle*)))
+      (vl-catch-all-apply
+        '(lambda ()
+           (vl-load-com)
+           (setq doc (vla-get-activedocument (vlax-get-acad-object)))
+           (vla-put-activedimstyle
+             doc (vla-item (vla-get-dimstyles doc) cal:*odstyle*)))
+        '()))
   (setq cal:*odstyle* nil))
 
 ;; T when MSG is the message of a plain cancel (Esc, quit) rather than

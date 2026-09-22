@@ -100,7 +100,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v2.3")
+(setq cal:*version* "v2.4")
 
 
 ;;  WHAT IS LOADED, AND AT WHICH VERSION.  Seventy-two commands report
@@ -320,12 +320,22 @@
 (defun cal:dimstysave ()
   (if (not cal:*odstyle*) (setq cal:*odstyle* (getvar "DIMSTYLE"))))
 
-(defun cal:dimstyrestore ()
-  ;; called from *error* handlers, where a bare (command ...) can itself
-  ;; fail -- so command-s under vl-catch-all-apply (STANDARDS section 5)
+(defun cal:dimstyrestore ( / doc)
+  ;; The style comes back through ActiveX, not -DIMSTYLE.  This runs from
+  ;; *error* handlers, some of which PUSH the error mode, and under a push
+  ;; AutoCAD refuses command-s outright -- "INTERNAL error in FAIL, message
+  ;; lost, reset to top" -- which vl-catch-all-apply cannot catch: the handler
+  ;; died here, the undo group stayed open, the mode stayed pushed and
+  ;; the failure was never reported.  A property put drives no command,
+  ;; so it is legal in every error mode and a throw from it IS caught.
   (if (and cal:*odstyle* (tblsearch "DIMSTYLE" cal:*odstyle*))
-      (vl-catch-all-apply 'command-s
-        (list "_.-DIMSTYLE" "_Restore" cal:*odstyle*)))
+      (vl-catch-all-apply
+        '(lambda ()
+           (vl-load-com)
+           (setq doc (vla-get-activedocument (vlax-get-acad-object)))
+           (vla-put-activedimstyle
+             doc (vla-item (vla-get-dimstyles doc) cal:*odstyle*)))
+        '()))
   (setq cal:*odstyle* nil))
 
 ;; T when MSG is the message of a plain cancel (Esc, quit) rather than
@@ -15568,7 +15578,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092226 REV29")
+(setq spa:*version* "092226 REV30")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -20358,7 +20368,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v9.1")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v9.2")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -49400,7 +49410,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.10"     ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.11"     ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -49710,6 +49720,11 @@
     (if oldos (setvar "OSMODE" oldos))
     (if oldpa (setvar "PEDITACCEPT" oldpa))
     (autobead-flush)
+    ;; the error mode comes off HERE, after the last bare (command) and
+    ;; before the first command-s: under a push AutoCAD refuses command-s
+    ;; inside *error* with "INTERNAL error in FAIL", past any
+    ;; vl-catch-all-apply, and the rest of the handler never runs
+    (if *pop-error-mode* (*pop-error-mode*))
     (foreach e temps
       (if (and e (entget e)) (entdel e)))
     ;; only close a group that was actually opened -- an error thrown
@@ -49722,7 +49737,6 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nAUTOBEAD error: " msg)))
-    (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "AUTOBEAD" *autobead-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "AUTOBEAD" *autobead-version*))
@@ -96129,7 +96143,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.21")
+(setq *perp-version* "v0.22")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -96967,6 +96981,14 @@
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)
       (setq guard (1+ guard)))
+    ;; The error mode comes off HERE, after the last bare (command) and
+    ;; before the first command-s: under a push AutoCAD refuses command-s
+    ;; inside *error* with "INTERNAL error in FAIL", past any
+    ;; vl-catch-all-apply, and the rest of the handler never runs
+    ;; -- the DIMSTYLE restore and the undo close below.  Both exits come
+    ;; through here, so a clean run's mode is not left stacked for the
+    ;; session either (AutoLISP reference, *push-error-using-command*).
+    (if *pop-error-mode* (*pop-error-mode*))
     (if rl (setq rl (cal:ruler-off rl)))
     (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
     (setq tmpEnts nil)
@@ -96976,13 +96998,7 @@
     (if ce (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
-             (setq undoOpen nil)))
-    ;; and the error mode pushed below comes off the stack on EVERY way
-    ;; out, since both exits come through here.  Popping only from the
-    ;; handler left a clean run's mode stacked for the whole session,
-    ;; and a stacked mode refuses command-s inside every later handler
-    ;; (AutoLISP reference, *push-error-using-command*).
-    (if *pop-error-mode* (*pop-error-mode*)))
+             (setq undoOpen nil))))
 
   (defun *error* (msg)
     (perp:finish)
@@ -97880,7 +97896,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.21")
+(setq *cperp-version* "v0.22")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -98534,6 +98550,14 @@
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)
       (setq guard (1+ guard)))
+    ;; The error mode comes off HERE, after the last bare (command) and
+    ;; before the first command-s: under a push AutoCAD refuses command-s
+    ;; inside *error* with "INTERNAL error in FAIL", past any
+    ;; vl-catch-all-apply, and the rest of the handler never runs
+    ;; -- the DIMSTYLE restore and the undo close below.  Both exits come
+    ;; through here, so a clean run's mode is not left stacked for the
+    ;; session either (AutoLISP reference, *push-error-using-command*).
+    (if *pop-error-mode* (*pop-error-mode*))
     (if rl (setq rl (cal:ruler-off rl)))
     (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
     (setq tmpEnts nil)
@@ -98543,13 +98567,7 @@
     (if ce (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
-             (setq undoOpen nil)))
-    ;; and the error mode pushed below comes off the stack on EVERY way
-    ;; out, since both exits come through here.  Popping only from the
-    ;; handler left a clean run's mode stacked for the whole session,
-    ;; and a stacked mode refuses command-s inside every later handler
-    ;; (AutoLISP reference, *push-error-using-command*).
-    (if *pop-error-mode* (*pop-error-mode*)))
+             (setq undoOpen nil))))
 
   (defun *error* (msg)
     (cperp:finish)
@@ -101750,7 +101768,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.6")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.7")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -102482,6 +102500,11 @@
     ;; only legal from inside *error* behind *push-error-using-command*,
     ;; which the command pushes on the way in.
     (sf:flush)
+    ;; the error mode comes off HERE, after the last bare (command) and
+    ;; before the first command-s: under a push AutoCAD refuses command-s
+    ;; inside *error* with "INTERNAL error in FAIL", past any
+    ;; vl-catch-all-apply, and the rest of the handler never runs
+    (if *pop-error-mode* (*pop-error-mode*))
     (sf:restyle odim)
     (if undo-open
       (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -102489,7 +102512,6 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSMARTFILLET error: " m)))
-    (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "SMARTFILLET" *smartfillet-version* m))
     (princ))
   (if lzd:begin (lzd:begin "SMARTFILLET" *smartfillet-version*))
@@ -102828,7 +102850,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *honefillet-version* "v1.4")  ; announced on load; release_lisp.py
+(setq *honefillet-version* "v1.5")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -103641,6 +103663,11 @@
     ;; only legal from inside *error* behind *push-error-using-command*,
     ;; which the command pushes on the way in.
     (hn:flush)
+    ;; the error mode comes off HERE, after the last bare (command) and
+    ;; before the first command-s: under a push AutoCAD refuses command-s
+    ;; inside *error* with "INTERNAL error in FAIL", past any
+    ;; vl-catch-all-apply, and the rest of the handler never runs
+    (if *pop-error-mode* (*pop-error-mode*))
     (hn:restyle odim)
     (if undo-open
       (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -103648,7 +103675,6 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nHONEFILLET error: " m)))
-    (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "HONEFILLET" *honefillet-version* m))
     (princ))
   (if lzd:begin (lzd:begin "HONEFILLET" *honefillet-version*))

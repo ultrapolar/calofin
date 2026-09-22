@@ -249,7 +249,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.21")
+(setq *perp-version* "v0.22")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -1592,6 +1592,14 @@
     (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
       (command)
       (setq guard (1+ guard)))
+    ;; The error mode comes off HERE, after the last bare (command) and
+    ;; before the first command-s: under a push AutoCAD refuses command-s
+    ;; inside *error* with "INTERNAL error in FAIL", past any
+    ;; vl-catch-all-apply, and the rest of the handler never runs
+    ;; -- the DIMSTYLE restore and the undo close below.  Both exits come
+    ;; through here, so a clean run's mode is not left stacked for the
+    ;; session either (AutoLISP reference, *push-error-using-command*).
+    (if *pop-error-mode* (*pop-error-mode*))
     (if rl (setq rl (perp:ruler-off rl)))
     (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
     (setq tmpEnts nil)
@@ -1601,13 +1609,7 @@
     (if ce (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
-             (setq undoOpen nil)))
-    ;; and the error mode pushed below comes off the stack on EVERY way
-    ;; out, since both exits come through here.  Popping only from the
-    ;; handler left a clean run's mode stacked for the whole session,
-    ;; and a stacked mode refuses command-s inside every later handler
-    ;; (AutoLISP reference, *push-error-using-command*).
-    (if *pop-error-mode* (*pop-error-mode*)))
+             (setq undoOpen nil))))
 
   (defun *error* (msg)
     (perp:finish)

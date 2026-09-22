@@ -231,7 +231,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092226 REV29")
+(setq spa:*version* "092226 REV30")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;

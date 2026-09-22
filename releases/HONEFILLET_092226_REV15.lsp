@@ -161,7 +161,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *honefillet-version* "v1.4")  ; announced on load; release_lisp.py
+(setq *honefillet-version* "v1.5")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -1071,6 +1071,11 @@
     ;; only legal from inside *error* behind *push-error-using-command*,
     ;; which the command pushes on the way in.
     (hn:flush)
+    ;; the error mode comes off HERE, after the last bare (command) and
+    ;; before the first command-s: under a push AutoCAD refuses command-s
+    ;; inside *error* with "INTERNAL error in FAIL", past any
+    ;; vl-catch-all-apply, and the rest of the handler never runs
+    (if *pop-error-mode* (*pop-error-mode*))
     (hn:restyle odim)
     (if undo-open
       (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -1078,7 +1083,6 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nHONEFILLET error: " m)))
-    (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "HONEFILLET" *honefillet-version* m))
     (princ))
   (if lzd:begin (lzd:begin "HONEFILLET" *honefillet-version*))

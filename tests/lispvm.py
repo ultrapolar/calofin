@@ -2103,7 +2103,27 @@ def _command(vm, a):
     return NIL
 
 
-BUILTINS[Sym('command-s')] = BUILTINS[Sym('command')]
+class HandlerAbort(LispError):
+    """An error AutoCAD raises past vl-catch-all-apply: the whole
+    handler is abandoned ("INTERNAL error in FAIL / message lost, reset
+    to top"), so nothing after it runs -- not the undo close, not the
+    pop, not the report."""
+
+
+@bi('command-s')
+def _command_s(vm, a):
+    # Under *push-error-using-command* AutoCAD refuses command-s inside
+    # *error* -- the pushed mode is the one that says (command) is how
+    # this handler drives commands.  The refusal is not an ordinary
+    # error: vl-catch-all-apply does not catch it, and the handler dies
+    # where it stands.  SPA's -DIMSTYLE restore did exactly that on
+    # every Esc, and the VM, which let command-s through anywhere,
+    # never saw it.
+    if vm._in_handler and vm.error_mode_depth > 0:
+        raise HandlerAbort("INTERNAL error in FAIL: command-s inside "
+                           "*error* while *push-error-using-command* is "
+                           "in effect -- message lost, reset to top", vm)
+    return BUILTINS[Sym('command')](vm, a)
 
 
 @bi('initget')
@@ -2496,6 +2516,8 @@ def _vl_catch_all_apply(vm, a):
     vm._catch_depth += 1
     try:
         return vm.call_value(a[0], list(a[1] or []))
+    except HandlerAbort:
+        raise
     except LispError as e:
         return CaughtError(str(e))
     finally:

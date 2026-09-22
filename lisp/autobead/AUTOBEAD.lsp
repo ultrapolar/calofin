@@ -53,7 +53,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.10"     ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.11"     ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -367,6 +367,11 @@
     (if oldos (setvar "OSMODE" oldos))
     (if oldpa (setvar "PEDITACCEPT" oldpa))
     (autobead-flush)
+    ;; the error mode comes off HERE, after the last bare (command) and
+    ;; before the first command-s: under a push AutoCAD refuses command-s
+    ;; inside *error* with "INTERNAL error in FAIL", past any
+    ;; vl-catch-all-apply, and the rest of the handler never runs
+    (if *pop-error-mode* (*pop-error-mode*))
     (foreach e temps
       (if (and e (entget e)) (entdel e)))
     ;; only close a group that was actually opened -- an error thrown
@@ -379,7 +384,6 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nAUTOBEAD error: " msg)))
-    (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "AUTOBEAD" *autobead-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "AUTOBEAD" *autobead-version*))

@@ -141,7 +141,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.6")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.7")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -970,6 +970,11 @@
     ;; only legal from inside *error* behind *push-error-using-command*,
     ;; which the command pushes on the way in.
     (sf:flush)
+    ;; the error mode comes off HERE, after the last bare (command) and
+    ;; before the first command-s: under a push AutoCAD refuses command-s
+    ;; inside *error* with "INTERNAL error in FAIL", past any
+    ;; vl-catch-all-apply, and the rest of the handler never runs
+    (if *pop-error-mode* (*pop-error-mode*))
     (sf:restyle odim)
     (if undo-open
       (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -977,7 +982,6 @@
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSMARTFILLET error: " m)))
-    (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "SMARTFILLET" *smartfillet-version* m))
     (princ))
   (if lzd:begin (lzd:begin "SMARTFILLET" *smartfillet-version*))
