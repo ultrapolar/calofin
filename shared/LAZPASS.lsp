@@ -71978,7 +71978,7 @@
 
 ;;; -------------------- the modes ----------------------------------------
 
-;; Not a knob either: the profile key the drafter's own preset is stored
+;; NOT A KNOB: the profile key the drafter's own preset is stored
 ;; under.  LAZPANEL writes it (LAZSET and CALSET, lzp:*osrkey*), so a
 ;; change here alone would leave OSR reading a key nothing writes.
 (setq osr:*envkey* "CalofinOsnapPreset")
@@ -72002,7 +72002,8 @@
     ("Apparent intersection" . 2048)
     ("Parallel"              . 8192)))
 
-;; The bit that means Object Snap is OFF (F3), modes kept.
+;; NOT A KNOB: AutoCAD's own bit that means Object Snap is OFF (F3),
+;; modes kept.
 (setq osr:*offbit* 16384)
 
 ;;; -------------------- the preset ---------------------------------------
@@ -125551,7 +125552,14 @@
 ;;  preset, what a drafter who never chose one gets, is OSR's own
 ;;  osr:*default*; lzp:*osrdefault* is the same number so the dialog can
 ;;  paint it with OSR not loaded, and the same test pins the pair.
+;; NOT A KNOB: the profile key OSR reads its preset from.  It is
+;; osr:*envkey* in lisp/osr/OSR.lsp, and changing it here alone would
+;; write a key OSR never looks at.
 (setq lzp:*osrkey* "CalofinOsnapPreset")
+
+;; NOT A KNOB: a copy of OSR's own osr:*default*, so this dialog can
+;; paint the shipped preset with OSR not loaded.  The knob is OSR's;
+;; tests/test_osr.py fails the day the two disagree.
 (setq lzp:*osrdefault* 191)
 
 ;; AutoCAD's own OSMODE bits, in the order its Drafting Settings dialog
@@ -125572,6 +125580,7 @@
     ("Nearest"               . 512)
     ("Apparent intersection" . 2048)
     ("Parallel"              . 8192)))
+;; NOT A KNOB: AutoCAD's own OSMODE bit for Object Snap OFF (F3).
 (setq lzp:*osroff* 16384)
 
 ;; T when S reads as an OSMODE, 0 to 32767.  Digits only, spelled out

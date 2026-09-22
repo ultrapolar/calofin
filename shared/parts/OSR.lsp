@@ -56,7 +56,7 @@
 
 ;;; -------------------- the modes ----------------------------------------
 
-;; Not a knob either: the profile key the drafter's own preset is stored
+;; NOT A KNOB: the profile key the drafter's own preset is stored
 ;; under.  LAZPANEL writes it (LAZSET and CALSET, lzp:*osrkey*), so a
 ;; change here alone would leave OSR reading a key nothing writes.
 (setq osr:*envkey* "CalofinOsnapPreset")
@@ -80,7 +80,8 @@
     ("Apparent intersection" . 2048)
     ("Parallel"              . 8192)))
 
-;; The bit that means Object Snap is OFF (F3), modes kept.
+;; NOT A KNOB: AutoCAD's own bit that means Object Snap is OFF (F3),
+;; modes kept.
 (setq osr:*offbit* 16384)
 
 ;;; -------------------- the preset ---------------------------------------

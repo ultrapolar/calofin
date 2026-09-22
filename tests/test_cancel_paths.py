@@ -96,6 +96,10 @@ NO_PROMPT = {
     # and stops.  tests/test_vsconv.py drives the prompt, and the Esc at
     # it, on a drawing that HAS them.
     'VSCONV',
+    # OSR asks nothing by design: it sets OSMODE to the saved preset and
+    # says what it put back.  The preset is chosen in LAZSET / CALSET.
+    # tests/test_osr.py drives it, its handler included.
+    'OSR',
 }
 #: the ActiveX surface the VM does not carry.  Empty now: PADDLE was
 #: the one entry, and the VM has carried vla-get-ActiveLayout/-Block,
