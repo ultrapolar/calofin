@@ -226,7 +226,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.10")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.11")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -857,15 +857,18 @@
   out)
 
 ;; The index of the node at P, adding P as a new node when nothing within
-;; TOL is already there.  Returns (index nodelist).
-(defun lg:node-of (p tol nodes / i n found)
-  (setq i 0 found nil)
-  (foreach n nodes
-    (if (and (null found) (<= (distance (lg:2d p) n) tol)) (setq found i))
-    (setq i (1+ i)))
+;; TOL is already there.  Returns (index nodelist).  Scanned oldest
+;; first and stopped at the first hit, so when two nodes are both within
+;; TOL the lower index is the one P joins; a walk that runs off the end
+;; has counted the list, which is the index a new node gets.
+(defun lg:node-of (p tol nodes / q i rest found)
+  (setq q (lg:2d p) i 0 rest nodes found nil)
+  (while (and rest (null found))
+    (if (<= (distance q (car rest)) tol) (setq found i))
+    (setq i (1+ i) rest (cdr rest)))
   (if found
     (list found nodes)
-    (list (length nodes) (append nodes (list (lg:2d p))))))
+    (list i (append nodes (list q)))))
 
 ;; SEGS as a graph at snap tolerance TOL: (nodes segments), where each
 ;; segment is (node-a node-b bulge).  A segment whose two ends land on
@@ -902,17 +905,40 @@
   (list i dir (if (= dir 1) (cadr seg) (car seg))
         (car tg) (cadr tg) blg))
 
-;; Every dart leaving node V.
-(defun lg:darts-at (v nodes segn / i s out)
-  (setq i 0)
-  (foreach s segn
-    (if (= (car s) v) (setq out (cons (lg:dart i 1 s nodes) out)))
-    (if (= (cadr s) v) (setq out (cons (lg:dart i -1 s nodes) out)))
-    (setq i (1+ i)))
-  (reverse out))
-
 ;; One number per dart, so a face walk can mark the darts it used
 (defun lg:dart-id (d) (+ (* 2 (car d)) (if (= 1 (cadr d)) 0 1)))
+
+;; Every dart leaving every node, built once per graph: (nth V table) is
+;; the darts leaving node V in segment order, which is the order
+;; lg:next-dart's strict < breaks a tie in.  A face walk used to rescan
+;; every segment at every step to find them -- the whole graph once per
+;; dart travelled, on every rung of the snap ladder.
+;;
+;; AutoLISP has no array to push into, so each dart is tagged with its
+;; node and its lg:dart-id, sorted on the pair -- unique, so vl-sort
+;; drops nothing -- and cut into one slot per node, nil where nothing
+;; leaves (a node whose only segment was too short to keep).
+(defun lg:dart-table (nodes segn / i s d tagged v slot out)
+  (setq i 0)
+  (foreach s segn
+    (setq d      (lg:dart i 1 s nodes)
+          tagged (cons (list (car s) (lg:dart-id d) d) tagged)
+          d      (lg:dart i -1 s nodes)
+          tagged (cons (list (cadr s) (lg:dart-id d) d) tagged)
+          i      (1+ i)))
+  (setq tagged (vl-sort tagged '(lambda (a b)
+                                  (if (= (car a) (car b))
+                                    (< (cadr a) (cadr b))
+                                    (< (car a) (car b)))))
+        v      0)
+  (repeat (length nodes)
+    (setq slot nil)
+    (while (and tagged (= (caar tagged) v))
+      (setq slot   (cons (caddr (car tagged)) slot)
+            tagged (cdr tagged)))
+    (setq out (cons (reverse slot) out)
+          v   (1+ v)))
+  (reverse out))
 
 (defun lg:same-dart (a b)
   (and a b (= (car a) (car b)) (= (cadr a) (cadr b))))
@@ -925,9 +951,9 @@
 ;; way back (AIN + pi) round to the dart's departing tangent, taken over
 ;; (0, 2pi] so that turning straight back is the last resort rather than
 ;; the first choice.  Swap the sense of this one comparison and the same
-;; walk traces interior faces instead.
-(defun lg:next-dart (v ain nodes segn / darts d t2 best bt)
-  (setq darts (lg:darts-at v nodes segn))
+;; walk traces interior faces instead.  ADJ is lg:dart-table's.
+(defun lg:next-dart (v ain adj / darts d t2 best bt)
+  (setq darts (nth v adj))
   (foreach d darts
     (setq t2 (lg:angnorm (- (nth 3 d) ain pi)))
     (if (<= t2 1e-9) (setq t2 (+ t2 pi pi)))
@@ -938,7 +964,8 @@
 ;; along it.  Returns the darts travelled, each consed onto the node it
 ;; left, or nil when the walk never closed (which a sound graph does not
 ;; do -- the guard is there so a pathological one cannot hang AutoCAD).
-(defun lg:walk-from (start first nodes segn / cur v ain out done guard lim)
+;; ADJ is the graph's lg:dart-table; SEGN is there only to size the guard.
+(defun lg:walk-from (start first adj segn / cur v ain out done guard lim)
   (setq cur   first
         v     start
         guard 0
@@ -947,7 +974,7 @@
     (setq out   (cons (cons v cur) out)
           ain   (nth 4 cur)
           v     (nth 2 cur)
-          cur   (lg:next-dart v ain nodes segn)
+          cur   (lg:next-dart v ain adj)
           guard (1+ guard))
     (if (or (null cur) (> guard lim)
             (and (= v start) (lg:same-dart cur first)))
@@ -972,8 +999,9 @@
 ;; the one enclosing the most area -- which is the outer boundary of the
 ;; whole component, since it is the face that contains all the others.
 ;; It costs no more work: each dart is still travelled exactly once.
-(defun lg:all-faces (nodes segn / used i s dir d walk w out)
-  (setq i 0)
+(defun lg:all-faces (nodes segn / adj used i s dir d walk w out)
+  (setq adj (lg:dart-table nodes segn)
+        i   0)
   (foreach s segn
     (foreach dir '(1 -1)
       (setq d (lg:dart i dir s nodes))
@@ -981,7 +1009,7 @@
         (progn
           (setq used (cons (lg:dart-id d) used)
                 walk (lg:walk-from (if (= dir 1) (car s) (cadr s))
-                                   d nodes segn))
+                                   d adj segn))
           (if walk
             (progn
               (foreach w walk

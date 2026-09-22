@@ -103,7 +103,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.3")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.4")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -1290,16 +1290,23 @@
   (setq r (vl-catch-all-apply 'lzd:logpath '()))
   (if (vl-catch-all-error-p r) nil r))
 
-(defun lzd:logtail (n / path fp line buf)
+;; The window is trimmed in batches: K lines are held, newest first, and
+;; only when that reaches 2N is it cut back to the newest N.  Trimming
+;; on every line measured and copied the window once per line read --
+;; inside *error*, over a log that grows by a line a run.  Still never
+;; more than 2N lines held, and the last cut takes the newest N.
+(defun lzd:logtail (n / path fp line buf k)
   (setq path (lzd:logpath))
   (if (or (null path) (null (setq fp (open path "r"))))
     nil
     (progn
+      (setq k 0)
       (while (setq line (read-line fp))
-        (setq buf (cons line buf))
-        (if (> (length buf) n) (setq buf (lzd:firstn buf n))))
+        (setq buf (cons line buf)
+              k   (1+ k))
+        (if (>= k (* 2 n)) (setq buf (lzd:firstn buf n) k n)))
       (close fp)
-      (reverse buf))))
+      (reverse (lzd:firstn buf n)))))
 
 ;;; -------------------- what the user is told ---------------------------
 
