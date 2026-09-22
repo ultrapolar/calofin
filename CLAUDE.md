@@ -4,6 +4,32 @@ AutoLISP tools for pool/spa drafting, plus Blender add-ons and an AutoCAD
 palette. Read this before changing anything; `STANDARDS.md` is the full
 rulebook for the `.lsp` files themselves.
 
+## Skills — read these instead of the whole rulebook
+
+This file, `STANDARDS.md` and `README.md` are ~260KB together. Nobody
+should read them front to back to change one prompt. `.claude/skills/`
+holds the working subset, distilled and task-scoped:
+
+| Skill | For |
+| --- | --- |
+| `calofin-lisp` | editing an existing `.lsp` — the change pipeline, the standards digest, navigation, the test idiom, the architecture |
+| `calofin-new-tool` | a new tool or command — a checked skeleton plus the whole registration chain |
+| `calofin-checks` | a red check or test — message to cause to fix |
+
+They carry three scripts that replace opening a 9,000-line file or
+running the 90-second full check:
+
+```bash
+S=.claude/skills/calofin-lisp/scripts
+python3 $S/whereis.py SQUAREUP            # every file and registration site
+python3 $S/lspshow.py --map lisp/pool/POOL.LSP   # a file's forms, one line each
+python3 $S/lspshow.py pool:askcorner      # one defun, with its comment block
+bash   $S/retier.sh SQUAREUP              # mirror + regenerate every tier
+bash   $S/precheck.sh lisp/squareup/SQUAREUP.lsp  # the scoped checks, ~20s
+```
+
+The rules below are still the authority; the skills are the map to them.
+
 ## Branch convention
 
 **All work in this repository goes on `claude/lisp-consolidation-strategy-9nrc7a`.**
