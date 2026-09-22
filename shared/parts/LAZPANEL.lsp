@@ -141,7 +141,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.58")
+(setq *lazpanel-version* "v3.59")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -1673,16 +1673,19 @@
 (defun lzp:on-roster (names)
   (vl-remove-if-not '(lambda (n) (member n (lzp:commands))) names))
 
-;; Nothing stored yet is a fresh install, and takes the shipped set;
-;; lzp:*hidden-none* is a drafter who has decided on none.
+;; NOTHING stored -- no value at all, which vl-registry-read answers
+;; nil for -- is a fresh install, and takes the shipped set.
+;; lzp:*hidden-none* is a drafter who has decided on none, and so is a
+;; stored EMPTY value: that is what every build before the sentinel
+;; wrote for "none hidden", and reading it as a fresh install put the
+;; shipped twelve out of sight for every drafter who had chosen none.
 (defun lzp:hidden-read ( / s)
   (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* "Hidden")))
-  (if (not (and (not (vl-catch-all-error-p s)) (= (type s) 'STR)))
-    (setq s ""))
   (setq lzp:*hidden*
     (cond
-      ((= s "") (lzp:on-roster lzp:*hidden-default*))
-      ((= s lzp:*hidden-none*) nil)
+      ((or (vl-catch-all-error-p s) (/= (type s) 'STR))
+       (lzp:on-roster lzp:*hidden-default*))
+      ((member (vl-string-trim " \t" s) (list "" lzp:*hidden-none*)) nil)
       (t (lzp:on-roster (lzp:split s ";")))))
   lzp:*hidden*)
 

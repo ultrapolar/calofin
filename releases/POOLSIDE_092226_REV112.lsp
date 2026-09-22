@@ -61,7 +61,7 @@
 ;;;  A self-contained file: it carries its own helpers.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.11")
+(setq *poolside-version* "v1.12")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -532,10 +532,12 @@
 
 ;; What to say when something typed is not a length at all.  The
 ;; examples are the lazy spellings on purpose: the ones worth showing
-;; are the ones that save keystrokes.
+;; are the ones that save keystrokes.  A fraction is shown DASHED, never
+;; spaced: at a click-or-type prompt the spacebar is Enter, so 44 1/2
+;; entered 44 and handed the 1/2 to the next question as half an inch.
 (defun psd:len-unread (v)
-  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44 1/2,"
-                 " 4'4.5 or 4'-4 1/2\".")))
+  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44-1/2,"
+                 " 4'4.5 or 4'-4-1/2\".")))
 
 ;; The RULER TIER an offset of OFFSET eighths from the current value
 ;; falls in -- 'jump for a whole inch, 'half/'quarter/'eighth for the
@@ -789,7 +791,7 @@
      (if (not (nth 7 state))
        (princ (strcat "\n  A ruler of " (if ladder "the usual" "nearby")
                       " lengths is beside the drawing: click a row to"
-                      " take it, or type a length (44, 44 1/2, 3'8).")))
+                      " take it, or type a length (44, 44-1/2, 3'8).")))
      (list len (nth 1 state) (car rr) (cadr rr) (caddr rr)
            (nth 5 state) (nth 6 state) T ladder))))
 

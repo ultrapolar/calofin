@@ -228,7 +228,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092226 REV30")
+(setq spa:*version* "092226 REV31")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -1376,10 +1376,12 @@
 
 ;; What to say when something typed is not a length at all.  The
 ;; examples are the lazy spellings on purpose: the ones worth showing
-;; are the ones that save keystrokes.
+;; are the ones that save keystrokes.  A fraction is shown DASHED, never
+;; spaced: at a click-or-type prompt the spacebar is Enter, so 44 1/2
+;; entered 44 and handed the 1/2 to the next question as half an inch.
 (defun spa:len-unread (v)
-  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44 1/2,"
-                 " 4'4.5 or 4'-4 1/2\".")))
+  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44-1/2,"
+                 " 4'4.5 or 4'-4-1/2\".")))
 
 ;; The RULER TIER an offset of OFFSET eighths from the current value
 ;; falls in -- 'jump for a whole inch, 'half/'quarter/'eighth for the
@@ -1633,7 +1635,7 @@
      (if (not (nth 7 state))
        (princ (strcat "\n  A ruler of " (if ladder "the usual" "nearby")
                       " lengths is beside the drawing: click a row to"
-                      " take it, or type a length (44, 44 1/2, 3'8).")))
+                      " take it, or type a length (44, 44-1/2, 3'8).")))
      (list len (nth 1 state) (car rr) (cadr rr) (caddr rr)
            (nth 5 state) (nth 6 state) T ladder))))
 
@@ -1807,6 +1809,12 @@
 
 (defun spa:fclear () (setq spa:*form* nil))
 
+;; Could V have been typed at a spa:asks prompt of this KIND?  A number
+;; above zero -- every kind's initget refuses zero and negatives -- or
+;; nil, NA, anywhere but on a REQ question, which offers no NA.
+(defun spa:fok (kind v)
+  (if (null v) (not (eq kind 'REQ)) (and (numberp v) (> v 0))))
+
 ;; V as the question would spell it, or nil when the question does not
 ;; accept it at all -- so a form answer the prompt would reject falls
 ;; through to the prompt, and the canonical SPELLING comes back rather
@@ -1939,9 +1947,14 @@
                       (if back " [Back]" "")
                       ": ")))
     (if lzd:ask (lzd:ask msg v) v)
+    ;; a keyword counts only where this prompt OFFERS it: bit 128 lets
+    ;; any typed word through, and a Back typed at the first width (no
+    ;; Back there) reached the caller as SPA-BACK and died in rc:sides,
+    ;; an NA on a REQ as nil in the arithmetic.  Unoffered, each falls
+    ;; to "Not a measurement" and is asked again
     (cond
-      ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'SPA-BACK))
-      ((and (= (type v) 'STR) (= v "NA")) (setq out 'SPA-NA))
+      ((and back (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'SPA-BACK))
+      ((and (not (eq kind 'REQ)) (= (type v) 'STR) (= v "NA")) (setq out 'SPA-NA))
       ((and (null v) (eq kind 'SUG)) (setq out dflt))   ; Enter took it
       ((setq out (spa:dval v)))
       (t (princ "\nNot a measurement -- type inches, 6'10\", or 600mm."))))
@@ -2038,7 +2051,7 @@
               v  (car rr)
               spa:*ruler* (cadr rr))
         (cond
-          ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+          ((and back (= (type v) 'STR) (member v '("Back" "Undo")))
            (setq out 'SPA-BACK))
           ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
           ((and (null v) dflt) (setq out dflt))
@@ -2052,7 +2065,8 @@
         (setq v (getdist prompt))
         (if lzd:ask (lzd:ask msg v) v)
         (cond
-          ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+          ;; Back only where offered, as spa:asks above
+          ((and back (= (type v) 'STR) (member v '("Back" "Undo")))
            (setq out 'SPA-BACK))
           ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
           ((and (null v) dflt) (setq out dflt))
@@ -2097,7 +2111,7 @@
 ;; Run a whole block; returns the answers as an assoc list, or SPA-BACK
 ;; when the user backed out of its FIRST question (only offered when bk
 ;; is non-nil).
-(defun spa:askseqb (items bk / ans i n it v dflt asked out)
+(defun spa:askseqb (items bk / ans i n it v fv dflt asked out)
   (setq ans nil i 0 n (length items) asked nil out nil)
   (while (and (< i n) (not out))
     (setq it (nth i items)
@@ -2106,8 +2120,12 @@
         (setq dflt (spa:sqfirst ans dflt)))
     ;; the form answers first, and its answer is consumed -- see
     ;; "form answers" above for why removing beats marking
-    (setq v (if (spa:fhas (car it))
-                (spa:ftake (car it))
+    ;; -- and only an answer the prompt itself would have taken
+    ;; (STANDARDS 7.5).  Anything else is spent and then asked for
+    ;; properly: a sheet's NA on W reached the arithmetic as nil.
+    (setq v (if (and (spa:fhas (car it))
+                     (spa:fok (cadr it) (setq fv (spa:ftake (car it)))))
+                fv
                 (spa:asks (cadr it) (caddr it) (cadddr it) dflt
                           (if (or asked bk) t nil))))
     (if (eq v 'SPA-BACK)

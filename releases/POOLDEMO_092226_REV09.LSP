@@ -27,7 +27,7 @@
 ;;;      POOLDEMO_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
 
-(setq pooldemo:*version* "091226 REV08")
+(setq pooldemo:*version* "092226 REV09")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -372,6 +372,10 @@
   (setq undo-open (pool:undobegin))
   (setvar "OSMODE" 0)
   (setvar "LUNITS" 4)
+  ;; POOL's rotated dimensions type their angle: zero, east, CCW
+  (setvar "AUNITS" 0)
+  (setvar "ANGBASE" 0.0)
+  (setvar "ANGDIR" 0)
 
   (pool:layer "POOL" 4)
   (pool:layer "DIMENSION" 2)

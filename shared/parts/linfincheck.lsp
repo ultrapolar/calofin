@@ -278,7 +278,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.20")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.21")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -2187,10 +2187,11 @@
       (while (and e (null done)
                   (= "ATTRIB" (cdr (assoc 0 (setq ed (entget e))))))
         (if (= tag (strcase (cdr (assoc 2 ed))))
-          (progn
-            (entmod (subst (cons 1 val) (assoc 1 ed) ed))
-            (entupd e)
-            (setq done T)))
+          (if (entmod (subst (cons 1 val) (assoc 1 ed) ed))
+            ;; entmod answers nil on a LOCKED layer and changes nothing:
+            ;; done only when the value really went in, or the report
+            ;; says "UPDATED" over a date still standing on the sheet
+            (progn (entupd e) (setq done T))))
         (setq e (entnext e)))))
   (if done (entupd ent))
   done)

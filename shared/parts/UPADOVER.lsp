@@ -119,7 +119,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *upadover-version* "v1.2")
+(setq *upadover-version* "v1.3")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -587,9 +587,13 @@
       ((null v)
        (princ (strcat "\nA place is required - click the wall, or type a"
                       " survey point's number.")))
-      ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+      ;; each keyword counts only where this prompt OFFERS it: initget
+      ;; 128 lets any typed word through, and a "Whole" typed at the
+      ;; end prompt (which has no Whole) came back UPAD-WHOLE to a
+      ;; caller that took it for a point and died on it
+      ((and back (= (type v) 'STR) (member v '("Back" "Undo")))
        (setq out 'UPAD-BACK done T))
-      ((and (= (type v) 'STR) (= v "Whole"))
+      ((and whole (= (type v) 'STR) (= v "Whole"))
        (setq out 'UPAD-WHOLE done T))
       ((= (type v) 'STR)
        (setq dupes (cal:cand-matches v cands))

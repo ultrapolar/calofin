@@ -520,6 +520,40 @@ assert ("Tech Title date: Date '01/02/2020' is NOT TODAY'S DATE (%s)"
         " - UPDATED to %s" % (today(vm), today(vm))) in txt, txt
 print("   COVERCHECK set it to today, MM/DD/YYYY, label and all")
 
+# ...and on a LOCKED layer, where AutoCAD's entmod answers nil and
+# changes nothing.  The write used to be counted done whatever entmod
+# said, so the report read "UPDATED to <today>" over a date still
+# standing on the sheet.  Modelled here by an entmod that refuses every
+# ATTRIB, which is what a title block on its usual locked layer does.
+_entmod = BUILTINS[Sym('entmod')]
+
+
+def _locked_attribs(vm, a):
+    if any(isinstance(g, Dot) and g.a == 0 and g.b == 'ATTRIB'
+           for g in (a[0] or [])):
+        return NIL
+    return _entmod(vm, a)
+
+
+BUILTINS[Sym('entmod')] = _locked_attribs
+try:
+    vm, ents = build_vm(with_text=False, date='Date = 01/02/2020')
+    vm.run('c:COVERCHECK', [
+        None, selectable(vm),
+        'Move', 'Yes',      # dbad: take the suggested point
+        'Yes',              # dok: correct
+        'No',               # not a replacement
+    ])
+finally:
+    BUILTINS[Sym('entmod')] = _entmod
+assert attrib_value(vm, ents['title'], 'Date') == 'Date = 01/02/2020', \
+    attrib_value(vm, ents['title'], 'Date')
+txt = '\n'.join(report_texts(vm))
+assert 'UPDATED to' not in txt, txt
+assert ("Tech Title date: Date '01/02/2020' is NOT TODAY'S DATE (%s)"
+        " - fix it in the block" % today(vm)) in txt, txt
+print("   a date it could not write is not reported as updated")
+
 vm, ents = build_vm(with_text=False, date='01/02/2020')
 vm.run('c:COVERSCAN', [None, selectable(vm)])
 assert attrib_value(vm, ents['title'], 'Date') == '01/02/2020', \

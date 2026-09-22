@@ -573,4 +573,36 @@ for cmd, path, pair, script in (
           % cmd.replace('c:', ''))
 
 
+# --------------------------------------------------------------------
+# 8.  A sheet number the keyboard would refuse is ASKED, not drawn and
+#     not read as Enter (STANDARDS 7.5).  Every tread, width, depth and
+#     offset prompt refuses zero and negatives; the form path used to
+#     take them as given -- tread1 = -24 drew CORNERSTP's step 1 outside
+#     the corner -- and reading one as nil instead would end the tread
+#     chain early, since nil is Enter there.  So each is dropped from the
+#     store up front and its own prompt comes up: the keyboard answer the
+#     full sheet would have given draws the full sheet's steps.
+# --------------------------------------------------------------------
+print("== 8. a zero or negative on the sheet is asked for, not drawn ==")
+
+for name, path, cmd, pair, prompts_of, full, form_script in TOOLS:
+    a = drive(path, cmd, pair, form_script, form=full,
+              label=name + " full form")
+    for key, bad, typed in (('tread1', '-24.0', 24.0),
+                            ('tread2', '0.0', 24.0),
+                            ('depth2', '-10.75', 10.75)):
+        form = full.replace('(%s . %s)' % (key, typed),
+                            '(%s . %s)' % (key, bad))
+        assert form != full, "%s: no (%s . %s) in the sheet" % (name, key,
+                                                              typed)
+        b = drive(path, cmd, pair, form_script[:-1] + [typed, PICK],
+                  form=form, label="%s %s = %s" % (name, key, bad))
+        same(a, b, "%s %s = %s asked again" % (name, key, bad))
+        assert len(b.prompts) == len(a.prompts) + 1, \
+            "%s %s = %s: expected exactly one extra prompt, got %d" \
+            % (name, key, bad, len(b.prompts) - len(a.prompts))
+    print("   %-12s a negative tread, a zero tread and a negative depth "
+          "each asked once" % name)
+
+
 print("\nALL STEPS FORM SCENARIOS PASSED")

@@ -44,7 +44,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dronote-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *dronote-version* "v1.2")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -215,6 +215,12 @@
             (progn
               (princ "\n  Back to the note choice.")
               (setq stage 'NOTE))))
+         ;; initget 128 lets ANY typed word through, not just Back: a
+         ;; word that is not one of ours is re-asked, never handed to
+         ;; (car pt) -- "done" used to end the command in an error
+         ((= (type pt) 'STR)
+          (princ (strcat "\n  \"" pt "\" is not a point - pick one, press"
+                         " Enter when done, or type Back.")))
          (T
           (cal:ensure-layer dn:*layer* dn:*layer-color*)
           (dn:ensure-style dn:*style* dn:*style-font*)

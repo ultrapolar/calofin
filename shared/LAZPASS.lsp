@@ -100,7 +100,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v2.4")
+(setq cal:*version* "v2.5")
 
 
 ;;  WHAT IS LOADED, AND AT WHICH VERSION.  Seventy-two commands report
@@ -1248,10 +1248,12 @@
 
 ;; What to say when something typed is not a length at all.  The
 ;; examples are the lazy spellings on purpose: the ones worth showing
-;; are the ones that save keystrokes.
+;; are the ones that save keystrokes.  A fraction is shown DASHED, never
+;; spaced: at a click-or-type prompt the spacebar is Enter, so 44 1/2
+;; entered 44 and handed the 1/2 to the next question as half an inch.
 (defun cal:len-unread (v)
-  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44 1/2,"
-                 " 4'4.5 or 4'-4 1/2\".")))
+  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44-1/2,"
+                 " 4'4.5 or 4'-4-1/2\".")))
 
 ;; The RULER TIER an offset of OFFSET eighths from the current value
 ;; falls in -- 'jump for a whole inch, 'half/'quarter/'eighth for the
@@ -1505,7 +1507,7 @@
      (if (not (nth 7 state))
        (princ (strcat "\n  A ruler of " (if ladder "the usual" "nearby")
                       " lengths is beside the drawing: click a row to"
-                      " take it, or type a length (44, 44 1/2, 3'8).")))
+                      " take it, or type a length (44, 44-1/2, 3'8).")))
      (list len (nth 1 state) (car rr) (cadr rr) (caddr rr)
            (nth 5 state) (nth 6 state) T ladder))))
 
@@ -3557,7 +3559,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092226 REV39")
+(setq pool:*version* "092226 REV40")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -4625,6 +4627,17 @@
 
 (defun pool:fclear () (setq pool:*form* nil))
 
+;; Could V have been typed at a pool:asks prompt of this KIND?  The
+;; rules that prompt's initget puts on it: a number above zero, zero
+;; too on a ZER question, and nil -- NA -- only where NA is offered,
+;; which is never on a REQ or a SUGR.
+(defun pool:fok (kind v)
+  (cond
+    ((null v) (not (member kind '(REQ SUGR))))
+    ((not (numberp v)) nil)
+    ((eq kind 'ZER) (>= v 0))
+    (t (> v 0))))
+
 ;; The letter a prompt leads with, as a form key.  The depth questions
 ;; are asked through pool:askh, which carries no key of its own, but
 ;; their prompts all read "<letter> - <what it is>": "C - wall height
@@ -4919,7 +4932,7 @@
   (setq ans (pool:askseqb items nil ink))
   ans)
 
-(defun pool:askseqb (items bk ink / ans i n it v dflt asked out kind sg)
+(defun pool:askseqb (items bk ink / ans i n it v fv dflt asked out kind sg)
   (setq ans nil i 0 n (length items) asked nil out nil)
   (while (and (< i n) (not out))
     (setq it (nth i items))
@@ -4949,8 +4962,13 @@
                                (t kind))))
           ;; the form answers first, and its answer is consumed --
           ;; see "form answers" above for why removing beats marking
-          (setq v (if (pool:fhas (car it))
-                      (pool:ftake (car it))
+          ;; -- and only an answer the prompt itself would have taken
+          ;; (STANDARDS 7.5).  Anything else is spent and then asked
+          ;; for properly: a sheet's NA on a Grecian's B reached
+          ;; pool:grecov as nil, and a B of 0 drew a pool of nothing.
+          (setq v (if (and (pool:fhas (car it))
+                           (pool:fok kind (setq fv (pool:ftake (car it)))))
+                      fv
                       (pool:asks kind (caddr it) (cadddr it) dflt
                                  (if (or asked bk) t nil) (nth 8 it))))
           (if (eq v 'CAL-BACK)
@@ -12184,7 +12202,7 @@
   ;; harmless no-op guard on older releases where it doesn't exist
   (if *push-error-using-command* (*push-error-using-command*))
 
-  (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
+  (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER" "AUNITS" "ANGBASE" "ANGDIR"))
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil
         ;; a fresh run, so a fresh ruler: the hint is said once a run,
@@ -12204,6 +12222,14 @@
   ;; architectural units while prompting so every distance can be
   ;; typed as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
   (setvar "LUNITS" 4)
+  ;; ...and the angle three at their defaults: pool:dimrot TYPES its
+  ;; rotation into DIMLINEAR, and AutoCAD reads a typed angle through
+  ;; AUNITS, ANGBASE and ANGDIR -- in a surveyor's template (zero north,
+  ;; clockwise) a wall's rotated dimension came out square to the wall,
+  ;; reading the wrong number.  SQUAREUP zeroes the same three for ROTATE.
+  (setvar "AUNITS" 0)
+  (setvar "ANGBASE" 0.0)
+  (setvar "ANGDIR" 0)
   (princ "\nDistances may be typed as 25'6\", 25'-6-1/2\" or 25'6.5 (plain numbers = inches).")
 
   ;; The three questions in front of every measurement - in-square,
@@ -12363,7 +12389,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq pooldemo:*version* "091226 REV08")
+(setq pooldemo:*version* "092226 REV09")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -12701,13 +12727,17 @@
   (if lzd:begin (lzd:begin "POOLDEMO" pooldemo:*version*))
 
   (if *push-error-using-command* (*push-error-using-command*))
-  (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
+  (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER" "AUNITS" "ANGBASE" "ANGDIR"))
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil)
   (setvar "CMDECHO" 0)
   (setq undo-open (cal:undobegin))
   (setvar "OSMODE" 0)
   (setvar "LUNITS" 4)
+  ;; POOL's rotated dimensions type their angle: zero, east, CCW
+  (setvar "AUNITS" 0)
+  (setvar "ANGBASE" 0.0)
+  (setvar "ANGDIR" 0)
 
   (pool:layer "POOL" 4)
   (pool:layer "DIMENSION" 2)
@@ -12792,7 +12822,7 @@
 ;;;      TUTORIALPOOL_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
 
-(setq tutorial:*version* "091226 REV08")
+(setq tutorial:*version* "092226 REV09")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -13138,13 +13168,17 @@
   (if lzd:begin (lzd:begin "TUTORIALPOOL" tutorial:*version*))
 
   (if *push-error-using-command* (*push-error-using-command*))
-  (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
+  (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER" "AUNITS" "ANGBASE" "ANGDIR"))
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil)
   (setvar "CMDECHO" 0)
   (setq undo-open (cal:undobegin))
   (setvar "OSMODE" 0)
   (setvar "LUNITS" 4)
+  ;; POOL's rotated dimensions type their angle: zero, east, CCW
+  (setvar "AUNITS" 0)
+  (setvar "ANGBASE" 0.0)
+  (setvar "ANGDIR" 0)
 
   (pool:layer "POOL" 4)
   (pool:layer "DIMENSION" 2)
@@ -13261,7 +13295,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.11")
+(setq *poolside-version* "v1.12")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -15600,7 +15634,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092226 REV30")
+(setq spa:*version* "092226 REV31")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -16627,6 +16661,12 @@
 
 (defun spa:fclear () (setq spa:*form* nil))
 
+;; Could V have been typed at a spa:asks prompt of this KIND?  A number
+;; above zero -- every kind's initget refuses zero and negatives -- or
+;; nil, NA, anywhere but on a REQ question, which offers no NA.
+(defun spa:fok (kind v)
+  (if (null v) (not (eq kind 'REQ)) (and (numberp v) (> v 0))))
+
 ;; V as the question would spell it, or nil when the question does not
 ;; accept it at all -- so a form answer the prompt would reject falls
 ;; through to the prompt, and the canonical SPELLING comes back rather
@@ -16759,9 +16799,14 @@
                       (if back " [Back]" "")
                       ": ")))
     (if lzd:ask (lzd:ask msg v) v)
+    ;; a keyword counts only where this prompt OFFERS it: bit 128 lets
+    ;; any typed word through, and a Back typed at the first width (no
+    ;; Back there) reached the caller as CAL-BACK and died in rc:sides,
+    ;; an NA on a REQ as nil in the arithmetic.  Unoffered, each falls
+    ;; to "Not a measurement" and is asked again
     (cond
-      ((and (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'CAL-BACK))
-      ((and (= (type v) 'STR) (= v "NA")) (setq out 'SPA-NA))
+      ((and back (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'CAL-BACK))
+      ((and (not (eq kind 'REQ)) (= (type v) 'STR) (= v "NA")) (setq out 'SPA-NA))
       ((and (null v) (eq kind 'SUG)) (setq out dflt))   ; Enter took it
       ((setq out (spa:dval v)))
       (t (princ "\nNot a measurement -- type inches, 6'10\", or 600mm."))))
@@ -16844,7 +16889,7 @@
               v  (car rr)
               spa:*ruler* (cadr rr))
         (cond
-          ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+          ((and back (= (type v) 'STR) (member v '("Back" "Undo")))
            (setq out 'CAL-BACK))
           ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
           ((and (null v) dflt) (setq out dflt))
@@ -16858,7 +16903,8 @@
         (setq v (getdist prompt))
         (if lzd:ask (lzd:ask msg v) v)
         (cond
-          ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+          ;; Back only where offered, as spa:asks above
+          ((and back (= (type v) 'STR) (member v '("Back" "Undo")))
            (setq out 'CAL-BACK))
           ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
           ((and (null v) dflt) (setq out dflt))
@@ -16903,7 +16949,7 @@
 ;; Run a whole block; returns the answers as an assoc list, or CAL-BACK
 ;; when the user backed out of its FIRST question (only offered when bk
 ;; is non-nil).
-(defun spa:askseqb (items bk / ans i n it v dflt asked out)
+(defun spa:askseqb (items bk / ans i n it v fv dflt asked out)
   (setq ans nil i 0 n (length items) asked nil out nil)
   (while (and (< i n) (not out))
     (setq it (nth i items)
@@ -16912,8 +16958,12 @@
         (setq dflt (spa:sqfirst ans dflt)))
     ;; the form answers first, and its answer is consumed -- see
     ;; "form answers" above for why removing beats marking
-    (setq v (if (spa:fhas (car it))
-                (spa:ftake (car it))
+    ;; -- and only an answer the prompt itself would have taken
+    ;; (STANDARDS 7.5).  Anything else is spent and then asked for
+    ;; properly: a sheet's NA on W reached the arithmetic as nil.
+    (setq v (if (and (spa:fhas (car it))
+                     (spa:fok (cadr it) (setq fv (spa:ftake (car it)))))
+                fv
                 (spa:asks (cadr it) (caddr it) (cadddr it) dflt
                           (if (or asked bk) t nil))))
     (if (eq v 'CAL-BACK)
@@ -20390,7 +20440,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v9.2")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v9.3")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -23957,7 +24007,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.8")
+(setq *abcdef-version* "v5.9")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -25214,28 +25264,72 @@
     (abcdef:read-csv file maxd)
     (abcdef:read-excel file maxd)))
 
-(defun abcdef:read-excel (file maxd / xl created wbs wb sheet used rng nrows ncols
+;; How many workbooks the collection WBS holds; 0 when it cannot say.
+(defun abcdef:xl-count (wbs / n)
+  (setq n (vl-catch-all-apply 'vlax-get-property (list wbs "Count")))
+  (if (= (type n) 'VARIANT) (setq n (vlax-variant-value n)))
+  (if (= (type n) 'INT) n 0))
+
+;; The workbook FILE already is in the Workbooks collection WBS, or nil.
+;; Compared by full path, case folded, the way Windows compares them.
+(defun abcdef:xl-open-book (wbs file / n i wb nm out)
+  (setq n (abcdef:xl-count wbs) i 1)
+  (while (and (null out) (<= i n))
+    (setq wb (vl-catch-all-apply 'vlax-get-property (list wbs "Item" i))
+          nm (if (not (vl-catch-all-error-p wb))
+               (vl-catch-all-apply 'vlax-get-property (list wb "FullName"))))
+    (if (= (type nm) 'VARIANT) (setq nm (vlax-variant-value nm)))
+    (if (and (= (type nm) 'STR) (= (strcase nm) (strcase file)))
+      (setq out wb))
+    (setq i (1+ i)))
+  out)
+
+(defun abcdef:read-excel (file maxd / xl created wasopen n0 wbs wb sheet used rng nrows ncols
                                   hdr r c txt up kind name-c a-c b-c d-c c-c
                                   rows nm da db dc dd err m)
   ;; connect to an existing Excel, else start one
+  ;; vlax-get-object answers nil, not an error, when no Excel is
+  ;; running -- so nil starts one too, or a machine with Excel closed
+  ;; could never import a sheet at all.
   (setq xl (vl-catch-all-apply 'vlax-get-object (list "Excel.Application")))
-  (if (vl-catch-all-error-p xl)
-    (progn (setq xl (vlax-create-object "Excel.Application") created T)))
+  (if (or (null xl) (vl-catch-all-error-p xl))
+    (setq xl (vl-catch-all-apply 'vlax-create-object (list "Excel.Application"))
+          created T))
   (if (or (null xl) (vl-catch-all-error-p xl))
     (progn (princ "\n** Could not start Excel (is it installed?).") nil)
     (progn
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)) '())
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)) '())
+      ;; Only an Excel this command STARTED is hidden and silenced.  One
+      ;; the drafter already had open stays on their screen as they left
+      ;; it: hiding it left their whole Excel invisible after the run.
+      (if created
+        (progn
+          (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)) '())
+          (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)) '())))
       (setq err (vl-catch-all-apply
                   '(lambda ()
                      (setq wbs (vlax-get-property xl "Workbooks"))
-                     (setq wb (vlax-invoke-method wbs "Open" file))
+                     ;; A sheet the drafter has open is read where it
+                     ;; stands, unsaved readings included, and left open:
+                     ;; Open hands back that same workbook, so closing
+                     ;; what it returned closed their window unsaved.
+                     (if (setq wb (abcdef:xl-open-book wbs file))
+                       (setq wasopen T)
+                       (progn
+                         (setq n0 (abcdef:xl-count wbs)
+                               wb (vlax-invoke-method wbs "Open" file))
+                         ;; a book open under another spelling of its path
+                         ;; (a mapped drive against its UNC name) is missed
+                         ;; above and handed back by Open all the same --
+                         ;; the count not moving is how that shows
+                         (if (= n0 (abcdef:xl-count wbs)) (setq wasopen T))))
                      (setq sheet (vlax-get-property wb "ActiveSheet"))
                      (setq used (vlax-get-property sheet "UsedRange"))
                      ;; widen columns so "Text" is never truncated to ####
-                     (vl-catch-all-apply
-                       '(lambda () (vlax-invoke-method
-                                     (vlax-get-property used "Columns") "AutoFit")) '())
+                     ;; -- on our own copy only, never the drafter's
+                     (if (not wasopen)
+                       (vl-catch-all-apply
+                         '(lambda () (vlax-invoke-method
+                                       (vlax-get-property used "Columns") "AutoFit")) '()))
                      (setq nrows (vlax-get-property
                                    (vlax-get-property used "Rows") "Count"))
                      (setq ncols (vlax-get-property
@@ -25244,6 +25338,8 @@
         (progn
           (princ (strcat "\n** Could not open the spreadsheet: "
                          (vl-catch-all-error-message err)))
+          (if (and wb (not wasopen) (not created))
+            (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '()))
           (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
           nil)
         (progn
@@ -25277,7 +25373,8 @@
             (setq r (1+ r)))
           (abcdef:report-fixes)
           ;; --- close up --------------------------------------------------
-          (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '())
+          (if (not wasopen)
+            (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '()))
           (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
           (vl-catch-all-apply '(lambda () (vlax-release-object wb)) '())
           (vl-catch-all-apply '(lambda () (vlax-release-object wbs)) '())
@@ -29182,7 +29279,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.9")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -29951,28 +30048,72 @@
     (altabcdef:read-csv file maxd)
     (altabcdef:read-excel file maxd)))
 
-(defun altabcdef:read-excel (file maxd / xl created wbs wb sheet used rng nrows ncols
+;; How many workbooks the collection WBS holds; 0 when it cannot say.
+(defun altabcdef:xl-count (wbs / n)
+  (setq n (vl-catch-all-apply 'vlax-get-property (list wbs "Count")))
+  (if (= (type n) 'VARIANT) (setq n (vlax-variant-value n)))
+  (if (= (type n) 'INT) n 0))
+
+;; The workbook FILE already is in the Workbooks collection WBS, or nil.
+;; Compared by full path, case folded, the way Windows compares them.
+(defun altabcdef:xl-open-book (wbs file / n i wb nm out)
+  (setq n (altabcdef:xl-count wbs) i 1)
+  (while (and (null out) (<= i n))
+    (setq wb (vl-catch-all-apply 'vlax-get-property (list wbs "Item" i))
+          nm (if (not (vl-catch-all-error-p wb))
+               (vl-catch-all-apply 'vlax-get-property (list wb "FullName"))))
+    (if (= (type nm) 'VARIANT) (setq nm (vlax-variant-value nm)))
+    (if (and (= (type nm) 'STR) (= (strcase nm) (strcase file)))
+      (setq out wb))
+    (setq i (1+ i)))
+  out)
+
+(defun altabcdef:read-excel (file maxd / xl created wasopen n0 wbs wb sheet used rng nrows ncols
                                   hdr r c txt up kind name-c a-c b-c d-c c-c
                                   rows nm da db dc dd err m)
   ;; connect to an existing Excel, else start one
+  ;; vlax-get-object answers nil, not an error, when no Excel is
+  ;; running -- so nil starts one too, or a machine with Excel closed
+  ;; could never import a sheet at all.
   (setq xl (vl-catch-all-apply 'vlax-get-object (list "Excel.Application")))
-  (if (vl-catch-all-error-p xl)
-    (progn (setq xl (vlax-create-object "Excel.Application") created T)))
+  (if (or (null xl) (vl-catch-all-error-p xl))
+    (setq xl (vl-catch-all-apply 'vlax-create-object (list "Excel.Application"))
+          created T))
   (if (or (null xl) (vl-catch-all-error-p xl))
     (progn (princ "\n** Could not start Excel (is it installed?).") nil)
     (progn
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)) '())
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)) '())
+      ;; Only an Excel this command STARTED is hidden and silenced.  One
+      ;; the drafter already had open stays on their screen as they left
+      ;; it: hiding it left their whole Excel invisible after the run.
+      (if created
+        (progn
+          (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)) '())
+          (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)) '())))
       (setq err (vl-catch-all-apply
                   '(lambda ()
                      (setq wbs (vlax-get-property xl "Workbooks"))
-                     (setq wb (vlax-invoke-method wbs "Open" file))
+                     ;; A sheet the drafter has open is read where it
+                     ;; stands, unsaved readings included, and left open:
+                     ;; Open hands back that same workbook, so closing
+                     ;; what it returned closed their window unsaved.
+                     (if (setq wb (altabcdef:xl-open-book wbs file))
+                       (setq wasopen T)
+                       (progn
+                         (setq n0 (altabcdef:xl-count wbs)
+                               wb (vlax-invoke-method wbs "Open" file))
+                         ;; a book open under another spelling of its path
+                         ;; (a mapped drive against its UNC name) is missed
+                         ;; above and handed back by Open all the same --
+                         ;; the count not moving is how that shows
+                         (if (= n0 (altabcdef:xl-count wbs)) (setq wasopen T))))
                      (setq sheet (vlax-get-property wb "ActiveSheet"))
                      (setq used (vlax-get-property sheet "UsedRange"))
                      ;; widen columns so "Text" is never truncated to ####
-                     (vl-catch-all-apply
-                       '(lambda () (vlax-invoke-method
-                                     (vlax-get-property used "Columns") "AutoFit")) '())
+                     ;; -- on our own copy only, never the drafter's
+                     (if (not wasopen)
+                       (vl-catch-all-apply
+                         '(lambda () (vlax-invoke-method
+                                       (vlax-get-property used "Columns") "AutoFit")) '()))
                      (setq nrows (vlax-get-property
                                    (vlax-get-property used "Rows") "Count"))
                      (setq ncols (vlax-get-property
@@ -29981,6 +30122,8 @@
         (progn
           (princ (strcat "\n** Could not open the spreadsheet: "
                          (vl-catch-all-error-message err)))
+          (if (and wb (not wasopen) (not created))
+            (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '()))
           (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
           nil)
         (progn
@@ -30014,7 +30157,8 @@
             (setq r (1+ r)))
           (altabcdef:report-fixes)
           ;; --- close up --------------------------------------------------
-          (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '())
+          (if (not wasopen)
+            (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '()))
           (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
           (vl-catch-all-apply '(lambda () (vlax-release-object wb)) '())
           (vl-catch-all-apply '(lambda () (vlax-release-object wbs)) '())
@@ -31091,7 +31235,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "092226 REV23") ; announced on load.  The
+(setq pf:*version*      "092226 REV24") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -52896,7 +53040,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dronote-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *dronote-version* "v1.2")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -53067,6 +53211,12 @@
             (progn
               (princ "\n  Back to the note choice.")
               (setq stage 'NOTE))))
+         ;; initget 128 lets ANY typed word through, not just Back: a
+         ;; word that is not one of ours is re-asked, never handed to
+         ;; (car pt) -- "done" used to end the command in an error
+         ((= (type pt) 'STR)
+          (princ (strcat "\n  \"" pt "\" is not a point - pick one, press"
+                         " Enter when done, or type Back.")))
          (T
           (cal:ensure-layer dn:*layer* dn:*layer-color*)
           (dn:ensure-style dn:*style* dn:*style-font*)
@@ -53261,7 +53411,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.7")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.8")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -53942,7 +54092,7 @@
 ;; are the ones that save keystrokes.
 (defun ds:say-unread (v)
   (princ (strcat "\nDIMSTAMP: \"" v "\" is not a measurement or a label"
-                 " - try 44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2\", or a"
+                 " - try 44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2\", or a"
                  " letter like A or AB.")))
 
 ;; One free-text answer, read as loosely as ds:parse reads and handed
@@ -56796,7 +56946,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.13") ; printed on load and at command start so a
+(setq *cs-version* "v4.14") ; printed on load and at command start so a
                             ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -57282,9 +57432,25 @@
 
 ;; The form's numeric answer for KEY, spent as it is read: the number
 ;; as a REAL (the way getdist hands one back), nil for anything else.
+;; Only a POSITIVE number is an answer -- every prompt this stands in
+;; for refuses zero and negatives, and a sheet must not talk the run
+;; into what the keyboard could not (a tread of -24 drew step 1
+;; outside the corner).  POOLSIDE's psd:fnum is the same rule.
 (defun cs-fnum (key / v)
   (setq v (cs-ftake key))
-  (if (numberp v) (* 1.0 v)))
+  (if (and (numberp v) (> v 0)) (* 1.0 v)))
+
+;; ...and such a number is taken OUT of the store before anything reads
+;; it, so the question it answered is ASKED rather than read as the nil
+;; cs-fnum would make of it -- nil is Enter, which ends a tread chain,
+;; and a sheet's typo is not the drafter saying "done" (STANDARDS 7.5:
+;; an invalid value falls through to the prompt).  Every number this
+;; form carries is a length or a count and every prompt behind one
+;; refuses zero and negatives, so the rule needs no list of keys.
+(defun cs-fprune ()
+  (setq *cs-form*
+        (vl-remove-if '(lambda (pr) (and (numberp (cdr pr)) (<= (cdr pr) 0)))
+                      *cs-form*)))
 
 ;; The key of a numbered question: (cs-fnkey "tread" 3) -> tread3.
 (defun cs-fnkey (stem i) (read (strcat stem (itoa i))))
@@ -57429,6 +57595,7 @@
     (if lzd:report (lzd:report "CORNERSTP" *cs-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "CORNERSTP" *cs-version*))
+  (cs-fprune)
 
   ;; remove the most recently drawn step and roll the state back
   (defun cs-popstep ( / rec e)
@@ -57878,7 +58045,10 @@
                    (princ "\n  Stepping back one question.")   ; re-ask the wall
                    (progn
                      (if (cs-fhas 'benchstep) (setq bnk (cs-ftake 'benchstep)))
-                     (if (not (= (type bnk) 'INT))
+                     ;; a step number is a whole number from 1 up; a
+                     ;; sheet's 0 or -2 is asked for again, as the
+                     ;; getint below would have refused it
+                     (if (not (and (= (type bnk) 'INT) (> bnk 0)))
                        (progn
                          (initget 7 "Back Undo")
                          (setq bnk (getint (strcat "\nWhich step is the bench attached"
@@ -59075,7 +59245,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.23") ; printed on load and at command start so a
+(setq *hs-version* "v3.24") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -59669,9 +59839,25 @@
 
 ;; The form's numeric answer for KEY, spent as it is read: the number
 ;; as a REAL (the way getdist hands one back), nil for anything else.
+;; Only a POSITIVE number is an answer -- every prompt this stands in
+;; for refuses zero and negatives, and a sheet must not talk the run
+;; into what the keyboard could not (a tread of -24 drew step 1
+;; outside the corner).  POOLSIDE's psd:fnum is the same rule.
 (defun hs-fnum (key / v)
   (setq v (hs-ftake key))
-  (if (numberp v) (* 1.0 v)))
+  (if (and (numberp v) (> v 0)) (* 1.0 v)))
+
+;; ...and such a number is taken OUT of the store before anything reads
+;; it, so the question it answered is ASKED rather than read as the nil
+;; hs-fnum would make of it -- nil is Enter, which ends a tread chain,
+;; and a sheet's typo is not the drafter saying "done" (STANDARDS 7.5:
+;; an invalid value falls through to the prompt).  Every number this
+;; form carries is a length or a count and every prompt behind one
+;; refuses zero and negatives, so the rule needs no list of keys.
+(defun hs-fprune ()
+  (setq *hs-form*
+        (vl-remove-if '(lambda (pr) (and (numberp (cdr pr)) (<= (cdr pr) 0)))
+                      *hs-form*)))
 
 ;; The key of a numbered question: (hs-fnkey "tread" 3) -> tread3.
 (defun hs-fnkey (stem i) (read (strcat stem (itoa i))))
@@ -59813,6 +59999,7 @@
     (if lzd:report (lzd:report "HEMISTEP" *hs-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "HEMISTEP" *hs-version*))
+  (hs-fprune)
 
   ;; remove the most recently drawn step and roll the state back
   (defun hs-popstep ( / e)
@@ -61207,7 +61394,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.18") ; printed on load and at command start so a
+(setq *ns-version* "v3.19") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -61923,9 +62110,25 @@
 
 ;; The form's numeric answer for KEY, spent as it is read: the number
 ;; as a REAL (the way getdist hands one back), nil for anything else.
+;; Only a POSITIVE number is an answer -- every prompt this stands in
+;; for refuses zero and negatives, and a sheet must not talk the run
+;; into what the keyboard could not (a tread of -24 drew step 1
+;; outside the corner).  POOLSIDE's psd:fnum is the same rule.
 (defun ns-fnum (key / v)
   (setq v (ns-ftake key))
-  (if (numberp v) (* 1.0 v)))
+  (if (and (numberp v) (> v 0)) (* 1.0 v)))
+
+;; ...and such a number is taken OUT of the store before anything reads
+;; it, so the question it answered is ASKED rather than read as the nil
+;; ns-fnum would make of it -- nil is Enter, which ends a tread chain,
+;; and a sheet's typo is not the drafter saying "done" (STANDARDS 7.5:
+;; an invalid value falls through to the prompt).  Every number this
+;; form carries is a length or a count and every prompt behind one
+;; refuses zero and negatives, so the rule needs no list of keys.
+(defun ns-fprune ()
+  (setq *ns-form*
+        (vl-remove-if '(lambda (pr) (and (numberp (cdr pr)) (<= (cdr pr) 0)))
+                      *ns-form*)))
 
 ;; The key of a numbered question: (ns-fnkey "tread" 3) -> tread3.
 (defun ns-fnkey (stem i) (read (strcat stem (itoa i))))
@@ -62100,6 +62303,7 @@
     (if lzd:report (lzd:report "NORMIESTEP" *ns-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "NORMIESTEP" *ns-version*))
+  (ns-fprune)
 
   ;; remove the most recently drawn step and roll the state back
   ;; One corner-size prompt beside the LENGTH RULER: the same question
@@ -65334,7 +65538,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.24")
+(setq *cchk-version* "v1.25")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -66216,10 +66420,11 @@
       (while (and e (null done)
                   (= "ATTRIB" (cdr (assoc 0 (setq ed (entget e))))))
         (if (= tag (strcase (cdr (assoc 2 ed))))
-          (progn
-            (entmod (subst (cons 1 val) (assoc 1 ed) ed))
-            (entupd e)
-            (setq done T)))
+          (if (entmod (subst (cons 1 val) (assoc 1 ed) ed))
+            ;; entmod answers nil on a LOCKED layer and changes nothing:
+            ;; done only when the value really went in, or the report
+            ;; says "UPDATED" over a date still standing on the sheet
+            (progn (entupd e) (setq done T))))
         (setq e (entnext e)))))
   (if done (entupd ent))
   done)
@@ -76840,7 +77045,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v3.4")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.5")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -82084,7 +82289,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v2.4")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v2.5")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -84879,36 +85084,45 @@
                                              (lh:cands-of
                                                (append dpts (mapcar 'car lh-omitted)))
                                              *LH-SNAP*))
-                           (setq w1 (car cand)
-                                 w2 (lh:nearest w1 (mapcar 'car lh-omitted)))
-                           (cond
-                             ((and w2 (< (cal:dist w1 w2) *LH-EXACT-EPS*))
-                              (setq ent        (assoc w2 lh-omitted)
-                                    pts        (append pts (cadr ent))
-                                    dpts       (cal:dedupe pts *LH-EXACT-EPS*)
-                                    lh-omitted (lh:remove ent lh-omitted)
-                                    omits      (lh:remove w2 omits))
-                              (if (and (caddr ent) (entget (caddr ent)))
-                                (progn
-                                  (lh:temp-drop (caddr ent))
-                                  (entdel (caddr ent))))
-                              (princ (strcat "  - Pt." (lh:pt-name w2)
-                                             " back in")))
-                             (w1
-                              (setq pts2 nil ent nil)
-                              (foreach w pts
-                                (if (< (cal:dist w w1) *LH-EXACT-EPS*)
-                                  (setq ent (cons w ent))
-                                  (setq pts2 (cons w pts2))))
-                              (setq pts  (reverse pts2)
-                                    dpts (cal:dedupe pts *LH-EXACT-EPS*)
-                                    ring (lh:temp-add (lh:tag-mine
-                                           (lh:draw-corner-marker w1)))
-                                    lh-omitted (cons (list w1 ent ring)
-                                                     lh-omitted)
-                                    omits      (cons w1 omits))
-                              (princ (strcat "  - omitting Pt."
-                                             (lh:pt-name w1))))))
+                           ;; the prompt offers no Back, but a typed one
+                           ;; still comes back CAL-BACK and died at (car
+                           ;; ...) -- refused where it stands, as the four
+                           ;; siblings' pf:omit-loop refuses it
+                           (if (eq cand 'CAL-BACK)
+                             (princ (strcat "\n  Nothing to go back to here - name a ringed"
+                                            " point again to put it back in, or press Enter"
+                                            " when the list is right."))
+                             (progn
+                               (setq w1 (car cand)
+                                     w2 (lh:nearest w1 (mapcar 'car lh-omitted)))
+                               (cond
+                                 ((and w2 (< (cal:dist w1 w2) *LH-EXACT-EPS*))
+                                  (setq ent        (assoc w2 lh-omitted)
+                                        pts        (append pts (cadr ent))
+                                        dpts       (cal:dedupe pts *LH-EXACT-EPS*)
+                                        lh-omitted (lh:remove ent lh-omitted)
+                                        omits      (lh:remove w2 omits))
+                                  (if (and (caddr ent) (entget (caddr ent)))
+                                    (progn
+                                      (lh:temp-drop (caddr ent))
+                                      (entdel (caddr ent))))
+                                  (princ (strcat "  - Pt." (lh:pt-name w2)
+                                                 " back in")))
+                                 (w1
+                                  (setq pts2 nil ent nil)
+                                  (foreach w pts
+                                    (if (< (cal:dist w w1) *LH-EXACT-EPS*)
+                                      (setq ent (cons w ent))
+                                      (setq pts2 (cons w pts2))))
+                                  (setq pts  (reverse pts2)
+                                        dpts (cal:dedupe pts *LH-EXACT-EPS*)
+                                        ring (lh:temp-add (lh:tag-mine
+                                               (lh:draw-corner-marker w1)))
+                                        lh-omitted (cons (list w1 ent ring)
+                                                         lh-omitted)
+                                        omits      (cons w1 omits))
+                                  (princ (strcat "  - omitting Pt."
+                                                 (lh:pt-name w1))))))))
                          (if omits
                            (progn
                              ;; declared stretches and corners anchored on
@@ -85832,7 +86046,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.20")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.21")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -87741,10 +87955,11 @@
       (while (and e (null done)
                   (= "ATTRIB" (cdr (assoc 0 (setq ed (entget e))))))
         (if (= tag (strcase (cdr (assoc 2 ed))))
-          (progn
-            (entmod (subst (cons 1 val) (assoc 1 ed) ed))
-            (entupd e)
-            (setq done T)))
+          (if (entmod (subst (cons 1 val) (assoc 1 ed) ed))
+            ;; entmod answers nil on a LOCKED layer and changes nothing:
+            ;; done only when the value really went in, or the report
+            ;; says "UPDATED" over a date still standing on the sheet
+            (progn (entupd e) (setq done T))))
         (setq e (entnext e)))))
   (if done (entupd ent))
   done)
@@ -93174,7 +93389,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *upadover-version* "v1.2")
+(setq *upadover-version* "v1.3")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -93642,9 +93857,13 @@
       ((null v)
        (princ (strcat "\nA place is required - click the wall, or type a"
                       " survey point's number.")))
-      ((and (= (type v) 'STR) (member v '("Back" "Undo")))
+      ;; each keyword counts only where this prompt OFFERS it: initget
+      ;; 128 lets any typed word through, and a "Whole" typed at the
+      ;; end prompt (which has no Whole) came back UPAD-WHOLE to a
+      ;; caller that took it for a point and died on it
+      ((and back (= (type v) 'STR) (member v '("Back" "Undo")))
        (setq out 'UPAD-BACK done T))
-      ((and (= (type v) 'STR) (= v "Whole"))
+      ((and whole (= (type v) 'STR) (= v "Whole"))
        (setq out 'UPAD-WHOLE done T))
       ((= (type v) 'STR)
        (setq dupes (cal:cand-matches v cands))
@@ -96335,7 +96554,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.22")
+(setq *perp-version* "v0.23")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -97409,6 +97628,11 @@
        (setq bnd 'RETRY)
        (while (eq bnd 'RETRY)
          (initget "None")
+         ;; ERRNO is STICKY: it holds whatever the last failing call
+         ;; left there, so it is cleared right before the pick it is read
+         ;; after -- or one earlier miss turned every later Enter into
+         ;; "Nothing there".  Wrapped as POINTRENAMER wraps it
+         (vl-catch-all-apply 'setvar (list "ERRNO" 0))
          (setq sel (entsel "\nSelect a boundary for the offsets [None] <None>: "))
          (if lzd:ask (lzd:ask "\nSelect a boundary for the offsets [None] <None>: " sel) sel)
          (if lzd:watch (lzd:watch sel) sel)
@@ -98088,7 +98312,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.22")
+(setq *cperp-version* "v0.23")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -98972,6 +99196,11 @@
        (setq bnd 'RETRY)
        (while (eq bnd 'RETRY)
          (initget "None")
+         ;; ERRNO is STICKY: it holds whatever the last failing call
+         ;; left there, so it is cleared right before the pick it is read
+         ;; after -- or one earlier miss turned every later Enter into
+         ;; "Nothing there".  Wrapped as POINTRENAMER wraps it
+         (vl-catch-all-apply 'setvar (list "ERRNO" 0))
          (setq sel (entsel "\nSelect a boundary for the offsets [None] <None>: "))
          (if lzd:ask (lzd:ask "\nSelect a boundary for the offsets [None] <None>: " sel) sel)
          (if lzd:watch (lzd:watch sel) sel)
@@ -100464,7 +100693,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.9")
+(setq *perpmark-version* "v1.10")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -101463,11 +101692,15 @@
     (if (> (pm:m-dist m) pm:*fuzz*)
       (progn
         ;; command arguments are read in the CURRENT UCS, and every mark
-        ;; has been carried in WCS since the pick that made it
+        ;; has been carried in WCS since the pick that made it.  _non on
+        ;; each: PERPMARK leaves the drafter's OSMODE alone, so a running
+        ;; Endpoint or Nearest would otherwise pull the wall foot or the
+        ;; mark onto whatever is near it -- a taped distance, dimensioned
+        ;; wrong, with nothing on screen to say so
         (command "_.DIMALIGNED"
-                 (trans (pm:m-base m) 0 1)
-                 (trans (pm:m-offs m) 0 1)
-                 (trans (pm:m-offs m) 0 1))
+                 "_non" (trans (pm:m-base m) 0 1)
+                 "_non" (trans (pm:m-offs m) 0 1)
+                 "_non" (trans (pm:m-offs m) 0 1))
         (setq n (1+ n)))))
   n)
 
@@ -104186,7 +104419,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.19")
+(setq *spacheck-version* "v1.20")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -105534,10 +105767,11 @@
   (while (and e (null done) (setq ed (entget e))
               (= "ATTRIB" (cdr (assoc 0 ed))))
     (if (= tag (strcase (cdr (assoc 2 ed))))
-      (progn
-        (entmod (subst (cons 1 val) (assoc 1 ed) ed))
-        (entupd e)
-        (setq done T)))
+      (if (entmod (subst (cons 1 val) (assoc 1 ed) ed))
+        ;; entmod answers nil on a LOCKED layer and changes nothing:
+        ;; done only when the value really went in, or the report
+        ;; says "UPDATED" over a date still standing on the sheet
+        (progn (entupd e) (setq done T))))
     (setq e (entnext e)))
   (if done (entupd ent))
   done)
@@ -108422,7 +108656,7 @@
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
-(setq *drone-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *drone-version* "v1.7")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -108577,11 +108811,14 @@
   (if lzd:watch (lzd:watch ss-text) ss-text)
   (if (null ss-text)
     (progn
-      (prompt "\nSelect text to update <Enter = all text in drawing>: ")
+      (prompt "\nSelect text to update <Enter = all text in model space>: ")
       (setq ss-text (ssget '((0 . "TEXT"))))
       (if lzd:watch (lzd:watch ss-text) ss-text)
+      ;; Enter means the TRACE's text, which is in model space: a
+      ;; bare "_X" also took every layout's title-block and sheet
+      ;; text and restyled it to the trace's font, height and angle
       (if (null ss-text)
-        (setq ss-text (ssget "_X" '((0 . "TEXT")))))))
+        (setq ss-text (ssget "_X" '((0 . "TEXT") (410 . "Model")))))))
 
   ;; ------------------------------------------------------------
   ;; 2/3/4. Points on POOL / SPA, the spa outline, and the ANCHORS
@@ -108733,7 +108970,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.8")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -108876,11 +109113,14 @@
   (if lzd:watch (lzd:watch ss-text) ss-text)
   (if (null ss-text)
     (progn
-      (prompt "\nSelect text to update <Enter = all text in drawing>: ")
+      (prompt "\nSelect text to update <Enter = all text in model space>: ")
       (setq ss-text (ssget '((0 . "TEXT"))))
       (if lzd:watch (lzd:watch ss-text) ss-text)
+      ;; Enter means the TRACE's text, which is in model space: a
+      ;; bare "_X" also took every layout's title-block and sheet
+      ;; text and restyled it to the trace's font, height and angle
       (if (null ss-text)
-        (setq ss-text (ssget "_X" '((0 . "TEXT")))))))
+        (setq ss-text (ssget "_X" '((0 . "TEXT") (410 . "Model")))))))
 
   ;; ------------------------------------------------------------
   ;; 2/3. Points on POOL and ANCHORS, anywhere in the drawing
@@ -114481,7 +114721,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.8")
+(setq *xyplot-version* "v1.9")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -114872,29 +115112,73 @@
       (xyp:report-fixes)
       (reverse rows))))
 
-(defun xyp:read-excel (file / xl created wbs wb sheet used rng nrows ncols
+;; How many workbooks the collection WBS holds; 0 when it cannot say.
+(defun xyp:xl-count (wbs / n)
+  (setq n (vl-catch-all-apply 'vlax-get-property (list wbs "Count")))
+  (if (= (type n) 'VARIANT) (setq n (vlax-variant-value n)))
+  (if (= (type n) 'INT) n 0))
+
+;; The workbook FILE already is in the Workbooks collection WBS, or nil.
+;; Compared by full path, case folded, the way Windows compares them.
+(defun xyp:xl-open-book (wbs file / n i wb nm out)
+  (setq n (xyp:xl-count wbs) i 1)
+  (while (and (null out) (<= i n))
+    (setq wb (vl-catch-all-apply 'vlax-get-property (list wbs "Item" i))
+          nm (if (not (vl-catch-all-error-p wb))
+               (vl-catch-all-apply 'vlax-get-property (list wb "FullName"))))
+    (if (= (type nm) 'VARIANT) (setq nm (vlax-variant-value nm)))
+    (if (and (= (type nm) 'STR) (= (strcase nm) (strcase file)))
+      (setq out wb))
+    (setq i (1+ i)))
+  out)
+
+(defun xyp:read-excel (file / xl created wasopen n0 wbs wb sheet used rng nrows ncols
                               r c up kind name-c x-c y-c rows nm err)
   ;; connect to an existing Excel, else start one.  Structure, error
   ;; handling and object release are ABCDEF's, which is the copy that has
   ;; survived contact with real machines.
+  ;; vlax-get-object answers nil, not an error, when no Excel is
+  ;; running -- so nil starts one too, or a machine with Excel closed
+  ;; could never import a sheet at all.
   (setq xl (vl-catch-all-apply 'vlax-get-object (list "Excel.Application")))
-  (if (vl-catch-all-error-p xl)
-    (progn (setq xl (vlax-create-object "Excel.Application") created T)))
+  (if (or (null xl) (vl-catch-all-error-p xl))
+    (setq xl (vl-catch-all-apply 'vlax-create-object (list "Excel.Application"))
+          created T))
   (if (or (null xl) (vl-catch-all-error-p xl))
     (progn (princ "\n** Could not start Excel (is it installed?).") nil)
     (progn
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)) '())
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)) '())
+      ;; Only an Excel this command STARTED is hidden and silenced.  One
+      ;; the drafter already had open stays on their screen as they left
+      ;; it: hiding it left their whole Excel invisible after the run.
+      (if created
+        (progn
+          (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)) '())
+          (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)) '())))
       (setq err (vl-catch-all-apply
                   '(lambda ()
                      (setq wbs (vlax-get-property xl "Workbooks"))
-                     (setq wb (vlax-invoke-method wbs "Open" file))
+                     ;; A sheet the drafter has open is read where it
+                     ;; stands, unsaved readings included, and left open:
+                     ;; Open hands back that same workbook, so closing
+                     ;; what it returned closed their window unsaved.
+                     (if (setq wb (xyp:xl-open-book wbs file))
+                       (setq wasopen T)
+                       (progn
+                         (setq n0 (xyp:xl-count wbs)
+                               wb (vlax-invoke-method wbs "Open" file))
+                         ;; a book open under another spelling of its path
+                         ;; (a mapped drive against its UNC name) is missed
+                         ;; above and handed back by Open all the same --
+                         ;; the count not moving is how that shows
+                         (if (= n0 (xyp:xl-count wbs)) (setq wasopen T))))
                      (setq sheet (vlax-get-property wb "ActiveSheet"))
                      (setq used (vlax-get-property sheet "UsedRange"))
                      ;; widen columns so "Text" is never truncated to ####
-                     (vl-catch-all-apply
-                       '(lambda () (vlax-invoke-method
-                                     (vlax-get-property used "Columns") "AutoFit")) '())
+                     ;; -- on our own copy only, never the drafter's
+                     (if (not wasopen)
+                       (vl-catch-all-apply
+                         '(lambda () (vlax-invoke-method
+                                       (vlax-get-property used "Columns") "AutoFit")) '()))
                      (setq nrows (vlax-get-property
                                    (vlax-get-property used "Rows") "Count"))
                      (setq ncols (vlax-get-property
@@ -114903,6 +115187,8 @@
         (progn
           (princ (strcat "\n** Could not open the spreadsheet: "
                          (vl-catch-all-error-message err)))
+          (if (and wb (not wasopen) (not created))
+            (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '()))
           (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
           nil)
         (progn
@@ -114934,7 +115220,8 @@
             (setq r (1+ r)))
           (xyp:report-fixes)
           ;; --- close up --------------------------------------------------
-          (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '())
+          (if (not wasopen)
+            (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '()))
           (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
           (vl-catch-all-apply '(lambda () (vlax-release-object wb)) '())
           (vl-catch-all-apply '(lambda () (vlax-release-object wbs)) '())
@@ -115520,7 +115807,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.7")
+(setq *constellation-version* "v1.8")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -117028,10 +117315,13 @@
 
 ;; Which pair to dimension.  Typed, not a keyword list: a 26-point job
 ;; has 325 pair names and initget cannot carry them, so Back and Done
-;; are typed words too and the prompt says so.
+;; are typed words too and the prompt says so.  (getstring T ...): a
+;; plain getstring ends at the spacebar, so "a c" arrived as "a" and
+;; left the "c" to answer the re-ask -- one of the spellings the pair
+;; reader takes, and one nobody could type.
 (defun cst:askpair (n dflt / s)
   (setq s (cal:trim ((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
-                      (getstring (strcat "\n  Pair to dimension <" dflt
+                      (getstring T (strcat "\n  Pair to dimension <" dflt
                                          "> (B = back, D = done): ")))))
   (cond ((= s "") (cst:parsepair dflt n))
         ((cal:back-word-p s) 'CAL-BACK)
@@ -117100,11 +117390,12 @@
   (princ "\n    B        undo the arc just given"))
 
 ;; Which points the arc runs through.  Typed, like the pair prompt and
-;; for the same reason, so Back and Done are typed words too.
+;; for the same reason, so Back and Done are typed words too -- and read
+;; with spaces allowed, for the same reason as the pair.
 (defun cst:askrun (n / str ls)
   (setq str (cal:trim
               ((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
-                (getstring (strcat "\n  Points on the arc <Enter = done>"
+                (getstring T (strcat "\n  Points on the arc <Enter = done>"
                                    " (B = back): ")))))
   (cond ((= str "") 'CST-DONE)
         ((cal:back-word-p str) 'CAL-BACK)
@@ -122282,7 +122573,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.58")
+(setq *lazpanel-version* "v3.59")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -123814,16 +124105,19 @@
 (defun lzp:on-roster (names)
   (vl-remove-if-not '(lambda (n) (member n (lzp:commands))) names))
 
-;; Nothing stored yet is a fresh install, and takes the shipped set;
-;; lzp:*hidden-none* is a drafter who has decided on none.
+;; NOTHING stored -- no value at all, which vl-registry-read answers
+;; nil for -- is a fresh install, and takes the shipped set.
+;; lzp:*hidden-none* is a drafter who has decided on none, and so is a
+;; stored EMPTY value: that is what every build before the sentinel
+;; wrote for "none hidden", and reading it as a fresh install put the
+;; shipped twelve out of sight for every drafter who had chosen none.
 (defun lzp:hidden-read ( / s)
   (setq s (vl-catch-all-apply 'vl-registry-read (list lzp:*pinkey* "Hidden")))
-  (if (not (and (not (vl-catch-all-error-p s)) (= (type s) 'STR)))
-    (setq s ""))
   (setq lzp:*hidden*
     (cond
-      ((= s "") (lzp:on-roster lzp:*hidden-default*))
-      ((= s lzp:*hidden-none*) nil)
+      ((or (vl-catch-all-error-p s) (/= (type s) 'STR))
+       (lzp:on-roster lzp:*hidden-default*))
+      ((member (vl-string-trim " \t" s) (list "" lzp:*hidden-none*)) nil)
       (t (lzp:on-roster (lzp:split s ";")))))
   lzp:*hidden*)
 

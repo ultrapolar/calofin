@@ -45,7 +45,7 @@
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
-(setq *drone-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *drone-version* "v1.7")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -228,11 +228,14 @@
   (if lzd:watch (lzd:watch ss-text) ss-text)
   (if (null ss-text)
     (progn
-      (prompt "\nSelect text to update <Enter = all text in drawing>: ")
+      (prompt "\nSelect text to update <Enter = all text in model space>: ")
       (setq ss-text (ssget '((0 . "TEXT"))))
       (if lzd:watch (lzd:watch ss-text) ss-text)
+      ;; Enter means the TRACE's text, which is in model space: a
+      ;; bare "_X" also took every layout's title-block and sheet
+      ;; text and restyled it to the trace's font, height and angle
       (if (null ss-text)
-        (setq ss-text (ssget "_X" '((0 . "TEXT")))))))
+        (setq ss-text (ssget "_X" '((0 . "TEXT") (410 . "Model")))))))
 
   ;; ------------------------------------------------------------
   ;; 2/3/4. Points on POOL / SPA, the spa outline, and the ANCHORS

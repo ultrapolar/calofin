@@ -110,7 +110,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.19")
+(setq *spacheck-version* "v1.20")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -1522,10 +1522,11 @@
   (while (and e (null done) (setq ed (entget e))
               (= "ATTRIB" (cdr (assoc 0 ed))))
     (if (= tag (strcase (cdr (assoc 2 ed))))
-      (progn
-        (entmod (subst (cons 1 val) (assoc 1 ed) ed))
-        (entupd e)
-        (setq done T)))
+      (if (entmod (subst (cons 1 val) (assoc 1 ed) ed))
+        ;; entmod answers nil on a LOCKED layer and changes nothing:
+        ;; done only when the value really went in, or the report
+        ;; says "UPDATED" over a date still standing on the sheet
+        (progn (entupd e) (setq done T))))
     (setq e (entnext e)))
   (if done (entupd ent))
   done)

@@ -315,7 +315,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.23") ; printed on load and at command start so a
+(setq *hs-version* "v3.24") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -909,9 +909,25 @@
 
 ;; The form's numeric answer for KEY, spent as it is read: the number
 ;; as a REAL (the way getdist hands one back), nil for anything else.
+;; Only a POSITIVE number is an answer -- every prompt this stands in
+;; for refuses zero and negatives, and a sheet must not talk the run
+;; into what the keyboard could not (a tread of -24 drew step 1
+;; outside the corner).  POOLSIDE's psd:fnum is the same rule.
 (defun hs-fnum (key / v)
   (setq v (hs-ftake key))
-  (if (numberp v) (* 1.0 v)))
+  (if (and (numberp v) (> v 0)) (* 1.0 v)))
+
+;; ...and such a number is taken OUT of the store before anything reads
+;; it, so the question it answered is ASKED rather than read as the nil
+;; hs-fnum would make of it -- nil is Enter, which ends a tread chain,
+;; and a sheet's typo is not the drafter saying "done" (STANDARDS 7.5:
+;; an invalid value falls through to the prompt).  Every number this
+;; form carries is a length or a count and every prompt behind one
+;; refuses zero and negatives, so the rule needs no list of keys.
+(defun hs-fprune ()
+  (setq *hs-form*
+        (vl-remove-if '(lambda (pr) (and (numberp (cdr pr)) (<= (cdr pr) 0)))
+                      *hs-form*)))
 
 ;; The key of a numbered question: (hs-fnkey "tread" 3) -> tread3.
 (defun hs-fnkey (stem i) (read (strcat stem (itoa i))))
@@ -1053,6 +1069,7 @@
     (if lzd:report (lzd:report "HEMISTEP" *hs-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "HEMISTEP" *hs-version*))
+  (hs-fprune)
 
   ;; remove the most recently drawn step and roll the state back
   (defun hs-popstep ( / e)

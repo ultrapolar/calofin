@@ -192,7 +192,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.9")
+(setq *perpmark-version* "v1.10")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -1191,11 +1191,15 @@
     (if (> (pm:m-dist m) pm:*fuzz*)
       (progn
         ;; command arguments are read in the CURRENT UCS, and every mark
-        ;; has been carried in WCS since the pick that made it
+        ;; has been carried in WCS since the pick that made it.  _non on
+        ;; each: PERPMARK leaves the drafter's OSMODE alone, so a running
+        ;; Endpoint or Nearest would otherwise pull the wall foot or the
+        ;; mark onto whatever is near it -- a taped distance, dimensioned
+        ;; wrong, with nothing on screen to say so
         (command "_.DIMALIGNED"
-                 (trans (pm:m-base m) 0 1)
-                 (trans (pm:m-offs m) 0 1)
-                 (trans (pm:m-offs m) 0 1))
+                 "_non" (trans (pm:m-base m) 0 1)
+                 "_non" (trans (pm:m-offs m) 0 1)
+                 "_non" (trans (pm:m-offs m) 0 1))
         (setq n (1+ n)))))
   n)
 

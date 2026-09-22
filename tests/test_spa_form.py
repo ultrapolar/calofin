@@ -668,4 +668,34 @@ print("   one keyword, and one size, covering all four corners")
 print("   samecorners + corner A answer the round from a form")
 
 
+# --------------------------------------------------------------------
+# A width the PROMPT would refuse is asked for again, whichever way it
+# arrives.  W is a REQ question: no zero, no negative, no NA, and as
+# the first question of the block, no Back either.
+#   * from a form: spa:askseqb stored whatever the sheet sent, so an NA
+#     reached the arithmetic as nil (STANDARDS 7.5);
+#   * typed: bit 128 lets any word through, and spa:asks matched Back
+#     and NA whether or not the prompt offered them -- Back reached
+#     rc:sides as SPA-BACK and died there.
+# Either way the keyboard answer the typed run gave draws its spa.
+# --------------------------------------------------------------------
+print("== a width the prompt would refuse is asked again ==")
+
+full = by_form(FULL, [None, "No", "No"])
+for bad in ('0.0', '-84.0', 'nil'):
+    f = by_form(FULL.replace('(w . 84.0)', '(w . %s)' % bad),
+                [None, 84.0, "No", "No"])
+    same(a, f, "form w = %s" % bad)
+    assert len(f.prompts) == len(full.prompts) + 1, \
+        "form w = %s: the refused width was not asked for" % bad
+print("   a zero, negative or NA width off the sheet is asked for")
+
+typed = PROMPTS[:4] + ["Back", "NA"] + PROMPTS[4:]
+g = by_prompts(typed)
+same(a, g, "typed Back and NA at the first width")
+assert len(g.prompts) == len(a.prompts) + 2, \
+    "Back and NA were not each refused and asked again"
+print("   Back and NA typed where neither is offered are asked again")
+
+
 print("\nALL SPA FORM SCENARIOS PASSED")

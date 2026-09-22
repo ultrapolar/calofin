@@ -2627,17 +2627,21 @@ def test_the_length_ruler_is_down_between_rounds():
 
 
 def test_the_length_prompt_reads_a_measurement_as_dimstamp_does():
-    """44 1/2, 3'8 and 4'-4 1/2\" all read, feet typed put the ruler in
+    """44-1/2, 3'8 and 4'-4-1/2\" all read, feet typed put the ruler in
     the feet family, and what is not a length or is not positive is
-    refused and asked again."""
-    vm, pl = run_perppts([CLICK, 4, "44 1/2", "abc", "3'8", 0, "-5",
-                          "4'-4 1/2\"", 44.3, "Straight", WIDTH_OK, "No",
+    refused and asked again.  The fractions are DASHED because that is
+    all this prompt can be typed: it is a getpoint, where AutoCAD takes
+    the spacebar for Enter, so "44 1/2" would arrive as 44 and leave the
+    1/2 to answer the next question -- which is why the hint asserted
+    below no longer offers the spaced spelling."""
+    vm, pl = run_perppts([CLICK, 4, "44-1/2", "abc", "3'8", 0, "-5",
+                          "4'-4-1/2\"", 44.3, "Straight", WIDTH_OK, "No",
                           "STandard"])
     ys = [round(v[1], 9) for v in poly_verts(vm, pl[0])]
     assert ys == [44.5, 44.0, 52.5, 44.3], ys
     out = said(vm)
-    assert '"abc" is not a length - try 44, 44.5, 44 1/2, 4\'4.5 or ' \
-        '4\'-4 1/2".' in out, out
+    assert '"abc" is not a length - try 44, 44.5, 44-1/2, 4\'4.5 or ' \
+        '4\'-4-1/2".' in out, out
     assert out.count("A length must be more than zero.") == 2, out
     drawn = labels_ever_drawn(vm)
     assert '3\'-8"' in drawn, "feet typed means feet on the ruler"

@@ -87,7 +87,7 @@ puts it back too; `Esc` inside a stage does not, for the reason below.
 
 **Nothing is skipped or reworded.** Each stage is the command itself,
 asking its own questions — so `TYDRN` still offers *"Select text to
-update <Enter = all text in drawing>"*, and `PADDLE` and `CDIM` still
+update <Enter = all text in model space>"*, and `PADDLE` and `CDIM` still
 ask for what they need. The suite supplies the order and the highlight.
 Anything you know about the three commands stays true here.
 

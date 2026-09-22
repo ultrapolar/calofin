@@ -59,8 +59,9 @@ can still be clicked, it just cannot be typed.
      the distance prompt -- the eighths of an inch for a whole inch
      either side of the last distance, graded like a tape with the
      last one ringed -- and a click on a row IS the distance. A typed
-     one reads the way `DIMSTAMP` reads (`44`, `44 1/2`, `3'8`,
-     `4'-4 1/2"`, kept exactly as typed), and a click on empty space
+     one reads the way `DIMSTAMP` reads (`44`, `44-1/2`, `3'8`,
+     `4'-4-1/2"`, kept exactly as typed -- dashed, because the spacebar
+     is Enter at a click-or-type prompt), and a click on empty space
      is the first of two points to measure between. It is scratch on
      the marks layer, down when the round ends or backs out, and swept
      on every way out, Esc included; its `pm:*ruler-*` knobs are in

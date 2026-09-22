@@ -835,10 +835,13 @@ TOOLS = {
         'symbols': {'POOL-BACK': 'CAL-BACK',
                     'pool:*sysold*': 'cal:*sysold*'},
         # POOL also saves LUNITS -- it switches the drawing to
-        # architectural units for the run and must put the user's back
+        # architectural units for the run and must put the user's back --
+        # and the angle three, zeroed so a typed DIMLINEAR rotation reads
+        # as the degrees it was written in
         'expand': {
             '(cal:syssave)':
-                ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))'],
+                ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"'
+                 ' "AUNITS" "ANGBASE" "ANGDIR"))'],
         },
     },
     # POOLSIDE was written against the library from the start: the whole
@@ -1819,7 +1822,8 @@ TOOLS = {
         'drop_globals': [],
         'expand': {
             '(cal:syssave)':
-                ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))'],
+                ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"'
+                 ' "AUNITS" "ANGBASE" "ANGDIR"))'],
         },
     },
     # Like POOLDEMO: no helpers of its own, just POOL's called
@@ -1838,7 +1842,8 @@ TOOLS = {
         'drop_globals': [],
         'expand': {
             '(cal:syssave)':
-                ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))'],
+                ['(cal:syssave \'("OSMODE" "LUNITS" "CMDECHO" "CLAYER"'
+                 ' "AUNITS" "ANGBASE" "ANGDIR"))'],
         },
     },
     # DRONE's only generic helper is the layer creator.

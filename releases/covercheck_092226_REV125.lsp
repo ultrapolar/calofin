@@ -237,7 +237,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.24")
+(setq *cchk-version* "v1.25")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -1317,10 +1317,11 @@
       (while (and e (null done)
                   (= "ATTRIB" (cdr (assoc 0 (setq ed (entget e))))))
         (if (= tag (strcase (cdr (assoc 2 ed))))
-          (progn
-            (entmod (subst (cons 1 val) (assoc 1 ed) ed))
-            (entupd e)
-            (setq done T)))
+          (if (entmod (subst (cons 1 val) (assoc 1 ed) ed))
+            ;; entmod answers nil on a LOCKED layer and changes nothing:
+            ;; done only when the value really went in, or the report
+            ;; says "UPDATED" over a date still standing on the sheet
+            (progn (entupd e) (setq done T))))
         (setq e (entnext e)))))
   (if done (entupd ent))
   done)

@@ -364,7 +364,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.18") ; printed on load and at command start so a
+(setq *ns-version* "v3.19") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -1080,9 +1080,25 @@
 
 ;; The form's numeric answer for KEY, spent as it is read: the number
 ;; as a REAL (the way getdist hands one back), nil for anything else.
+;; Only a POSITIVE number is an answer -- every prompt this stands in
+;; for refuses zero and negatives, and a sheet must not talk the run
+;; into what the keyboard could not (a tread of -24 drew step 1
+;; outside the corner).  POOLSIDE's psd:fnum is the same rule.
 (defun ns-fnum (key / v)
   (setq v (ns-ftake key))
-  (if (numberp v) (* 1.0 v)))
+  (if (and (numberp v) (> v 0)) (* 1.0 v)))
+
+;; ...and such a number is taken OUT of the store before anything reads
+;; it, so the question it answered is ASKED rather than read as the nil
+;; ns-fnum would make of it -- nil is Enter, which ends a tread chain,
+;; and a sheet's typo is not the drafter saying "done" (STANDARDS 7.5:
+;; an invalid value falls through to the prompt).  Every number this
+;; form carries is a length or a count and every prompt behind one
+;; refuses zero and negatives, so the rule needs no list of keys.
+(defun ns-fprune ()
+  (setq *ns-form*
+        (vl-remove-if '(lambda (pr) (and (numberp (cdr pr)) (<= (cdr pr) 0)))
+                      *ns-form*)))
 
 ;; The key of a numbered question: (ns-fnkey "tread" 3) -> tread3.
 (defun ns-fnkey (stem i) (read (strcat stem (itoa i))))
@@ -1257,6 +1273,7 @@
     (if lzd:report (lzd:report "NORMIESTEP" *ns-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "NORMIESTEP" *ns-version*))
+  (ns-fprune)
 
   ;; remove the most recently drawn step and roll the state back
   ;; One corner-size prompt beside the LENGTH RULER: the same question

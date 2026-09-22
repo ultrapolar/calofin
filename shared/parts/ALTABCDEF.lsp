@@ -43,7 +43,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.9")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -812,28 +812,72 @@
     (altabcdef:read-csv file maxd)
     (altabcdef:read-excel file maxd)))
 
-(defun altabcdef:read-excel (file maxd / xl created wbs wb sheet used rng nrows ncols
+;; How many workbooks the collection WBS holds; 0 when it cannot say.
+(defun altabcdef:xl-count (wbs / n)
+  (setq n (vl-catch-all-apply 'vlax-get-property (list wbs "Count")))
+  (if (= (type n) 'VARIANT) (setq n (vlax-variant-value n)))
+  (if (= (type n) 'INT) n 0))
+
+;; The workbook FILE already is in the Workbooks collection WBS, or nil.
+;; Compared by full path, case folded, the way Windows compares them.
+(defun altabcdef:xl-open-book (wbs file / n i wb nm out)
+  (setq n (altabcdef:xl-count wbs) i 1)
+  (while (and (null out) (<= i n))
+    (setq wb (vl-catch-all-apply 'vlax-get-property (list wbs "Item" i))
+          nm (if (not (vl-catch-all-error-p wb))
+               (vl-catch-all-apply 'vlax-get-property (list wb "FullName"))))
+    (if (= (type nm) 'VARIANT) (setq nm (vlax-variant-value nm)))
+    (if (and (= (type nm) 'STR) (= (strcase nm) (strcase file)))
+      (setq out wb))
+    (setq i (1+ i)))
+  out)
+
+(defun altabcdef:read-excel (file maxd / xl created wasopen n0 wbs wb sheet used rng nrows ncols
                                   hdr r c txt up kind name-c a-c b-c d-c c-c
                                   rows nm da db dc dd err m)
   ;; connect to an existing Excel, else start one
+  ;; vlax-get-object answers nil, not an error, when no Excel is
+  ;; running -- so nil starts one too, or a machine with Excel closed
+  ;; could never import a sheet at all.
   (setq xl (vl-catch-all-apply 'vlax-get-object (list "Excel.Application")))
-  (if (vl-catch-all-error-p xl)
-    (progn (setq xl (vlax-create-object "Excel.Application") created T)))
+  (if (or (null xl) (vl-catch-all-error-p xl))
+    (setq xl (vl-catch-all-apply 'vlax-create-object (list "Excel.Application"))
+          created T))
   (if (or (null xl) (vl-catch-all-error-p xl))
     (progn (princ "\n** Could not start Excel (is it installed?).") nil)
     (progn
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)) '())
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)) '())
+      ;; Only an Excel this command STARTED is hidden and silenced.  One
+      ;; the drafter already had open stays on their screen as they left
+      ;; it: hiding it left their whole Excel invisible after the run.
+      (if created
+        (progn
+          (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)) '())
+          (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)) '())))
       (setq err (vl-catch-all-apply
                   '(lambda ()
                      (setq wbs (vlax-get-property xl "Workbooks"))
-                     (setq wb (vlax-invoke-method wbs "Open" file))
+                     ;; A sheet the drafter has open is read where it
+                     ;; stands, unsaved readings included, and left open:
+                     ;; Open hands back that same workbook, so closing
+                     ;; what it returned closed their window unsaved.
+                     (if (setq wb (altabcdef:xl-open-book wbs file))
+                       (setq wasopen T)
+                       (progn
+                         (setq n0 (altabcdef:xl-count wbs)
+                               wb (vlax-invoke-method wbs "Open" file))
+                         ;; a book open under another spelling of its path
+                         ;; (a mapped drive against its UNC name) is missed
+                         ;; above and handed back by Open all the same --
+                         ;; the count not moving is how that shows
+                         (if (= n0 (altabcdef:xl-count wbs)) (setq wasopen T))))
                      (setq sheet (vlax-get-property wb "ActiveSheet"))
                      (setq used (vlax-get-property sheet "UsedRange"))
                      ;; widen columns so "Text" is never truncated to ####
-                     (vl-catch-all-apply
-                       '(lambda () (vlax-invoke-method
-                                     (vlax-get-property used "Columns") "AutoFit")) '())
+                     ;; -- on our own copy only, never the drafter's
+                     (if (not wasopen)
+                       (vl-catch-all-apply
+                         '(lambda () (vlax-invoke-method
+                                       (vlax-get-property used "Columns") "AutoFit")) '()))
                      (setq nrows (vlax-get-property
                                    (vlax-get-property used "Rows") "Count"))
                      (setq ncols (vlax-get-property
@@ -842,6 +886,8 @@
         (progn
           (princ (strcat "\n** Could not open the spreadsheet: "
                          (vl-catch-all-error-message err)))
+          (if (and wb (not wasopen) (not created))
+            (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '()))
           (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
           nil)
         (progn
@@ -875,7 +921,8 @@
             (setq r (1+ r)))
           (altabcdef:report-fixes)
           ;; --- close up --------------------------------------------------
-          (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '())
+          (if (not wasopen)
+            (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '()))
           (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
           (vl-catch-all-apply '(lambda () (vlax-release-object wb)) '())
           (vl-catch-all-apply '(lambda () (vlax-release-object wbs)) '())

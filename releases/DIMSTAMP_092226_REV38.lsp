@@ -147,7 +147,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.7")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.8")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -855,7 +855,7 @@
 ;; are the ones that save keystrokes.
 (defun ds:say-unread (v)
   (princ (strcat "\nDIMSTAMP: \"" v "\" is not a measurement or a label"
-                 " - try 44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2\", or a"
+                 " - try 44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2\", or a"
                  " letter like A or AB.")))
 
 ;; One free-text answer, read as loosely as ds:parse reads and handed

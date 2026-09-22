@@ -24,7 +24,7 @@
 ;;;      TUTORIALPOOL_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
 
-(setq tutorial:*version* "091226 REV08")
+(setq tutorial:*version* "092226 REV09")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -377,6 +377,10 @@
   (setq undo-open (pool:undobegin))
   (setvar "OSMODE" 0)
   (setvar "LUNITS" 4)
+  ;; POOL's rotated dimensions type their angle: zero, east, CCW
+  (setvar "AUNITS" 0)
+  (setvar "ANGBASE" 0.0)
+  (setvar "ANGDIR" 0)
 
   (pool:layer "POOL" 4)
   (pool:layer "DIMENSION" 2)

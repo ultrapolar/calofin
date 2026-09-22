@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_092226_REV413-323-318.lsp
+;;; STEPS_092226_REV414-324-319.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,9 +8,9 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v4.13 -> REV413   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
-;;;     HEMISTEP.lsp    v3.23 -> REV323   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
-;;;     NORMIESTEP.lsp  v3.18 -> REV318   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
+;;;     CORNERSTP.lsp   v4.14 -> REV414   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
+;;;     HEMISTEP.lsp    v3.24 -> REV324   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
+;;;     NORMIESTEP.lsp  v3.19 -> REV319   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
 ;;;        window) and every command listed above comes with it.
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v4.13) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v4.14) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -372,7 +372,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.13") ; printed on load and at command start so a
+(setq *cs-version* "v4.14") ; printed on load and at command start so a
                             ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -870,9 +870,25 @@
 
 ;; The form's numeric answer for KEY, spent as it is read: the number
 ;; as a REAL (the way getdist hands one back), nil for anything else.
+;; Only a POSITIVE number is an answer -- every prompt this stands in
+;; for refuses zero and negatives, and a sheet must not talk the run
+;; into what the keyboard could not (a tread of -24 drew step 1
+;; outside the corner).  POOLSIDE's psd:fnum is the same rule.
 (defun cs-fnum (key / v)
   (setq v (cs-ftake key))
-  (if (numberp v) (* 1.0 v)))
+  (if (and (numberp v) (> v 0)) (* 1.0 v)))
+
+;; ...and such a number is taken OUT of the store before anything reads
+;; it, so the question it answered is ASKED rather than read as the nil
+;; cs-fnum would make of it -- nil is Enter, which ends a tread chain,
+;; and a sheet's typo is not the drafter saying "done" (STANDARDS 7.5:
+;; an invalid value falls through to the prompt).  Every number this
+;; form carries is a length or a count and every prompt behind one
+;; refuses zero and negatives, so the rule needs no list of keys.
+(defun cs-fprune ()
+  (setq *cs-form*
+        (vl-remove-if '(lambda (pr) (and (numberp (cdr pr)) (<= (cdr pr) 0)))
+                      *cs-form*)))
 
 ;; The key of a numbered question: (cs-fnkey "tread" 3) -> tread3.
 (defun cs-fnkey (stem i) (read (strcat stem (itoa i))))
@@ -1086,10 +1102,12 @@
 
 ;; What to say when something typed is not a length at all.  The
 ;; examples are the lazy spellings on purpose: the ones worth showing
-;; are the ones that save keystrokes.
+;; are the ones that save keystrokes.  A fraction is shown DASHED, never
+;; spaced: at a click-or-type prompt the spacebar is Enter, so 44 1/2
+;; entered 44 and handed the 1/2 to the next question as half an inch.
 (defun cs-len-unread (v)
-  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44 1/2,"
-                 " 4'4.5 or 4'-4 1/2\".")))
+  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44-1/2,"
+                 " 4'4.5 or 4'-4-1/2\".")))
 
 ;; The RULER TIER an offset of OFFSET eighths from the current value
 ;; falls in -- 'jump for a whole inch, 'half/'quarter/'eighth for the
@@ -1343,7 +1361,7 @@
      (if (not (nth 7 state))
        (princ (strcat "\n  A ruler of " (if ladder "the usual" "nearby")
                       " lengths is beside the drawing: click a row to"
-                      " take it, or type a length (44, 44 1/2, 3'8).")))
+                      " take it, or type a length (44, 44-1/2, 3'8).")))
      (list len (nth 1 state) (car rr) (cadr rr) (caddr rr)
            (nth 5 state) (nth 6 state) T ladder))))
 
@@ -1469,6 +1487,7 @@
     (if lzd:report (lzd:report "CORNERSTP" *cs-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "CORNERSTP" *cs-version*))
+  (cs-fprune)
 
   ;; remove the most recently drawn step and roll the state back
   (defun cs-popstep ( / rec e)
@@ -1918,7 +1937,10 @@
                    (princ "\n  Stepping back one question.")   ; re-ask the wall
                    (progn
                      (if (cs-fhas 'benchstep) (setq bnk (cs-ftake 'benchstep)))
-                     (if (not (= (type bnk) 'INT))
+                     ;; a step number is a whole number from 1 up; a
+                     ;; sheet's 0 or -2 is asked for again, as the
+                     ;; getint below would have refused it
+                     (if (not (and (= (type bnk) 'INT) (> bnk 0)))
                        (progn
                          (initget 7 "Back Undo")
                          (setq bnk (getint (strcat "\nWhich step is the bench attached"
@@ -2794,7 +2816,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> HEMISTEP.lsp (v3.23) - verbatim from lisp/cornerstp/HEMISTEP.lsp
+;;; >>> HEMISTEP.lsp (v3.24) - verbatim from lisp/cornerstp/HEMISTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; HEMISTEP.lsp
@@ -3109,7 +3131,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.23") ; printed on load and at command start so a
+(setq *hs-version* "v3.24") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -3717,9 +3739,25 @@
 
 ;; The form's numeric answer for KEY, spent as it is read: the number
 ;; as a REAL (the way getdist hands one back), nil for anything else.
+;; Only a POSITIVE number is an answer -- every prompt this stands in
+;; for refuses zero and negatives, and a sheet must not talk the run
+;; into what the keyboard could not (a tread of -24 drew step 1
+;; outside the corner).  POOLSIDE's psd:fnum is the same rule.
 (defun hs-fnum (key / v)
   (setq v (hs-ftake key))
-  (if (numberp v) (* 1.0 v)))
+  (if (and (numberp v) (> v 0)) (* 1.0 v)))
+
+;; ...and such a number is taken OUT of the store before anything reads
+;; it, so the question it answered is ASKED rather than read as the nil
+;; hs-fnum would make of it -- nil is Enter, which ends a tread chain,
+;; and a sheet's typo is not the drafter saying "done" (STANDARDS 7.5:
+;; an invalid value falls through to the prompt).  Every number this
+;; form carries is a length or a count and every prompt behind one
+;; refuses zero and negatives, so the rule needs no list of keys.
+(defun hs-fprune ()
+  (setq *hs-form*
+        (vl-remove-if '(lambda (pr) (and (numberp (cdr pr)) (<= (cdr pr) 0)))
+                      *hs-form*)))
 
 ;; The key of a numbered question: (hs-fnkey "tread" 3) -> tread3.
 (defun hs-fnkey (stem i) (read (strcat stem (itoa i))))
@@ -3933,10 +3971,12 @@
 
 ;; What to say when something typed is not a length at all.  The
 ;; examples are the lazy spellings on purpose: the ones worth showing
-;; are the ones that save keystrokes.
+;; are the ones that save keystrokes.  A fraction is shown DASHED, never
+;; spaced: at a click-or-type prompt the spacebar is Enter, so 44 1/2
+;; entered 44 and handed the 1/2 to the next question as half an inch.
 (defun hs-len-unread (v)
-  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44 1/2,"
-                 " 4'4.5 or 4'-4 1/2\".")))
+  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44-1/2,"
+                 " 4'4.5 or 4'-4-1/2\".")))
 
 ;; The RULER TIER an offset of OFFSET eighths from the current value
 ;; falls in -- 'jump for a whole inch, 'half/'quarter/'eighth for the
@@ -4190,7 +4230,7 @@
      (if (not (nth 7 state))
        (princ (strcat "\n  A ruler of " (if ladder "the usual" "nearby")
                       " lengths is beside the drawing: click a row to"
-                      " take it, or type a length (44, 44 1/2, 3'8).")))
+                      " take it, or type a length (44, 44-1/2, 3'8).")))
      (list len (nth 1 state) (car rr) (cadr rr) (caddr rr)
            (nth 5 state) (nth 6 state) T ladder))))
 
@@ -4313,6 +4353,7 @@
     (if lzd:report (lzd:report "HEMISTEP" *hs-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "HEMISTEP" *hs-version*))
+  (hs-fprune)
 
   ;; remove the most recently drawn step and roll the state back
   (defun hs-popstep ( / e)
@@ -5337,7 +5378,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> NORMIESTEP.lsp (v3.18) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
+;;; >>> NORMIESTEP.lsp (v3.19) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; NORMIESTEP.lsp
@@ -5701,7 +5742,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.18") ; printed on load and at command start so a
+(setq *ns-version* "v3.19") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -6466,9 +6507,25 @@
 
 ;; The form's numeric answer for KEY, spent as it is read: the number
 ;; as a REAL (the way getdist hands one back), nil for anything else.
+;; Only a POSITIVE number is an answer -- every prompt this stands in
+;; for refuses zero and negatives, and a sheet must not talk the run
+;; into what the keyboard could not (a tread of -24 drew step 1
+;; outside the corner).  POOLSIDE's psd:fnum is the same rule.
 (defun ns-fnum (key / v)
   (setq v (ns-ftake key))
-  (if (numberp v) (* 1.0 v)))
+  (if (and (numberp v) (> v 0)) (* 1.0 v)))
+
+;; ...and such a number is taken OUT of the store before anything reads
+;; it, so the question it answered is ASKED rather than read as the nil
+;; ns-fnum would make of it -- nil is Enter, which ends a tread chain,
+;; and a sheet's typo is not the drafter saying "done" (STANDARDS 7.5:
+;; an invalid value falls through to the prompt).  Every number this
+;; form carries is a length or a count and every prompt behind one
+;; refuses zero and negatives, so the rule needs no list of keys.
+(defun ns-fprune ()
+  (setq *ns-form*
+        (vl-remove-if '(lambda (pr) (and (numberp (cdr pr)) (<= (cdr pr) 0)))
+                      *ns-form*)))
 
 ;; The key of a numbered question: (ns-fnkey "tread" 3) -> tread3.
 (defun ns-fnkey (stem i) (read (strcat stem (itoa i))))
@@ -6706,10 +6763,12 @@
 
 ;; What to say when something typed is not a length at all.  The
 ;; examples are the lazy spellings on purpose: the ones worth showing
-;; are the ones that save keystrokes.
+;; are the ones that save keystrokes.  A fraction is shown DASHED, never
+;; spaced: at a click-or-type prompt the spacebar is Enter, so 44 1/2
+;; entered 44 and handed the 1/2 to the next question as half an inch.
 (defun ns-len-unread (v)
-  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44 1/2,"
-                 " 4'4.5 or 4'-4 1/2\".")))
+  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44-1/2,"
+                 " 4'4.5 or 4'-4-1/2\".")))
 
 ;; The RULER TIER an offset of OFFSET eighths from the current value
 ;; falls in -- 'jump for a whole inch, 'half/'quarter/'eighth for the
@@ -6963,7 +7022,7 @@
      (if (not (nth 7 state))
        (princ (strcat "\n  A ruler of " (if ladder "the usual" "nearby")
                       " lengths is beside the drawing: click a row to"
-                      " take it, or type a length (44, 44 1/2, 3'8).")))
+                      " take it, or type a length (44, 44-1/2, 3'8).")))
      (list len (nth 1 state) (car rr) (cadr rr) (caddr rr)
            (nth 5 state) (nth 6 state) T ladder))))
 
@@ -7095,6 +7154,7 @@
     (if lzd:report (lzd:report "NORMIESTEP" *ns-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "NORMIESTEP" *ns-version*))
+  (ns-fprune)
 
   ;; remove the most recently drawn step and roll the state back
   ;; One corner-size prompt beside the LENGTH RULER: the same question

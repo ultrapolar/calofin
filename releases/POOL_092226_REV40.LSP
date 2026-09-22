@@ -124,7 +124,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092226 REV39")
+(setq pool:*version* "092226 REV40")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -1220,10 +1220,12 @@
 
 ;; What to say when something typed is not a length at all.  The
 ;; examples are the lazy spellings on purpose: the ones worth showing
-;; are the ones that save keystrokes.
+;; are the ones that save keystrokes.  A fraction is shown DASHED, never
+;; spaced: at a click-or-type prompt the spacebar is Enter, so 44 1/2
+;; entered 44 and handed the 1/2 to the next question as half an inch.
 (defun pool:len-unread (v)
-  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44 1/2,"
-                 " 4'4.5 or 4'-4 1/2\".")))
+  (princ (strcat "\n\"" v "\" is not a length - try 44, 44.5, 44-1/2,"
+                 " 4'4.5 or 4'-4-1/2\".")))
 
 ;; The RULER TIER an offset of OFFSET eighths from the current value
 ;; falls in -- 'jump for a whole inch, 'half/'quarter/'eighth for the
@@ -1477,7 +1479,7 @@
      (if (not (nth 7 state))
        (princ (strcat "\n  A ruler of " (if ladder "the usual" "nearby")
                       " lengths is beside the drawing: click a row to"
-                      " take it, or type a length (44, 44 1/2, 3'8).")))
+                      " take it, or type a length (44, 44-1/2, 3'8).")))
      (list len (nth 1 state) (car rr) (cadr rr) (caddr rr)
            (nth 5 state) (nth 6 state) T ladder))))
 
@@ -1745,6 +1747,17 @@
   (cdr p))
 
 (defun pool:fclear () (setq pool:*form* nil))
+
+;; Could V have been typed at a pool:asks prompt of this KIND?  The
+;; rules that prompt's initget puts on it: a number above zero, zero
+;; too on a ZER question, and nil -- NA -- only where NA is offered,
+;; which is never on a REQ or a SUGR.
+(defun pool:fok (kind v)
+  (cond
+    ((null v) (not (member kind '(REQ SUGR))))
+    ((not (numberp v)) nil)
+    ((eq kind 'ZER) (>= v 0))
+    (t (> v 0))))
 
 ;; The letter a prompt leads with, as a form key.  The depth questions
 ;; are asked through pool:askh, which carries no key of its own, but
@@ -2096,7 +2109,7 @@
   (setq ans (pool:askseqb items nil ink))
   ans)
 
-(defun pool:askseqb (items bk ink / ans i n it v dflt asked out kind sg)
+(defun pool:askseqb (items bk ink / ans i n it v fv dflt asked out kind sg)
   (setq ans nil i 0 n (length items) asked nil out nil)
   (while (and (< i n) (not out))
     (setq it (nth i items))
@@ -2126,8 +2139,13 @@
                                (t kind))))
           ;; the form answers first, and its answer is consumed --
           ;; see "form answers" above for why removing beats marking
-          (setq v (if (pool:fhas (car it))
-                      (pool:ftake (car it))
+          ;; -- and only an answer the prompt itself would have taken
+          ;; (STANDARDS 7.5).  Anything else is spent and then asked
+          ;; for properly: a sheet's NA on a Grecian's B reached
+          ;; pool:grecov as nil, and a B of 0 drew a pool of nothing.
+          (setq v (if (and (pool:fhas (car it))
+                           (pool:fok kind (setq fv (pool:ftake (car it)))))
+                      fv
                       (pool:asks kind (caddr it) (cadddr it) dflt
                                  (if (or asked bk) t nil) (nth 8 it))))
           (if (eq v 'POOL-BACK)
@@ -9349,12 +9367,14 @@
   (if (not pool:*sysold*)
       (setq pool:*sysold*
             (mapcar '(lambda (v) (cons v (getvar v)))
-                    '("OSMODE" "LUNITS" "CMDECHO" "CLAYER")))))
+                    '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"
+                      "AUNITS" "ANGBASE" "ANGDIR")))))
 
 (defun pool:sysrestore ( / v p)
   ;; OSMODE first -- object snaps are the setting the user misses most
   ;; if a cleanup is ever cut short partway
-  (foreach v '("OSMODE" "LUNITS" "CMDECHO" "CLAYER")
+  (foreach v '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"
+               "AUNITS" "ANGBASE" "ANGDIR")
     (setq p (assoc v pool:*sysold*))
     (if p (setvar v (cdr p))))
   (setq pool:*sysold* nil))
@@ -9416,6 +9436,14 @@
   ;; architectural units while prompting so every distance can be
   ;; typed as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
   (setvar "LUNITS" 4)
+  ;; ...and the angle three at their defaults: pool:dimrot TYPES its
+  ;; rotation into DIMLINEAR, and AutoCAD reads a typed angle through
+  ;; AUNITS, ANGBASE and ANGDIR -- in a surveyor's template (zero north,
+  ;; clockwise) a wall's rotated dimension came out square to the wall,
+  ;; reading the wrong number.  SQUAREUP zeroes the same three for ROTATE.
+  (setvar "AUNITS" 0)
+  (setvar "ANGBASE" 0.0)
+  (setvar "ANGDIR" 0)
   (princ "\nDistances may be typed as 25'6\", 25'-6-1/2\" or 25'6.5 (plain numbers = inches).")
 
   ;; The three questions in front of every measurement - in-square,

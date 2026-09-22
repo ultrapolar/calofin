@@ -70,7 +70,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v2.4")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v2.5")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -2865,36 +2865,45 @@
                                              (lh:cands-of
                                                (append dpts (mapcar 'car lh-omitted)))
                                              *LH-SNAP*))
-                           (setq w1 (car cand)
-                                 w2 (lh:nearest w1 (mapcar 'car lh-omitted)))
-                           (cond
-                             ((and w2 (< (cal:dist w1 w2) *LH-EXACT-EPS*))
-                              (setq ent        (assoc w2 lh-omitted)
-                                    pts        (append pts (cadr ent))
-                                    dpts       (cal:dedupe pts *LH-EXACT-EPS*)
-                                    lh-omitted (lh:remove ent lh-omitted)
-                                    omits      (lh:remove w2 omits))
-                              (if (and (caddr ent) (entget (caddr ent)))
-                                (progn
-                                  (lh:temp-drop (caddr ent))
-                                  (entdel (caddr ent))))
-                              (princ (strcat "  - Pt." (lh:pt-name w2)
-                                             " back in")))
-                             (w1
-                              (setq pts2 nil ent nil)
-                              (foreach w pts
-                                (if (< (cal:dist w w1) *LH-EXACT-EPS*)
-                                  (setq ent (cons w ent))
-                                  (setq pts2 (cons w pts2))))
-                              (setq pts  (reverse pts2)
-                                    dpts (cal:dedupe pts *LH-EXACT-EPS*)
-                                    ring (lh:temp-add (lh:tag-mine
-                                           (lh:draw-corner-marker w1)))
-                                    lh-omitted (cons (list w1 ent ring)
-                                                     lh-omitted)
-                                    omits      (cons w1 omits))
-                              (princ (strcat "  - omitting Pt."
-                                             (lh:pt-name w1))))))
+                           ;; the prompt offers no Back, but a typed one
+                           ;; still comes back CAL-BACK and died at (car
+                           ;; ...) -- refused where it stands, as the four
+                           ;; siblings' pf:omit-loop refuses it
+                           (if (eq cand 'CAL-BACK)
+                             (princ (strcat "\n  Nothing to go back to here - name a ringed"
+                                            " point again to put it back in, or press Enter"
+                                            " when the list is right."))
+                             (progn
+                               (setq w1 (car cand)
+                                     w2 (lh:nearest w1 (mapcar 'car lh-omitted)))
+                               (cond
+                                 ((and w2 (< (cal:dist w1 w2) *LH-EXACT-EPS*))
+                                  (setq ent        (assoc w2 lh-omitted)
+                                        pts        (append pts (cadr ent))
+                                        dpts       (cal:dedupe pts *LH-EXACT-EPS*)
+                                        lh-omitted (lh:remove ent lh-omitted)
+                                        omits      (lh:remove w2 omits))
+                                  (if (and (caddr ent) (entget (caddr ent)))
+                                    (progn
+                                      (lh:temp-drop (caddr ent))
+                                      (entdel (caddr ent))))
+                                  (princ (strcat "  - Pt." (lh:pt-name w2)
+                                                 " back in")))
+                                 (w1
+                                  (setq pts2 nil ent nil)
+                                  (foreach w pts
+                                    (if (< (cal:dist w w1) *LH-EXACT-EPS*)
+                                      (setq ent (cons w ent))
+                                      (setq pts2 (cons w pts2))))
+                                  (setq pts  (reverse pts2)
+                                        dpts (cal:dedupe pts *LH-EXACT-EPS*)
+                                        ring (lh:temp-add (lh:tag-mine
+                                               (lh:draw-corner-marker w1)))
+                                        lh-omitted (cons (list w1 ent ring)
+                                                         lh-omitted)
+                                        omits      (cons w1 omits))
+                                  (princ (strcat "  - omitting Pt."
+                                                 (lh:pt-name w1))))))))
                          (if omits
                            (progn
                              ;; declared stretches and corners anchored on

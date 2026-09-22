@@ -2057,13 +2057,15 @@ def hidevm(rc, click=None, val="1", stored="-"):
     accept, 0 cancel).
 
     STORED defaults to "-", lzp:*hidden-none*: a drafter who has been
-    here and hidden nothing.  It is NOT "" -- that is a store nobody
-    has written yet, and the panel reads it as a fresh install and
-    hides lzp:*hidden-default*.  The difference between those two is
-    the whole point of the sentinel, and the cases below are about
-    what ticking does, not about what a new install starts with."""
+    here and hidden nothing.  None is a store nobody has written yet --
+    vl-registry-read answers nil for a value that is not there -- and
+    the panel reads that as a fresh install and hides
+    lzp:*hidden-default*.  "" is neither: it is what builds before the
+    sentinel wrote for "none hidden", and it has to keep meaning that.
+    The cases below are about what ticking does, not about what a new
+    install starts with."""
     v = stubbed()
-    v.loads('(setq t:*reg* "%s")' % stored)
+    v.loads('(setq t:*reg* %s)' % ('nil' if stored is None else '"%s"' % stored))
     v.loads('(defun vl-registry-read (k n) t:*reg*)')
     v.loads('(defun vl-registry-write (k n s) (setq t:*reg* s) s)')
     v.loads("(setq stub:*rcs* '(%d))" % rc)
@@ -2127,7 +2129,7 @@ print("   un-ticking a hidden tool and accepting un-hides it")
 # THE SHIPPED SET.  A drafter who has never opened this dialog starts
 # with lzp:*hidden-default* out of sight -- the panel shows 94 tools
 # and most shops use a fraction of them.
-vm = hidevm(1, stored="")
+vm = hidevm(1, stored=None)
 vm.loads('(setq t:*d* (lzp:hidden-read))')
 shipped = [str(x) for x in vm.globals['t:*d*']]
 vm.loads('(setq t:*def* lzp:*hidden-default*)')
@@ -2138,9 +2140,19 @@ assert set(shipped) <= set(PANEL), \
         sorted(set(shipped) - set(PANEL)))
 print("   a store nobody has written yet starts on the shipped %d" % len(shipped))
 
+# ...but a store that is there and EMPTY is a decision, not silence:
+# every build before lzp:*hidden-none* wrote "" for "none hidden", and
+# reading it as a fresh install hid the shipped twelve from each of
+# those drafters on the first load of the new build
+vm = hidevm(1, stored="")
+vm.loads('(setq t:*g* (lzp:hidden-read))')
+assert not (vm.globals.get('t:*g*') or []), \
+    "a stored empty list came back as the shipped set: %r" % vm.globals.get('t:*g*')
+print("   an empty store written before the sentinel still means none")
+
 # ...and the moment they untick the lot, that is remembered as a
 # DECISION rather than read back as silence on the next load
-vm = hidevm(1, stored="")
+vm = hidevm(1, stored=None)
 vm.loads('(lzp:hidden-read) (setq lzp:*hidden* nil) (lzp:hidden-write)')
 assert str(vm.globals.get('t:*reg*')) == "-", vm.globals.get('t:*reg*')
 vm.loads('(setq t:*e* (lzp:hidden-read))')
@@ -2150,7 +2162,7 @@ print("   ...and unticking them all sticks: the shipped set does not return")
 
 # a name the shipped set carries that the roster has since lost is
 # dropped on read, the same rule a stored list already obeys
-vm = hidevm(1, stored="")
+vm = hidevm(1, stored=None)
 vm.loads('(setq lzp:*hidden-default* (list "SPA" "NOSUCHTOOL"))')
 vm.loads('(setq t:*f* (lzp:hidden-read))')
 assert [str(x) for x in vm.globals['t:*f*']] == ["SPA"], vm.globals['t:*f*']

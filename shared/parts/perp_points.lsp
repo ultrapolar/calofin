@@ -252,7 +252,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.22")
+(setq *perp-version* "v0.23")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -1326,6 +1326,11 @@
        (setq bnd 'RETRY)
        (while (eq bnd 'RETRY)
          (initget "None")
+         ;; ERRNO is STICKY: it holds whatever the last failing call
+         ;; left there, so it is cleared right before the pick it is read
+         ;; after -- or one earlier miss turned every later Enter into
+         ;; "Nothing there".  Wrapped as POINTRENAMER wraps it
+         (vl-catch-all-apply 'setvar (list "ERRNO" 0))
          (setq sel (entsel "\nSelect a boundary for the offsets [None] <None>: "))
          (if lzd:ask (lzd:ask "\nSelect a boundary for the offsets [None] <None>: " sel) sel)
          (if lzd:watch (lzd:watch sel) sel)

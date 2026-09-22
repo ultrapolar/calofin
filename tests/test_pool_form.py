@@ -408,6 +408,29 @@ for subject, expect in [
 print("   body/tip and mutt end families key; partial subjects still prompt")
 
 
+# --------------------------------------------------------------------
+# 12. A form answer the PROMPT would have refused is spent and then
+#     asked for at the keyboard (STANDARDS 7.5).  B is a REQ question:
+#     its initget takes no zero, no negative and no NA.  pool:askseqb
+#     used to store whatever the form sent -- a sheet's NA on a
+#     Grecian's B reached pool:grecov as nil and died "numberp: nil",
+#     and a 0 or -240 drew a pool of nothing with only an ADJUSTED
+#     note.  Now each is refused where it stands, so the same keyboard
+#     answer the typed run gave draws the same pool.
+# --------------------------------------------------------------------
+print("== 12. a form value the prompt would refuse is asked for again ==")
+
+for bad, label in (('0.0', 'zero'), ('-240.0', 'negative'),
+                   ('nil', 'NA on a REQ')):
+    m = by_form("'((b . %s))" % bad,
+                GREC_LEAD + ["Yes", "Cut", 24.0, "Square", "No"])
+    same(h, m, "grecian B = %s from the form" % label)
+    assert len(m.prompts) == len(h.prompts), \
+        "B = %s: the refused answer did not fall through to the prompt " \
+        "(%d prompts, typed run %d)" % (label, len(m.prompts), len(h.prompts))
+print("   zero, negative and NA on B each re-asked; the pool is the typed one")
+
+
 print("\nALL POOL FORM SCENARIOS PASSED")
 
 

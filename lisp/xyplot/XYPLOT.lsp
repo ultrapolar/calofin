@@ -55,7 +55,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.8")
+(setq *xyplot-version* "v1.9")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -463,29 +463,73 @@
       (xyp:report-fixes)
       (reverse rows))))
 
-(defun xyp:read-excel (file / xl created wbs wb sheet used rng nrows ncols
+;; How many workbooks the collection WBS holds; 0 when it cannot say.
+(defun xyp:xl-count (wbs / n)
+  (setq n (vl-catch-all-apply 'vlax-get-property (list wbs "Count")))
+  (if (= (type n) 'VARIANT) (setq n (vlax-variant-value n)))
+  (if (= (type n) 'INT) n 0))
+
+;; The workbook FILE already is in the Workbooks collection WBS, or nil.
+;; Compared by full path, case folded, the way Windows compares them.
+(defun xyp:xl-open-book (wbs file / n i wb nm out)
+  (setq n (xyp:xl-count wbs) i 1)
+  (while (and (null out) (<= i n))
+    (setq wb (vl-catch-all-apply 'vlax-get-property (list wbs "Item" i))
+          nm (if (not (vl-catch-all-error-p wb))
+               (vl-catch-all-apply 'vlax-get-property (list wb "FullName"))))
+    (if (= (type nm) 'VARIANT) (setq nm (vlax-variant-value nm)))
+    (if (and (= (type nm) 'STR) (= (strcase nm) (strcase file)))
+      (setq out wb))
+    (setq i (1+ i)))
+  out)
+
+(defun xyp:read-excel (file / xl created wasopen n0 wbs wb sheet used rng nrows ncols
                               r c up kind name-c x-c y-c rows nm err)
   ;; connect to an existing Excel, else start one.  Structure, error
   ;; handling and object release are ABCDEF's, which is the copy that has
   ;; survived contact with real machines.
+  ;; vlax-get-object answers nil, not an error, when no Excel is
+  ;; running -- so nil starts one too, or a machine with Excel closed
+  ;; could never import a sheet at all.
   (setq xl (vl-catch-all-apply 'vlax-get-object (list "Excel.Application")))
-  (if (vl-catch-all-error-p xl)
-    (progn (setq xl (vlax-create-object "Excel.Application") created T)))
+  (if (or (null xl) (vl-catch-all-error-p xl))
+    (setq xl (vl-catch-all-apply 'vlax-create-object (list "Excel.Application"))
+          created T))
   (if (or (null xl) (vl-catch-all-error-p xl))
     (progn (princ "\n** Could not start Excel (is it installed?).") nil)
     (progn
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)) '())
-      (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)) '())
+      ;; Only an Excel this command STARTED is hidden and silenced.  One
+      ;; the drafter already had open stays on their screen as they left
+      ;; it: hiding it left their whole Excel invisible after the run.
+      (if created
+        (progn
+          (vl-catch-all-apply '(lambda () (vlax-put-property xl "Visible" :vlax-false)) '())
+          (vl-catch-all-apply '(lambda () (vlax-put-property xl "DisplayAlerts" :vlax-false)) '())))
       (setq err (vl-catch-all-apply
                   '(lambda ()
                      (setq wbs (vlax-get-property xl "Workbooks"))
-                     (setq wb (vlax-invoke-method wbs "Open" file))
+                     ;; A sheet the drafter has open is read where it
+                     ;; stands, unsaved readings included, and left open:
+                     ;; Open hands back that same workbook, so closing
+                     ;; what it returned closed their window unsaved.
+                     (if (setq wb (xyp:xl-open-book wbs file))
+                       (setq wasopen T)
+                       (progn
+                         (setq n0 (xyp:xl-count wbs)
+                               wb (vlax-invoke-method wbs "Open" file))
+                         ;; a book open under another spelling of its path
+                         ;; (a mapped drive against its UNC name) is missed
+                         ;; above and handed back by Open all the same --
+                         ;; the count not moving is how that shows
+                         (if (= n0 (xyp:xl-count wbs)) (setq wasopen T))))
                      (setq sheet (vlax-get-property wb "ActiveSheet"))
                      (setq used (vlax-get-property sheet "UsedRange"))
                      ;; widen columns so "Text" is never truncated to ####
-                     (vl-catch-all-apply
-                       '(lambda () (vlax-invoke-method
-                                     (vlax-get-property used "Columns") "AutoFit")) '())
+                     ;; -- on our own copy only, never the drafter's
+                     (if (not wasopen)
+                       (vl-catch-all-apply
+                         '(lambda () (vlax-invoke-method
+                                       (vlax-get-property used "Columns") "AutoFit")) '()))
                      (setq nrows (vlax-get-property
                                    (vlax-get-property used "Rows") "Count"))
                      (setq ncols (vlax-get-property
@@ -494,6 +538,8 @@
         (progn
           (princ (strcat "\n** Could not open the spreadsheet: "
                          (vl-catch-all-error-message err)))
+          (if (and wb (not wasopen) (not created))
+            (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '()))
           (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
           nil)
         (progn
@@ -525,7 +571,8 @@
             (setq r (1+ r)))
           (xyp:report-fixes)
           ;; --- close up --------------------------------------------------
-          (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '())
+          (if (not wasopen)
+            (vl-catch-all-apply '(lambda () (vlax-invoke-method wb "Close" :vlax-false)) '()))
           (if created (vl-catch-all-apply '(lambda () (vlax-invoke-method xl "Quit")) '()))
           (vl-catch-all-apply '(lambda () (vlax-release-object wb)) '())
           (vl-catch-all-apply '(lambda () (vlax-release-object wbs)) '())
