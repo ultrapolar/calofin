@@ -24,9 +24,9 @@ lisp/bpcallout/BPCALLOUT.lsp|c:BPCALLOUT|\nClick a bad point (a ringed one un-ri
 lisp/cabhd/CABHD.lsp|cab:compare|\n Keep which fit - click one, or [1/2/3/All/None/Redo] < >:|the fit picker - Redo is its way back
 lisp/constellation/CONSTELLATION.lsp|cst:ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
 lisp/constellation/CONSTELLATION.lsp|cst:ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
-lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nAdd a side profile? [Yes/No] <Yes>:|past committed geometry
-lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nBead the steps? [Yes/No] <Yes>:|past committed geometry
-lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>:|first of the option chain; only the selection is in front of it
+lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nAdd a side profile? [Yes/No] < >:|past committed geometry
+lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nBead the steps? [Yes/No] < >:|past committed geometry
+lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nDraw steps from the inside out, or the outside in? [Inside/Outside] < >:|first of the option chain; only the selection is in front of it
 lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nPick the FIRST wall of the corner:|first of the two wall picks - the SECOND one backs into it
 lisp/cornerstp/CORNERSTP.lsp|c:CORNERSTP|\nStep - step width [Same] <Enter = fit to walls , Same = >:|part of the step the next tread prompt takes back
 lisp/cornerstp/CORNERSTP.lsp|c:TUTORIALCORNERSTP|\nDraw a demonstration in this drawing? [Yes/No] <Yes>:|demo / tutorial
@@ -34,10 +34,10 @@ lisp/cornerstp/CORNERSTP.lsp|c:TUTORIALCORNERSTP|\nPick a clear spot (about 250 
 lisp/cornerstp/CORNERSTP.lsp|cs-ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
 lisp/cornerstp/CORNERSTP.lsp|cs-ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/cornerstp/CORNERSTP.lsp|cs-tut-pause||demo / tutorial
-lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nAdd a side profile? [Yes/No] <Yes>:|past committed geometry
-lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nBead the steps? [Yes/No] <Yes>:|past committed geometry
-lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nDimension the steps? [Yes/No] <Yes>:|first question after the picks; only the selection is in front of it
-lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nDraw the reconstructed boundary through the step ends? [Yes/No] <Yes>:|past committed geometry
+lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nAdd a side profile? [Yes/No] < >:|past committed geometry
+lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nBead the steps? [Yes/No] < >:|past committed geometry
+lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nDimension the steps? [Yes/No] < >:|first question after the picks; only the selection is in front of it
+lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nDraw the reconstructed boundary through the step ends? [Yes/No] < >:|past committed geometry
 lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nPick a point on the side the steps go:|the only question in its branch; the selection is in front of it
 lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nPick the point on the curve to measure from:|the only question in its branch; the selection is in front of it
 lisp/cornerstp/HEMISTEP.lsp|c:HEMISTEP|\nStep - step width [Same] <Enter = fit to the curve , Same = >: <Enter = >: :|part of the step the next tread prompt takes back
@@ -46,9 +46,9 @@ lisp/cornerstp/HEMISTEP.lsp|c:TUTORIALHEMISTEP|\nPick a clear spot (about 300 x 
 lisp/cornerstp/HEMISTEP.lsp|hs-ask-len|\nSecond point of the length:|second half of a two-point pick - Enter drops it and the length prompt, with its Back, comes round again
 lisp/cornerstp/HEMISTEP.lsp|hs-ask-len||the length prompt: its keyword list is a runtime argument and DOES carry Back wherever the caller offers it (and Max, Same as the caller does)
 lisp/cornerstp/HEMISTEP.lsp|hs-tut-pause||demo / tutorial
-lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nAdd a side profile? [Yes/No] <Yes>:|past committed geometry
-lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nBead the steps? [Yes/No] <Yes>:|past committed geometry
-lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nDimension the steps? [Yes/No] <Yes>:|first question after the picks; only the selection is in front of it
+lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nAdd a side profile? [Yes/No] < >:|past committed geometry
+lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nBead the steps? [Yes/No] < >:|past committed geometry
+lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nDimension the steps? [Yes/No] < >:|first question after the picks; only the selection is in front of it
 lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nPick a point on the side the steps go:|the only question in its branch; the selection is in front of it
 lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nPick the line the steps run OFF OF:|the only question in its branch; the selection is in front of it
 lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\nStep width (the same for every step):|part of the step the next tread prompt takes back

@@ -2798,6 +2798,70 @@ assert events(vm).count('new') == 3, events(vm)
 assert 'list tune_tool' in events(vm), events(vm)
 print("   Defaults... in LAZSET opens it and comes back to the settings page")
 
+# ONE SHOP DECISION, ONE ACTION.  A lisp/ file may not read another
+# tool's global, so a rule several tools act on is several knobs --
+# the survey points' layer is *point-layer* in twelve files, the
+# concave pad cap is three.  Setting some and not the rest is how
+# COVERCHECK ends up suggesting pads PADDLE would not place, which is
+# the state the tree was actually in when the cap moved to 4'-0".
+kv2 = fresh()
+kv2.loads('(setq t:*kin* (lzp:knob-kin "*paddle-maxrad*"))')
+kin = sorted(str(x) for x in (kv2.globals.get('t:*kin*') or []))
+assert kin == ['*cchk-pad-maxrad*', '*mohamaddle-maxrad*'], kin
+kv2.loads('(setq t:*own* (lzp:knob-kin "pool:*half-ratio*"))')
+assert not (kv2.globals.get('t:*own*') or []), \
+    "a knob only POOL has was given a family: %r" % kv2.globals.get('t:*own*')
+print("   a rule several tools carry knows its own siblings; a lone knob has none")
+
+# every family agrees on its SHIPPED value -- that is what says the
+# members really are one decision and not a coincidence of naming, and
+# it is what makes one typed value legal for all of them
+kv2.loads('(setq t:*f* lzp:*knobfam*)')
+fams = kv2.globals['t:*f*']
+bad = []
+for g in fams:
+    lits = set()
+    for n in g[1]:
+        kv2.loads('(setq t:*e* (lzp:knob-entry "%s"))' % str(n))
+        e = kv2.globals.get('t:*e*')
+        assert e, "family %s names a knob that is not in the catalog: %s" % (str(g[0]), str(n))
+        lits.add(str(e[1]))
+    if len(lits) != 1:
+        bad.append((str(g[0]), sorted(lits)))
+assert not bad, "families whose members ship different values: %r" % bad[:3]
+print("   all %d families agree on the value they ship" % len(fams))
+
+# ...and one click queues it for every one of them, through the same
+# checks a typed value goes through
+vm = fresh()
+vm.loads('(defun vl-registry-write (k n s) s)')
+vm.loads('(setq lzp:*tunevals* nil lzp:*tunesel* "*paddle-maxrad*")')
+vm.loads('(lzp:tune-put "*paddle-maxrad*" "54.0")')
+vm.loads('(defun lzp:tune-refill () (princ))')
+vm.loads('(lzp:tune-all)')
+vm.loads('(setq t:*q* (mapcar (quote car) lzp:*tunevals*))')
+assert sorted(str(x) for x in vm.globals['t:*q*']) == \
+    ['*cchk-pad-maxrad*', '*mohamaddle-maxrad*', '*paddle-maxrad*'], vm.globals['t:*q*']
+vm.loads('(lzp:tune-write)')
+for k in ('*paddle-maxrad*', '*mohamaddle-maxrad*', '*cchk-pad-maxrad*'):
+    vm.loads('(setq t:*v* %s)' % k)
+    assert str(vm.globals.get('t:*v*')) == '54.0', \
+        "%s did not follow: %r" % (k, vm.globals.get('t:*v*'))
+print("   Set everywhere moves the pad cap in all three tools at once")
+
+# the button greys for a knob with no family, and the state line names
+# the tools for one that has
+vm = setvm([0])
+vm.loads('(setq lzp:*tunesel* "pool:*half-ratio*") (lzp:tune-state)')
+assert 'tune_all' in {str(x) for x in (vm.globals.get('stub:*disabled*') or [])}, \
+    "Set everywhere was live for a knob with no siblings"
+vm = setvm([0])
+vm.loads('(setq lzp:*tunesel* "*paddle-maxrad*") (lzp:tune-state)')
+assert 'tune_all' not in {str(x) for x in (vm.globals.get('stub:*disabled*') or [])}
+st = tile(vm, 'state')
+assert 'COVERCHECK' in st and 'MOHAMADDLE' in st, st
+print("   the line names the tools it would reach; the button greys when there are none")
+
 # LAZBACKUP carries the defaults: exported under [Knobs], read back
 # through the same checks LAZTUNE's own box makes
 bv = fresh()

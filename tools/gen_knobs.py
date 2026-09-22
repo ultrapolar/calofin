@@ -25,7 +25,9 @@ ever whole.
 """
 
 import argparse
+import collections
 import pathlib
+import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -46,6 +48,90 @@ LABELS = {"check_drawing": "CHECK",
 #: how much of a knob's explanation the list row carries.  The block's
 #: paragraph can run to several sentences; a DCL list row cannot.
 MEANING = 110
+
+
+#: Rules that ARE one decision under two spellings, so no naming rule
+#: could pair them.  COVERCHECK carries a PORTED COPY of PADDLE's
+#: concave-pad hunt and namespaces its knobs "pad-", so the cap, the
+#: pad size and the two angle tolerances read differently in the two
+#: files while being the same shop rule with the same shipped value --
+#: which is exactly the trio that had to be hand-edited in three files
+#: when the cap moved from 4'-6" to 4'-0".  Each entry is a JUDGEMENT
+#: that two names mean one thing; the shipped literals still have to
+#: agree before they are grouped, so a wrong entry here cannot quietly
+#: join two rules that hold different values.
+SAME = {"pad-maxrad": "maxrad",
+        "pad-size": "padsize",
+        "pad-cornertol": "cornertol",
+        "pad-arctol": "arctol"}
+
+
+def words_of(name):
+    """NAME's words, lower case, with the pfx: form's prefix off."""
+    s = name.strip("*").lower()
+    s = re.sub(r"^[a-z0-9]+:\*?", "", s)          # pfx:*name*
+    return [p for p in re.split(r"[-_]", s) if p]
+
+
+def toolword(names):
+    """The word every one of a file's knobs starts with, or None.
+
+    The tree spells a knob two ways -- abf:*point-layer*, where the
+    tool is the colon prefix, and *PADDLE-MAXRAD*, where it is the
+    first word of the name itself.  In the second, that word is the
+    tool and not the decision, and leaving it on makes *paddle-maxrad*
+    and *mohamaddle-maxrad* look like two rules when they are one."""
+    firsts = set()
+    for n in names:
+        w = words_of(n)
+        if len(w) < 2:                     # nothing left if we drop it
+            return None
+        firsts.add(w[0])
+    return firsts.pop() if len(firsts) == 1 else None
+
+
+def rule_of(name, drop=None):
+    """The words of NAME that say WHICH decision it is: the tool's own
+    prefix off the front, in whichever of the two spellings it used."""
+    w = words_of(name)
+    if drop and len(w) > 1 and w[0] == drop:
+        w = w[1:]
+    if not w:
+        return None
+    r = "-".join(w)
+    return SAME.get(r, r)
+
+
+def families(cat):
+    """[(rule, [name, ...])] -- one shop decision carried by more than
+    one tool, each under its own name.
+
+    A shop that puts its survey points on a layer of its own has to say
+    so in TWELVE tools, because every tool that reads those points
+    carries its own *point-layer*; the pad cap PADDLE, MOHAMADDLE and
+    COVERCHECK share is three.  Nothing about that is wrong -- a
+    lisp/ file is self-contained on purpose and may not read another
+    tool's global -- but it means one decision is twelve edits, and a
+    drafter who changes some and not the others gets two tools
+    disagreeing about the same drawing.  So LAZTUNE offers to set them
+    together, and this is the table it reads.
+
+    Same rule words AND the same shipped literal, in two or more FILES:
+    the shared value is what says these really are one decision rather
+    than a coincidence of naming."""
+    by = collections.defaultdict(list)
+    for relpath, ks in cat:
+        drop = toolword([n for n, _l, _w in ks])
+        for name, lit, _why in ks:
+            rule = rule_of(name, drop)
+            if rule:
+                by[(rule, lit)].append((relpath, name))
+    out = []
+    for (rule, _lit), members in sorted(by.items()):
+        if len(set(f for f, _ in members)) < 2:
+            continue
+        out.append((rule, [n for _, n in members]))
+    return out
 
 
 def lisp_str(s):
@@ -75,6 +161,17 @@ def region():
             out.append("     (%s %s %s)" % (lisp_str(name), lisp_str(lit),
                                             lisp_str(why)))
         out[-1] = out[-1] + ")"
+    out.append("   ))")
+    fams = families(knobs.catalog())
+    out.append("")
+    out.append(";; One shop decision, and every knob that spells it.  See")
+    out.append(";; tools/gen_knobs.py families() for what makes two knobs one")
+    out.append(";; decision; LAZTUNE's \"Set everywhere\" writes the lot.")
+    out.append("(setq lzp:*knobfam*")
+    out.append("  '(")
+    for rule, names in fams:
+        out.append("    (%s (%s))" % (lisp_str(rule),
+                                      " ".join(lisp_str(n) for n in names)))
     out.append("   ))")
     return "\n".join(out) + "\n"
 

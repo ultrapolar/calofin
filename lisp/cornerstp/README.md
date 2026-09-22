@@ -178,14 +178,24 @@ override):
 | `*cs-tread-ladder*` | `'(6.0 36.0 6.0)` | The rungs the FIRST step tread stands on, as (LOW HIGH STEP) in inches -- a tape of eighths has to be built round a last answer, and at the first tread there is none. From the second on the finer tape takes over. `nil` leaves that prompt with nothing beside it until the second answer |
 | `*cs-drop-ladder*` | `'(6.0 12.0 1.0)` | The same for the first step depth, in whole inches |
 | `*cs-corner-ladder*` | `'(3.0 24.0 3.0)` | NORMIESTEP only: the rungs its corner treatment's Radius, Cut face and Offset stand on -- 3" to 2'-0" by 3", the sizes a corner is built to. A run treats ONE corner, so there is never a second answer for a tape, and these stand from the first prompt |
+| `*cs-dims-default*` | `"Yes"` | What Enter answers at "Dimension the steps?". `"No"` makes a bare run the quick one and leaves the dims to be asked for by name |
+| `*cs-profile-default*` | `"Yes"` | What Enter answers at "Add a side profile?". `"No"` ends a run at the plan, so the step-depth questions behind it are reached only by typing `Yes` |
+| `*cs-bead-default*` | `"Yes"` | What Enter answers at "Bead the steps?". `"No"` suits a shop that runs `AUTOBEAD` itself once the drawing is finished |
+| `*cs-beadsides-default*` | `"All"` | What Enter answers at the side-wall question once beading is on: `"All"`, `"Some"` (which then asks which step numbers) or `"None"`, which beads the step faces and leaves the walls bare |
 
-One knob each of two of them keeps to itself:
+The knobs one file keeps to itself:
 
 | Variable | File | Default | Meaning |
 | --- | --- | --- | --- |
 | `*cs-chain-frac*` | CORNERSTP | `0.2` | The tread chain also clears this fraction of the first step's width, so a wide run does not run its chain through the steps; the larger of it and `*cs-dim-offset*` wins |
 | `*cs-parallel-tol*` | CORNERSTP | `1.0` | How close to parallel, in DEGREES, the two selected walls may be before the run says the corner it found is a long way off. It warns and carries on |
 | `*cs-join-fuzz*` | NORMIESTEP | `nil` | How far apart two ends may be and still count as JOINED when the parts of a U are chained -- what decides whether a hand-traced U reads as one outline or is refused as parts that do not connect; nil = four times the width tolerance |
+| `*cs-direction-default*` | CORNERSTP | `"Inside"` | Which way Enter draws the run: `"Inside"` starts at the corner and builds out toward the pool, `"Outside"` places the outermost step first and walks back in. Only what Enter answers moves -- both words stay on the prompt |
+| `*cs-measure-default*` | CORNERSTP | `"Middle"` | Where Enter measures the step treads from when a corner diagonal or fillet arc came in with the walls: `"Middle"` of that diagonal, or the `"True"` corner the two walls would meet at |
+| `*cs-treadmode-default*` | CORNERSTP | `"Parallel"` | Which way Enter runs the treads when a diagonal came in with the walls: `"Parallel"` to the diagonal, or square to the true corner -- the answer the outside-in prompt spells `Equidistant` and the inside-out one `True`, so either word sets the same thing whichever way the run goes |
+| `*cs-boundary-default*` | HEMISTEP | `"Yes"` | What Enter answers at "Draw the reconstructed boundary through the step ends?". `"No"` leaves the steps standing on their own and rebuilds no hemisphere through them |
+| `*cs-treat-default*` | NORMIESTEP | `"Square"` | What the FIRST corner-treatment question offers on Enter -- one of `"Square"`, `"Radius"`, `"Cut"` or `"NotGiven"`, in any case. A re-ask behind a size question still offers the answer before it, as it always has; this only decides where that chain starts |
+| `*cs-cut-given-default*` | NORMIESTEP | `"Offset"` | Which of a Cut corner's two sizes Enter asks for: the `"Offset"` back along each line, or the `"Cut"` face across them. Either gives the other, so this is the one the shop's order sheets quote |
 
 Deliberately not settings, in any of the three: the epsilons the
 geometry compares against, the temporary vectors a run previews itself
@@ -198,6 +208,17 @@ value it shipped with rather than failing mid-run, and
 `tests/test_steps_settings.py` holds the two copies of every default --
 the one the settings block sets and the one its reader falls back to --
 together.
+
+**What Enter answers.** The nine `...-default*` knobs above are the
+reply each prompt takes when you just press Enter -- the shop's habit,
+written down once instead of typed every run. Nothing else changes:
+the question still offers the same words in the same order. Each is
+read back through its file's own canonicaliser (`cs-kwcanon` /
+`hs-kwcanon` / `ns-kwcanon`), so any case will do -- `"no"`, `"NO"`
+and `"No"` all set the same thing -- and a word that is not one of the
+ones listed leaves the shipped default standing rather than reaching a
+keyword test unspelled. A drafter sets their own through `LAZTUNE`
+without editing this file.
 
 ## Notes & limitations
 

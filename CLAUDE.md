@@ -586,7 +586,15 @@ python3 tools/gen_knobs.py       # LAZTUNE's knob catalog (lzp:*knobs*
                                  # every tool's tunables block; a knob
                                  # added to a block is not on offer to
                                  # a drafter until this is re-run, and
-                                 # check_standards fails until it is
+                                 # check_standards fails until it is.
+                                 # It also writes lzp:*knobfam*: which
+                                 # knobs are ONE shop decision spelled
+                                 # in several tools (same name once the
+                                 # tool's prefix is off, same shipped
+                                 # value), so LAZTUNE's "Set everywhere"
+                                 # can move the survey-point layer in
+                                 # all twelve tools that carry it, or
+                                 # the pad cap in all three, at once
 make check                       # all of the above in one go
 ```
 

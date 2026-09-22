@@ -55970,10 +55970,46 @@
 (if (not (boundp '*cs-tread-ladder*)) (setq *cs-tread-ladder* '(6.0 36.0 6.0)))
 (if (not (boundp '*cs-drop-ladder*)) (setq *cs-drop-ladder* '(6.0 12.0 1.0)))
 
+;; CORNERSTP only.  Which way Enter draws the run: "Inside" starts at
+;; the corner and builds out toward the pool, "Outside" places the
+;; outermost step first and walks back in.  Only what Enter answers
+;; moves - both words stay on the prompt.
+(if (not (boundp '*cs-direction-default*)) (setq *cs-direction-default* "Inside"))
+
+;; CORNERSTP only.  Where Enter measures the step treads from when a
+;; corner diagonal or fillet arc came in with the walls: "Middle" of
+;; that diagonal, or the "True" corner the two walls would meet at.
+(if (not (boundp '*cs-measure-default*)) (setq *cs-measure-default* "Middle"))
+
+;; CORNERSTP only.  Which way Enter runs the treads when a diagonal
+;; came in with the walls: "Parallel" to the diagonal, or square to
+;; the true corner - the answer the outside-in prompt spells
+;; "Equidistant" and the inside-out one "True", so either word sets
+;; the same thing whichever way the run goes.
+(if (not (boundp '*cs-treadmode-default*)) (setq *cs-treadmode-default* "Parallel"))
+
+;; What Enter answers at "Dimension the steps?".  "No" makes a bare
+;; run the quick one and leaves the dims to be asked for by name.
+(if (not (boundp '*cs-dims-default*)) (setq *cs-dims-default* "Yes"))
+
+;; What Enter answers at "Add a side profile?".  "No" ends a run at
+;; the plan, so the step-depth questions behind it are reached only by
+;; typing Yes.
+(if (not (boundp '*cs-profile-default*)) (setq *cs-profile-default* "Yes"))
+
+;; What Enter answers at "Bead the steps?".  "No" suits a shop that
+;; runs AUTOBEAD itself once the drawing is finished.
+(if (not (boundp '*cs-bead-default*)) (setq *cs-bead-default* "Yes"))
+
+;; What Enter answers at the side-wall question once beading is on:
+;; "All", "Some" (which then asks which step numbers) or "None", which
+;; beads the step faces and leaves the walls bare.
+(if (not (boundp '*cs-beadsides-default*)) (setq *cs-beadsides-default* "All"))
+
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.9") ; printed on load and at command start so a
-                           ; stale APPLOADed copy is easy to spot
+(setq *cs-version* "v4.10") ; printed on load and at command start so a
+                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
 
@@ -56192,6 +56228,17 @@
 ;; A setting that has to be a number: V when it is one, DFLT when it is
 ;; not.
 (defun cs-num (v dflt) (if (numberp v) v dflt))
+
+;; A setting that has to be one of a prompt's KEYWORDS: the canonical
+;; spelling S stands for, in any case, or nil for anything that is not
+;; one of them, so the caller can fall back to the word it ships with.
+;; cs-fkw and a bare Enter both hand a default straight back unchecked,
+;; and "outside" set in acaddoc.lsp must not reach a (= key "Outside")
+;; test unspelled.
+(defun cs-kwcanon (s kws / u out w)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w kws (if (= u (strcase w)) (setq out w)))
+  out)
 
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
@@ -56556,7 +56603,7 @@
                        bns bnfar bnff bnl
                        tlist tvals tds drops pd ix ppt pw
                        px py totr totd cnrs ca cb pfo pgap fsteps fkey
-                       qstep qdir bstep lastwid rl rr)
+                       qstep qdir bstep lastwid rl rr dflt)
 
   (defun *error* (msg)
     (cs-fclear)                     ; both exits clear the form store
@@ -56810,11 +56857,15 @@
       ;; explanation lives in the question text.  This is the first
       ;; question of the command, so it offers no Back.
       ((= qstep 1)
-       (if (null (setq key (cs-fkw 'direction "Inside Outside" "Inside")))
+       (setq dflt (or (cs-kwcanon *cs-direction-default*
+                                  '("Inside" "Outside"))
+                      "Inside"))
+       (if (null (setq key (cs-fkw 'direction "Inside Outside" dflt)))
          (progn
            (initget "Inside Outside")
-           (setq key (getkword "\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>: "))
-           (if lzd:ask (lzd:ask "\nDraw steps from the inside out, or the outside in? [Inside/Outside] <Inside>: " key) key)))
+           (setq key (getkword (strcat "\nDraw steps from the inside out, or the outside in? [Inside/Outside] <" dflt ">: ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") key) key)
+           (if (null key) (setq key dflt))))
        (setq outflag (= key "Outside")
              qstep   2
              qdir    1))
@@ -56823,12 +56874,16 @@
       ((= qstep 2)
        (if (and mid (not outflag))
          (progn
-           (if (null (setq key (cs-fkw 'measure "Middle True" "Middle")))
+           (setq dflt (or (cs-kwcanon *cs-measure-default*
+                                      '("Middle" "True"))
+                          "Middle"))
+           (if (null (setq key (cs-fkw 'measure "Middle True" dflt)))
              (progn
                (initget "Middle True Back Undo")
-               (setq key (getkword
-                 "\nMeasure step treads from the middle of the diagonal, or the true corner? [Middle/True/Back] <Middle>: "))
-               (if lzd:ask (lzd:ask "\nMeasure step treads from the middle of the diagonal, or the true corner? [Middle/True/Back] <Middle>: " key) key)))
+               (setq key (getkword (strcat
+                 "\nMeasure step treads from the middle of the diagonal, or the true corner? [Middle/True/Back] <" dflt ">: ")))
+               (if lzd:ask (lzd:ask (getvar "LASTPROMPT") key) key)
+               (if (null key) (setq key dflt))))
            (if (member key '("Back" "Undo"))
              (progn (princ "\n  Stepping back one question.")
                     (setq qstep 1 qdir -1))
@@ -56855,23 +56910,37 @@
        (if diag
          (progn
            ;; one key answers whichever pair this run offers; a word the
-           ;; live prompt does not list falls through to the prompt
+           ;; live prompt does not list falls through to the prompt.
+           ;; The knob behind it is ONE setting under two spellings --
+           ;; outside-in calls the answer that is not Parallel
+           ;; "Equidistant" and inside-out calls it "True" -- so it is
+           ;; read once here and then spelled for whichever of the two
+           ;; prompts this run puts up
+           (setq dflt (if (= "Parallel"
+                             (or (cs-kwcanon *cs-treadmode-default*
+                                             '("Parallel" "True"
+                                               "Equidistant"))
+                                 "Parallel"))
+                        "Parallel"
+                        (if outflag "Equidistant" "True")))
            (if (null (setq key (cs-fkw 'treadmode
                                        (if outflag "Parallel Equidistant"
                                                    "Parallel True")
-                                       "Parallel")))
+                                       dflt)))
              (if outflag
                (progn
                  (initget "Parallel Equidistant Back Undo")
                  (setq key (getkword (strcat
                    "\nSteps parallel to the diagonal, or equidistant"
-                   " from the true corner? [Parallel/Equidistant/Back] <Parallel>: ")))
-                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") key) key))
+                   " from the true corner? [Parallel/Equidistant/Back] <" dflt ">: ")))
+                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") key) key)
+                 (if (null key) (setq key dflt)))
                (progn
                  (initget "Parallel True Back Undo")
-                 (setq key (getkword
-                   "\nTreads parallel to the diagonal, or at the true angle? [Parallel/True/Back] <Parallel>: "))
-                 (if lzd:ask (lzd:ask "\nTreads parallel to the diagonal, or at the true angle? [Parallel/True/Back] <Parallel>: " key) key))))
+                 (setq key (getkword (strcat
+                   "\nTreads parallel to the diagonal, or at the true angle? [Parallel/True/Back] <" dflt ">: ")))
+                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") key) key)
+                 (if (null key) (setq key dflt)))))
            (if (member key '("Back" "Undo"))
              (progn (princ "\n  Stepping back one question.")
                     (setq qstep 2 qdir -1))
@@ -56922,11 +56991,13 @@
 
       ;; -- 7. dimension the steps? ------------------------------------
       ((= qstep 4)
-       (if (null (setq fkey (cs-fkw 'dims "Yes No" "Yes")))
+       (setq dflt (or (cs-kwcanon *cs-dims-default* '("Yes" "No")) "Yes"))
+       (if (null (setq fkey (cs-fkw 'dims "Yes No" dflt)))
          (progn
            (initget "Yes No Back Undo")
-           (setq fkey (getkword "\nDimension the steps? [Yes/No/Back] <Yes>: "))
-           (if lzd:ask (lzd:ask "\nDimension the steps? [Yes/No/Back] <Yes>: " fkey) fkey)))
+           (setq fkey (getkword (strcat "\nDimension the steps? [Yes/No/Back] <" dflt ">: ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+           (if (null fkey) (setq fkey dflt))))
        (if (member fkey '("Back" "Undo"))
          (progn (princ "\n  Stepping back one question.")
                 (setq qstep 3 qdir -1))
@@ -57367,11 +57438,13 @@
   ;; style is restored - the profile places its own dims.
   (if (> drawn 0)
     (progn
-      (if (null (setq fkey (cs-fkw 'profile "Yes No" "Yes")))
+      (setq dflt (or (cs-kwcanon *cs-profile-default* '("Yes" "No")) "Yes"))
+      (if (null (setq fkey (cs-fkw 'profile "Yes No" dflt)))
         (progn
           (initget "Yes No")
-          (setq fkey (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))
-          (if lzd:ask (lzd:ask "\nAdd a side profile? [Yes/No] <Yes>: " fkey) fkey)))
+          (setq fkey (getkword (strcat "\nAdd a side profile? [Yes/No] <" dflt ">: ")))
+          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+          (if (null fkey) (setq fkey dflt))))
       (if (/= "No" fkey)
         (progn
           ;; treads, top step first: sort the axis distances ascending
@@ -57555,11 +57628,14 @@
         (while (<= bstep 4)
           (cond
             ((= bstep 1)
-             (if (null (setq fkey (cs-fkw 'bead "Yes No" "Yes")))
+             (setq dflt (or (cs-kwcanon *cs-bead-default* '("Yes" "No"))
+                            "Yes"))
+             (if (null (setq fkey (cs-fkw 'bead "Yes No" dflt)))
                (progn
                  (initget "Yes No")
-                 (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))
-                 (if lzd:ask (lzd:ask "\nBead the steps? [Yes/No] <Yes>: " fkey) fkey)))
+                 (setq fkey (getkword (strcat "\nBead the steps? [Yes/No] <" dflt ">: ")))
+                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+                 (if (null fkey) (setq fkey dflt))))
              (setq bstep (if (/= "No" fkey) 2 5)))
             ((= bstep 2)
              (setq btreads (cs-treadents slog)
@@ -57575,16 +57651,19 @@
                  ;; not reachable from a form answer -- there is no
                  ;; prompt to step back from, and the question above it
                  ;; came off the same sheet
+                 (setq dflt (or (cs-kwcanon *cs-beadsides-default*
+                                            '("All" "Some" "None"))
+                                "All"))
                  (if (null (setq bside (cs-fkw 'beadsides
-                                               "All Some None" "All")))
+                                               "All Some None" dflt)))
                    (progn
                      (initget "All Some None Back Undo")
                      (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
                                           (getkword (strcat "\nWhich steps have"
                                                             " beaded side walls?"
                                                             " [All/Some/None/Back]"
-                                                            " <All>: "))))
-                                       ("All")))))
+                                                            " <" dflt ">: "))))
+                                       (dflt)))))
                  (if (member bside '("Back" "Undo"))
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 1))
@@ -58159,9 +58238,32 @@
 (if (not (boundp '*cs-tread-ladder*)) (setq *cs-tread-ladder* '(6.0 36.0 6.0)))
 (if (not (boundp '*cs-drop-ladder*)) (setq *cs-drop-ladder* '(6.0 12.0 1.0)))
 
+;; What Enter answers at "Dimension the steps?".  "No" makes a bare
+;; run the quick one and leaves the dims to be asked for by name.
+(if (not (boundp '*cs-dims-default*)) (setq *cs-dims-default* "Yes"))
+
+;; HEMISTEP only.  What Enter answers at "Draw the reconstructed
+;; boundary through the step ends?".  "No" leaves the steps standing
+;; on their own and rebuilds no hemisphere through them.
+(if (not (boundp '*cs-boundary-default*)) (setq *cs-boundary-default* "Yes"))
+
+;; What Enter answers at "Add a side profile?".  "No" ends a run at
+;; the plan, so the step-depth questions behind it are reached only by
+;; typing Yes.
+(if (not (boundp '*cs-profile-default*)) (setq *cs-profile-default* "Yes"))
+
+;; What Enter answers at "Bead the steps?".  "No" suits a shop that
+;; runs AUTOBEAD itself once the drawing is finished.
+(if (not (boundp '*cs-bead-default*)) (setq *cs-bead-default* "Yes"))
+
+;; What Enter answers at the side-wall question once beading is on:
+;; "All", "Some" (which then asks which step numbers) or "None", which
+;; beads the step faces and leaves the walls bare.
+(if (not (boundp '*cs-beadsides-default*)) (setq *cs-beadsides-default* "All"))
+
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.20") ; printed on load and at command start so a
+(setq *hs-version* "v3.21") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -58543,6 +58645,17 @@
 ;; not.
 (defun hs-num (v dflt) (if (numberp v) v dflt))
 
+;; A setting that has to be one of a prompt's KEYWORDS: the canonical
+;; spelling S stands for, in any case, or nil for anything that is not
+;; one of them, so the caller can fall back to the word it ships with.
+;; hs-fkw and a bare Enter both hand a default straight back unchecked,
+;; and "no" set in acaddoc.lsp must not reach a (/= "No" fkey) test
+;; unspelled.
+(defun hs-kwcanon (s kws / u out w)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w kws (if (= u (strcase w)) (setq out w)))
+  out)
+
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
 ;; a string where a value would be a list or a number.
@@ -58850,7 +58963,7 @@
                       wallA wallB lastwid kx fx
                       tlist srt treads pv drops dd jx tcount ptop
                       px py totrun totdrop td cnrs pfo pgap fsteps fkey
-                      wnoun bstep s hstep rl rr)
+                      wnoun bstep s hstep rl rr dflt)
 
   (defun *error* (msg)
     (hs-fclear)                     ; both exits clear the form store
@@ -59091,11 +59204,13 @@
   (while (<= hstep 2)
     (cond
       ((= hstep 1)
-       (if (null (setq fkey (hs-fkw 'dims "Yes No" "Yes")))
+       (setq dflt (or (hs-kwcanon *cs-dims-default* '("Yes" "No")) "Yes"))
+       (if (null (setq fkey (hs-fkw 'dims "Yes No" dflt)))
          (progn
            (initget "Yes No")
-           (setq fkey (getkword "\nDimension the steps? [Yes/No] <Yes>: "))
-           (if lzd:ask (lzd:ask "\nDimension the steps? [Yes/No] <Yes>: " fkey) fkey)))
+           (setq fkey (getkword (strcat "\nDimension the steps? [Yes/No] <" dflt ">: ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+           (if (null fkey) (setq fkey dflt))))
        (setq dimflag (/= "No" fkey))
        (if dimflag
          (progn
@@ -59351,13 +59466,16 @@
                 kx  (if crown
                       (+ (length ea) (if wallA 1 0)))))
         (progn
-          (if (null (setq fkey (hs-fkw 'boundary "Yes No" "Yes")))
+          (setq dflt (or (hs-kwcanon *cs-boundary-default* '("Yes" "No"))
+                         "Yes"))
+          (if (null (setq fkey (hs-fkw 'boundary "Yes No" dflt)))
             (progn
               (initget "Yes No")
               (setq fkey (getkword (strcat "\nDraw the reconstructed boundary"
                                            " through the step ends? [Yes/No]"
-                                           " <Yes>: ")))
-              (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)))
+                                           " <" dflt ">: ")))
+              (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+              (if (null fkey) (setq fkey dflt))))
           (if (/= "No" fkey)
             ;; Deepest step - side A - across the first step - side B.
             ;; The start point is NOT made a vertex: near the crown the
@@ -59394,11 +59512,13 @@
       ;; what the run starts at, and so what the flight starts at: the
       ;; wall in base-line mode, the curve itself in the curve modes
       (setq wnoun (if cmode "the curve" "the wall"))
-      (if (null (setq fkey (hs-fkw 'profile "Yes No" "Yes")))
+      (setq dflt (or (hs-kwcanon *cs-profile-default* '("Yes" "No")) "Yes"))
+      (if (null (setq fkey (hs-fkw 'profile "Yes No" dflt)))
         (progn
           (initget "Yes No")
-          (setq fkey (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))
-          (if lzd:ask (lzd:ask "\nAdd a side profile? [Yes/No] <Yes>: " fkey) fkey)))
+          (setq fkey (getkword (strcat "\nAdd a side profile? [Yes/No] <" dflt ">: ")))
+          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+          (if (null fkey) (setq fkey dflt))))
       (if (/= "No" fkey)
         (progn
           ;; step treads, top step first: sort the logged axis distances
@@ -59580,11 +59700,14 @@
         (while (<= bstep 4)
           (cond
             ((= bstep 1)
-             (if (null (setq fkey (hs-fkw 'bead "Yes No" "Yes")))
+             (setq dflt (or (hs-kwcanon *cs-bead-default* '("Yes" "No"))
+                            "Yes"))
+             (if (null (setq fkey (hs-fkw 'bead "Yes No" dflt)))
                (progn
                  (initget "Yes No")
-                 (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))
-                 (if lzd:ask (lzd:ask "\nBead the steps? [Yes/No] <Yes>: " fkey) fkey)))
+                 (setq fkey (getkword (strcat "\nBead the steps? [Yes/No] <" dflt ">: ")))
+                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+                 (if (null fkey) (setq fkey dflt))))
              (setq bstep (if (/= "No" fkey) 2 5)))
             ((= bstep 2)
              (setq btreads (hs-treadents slog)
@@ -59599,16 +59722,19 @@
                  ;; not reachable from a form answer -- there is no
                  ;; prompt to step back from, and the question above it
                  ;; came off the same sheet
+                 (setq dflt (or (hs-kwcanon *cs-beadsides-default*
+                                            '("All" "Some" "None"))
+                                "All"))
                  (if (null (setq bside (hs-fkw 'beadsides
-                                               "All Some None" "All")))
+                                               "All Some None" dflt)))
                    (progn
                      (initget "All Some None Back Undo")
                      (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
                                           (getkword (strcat "\nWhich steps have"
                                                             " beaded side walls?"
                                                             " [All/Some/None/Back]"
-                                                            " <All>: "))))
-                                       ("All")))))
+                                                            " <" dflt ">: "))))
+                                       (dflt)))))
                  (if (member bside '("Back" "Undo"))
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 1))
@@ -60215,9 +60341,40 @@
 (if (not (boundp '*cs-corner-ladder*))
   (setq *cs-corner-ladder* '(3.0 24.0 3.0)))
 
+;; NORMIESTEP only.  What the FIRST corner-treatment question offers
+;; on Enter - one of "Square", "Radius", "Cut" or "NotGiven", in any
+;; case.  A re-ask behind a size question still offers the answer
+;; before it, as it always has; this only decides where that chain
+;; starts.
+(if (not (boundp '*cs-treat-default*)) (setq *cs-treat-default* "Square"))
+
+;; NORMIESTEP only.  Which of a Cut corner's two sizes Enter asks for:
+;; the "Offset" back along each line, or the "Cut" face across them.
+;; Either gives the other, so this is the one the shop's order sheets
+;; quote.
+(if (not (boundp '*cs-cut-given-default*)) (setq *cs-cut-given-default* "Offset"))
+
+;; What Enter answers at "Dimension the steps?".  "No" makes a bare
+;; run the quick one and leaves the dims to be asked for by name.
+(if (not (boundp '*cs-dims-default*)) (setq *cs-dims-default* "Yes"))
+
+;; What Enter answers at "Add a side profile?".  "No" ends a run at
+;; the plan, so the step-depth questions behind it are reached only by
+;; typing Yes.
+(if (not (boundp '*cs-profile-default*)) (setq *cs-profile-default* "Yes"))
+
+;; What Enter answers at "Bead the steps?".  "No" suits a shop that
+;; runs AUTOBEAD itself once the drawing is finished.
+(if (not (boundp '*cs-bead-default*)) (setq *cs-bead-default* "Yes"))
+
+;; What Enter answers at the side-wall question once beading is on:
+;; "All", "Some" (which then asks which step numbers) or "None", which
+;; beads the step faces and leaves the walls bare.
+(if (not (boundp '*cs-beadsides-default*)) (setq *cs-beadsides-default* "All"))
+
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.15") ; printed on load and at command start so a
+(setq *ns-version* "v3.16") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -60536,6 +60693,17 @@
 ;; A setting that has to be a number: V when it is one, DFLT when it is
 ;; not.
 (defun ns-num (v dflt) (if (numberp v) v dflt))
+
+;; A setting that has to be one of a prompt's KEYWORDS: the canonical
+;; spelling S stands for, in any case, or nil for anything that is not
+;; one of them, so the caller can fall back to the word it ships with.
+;; ns-fkw, ns-askkw and a bare Enter all hand a default straight back
+;; unchecked, and "radius" set in acaddoc.lsp must not reach the
+;; corner table unspelled.
+(defun ns-kwcanon (s kws / u out w)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w kws (if (= u (strcase w)) (setq out w)))
+  out)
 
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
@@ -61057,7 +61225,7 @@
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt totrun totdrop px0 cx cy
                         tt cnrs ca cb pfo pgap lastinn fsteps fkey
-                        bstep rredo rl rr szv)
+                        bstep rredo rl rr szv dflt)
 
   (defun *error* (msg)
     (ns-fclear)                     ; both exits clear the form store
@@ -61372,10 +61540,17 @@
       (setq rtype nil)
       (progn
         ;; the subject reads like prose, as STANDARDS.md section 2 has it
+        ;; the chain reads the knob only here: a re-ask below offers
+        ;; the answer before it, the way it always has
         (setq rsubj (if (= mode "LINE")
                       "the corners of the last step"
                       "the back corners")
-              rtype (ns-ftreat rsubj "Square" (/= mode "U")))
+              rtype (ns-ftreat rsubj
+                               (or (ns-kwcanon *cs-treat-default*
+                                               '("Square" "Radius"
+                                                 "Cut" "NotGiven"))
+                                   "Square")
+                               (/= mode "U")))
         (if (eq rtype 'CAL-BACK)
           (setq wid nil rtype nil treatback T)))))
 
@@ -61420,13 +61595,17 @@
          ;; the offset and the cut face are the two legs and the
          ;; hypotenuse of the same 45 degree triangle, so either one
          ;; gives the other; cutgiven says which one treat-sz is
-         (if (null (setq fkey (ns-fkw 'cutgiven "Offset Cut" "Offset")))
+         (setq dflt (or (ns-kwcanon *cs-cut-given-default*
+                                    '("Offset" "Cut"))
+                        "Offset"))
+         (if (null (setq fkey (ns-fkw 'cutgiven "Offset Cut" dflt)))
            (progn
              (initget "Offset Cut Back Undo")
              (setq fkey (getkword
                           (strcat "\nIs the cut given as its"
-                                  " [Offset/Cut/Back] <Offset>: ")))
-             (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)))
+                                  " [Offset/Cut/Back] <" dflt ">: ")))
+             (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+             (if (null fkey) (setq fkey dflt))))
          (if (member fkey '("Back" "Undo"))
            (progn (princ "\n  Stepping back one question.")
                   (setq rtype (ns-ftreat rsubj rtype nil)
@@ -61477,11 +61656,13 @@
               (setq bc1 nil bc2 nil rtype "Square")))))))
 
   ;; ---- 4. dimension the steps? -----------------------------------------
-  (if (null (setq fkey (ns-fkw 'dims "Yes No" "Yes")))
+  (setq dflt (or (ns-kwcanon *cs-dims-default* '("Yes" "No")) "Yes"))
+  (if (null (setq fkey (ns-fkw 'dims "Yes No" dflt)))
     (progn
       (initget "Yes No")
-      (setq fkey (getkword "\nDimension the steps? [Yes/No] <Yes>: "))
-      (if lzd:ask (lzd:ask "\nDimension the steps? [Yes/No] <Yes>: " fkey) fkey)))
+      (setq fkey (getkword (strcat "\nDimension the steps? [Yes/No] <" dflt ">: ")))
+      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+      (if (null fkey) (setq fkey dflt))))
   (setq dimflag (/= "No" fkey))
   (if dimflag
     (progn
@@ -61773,11 +61954,13 @@
   ;; the depth dim style like the tread chain.
   (if (> drawn 0)
     (progn
-      (if (null (setq fkey (ns-fkw 'profile "Yes No" "Yes")))
+      (setq dflt (or (ns-kwcanon *cs-profile-default* '("Yes" "No")) "Yes"))
+      (if (null (setq fkey (ns-fkw 'profile "Yes No" dflt)))
         (progn
           (initget "Yes No")
-          (setq fkey (getkword "\nAdd a side profile? [Yes/No] <Yes>: "))
-          (if lzd:ask (lzd:ask "\nAdd a side profile? [Yes/No] <Yes>: " fkey) fkey)))
+          (setq fkey (getkword (strcat "\nAdd a side profile? [Yes/No] <" dflt ">: ")))
+          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+          (if (null fkey) (setq fkey dflt))))
       (if (/= "No" fkey)
         (progn
           ;; the treads, top step first: sort the recorded distances
@@ -61956,11 +62139,14 @@
         (while (<= bstep 4)
           (cond
             ((= bstep 1)
-             (if (null (setq fkey (ns-fkw 'bead "Yes No" "Yes")))
+             (setq dflt (or (ns-kwcanon *cs-bead-default* '("Yes" "No"))
+                            "Yes"))
+             (if (null (setq fkey (ns-fkw 'bead "Yes No" dflt)))
                (progn
                  (initget "Yes No")
-                 (setq fkey (getkword "\nBead the steps? [Yes/No] <Yes>: "))
-                 (if lzd:ask (lzd:ask "\nBead the steps? [Yes/No] <Yes>: " fkey) fkey)))
+                 (setq fkey (getkword (strcat "\nBead the steps? [Yes/No] <" dflt ">: ")))
+                 (if lzd:ask (lzd:ask (getvar "LASTPROMPT") fkey) fkey)
+                 (if (null fkey) (setq fkey dflt))))
              (setq bstep (if (/= "No" fkey) 2 5)))
             ((= bstep 2)
              (setq btreads (ns-treadents slog)
@@ -61975,16 +62161,19 @@
                  ;; not reachable from a form answer -- there is no
                  ;; prompt to step back from, and the question above it
                  ;; came off the same sheet
+                 (setq dflt (or (ns-kwcanon *cs-beadsides-default*
+                                            '("All" "Some" "None"))
+                                "All"))
                  (if (null (setq bside (ns-fkw 'beadsides
-                                               "All Some None" "All")))
+                                               "All Some None" dflt)))
                    (progn
                      (initget "All Some None Back Undo")
                      (setq bside (cond (((lambda (v) (if lzd:ask (lzd:ask (getvar "LASTPROMPT") v) v))
                                           (getkword (strcat "\nWhich steps have"
                                                             " beaded side walls?"
                                                             " [All/Some/None/Back]"
-                                                            " <All>: "))))
-                                       ("All")))))
+                                                            " <" dflt ">: "))))
+                                       (dflt)))))
                  (if (member bside '("Back" "Undo"))
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 1))
@@ -120897,7 +121086,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.56")
+(setq *lazpanel-version* "v3.57")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -125410,12 +125599,23 @@
      ("*cs-ruler-ring-frac*" "0.26" "")
      ("*cs-ruler-reach*" "6.0" "How far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
      ("*cs-tread-ladder*" "'(6.0 36.0 6.0)" "The two LADDERS those prompts stand on before there is a last answer to build a tape round -- and beside it...")
-     ("*cs-drop-ladder*" "'(6.0 12.0 1.0)" ""))
+     ("*cs-drop-ladder*" "'(6.0 12.0 1.0)" "")
+     ("*cs-direction-default*" "\"Inside\"" "CORNERSTP only. Which way Enter draws the run: \"Inside\" starts at the corner and builds out toward the pool...")
+     ("*cs-measure-default*" "\"Middle\"" "CORNERSTP only. Where Enter measures the step treads from when a corner diagonal or fillet arc came in with...")
+     ("*cs-treadmode-default*" "\"Parallel\"" "CORNERSTP only. Which way Enter runs the treads when a diagonal came in with the walls: \"Parallel\" to the d...")
+     ("*cs-dims-default*" "\"Yes\"" "What Enter answers at \"Dimension the steps?\". \"No\" makes a bare run the quick one and leaves the dims to be...")
+     ("*cs-profile-default*" "\"Yes\"" "What Enter answers at \"Add a side profile?\". \"No\" ends a run at the plan, so the step-depth questions behin...")
+     ("*cs-bead-default*" "\"Yes\"" "What Enter answers at \"Bead the steps?\". \"No\" suits a shop that runs AUTOBEAD itself once the drawing is fi...")
+     ("*cs-beadsides-default*" "\"All\"" "What Enter answers at the side-wall question once beading is on: \"All\", \"Some\" (which then asks which step..."))
+    ("HEMISTEP" "lisp/cornerstp/HEMISTEP.lsp"
+     ("*cs-boundary-default*" "\"Yes\"" "HEMISTEP only. What Enter answers at \"Draw the reconstructed boundary through the step ends?\". \"No\" leaves..."))
     ("NORMIESTEP" "lisp/cornerstp/NORMIESTEP.lsp"
      ("*cs-join-fuzz*" "nil" "NORMIESTEP only. How far apart two ends may be, in drawing units, and still count as JOINED when the parts...")
      ("*cs-mark-dimstyle*" "\"STANDARD INCHES\"" "Dim style for the CORNER MARK (STANDARDS.md section 2). The sample sheet carries the mark at two sizes and...")
      ("*cs-mark-r*" "0.5" "Radius of the circle that mark is drawn on, in TEXT HEIGHTS - so it tracks DIMSCALE (or the annotation scal...")
-     ("*cs-sq90-deg*" "20.0" "How far off 90 a corner may sit, in DEGREES, and still be marked \"90%%d\". The mark ASSERTS a right angle, s..."))
+     ("*cs-sq90-deg*" "20.0" "How far off 90 a corner may sit, in DEGREES, and still be marked \"90%%d\". The mark ASSERTS a right angle, s...")
+     ("*cs-treat-default*" "\"Square\"" "NORMIESTEP only. What the FIRST corner-treatment question offers on Enter - one of \"Square\", \"Radius\", \"Cut...")
+     ("*cs-cut-given-default*" "\"Offset\"" "NORMIESTEP only. Which of a Cut corner's two sizes Enter asks for: the \"Offset\" back along each line, or th..."))
     ("COVERCHECK" "lisp/covercheck/covercheck.lsp"
      ("*cchk-pool-layer*" "\"POOL\"" "The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these ar...")
      ("*cchk-cover-layer*" "\"COVER\"" "The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these ar...")
@@ -126576,6 +126776,267 @@
      ("xyp:*dirty*" "nil" "set T whenever a value needed cleaning")
      ("xyp:*fixes*" "nil" "running list of cleanup / warning messages"))
    ))
+
+;; One shop decision, and every knob that spells it.  See
+;; tools/gen_knobs.py families() for what makes two knobs one
+;; decision; LAZTUNE's "Set everywhere" writes the lot.
+(setq lzp:*knobfam*
+  '(
+    ("advice-color" ("abp:*advice-color*" "spachk:*advice-color*"))
+    ("align" ("*mohamaddle-align*" "*paddle-align*"))
+    ("anchor-min" ("*cfchk-anchor-min*" "*cchk-anchor-min*" "*dchk-anchor-min*" "*lfc-anchor-min*"))
+    ("anchor-tol" ("*cfchk-anchor-tol*" "*cchk-anchor-tol*" "*dchk-anchor-tol*" "*lfc-anchor-tol*"))
+    ("ans-sep" ("chk:*ans-sep*" "lin:*ans-sep*"))
+    ("apos-over" ("abcdef:*apos-over*" "altabcdef:*apos-over*"))
+    ("arc-color" ("*cfchk-arc-color*" "*cchk-arc-color*" "*dchk-arc-color*" "*lfc-arc-color*"))
+    ("arc-div" ("*PF-ARC-DIV*" "*CAB-ARC-DIV*"))
+    ("arc-slack" ("*PF-ARC-SLACK*" "*ABL-ARC-SLACK*" "*CAB-ARC-SLACK*" "*LH-ARC-SLACK*"))
+    ("arctol" ("*cchk-pad-arctol*" "*mohamaddle-arctol*" "*paddle-arctol*"))
+    ("arrow" ("*mohamaddle-arrow*" "*paddle-arrow*"))
+    ("ask-all-arc-ends" ("*cchk-ask-all-arc-ends*" "*dchk-ask-all-arc-ends*" "*lfc-ask-all-arc-ends*"))
+    ("att-height" ("abf:*att-height*" "*xft-att-height*"))
+    ("att-offset" ("abf:*att-offset*" "*xft-att-offset*"))
+    ("back-words" ("chk:*back-words*" "lin:*back-words*"))
+    ("blkfile" ("*mohamaddle-blkfile*" "*paddle-blkfile*" "upad:*blkfile*"))
+    ("blkname" ("*paddle-blkname*" "upad:*blkname*"))
+    ("block-depth" ("*cchk-block-depth*" "*lfc-block-depth*"))
+    ("border-layer" ("*lfc-border-layer*" "spachk:*border-layer*"))
+    ("border-tol" ("*lfc-border-tol*" "spachk:*border-tol*"))
+    ("breakdepth-ladder" ("pool:*breakdepth-ladder*" "psd:*breakdepth-ladder*"))
+    ("btshown" ("pool:*btshown*" "psd:*btshown*"))
+    ("btypes" ("pool:*btypes*" "psd:*btypes*"))
+    ("bulge-clamp" ("*PF-BULGE-CLAMP*" "*ABL-BULGE-CLAMP*" "*CAB-BULGE-CLAMP*" "*LH-BULGE-CLAMP*"))
+    ("bullet" ("dn:*bullet*" "ltc:*bullet*"))
+    ("cap-relax" ("*PF-CAP-RELAX*" "*ABL-CAP-RELAX*" "*CAB-CAP-RELAX*" "*LH-CAP-RELAX*"))
+    ("cap-tries" ("*PF-CAP-TRIES*" "*ABL-CAP-TRIES*" "*CAB-CAP-TRIES*" "*LH-CAP-TRIES*"))
+    ("capfuzz" ("pool:*capfuzz*" "spa:*capfuzz*"))
+    ("chain-fuzz" ("*PF-CHAIN-FUZZ*" "*ABL-CHAIN-FUZZ*" "*CAB-CHAIN-FUZZ*" "*LH-CHAIN-FUZZ*"))
+    ("chart-w" ("lzf:*chart-w*" "lzs:*chart-w*"))
+    ("chart-w" ("lzv:*chart-w*" "lzt:*chart-w*"))
+    ("col-advice" ("spa:*col-advice*" "scv:*col-advice*"))
+    ("col-bad" ("pool:*col-bad*" "spa:*col-bad*" "scv:*col-bad*"))
+    ("col-cover" ("spa:*col-cover*" "scv:*col-cover*"))
+    ("col-dim" ("pool:*col-dim*" "spa:*col-dim*"))
+    ("col-notes" ("pool:*col-notes*" "spa:*col-notes*"))
+    ("col-text" ("spa:*col-text*" "scv:*col-text*"))
+    ("colbudget" ("lzf:*colbudget*" "lzt:*colbudget*"))
+    ("color" ("hn:*color*" "sf:*color*"))
+    ("compare" ("*PF-COMPARE*" "*ABL-COMPARE*" "*CAB-COMPARE*" "*LH-COMPARE*"))
+    ("constr-color" ("*cfchk-constr-color*" "*cchk-constr-color*" "*dchk-constr-color*" "*lfc-constr-color*"))
+    ("corner-ang" ("*PF-CORNER-ANG*" "*ABL-CORNER-ANG*" "*CAB-CORNER-ANG*" "*LH-CORNER-ANG*"))
+    ("cornertol" ("*cchk-pad-cornertol*" "*mohamaddle-cornertol*" "*paddle-cornertol*"))
+    ("crossstyle" ("oasis:*crossstyle*" "pool:*crossstyle*"))
+    ("curve-types" ("*cfchk-curve-types*" "*cchk-curve-types*" "*dchk-curve-types*" "*lfc-curve-types*"))
+    ("date-tag" ("*cchk-date-tag*" "*lfc-date-tag*" "spachk:*date-tag*"))
+    ("deepdepth-ladder" ("pool:*deepdepth-ladder*" "psd:*deepdepth-ladder*"))
+    ("default-color" ("*g2mconv-default-color*" "*soconv-default-color*" "*vsconv-default-color*"))
+    ("dim-layer" ("cst:*dim-layer*" "*cchk-dim-layer*" "*lfc-dim-layer*" "ola:*dim-layer*" "wc:*dim-layer*"))
+    ("dim-off" ("*PF-DIM-OFF*" "fit:*dim-off*"))
+    ("dim-style" ("*g2mconv-dim-style*" "*vsconv-dim-style*"))
+    ("dim-xdata" ("*g2mconv-dim-xdata*" "*vsconv-dim-xdata*"))
+    ("dimfix-cmd" ("*cchk-dimfix-cmd*" "*lfc-dimfix-cmd*" "spachk:*dimfix-cmd*"))
+    ("dimlayer" ("cbk:*dimlayer*" "hn:*dimlayer*" "oasis:*dimlayer*" "pm:*dimlayer*" "sf:*dimlayer*"))
+    ("dimoff" ("spa:*dimoff*" "spachk:*dimoff*"))
+    ("dimoff" ("hn:*dimoff*" "sf:*dimoff*"))
+    ("dimrepeat" ("hn:*dimrepeat*" "sf:*dimrepeat*"))
+    ("dimstyle-default" ("cperp:*dimstyle-default*" "perp:*dimstyle-default*" "pm:*dimstyle-default*"))
+    ("dist-mode" ("*cfchk-dist-mode*" "*cchk-dist-mode*" "*dchk-dist-mode*" "*lfc-dist-mode*"))
+    ("dist-mode" ("abp:*dist-mode*" "lobf:*dist-mode*" "ptr:*dist-mode*"))
+    ("dist-prec" ("abp:*dist-prec*" "*cfchk-dist-prec*" "*cchk-dist-prec*" "*dchk-dist-prec*" "*lfc-dist-prec*" "ptr:*dist-prec*"))
+    ("drop-gain" ("*PF-DROP-GAIN*" "*ABL-DROP-GAIN*" "*CAB-DROP-GAIN*" "*LH-DROP-GAIN*"))
+    ("drop-mult" ("*PF-DROP-MULT*" "*ABL-DROP-MULT*" "*CAB-DROP-MULT*" "*LH-DROP-MULT*"))
+    ("drop-pct" ("*PF-DROP-PCT*" "*ABL-DROP-PCT*" "*CAB-DROP-PCT*" "*LH-DROP-PCT*"))
+    ("ds-cover" ("spa:*ds-cover*" "spachk:*ds-cover*"))
+    ("ds-water" ("spa:*ds-water*" "spachk:*ds-water*"))
+    ("exact-eps" ("*PF-EXACT-EPS*" "*ABL-EXACT-EPS*" "bp:*exact-eps*" "*CAB-EXACT-EPS*" "cdo:*exact-eps*" "fit:*exact-eps*" "*LH-EXACT-EPS*"))
+    ("exact-eps" ("abp:*exact-eps*" "lobf:*exact-eps*" "ptr:*exact-eps*"))
+    ("extras" ("hn:*extras*" "sf:*extras*"))
+    ("file-types" ("abcdef:*file-types*" "altabcdef:*file-types*"))
+    ("first" ("hn:*first*" "sf:*first*"))
+    ("fit" ("hn:*fit*" "sf:*fit*"))
+    ("fit-eps" ("*PF-FIT-EPS*" "*ABL-FIT-EPS*" "*CAB-FIT-EPS*" "*LH-FIT-EPS*"))
+    ("flag-color" ("abp:*flag-color*" "*cchk-flag-color*" "*dchk-flag-color*" "*lfc-flag-color*" "spachk:*flag-color*"))
+    ("flat-eps" ("*cchk-flat-eps*" "*dchk-flat-eps*" "*lfc-flat-eps*"))
+    ("float-gain" ("*PF-FLOAT-GAIN*" "*ABL-FLOAT-GAIN*" "*CAB-FLOAT-GAIN*" "*LH-FLOAT-GAIN*"))
+    ("foamdflt" ("spa:*foamdflt*" "scv:*foamdflt*"))
+    ("foamdpc" ("spa:*foamdpc*" "scv:*foamdpc*"))
+    ("foamtab" ("spa:*foamtab*" "spachk:*foamtab*" "scv:*foamtab*"))
+    ("force-bylayer" ("*g2mconv-force-bylayer*" "*vsconv-force-bylayer*"))
+    ("fractions" ("abcdef:*fractions*" "altabcdef:*fractions*"))
+    ("frame-color" ("abcdef:*frame-color*" "altabcdef:*frame-color*"))
+    ("frame-tol" ("abcdef:*frame-tol*" "altabcdef:*frame-tol*"))
+    ("fuzz" ("*mohamaddle-fuzz*" "*paddle-fuzz*"))
+    ("fuzz" ("acc:*fuzz*" "ola:*fuzz*"))
+    ("fuzz" ("oasis:*fuzz*" "scv:*fuzz*"))
+    ("fuzz" ("abf:*fuzz*" "pm:*fuzz*" "upad:*fuzz*"))
+    ("fuzz" ("abcdef:*fuzz*" "altabcdef:*fuzz*"))
+    ("gap-color" ("acc:*gap-color*" "*mohamaddle-gap-color*" "*paddle-gap-color*"))
+    ("gap-layer" ("*mohamaddle-gap-layer*" "*paddle-gap-layer*"))
+    ("gapmax" ("*mohamaddle-gapmax*" "*paddle-gapmax*"))
+    ("gapmin" ("hn:*gapmin*" "sf:*gapmin*"))
+    ("grade-tag" ("spachk:*grade-tag*" "scv:*grade-tag*"))
+    ("green-scale" ("abp:*green-scale*" "*cchk-green-scale*" "*dchk-green-scale*" "*lfc-green-scale*" "spachk:*green-scale*"))
+    ("grey-color" ("*cchk-grey-color*" "*dchk-grey-color*" "*lfc-grey-color*"))
+    ("guide" ("hn:*guide*" "sf:*guide*"))
+    ("hardnames" ("spa:*hardnames*" "scv:*hardnames*"))
+    ("hardtab" ("spa:*hardtab*" "scv:*hardtab*"))
+    ("hdashmult" ("spa:*hdashmult*" "scv:*hdashmult*"))
+    ("hdashname" ("spa:*hdashname*" "scv:*hdashname*"))
+    ("hdashpat" ("spa:*hdashpat*" "scv:*hdashpat*"))
+    ("hdg-gap" ("abp:*hdg-gap*" "spachk:*hdg-gap*"))
+    ("hdg-lines" ("abp:*hdg-lines*" "spachk:*hdg-lines*"))
+    ("hdr-dist" ("abcdef:*hdr-dist*" "altabcdef:*hdr-dist*"))
+    ("hdr-name" ("abcdef:*hdr-name*" "altabcdef:*hdr-name*"))
+    ("head-lines" ("abp:*head-lines*" "spachk:*head-lines*"))
+    ("hi-col" ("pool:*hi-col*" "psd:*hi-col*" "spa:*hi-col*"))
+    ("hinge-min" ("spa:*hinge-min*" "scv:*hinge-min*"))
+    ("hinge-try" ("spa:*hinge-try*" "scv:*hinge-try*"))
+    ("hingestyle" ("spa:*hingestyle*" "scv:*hingestyle*"))
+    ("hingetxoff" ("spa:*hingetxoff*" "scv:*hingetxoff*"))
+    ("hingetxth" ("spa:*hingetxth*" "scv:*hingetxth*"))
+    ("hingetxw" ("spa:*hingetxw*" "scv:*hingetxw*"))
+    ("impossible" ("abcdef:*impossible*" "altabcdef:*impossible*"))
+    ("label" ("hn:*label*" "sf:*label*"))
+    ("lay-cover" ("spa:*lay-cover*" "spachk:*lay-cover*" "scv:*lay-cover*"))
+    ("lay-dim" ("pool:*lay-dim*" "spa:*lay-dim*" "spachk:*lay-dim*"))
+    ("lay-notes" ("spa:*lay-notes*" "spachk:*lay-notes*"))
+    ("lay-text" ("spa:*lay-text*" "spachk:*lay-text*" "scv:*lay-text*"))
+    ("lay-water" ("spa:*lay-water*" "spachk:*lay-water*"))
+    ("layer" ("abf:*layer*" "cdo:*layer*" "cdc:*layer*"))
+    ("layer" ("*mohamaddle-layer*" "*paddle-layer*" "upad:*layer*"))
+    ("layer" ("ds:*layer*" "dn:*layer*"))
+    ("layer-color" ("ad:*layer-color*" "cdo:*layer-color*" "cdc:*layer-color*" "ds:*layer-color*" "*mohamaddle-layer-color*" "*paddle-layer-color*"))
+    ("line-space" ("ds:*line-space*" "dn:*line-space*"))
+    ("log-denom" ("abcdef:*log-denom*" "altabcdef:*log-denom*"))
+    ("ltscale" ("hn:*ltscale*" "sf:*ltscale*"))
+    ("ltype" ("hn:*ltype*" "sf:*ltype*"))
+    ("map-gap" ("pool:*map-gap*" "spa:*map-gap*"))
+    ("map-size" ("pool:*map-size*" "spa:*map-size*"))
+    ("mark-lead" ("pool:*mark-lead*" "spa:*mark-lead*"))
+    ("mark-r" ("pool:*mark-r*" "spa:*mark-r*"))
+    ("mark-size" ("*cchk-mark-size*" "*dchk-mark-size*" "*lfc-mark-size*"))
+    ("maxrad" ("*cchk-pad-maxrad*" "*mohamaddle-maxrad*" "*paddle-maxrad*"))
+    ("maxshown" ("hn:*maxshown*" "sf:*maxshown*"))
+    ("minang" ("hn:*minang*" "sf:*minang*"))
+    ("miss-layer" ("*PF-MISS-LAYER*" "*ABL-MISS-LAYER*" "*CAB-MISS-LAYER*" "fit:*miss-layer*" "*LH-MISS-LAYER*"))
+    ("miss-pct" ("*ABL-MISS-PCT*" "fit:*miss-pct*" "*LH-MISS-PCT*"))
+    ("miss-pct" ("*PF-MISS-PCT*" "*CAB-MISS-PCT*"))
+    ("miss-radius" ("*PF-MISS-RADIUS*" "*ABL-MISS-RADIUS*" "*CAB-MISS-RADIUS*" "fit:*miss-radius*" "*LH-MISS-RADIUS*"))
+    ("moved-mark" ("*PF-MOVED-MARK*" "*CAB-MOVED-MARK*" "fit:*moved-mark*"))
+    ("ng-lead" ("pool:*ng-lead*" "spa:*ng-lead*"))
+    ("ng-off" ("pool:*ng-off*" "spa:*ng-off*"))
+    ("nice-radii" ("*PF-NICE-RADII*" "*ABL-NICE-RADII*" "*CAB-NICE-RADII*" "*LH-NICE-RADII*"))
+    ("offset" ("abf:*offset*" "cdo:*offset*" "cdc:*offset*"))
+    ("olap-color" ("*cchk-olap-color*" "*dchk-olap-color*" "*lfc-olap-color*"))
+    ("olap-dirtol" ("*cchk-olap-dirtol*" "*dchk-olap-dirtol*" "*lfc-olap-dirtol*"))
+    ("olap-fuzz" ("*cchk-olap-fuzz*" "*dchk-olap-fuzz*" "*lfc-olap-fuzz*"))
+    ("olap-types" ("*cchk-olap-types*" "*dchk-olap-types*" "*lfc-olap-types*"))
+    ("on-eps" ("*PF-ON-EPS*" "*ABL-ON-EPS*" "*CAB-ON-EPS*" "fit:*on-eps*" "*LH-ON-EPS*"))
+    ("on-frac" ("*PF-ON-FRAC*" "*ABL-ON-FRAC*" "*CAB-ON-FRAC*" "*LH-ON-FRAC*"))
+    ("orig-color" ("*cchk-orig-color*" "*dchk-orig-color*" "*lfc-orig-color*"))
+    ("out-layer" ("*PF-OUT-LAYER*" "*CAB-OUT-LAYER*" "fit:*out-layer*"))
+    ("padsize" ("*cchk-pad-size*" "*paddle-padsize*" "upad:*padsize*"))
+    ("picks" ("hn:*picks*" "sf:*picks*"))
+    ("planar-eps" ("*cfchk-planar-eps*" "*cchk-planar-eps*" "*dchk-planar-eps*" "*lfc-planar-eps*"))
+    ("point-block" ("abcdef:*point-block*" "abf:*point-block*" "*PF-POINT-BLOCK*" "*ABL-POINT-BLOCK*" "bp:*point-block*" "*CAB-POINT-BLOCK*" "cdo:*point-block*" "cst:*point-block*" "fit:*point-block*" "*LH-POINT-BLOCK*" "pm:*point-block*" "upad:*point-block*"))
+    ("point-color" ("*cchk-point-color*" "*dchk-point-color*" "*lfc-point-color*"))
+    ("point-color" ("abcdef:*point-color*" "altabcdef:*point-color*" "cst:*point-color*"))
+    ("point-layer" ("abcdef:*point-layer*" "abf:*point-layer*" "*PF-POINT-LAYER*" "*ABL-POINT-LAYER*" "bp:*point-layer*" "*CAB-POINT-LAYER*" "cdo:*point-layer*" "cst:*point-layer*" "fit:*point-layer*" "*LH-POINT-LAYER*" "pm:*point-layer*" "upad:*point-layer*"))
+    ("point-tag" ("abcdef:*point-tag*" "cst:*point-tag*"))
+    ("pool-layer" ("*PF-POOL-LAYER*" "*ABL-POOL-LAYER*" "*CAB-POOL-LAYER*" "*cchk-pool-layer*" "fit:*pool-layer*" "*LH-POOL-LAYER*"))
+    ("poolcolor" ("lg:*poolcolor*" "oasis:*poolcolor*"))
+    ("poollayer" ("lg:*poollayer*" "oasis:*poollayer*"))
+    ("prec" ("abf:*prec*" "cdo:*prec*"))
+    ("preview" ("hn:*preview*" "sf:*preview*"))
+    ("pt-block" ("abp:*pt-block*" "lobf:*pt-block*" "ptr:*pt-block*"))
+    ("pt-layer" ("abp:*pt-layer*" "lobf:*pt-layer*" "ptr:*pt-layer*"))
+    ("pt-prefix" ("bp:*pt-prefix*" "pm:*pt-prefix*" "upad:*pt-prefix*"))
+    ("pt-tag" ("abf:*pt-tag*" "*PF-PT-TAG*" "*ABL-PT-TAG*" "abp:*pt-tag*" "bp:*pt-tag*" "*CAB-PT-TAG*" "cdo:*pt-tag*" "fit:*pt-tag*" "*LH-PT-TAG*" "lobf:*pt-tag*" "pm:*pt-tag*" "ptr:*pt-tag*" "upad:*pt-tag*"))
+    ("pv-col" ("pool:*pv-col*" "psd:*pv-col*" "spa:*pv-col*"))
+    ("pvx-col" ("pool:*pvx-col*" "psd:*pvx-col*" "spa:*pvx-col*"))
+    ("rad-off" ("pool:*rad-off*" "spa:*rad-off*"))
+    ("record" ("*g2mconv-record*" "*soconv-record*" "*vsconv-record*"))
+    ("rep-c1" ("pool:*rep-c1*" "spa:*rep-c1*"))
+    ("rep-c2" ("pool:*rep-c2*" "spa:*rep-c2*"))
+    ("rep-c3" ("pool:*rep-c3*" "spa:*rep-c3*"))
+    ("rep-note" ("pool:*rep-note*" "spa:*rep-note*" "scv:*rep-note*"))
+    ("rep-row" ("pool:*rep-row*" "spa:*rep-row*" "scv:*rep-row*"))
+    ("rep-title" ("pool:*rep-title*" "spa:*rep-title*" "scv:*rep-title*"))
+    ("rep-w" ("pool:*rep-w*" "spa:*rep-w*"))
+    ("report-chars" ("*cchk-report-chars*" "*dchk-report-chars*" "*lfc-report-chars*"))
+    ("report-chars" ("abp:*report-chars*" "spachk:*report-chars*"))
+    ("report-color" ("abp:*report-color*" "*cchk-report-color*" "*dchk-report-color*" "*lfc-report-color*" "spachk:*report-color*"))
+    ("report-gap" ("abp:*report-gap*" "*cchk-report-gap*" "*dchk-report-gap*" "*lfc-report-gap*" "spachk:*report-gap*"))
+    ("report-hfall" ("abp:*report-hfall*" "*cchk-report-hfall*" "*dchk-report-hfall*" "*lfc-report-hfall*" "spachk:*report-hfall*"))
+    ("report-hmax" ("abp:*report-hmax*" "*cchk-report-hmax*" "*dchk-report-hmax*" "*lfc-report-hmax*" "spachk:*report-hmax*"))
+    ("report-hmin" ("abp:*report-hmin*" "*cchk-report-hmin*" "*dchk-report-hmin*" "*lfc-report-hmin*" "spachk:*report-hmin*"))
+    ("report-lead" ("abp:*report-lead*" "*cchk-report-lead*" "*dchk-report-lead*" "*lfc-report-lead*" "spachk:*report-lead*"))
+    ("report-wide" ("abp:*report-wide*" "*cchk-report-wide*" "*dchk-report-wide*" "*lfc-report-wide*" "spachk:*report-wide*"))
+    ("ring-scale" ("abp:*ring-scale*" "lobf:*ring-scale*"))
+    ("row-band" ("*cchk-row-band*" "*dchk-row-band*" "*lfc-row-band*"))
+    ("row-flat" ("*cchk-row-flat*" "*dchk-row-flat*" "*lfc-row-flat*"))
+    ("row-indent" ("abp:*row-indent*" "spachk:*row-indent*"))
+    ("ruler-color" ("*PF-RULER-COLOR*" "cst:*ruler-color*" "*cs-ruler-color*" "ds:*ruler-color*" "fit:*ruler-color*" "oasis:*ruler-color*" "cperp:*ruler-color*" "perp:*ruler-color*" "pm:*ruler-color*" "pool:*ruler-color*" "psd:*ruler-color*" "spa:*ruler-color*"))
+    ("ruler-current-color" ("cst:*ruler-current-color*" "*cs-ruler-current-color*" "fit:*ruler-current-color*" "oasis:*ruler-current-color*" "cperp:*ruler-current-color*" "perp:*ruler-current-color*" "pm:*ruler-current-color*" "pool:*ruler-current-color*" "psd:*ruler-current-color*" "spa:*ruler-current-color*"))
+    ("ruler-reach" ("*PF-RULER-REACH*" "cst:*ruler-reach*" "*cs-ruler-reach*" "ds:*ruler-reach*" "fit:*ruler-reach*" "oasis:*ruler-reach*" "cperp:*ruler-reach*" "perp:*ruler-reach*" "pm:*ruler-reach*" "pool:*ruler-reach*" "psd:*ruler-reach*" "spa:*ruler-reach*"))
+    ("ruler-ring-frac" ("*PF-RULER-RING-FRAC*" "cst:*ruler-ring-frac*" "*cs-ruler-ring-frac*" "fit:*ruler-ring-frac*" "oasis:*ruler-ring-frac*" "cperp:*ruler-ring-frac*" "perp:*ruler-ring-frac*" "pm:*ruler-ring-frac*" "pool:*ruler-ring-frac*" "psd:*ruler-ring-frac*" "spa:*ruler-ring-frac*"))
+    ("ruler-row-frac" ("*PF-RULER-ROW-FRAC*" "cst:*ruler-row-frac*" "*cs-ruler-row-frac*" "ds:*ruler-row-frac*" "fit:*ruler-row-frac*" "oasis:*ruler-row-frac*" "cperp:*ruler-row-frac*" "perp:*ruler-row-frac*" "pm:*ruler-row-frac*" "pool:*ruler-row-frac*" "psd:*ruler-row-frac*" "spa:*ruler-row-frac*"))
+    ("ruler-screen-x" ("*PF-RULER-SCREEN-X*" "cst:*ruler-screen-x*" "*cs-ruler-screen-x*" "ds:*ruler-screen-x*" "fit:*ruler-screen-x*" "oasis:*ruler-screen-x*" "cperp:*ruler-screen-x*" "perp:*ruler-screen-x*" "pm:*ruler-screen-x*" "pool:*ruler-screen-x*" "psd:*ruler-screen-x*" "spa:*ruler-screen-x*"))
+    ("ruler-tick-frac" ("*PF-RULER-TICK-FRAC*" "cst:*ruler-tick-frac*" "*cs-ruler-tick-frac*" "ds:*ruler-tick-frac*" "fit:*ruler-tick-frac*" "oasis:*ruler-tick-frac*" "cperp:*ruler-tick-frac*" "perp:*ruler-tick-frac*" "pm:*ruler-tick-frac*" "pool:*ruler-tick-frac*" "psd:*ruler-tick-frac*" "spa:*ruler-tick-frac*"))
+    ("ruler-txt-frac" ("*PF-RULER-TXT-FRAC*" "cst:*ruler-txt-frac*" "*cs-ruler-txt-frac*" "ds:*ruler-txt-frac*" "fit:*ruler-txt-frac*" "oasis:*ruler-txt-frac*" "cperp:*ruler-txt-frac*" "perp:*ruler-txt-frac*" "pm:*ruler-txt-frac*" "pool:*ruler-txt-frac*" "psd:*ruler-txt-frac*" "spa:*ruler-txt-frac*"))
+    ("rung" ("hn:*rung*" "sf:*rung*"))
+    ("same-pt" ("*cfchk-same-pt*" "*cchk-same-pt*" "*dchk-same-pt*" "*lfc-same-pt*"))
+    ("seed-singular" ("abcdef:*seed-singular*" "altabcdef:*seed-singular*"))
+    ("sfx-cover" ("spa:*sfx-cover*" "spachk:*sfx-cover*"))
+    ("sfx-water" ("spa:*sfx-water*" "spachk:*sfx-water*"))
+    ("shade-hi" ("hn:*shade-hi*" "sf:*shade-hi*"))
+    ("shade-lo" ("hn:*shade-lo*" "sf:*shade-lo*"))
+    ("sheet-chars" ("*dchk-sheet-chars*" "*lfc-sheet-chars*"))
+    ("smalldim" ("hn:*smalldim*" "pool:*smalldim*" "sf:*smalldim*"))
+    ("smallstyle" ("hn:*smallstyle*" "pool:*smallstyle*" "sf:*smallstyle*"))
+    ("smallwarned" ("hn:*smallwarned*" "sf:*smallwarned*"))
+    ("snap" ("abf:*snap*" "*PF-SNAP*" "*ABL-SNAP*" "bp:*snap*" "*CAB-SNAP*" "fit:*snap*" "*LH-SNAP*" "pm:*snap*" "upad:*snap*"))
+    ("snap-eps" ("*PF-SNAP-EPS*" "*ABL-SNAP-EPS*" "*CAB-SNAP-EPS*" "fit:*snap-eps*" "*LH-SNAP-EPS*"))
+    ("solve-iters" ("abcdef:*solve-iters*" "altabcdef:*solve-iters*"))
+    ("solve-singular" ("abcdef:*solve-singular*" "altabcdef:*solve-singular*"))
+    ("solve-step" ("abcdef:*solve-step*" "altabcdef:*solve-step*"))
+    ("spike-tol" ("*PF-SPIKE-TOL*" "pm:*spike-tol*"))
+    ("split-default" ("cperp:*split-default*" "perp:*split-default*"))
+    ("step" ("hn:*step*" "sf:*step*"))
+    ("straight-r" ("*PF-STRAIGHT-R*" "*ABL-STRAIGHT-R*" "*CAB-STRAIGHT-R*" "*LH-STRAIGHT-R*"))
+    ("style" ("ds:*style*" "dn:*style*"))
+    ("style" ("abf:*style*" "cdo:*style*" "cdc:*style*"))
+    ("style-order" ("*cchk-style-order*" "*dchk-style-order*" "*lfc-style-order*"))
+    ("sugg-color" ("*cchk-sugg-color*" "*dchk-sugg-color*" "*lfc-sugg-color*"))
+    ("sysold" ("cbk:*sysold*" "hn:*sysold*" "psd:*sysold*" "sf:*sysold*"))
+    ("tabbudget" ("lzf:*tabbudget*" "lzs:*tabbudget*"))
+    ("tag-drop" ("abcdef:*tag-drop*" "altabcdef:*tag-drop*"))
+    ("tag-gap" ("abcdef:*tag-gap*" "altabcdef:*tag-gap*"))
+    ("tag-scale" ("abcdef:*tag-scale*" "altabcdef:*tag-scale*"))
+    ("tang-steps" ("*PF-TANG-STEPS*" "*ABL-TANG-STEPS*" "*CAB-TANG-STEPS*" "fit:*tang-steps*" "*LH-TANG-STEPS*"))
+    ("tang-tol" ("*PF-TANG-TOL*" "*ABL-TANG-TOL*" "*CAB-TANG-TOL*" "fit:*tang-tol*" "*LH-TANG-TOL*"))
+    ("taper-tag" ("spachk:*taper-tag*" "scv:*taper-tag*"))
+    ("text-div" ("abcdef:*text-div*" "altabcdef:*text-div*"))
+    ("text-hgt" ("bp:*text-hgt*" "ds:*text-hgt*"))
+    ("text-min" ("abcdef:*text-min*" "altabcdef:*text-min*"))
+    ("th-div" ("spa:*th-div*" "scv:*th-div*"))
+    ("th-min" ("spa:*th-min*" "scv:*th-min*"))
+    ("thermotaper" ("spa:*thermotaper*" "scv:*thermotaper*"))
+    ("tight-tol" ("*PF-TIGHT-TOL*" "*ABL-TIGHT-TOL*" "*CAB-TIGHT-TOL*" "*LH-TIGHT-TOL*"))
+    ("title-block" ("*cchk-title-block*" "*lfc-title-block*"))
+    ("title-scale" ("abp:*title-scale*" "spachk:*title-scale*"))
+    ("tol" ("*cfchk-tol*" "*cchk-tol*" "*dchk-tol*" "*lfc-tol*"))
+    ("tol-max" ("*PF-TOL-MAX*" "*ABL-TOL-MAX*" "*CAB-TOL-MAX*" "fit:*tol-max*" "*LH-TOL-MAX*"))
+    ("topoff" ("spa:*topoff*" "spachk:*topoff*"))
+    ("trans" ("hn:*trans*" "sf:*trans*"))
+    ("treat-default" ("pool:*treat-default*" "spa:*treat-default*"))
+    ("typ" ("hn:*typ*" "sf:*typ*"))
+    ("unknown" ("bp:*unknown*" "pm:*unknown*" "upad:*unknown*"))
+    ("wall-layer" ("*PF-WALL-LAYER*" "*ABL-WALL-LAYER*" "*CAB-WALL-LAYER*" "*LH-WALL-LAYER*"))
+    ("wallheight-ladder" ("pool:*wallheight-ladder*" "psd:*wallheight-ladder*"))
+    ("zoom-margin" ("*cchk-zoom-margin*" "*dchk-zoom-margin*" "*lfc-zoom-margin*" "spachk:*zoom-margin*"))
+    ("zoom-out" ("*cchk-zoom-out*" "*dchk-zoom-out*" "*lfc-zoom-out*"))
+   ))
 ;;; <<< lzp:*knobs*
 
 ;;; -------------------- carrying it with you -----------------------------
@@ -126987,6 +127448,8 @@
                 "edit_width = 48; }")
         (strcat "    : button { label = \"Alec's choice\"; key = \"tune_reset\"; "
                 "fixed_width = true; }")
+        (strcat "    : button { label = \"Set everywhere\"; key = \"tune_all\"; "
+                "fixed_width = true; }")
         "  }"
         "  : text { key = \"state\"; width = 120; }"
         "  spacer;"
@@ -127035,7 +127498,7 @@
 ;; The state line, and OK with it -- greyed while a pending answer
 ;; will not read, and re-checked at OK (lzp:tune-ok) as every other
 ;; editor here does.
-(defun lzp:tune-state ( / bad tx e)
+(defun lzp:tune-state ( / bad tx e kin)
   (setq bad (lzp:tune-bad))
   (lzp:settile "state"
     (cond
@@ -127043,13 +127506,18 @@
                    (lzp:knob-why (car bad) (cdr (assoc (car bad) lzp:*tunevals*)))))
       ((and lzp:*tunesel* (setq e (lzp:knob-entry lzp:*tunesel*)))
        (setq tx (lzp:tune-text lzp:*tunesel*))
-       (if (cadr tx)
-         (strcat "Yours -- Alec's choice is " (cadr e)
-                 ".  OK keeps it in your AutoCAD profile and applies it now")
-         (strcat "Alec's choice -- type a value of your own, or leave it;"
-                 " OK keeps yours in your AutoCAD profile")))
+       (setq kin (lzp:knob-kin lzp:*tunesel*))
+       (strcat
+         (if (cadr tx)
+           (strcat "Yours -- Alec's choice is " (cadr e)
+                   ".  OK keeps it in your AutoCAD profile and applies it now")
+           (strcat "Alec's choice -- type a value of your own, or leave it;"
+                   " OK keeps yours in your AutoCAD profile"))
+         (if kin (strcat ".  Also in " (lzp:knob-kinwords kin)) "")))
       (t "")))
   (lzp:setmode "accept" (if bad 1 0))
+  (lzp:setmode "tune_all"
+               (if (and lzp:*tunesel* (lzp:knob-kin lzp:*tunesel*)) 0 1))
   (princ))
 
 (defun lzp:tune-show ( / e tx)
@@ -127100,6 +127568,69 @@
       (lzp:tune-refill)))
   (princ))
 
+;; Every OTHER knob that spells the same shop decision as SYM.
+;;
+;; A lisp/ file is self-contained -- it may not read another tool's
+;; global -- so a decision several tools act on is several knobs: the
+;; survey points' layer is *point-layer* in twelve files, and the
+;; concave pad cap is three.  That is right for the code and wrong for
+;; the person: one decision should not be twelve edits, and a drafter
+;; who changes some and not the rest gets two tools disagreeing about
+;; one drawing -- COVERCHECK suggesting pads PADDLE would not place.
+;; lzp:*knobfam* is the generated table of which names are one
+;; decision; this is the lookup.
+(defun lzp:knob-kin (sym / g out)
+  (foreach g lzp:*knobfam*
+    (if (member sym (cadr g))
+      (setq out (vl-remove sym (cadr g)))))
+  out)
+
+;; "A, B and C", or with MORE set "A, B, C" for a phrase that
+;; carries its own tail.  The library has cal:andjoin, but a lisp/ file may
+;; not call a cal: symbol and has to carry its own.
+(defun lzp:commajoin (ws more / n i out w)
+  (setq n (length ws) i 0)
+  (foreach w ws
+    (setq i (1+ i)
+          out (cond ((= i 1) w)
+                    ((and (= i n) (not more)) (strcat out " and " w))
+                    (t (strcat out ", " w)))))
+  (if out out ""))
+
+;; The tools KIN belongs to, named, because "everywhere" is not an
+;; answer a drafter can act on: five names and then a count, so the
+;; line says what the button will reach without running off the
+;; dialog's width.
+(defun lzp:knob-kinwords (kin / seen k t2 out n)
+  (setq n 0)
+  (foreach k kin
+    (setq t2 (lzp:knob-tool k))
+    (if (and t2 (not (member t2 seen)))
+      (progn (setq seen (append seen (list t2)))
+             (if (< n 5) (setq out (append out (list t2))))
+             (setq n (1+ n)))))
+  (strcat (if (> n 5)
+            ;; truncated: commas all the way, so the tail reads as the
+            ;; last item rather than "D and E and 6 more"
+            (strcat (lzp:commajoin out t) " and " (itoa (- n 5)) " more")
+            (lzp:commajoin out nil))
+          " -- Set everywhere gives them all this value"))
+
+;; "Set everywhere": whatever is in the box, queued for every knob that
+;; spells this same decision, the selected one included.  It queues
+;; rather than writes, so the value goes through exactly the checks a
+;; typed one does -- each sibling's own kind is tested at OK and a
+;; sibling that will not take it is skipped and named, not forced --
+;; and Cancel still throws the lot away.
+(defun lzp:tune-all ( / kin tx k)
+  (if (and lzp:*tunesel* (setq kin (lzp:knob-kin lzp:*tunesel*)))
+    (progn
+      (setq tx (car (lzp:tune-text lzp:*tunesel*)))
+      (lzp:tune-put lzp:*tunesel* tx)
+      (foreach k kin (lzp:tune-put k tx))
+      (lzp:tune-refill)))
+  (princ))
+
 (defun lzp:tune-reset ()
   (if lzp:*tunesel*
     (progn (lzp:tune-put lzp:*tunesel* "") (lzp:tune-refill)))
@@ -127145,6 +127676,7 @@
      (action_tile "tune_list" "(lzp:tune-pick $value)")
      (action_tile "tune_val" "(lzp:tune-val $value)")
      (action_tile "tune_reset" "(lzp:tune-reset)")
+     (action_tile "tune_all" "(lzp:tune-all)")
      (action_tile "accept" "(lzp:tune-ok)")
      (action_tile "cancel" "(done_dialog 0)")
      (lzp:tune-refill)
