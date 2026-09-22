@@ -41,6 +41,7 @@ verify:
 	$(PY) tools/gen_ui_charts.py --check
 	$(PY) tools/gen_knobs.py --check
 	$(PY) tools/gen_ribbon_icons.py --check
+	$(PY) tools/gen_agents_md.py --check
 
 lint:
 	$(PY) tools/check_lisp.py

@@ -59,10 +59,36 @@ underneath is ABHD's, walked in a straight line instead of round a loop.
    dragged over the whole sheet picks up the survey and leaves what is
    drawn alone.
 
-3. **Asks the two ends** (step 6):
+3. **Asks which points to leave out** (step 6):
 
    ```
-     Step 6 of 6 - where does the run START, and where does it END?
+     Step 6 of 7 - any of those points to leave OUT of the fit?
+     Name each one - click it, or type its number (Enter for none):
+     mis-shots, duplicates, anything the line should not chase;
+     each gets a dashed ring.
+   ```
+
+   With the whole survey in hand, this is the first moment anybody can
+   see **which** shot is the bad one -- the mis-shot, the double-shot,
+   the rod held crooked. It comes before the two ends on purpose: a
+   point about to be left out has no business being offered as the
+   point the run starts at. Every pick toggles, so naming a ringed one
+   again puts it back, its duplicate shots with it, and `Enter` takes
+   none of them.
+
+   Nothing is thrown away. A point left out is still **measured
+   against the run you keep**, ringed on `FGStep` beside the points
+   the fit missed and listed with how far off it landed -- that number
+   is what says whether leaving it out was right. Under the list goes
+   one line naming every bad point,
+   `- Pt.12, Pt.15 and Pt.20 are bad.`, in `BPCALLOUT`'s wording, so a
+   sheet reads the same sentence whichever tool wrote it. A `Redo`
+   asks again.
+
+4. **Asks the two ends** (step 7):
+
+   ```
+     Step 7 of 7 - where does the run START, and where does it END?
      Click a point or type the survey number it carries; Enter takes
      the farthest-apart pair.  Everything else is ordered between them.
      (11 of 11 selected point(s) carry a number of their own; the rest
@@ -85,14 +111,14 @@ underneath is ABHD's, walked in a straight line instead of round a loop.
    back, because nothing is drawn yet and the classifier rebuilds every
    list it fills.
 
-   The stretches, corners and held points of step 4 and the points left
-   out at a `Redo` are named the same way. Step 4 comes before the
+   The stretches, corners and held points of step 4, and the points
+   left out at step 6 or at a `Redo`, are named the same way. Step 4 comes before the
    points are selected, so each declaration is matched to the selection
    afterwards by the point's own identity, and one made on a point that
    was not selected is named and dropped, never snapped onto some other
    point.
 
-4. **Fits three candidates** and draws them side by side to pick from --
+5. **Fits three candidates** and draws them side by side to pick from --
    ABHD's three, numbered on screen in their own colours:
 
    | # | Aim |
@@ -108,7 +134,7 @@ underneath is ABHD's, walked in a straight line instead of round a loop.
    picker's way back -- it re-opens the omit list, the declarations, the
    **ends**, and the settings.
 
-5. **Keeps what you picked** as an **open** `LWPOLYLINE` on the `POOL`
+6. **Keeps what you picked** as an **open** `LWPOLYLINE` on the `POOL`
    layer in ByLayer colour -- ABHD's output layer, so the rest of the
    toolset can read the result -- and writes the hit report: points on
    the run, points off within tolerance, points beyond it, worst
@@ -142,6 +168,9 @@ label-pairing distance).
 | `*ABL-OUT-LAYER*` | `"ABLOBF-FIT"` | Layer the three candidates are drawn on while you choose |
 | `*ABL-MISS-LAYER*` | `"FGStep"` | Layer the "could not hold this point" rings go on |
 | `*ABL-MISS-RADIUS*` | `4.0` | Radius of those rings (drawing units) |
+| `*ABL-BAD-PREFIX*` | `"- "` | What the one line naming every bad point leads with -- ABFIND's note prefix, so a sheet's notes read as one column |
+| `*ABL-BAD-ONE*` / `*ABL-BAD-MANY*` | `" is bad."` / `" are bad."` | Its tail, by count: `- Pt.12 is bad.` / `- Pt.12, Pt.15 and Pt.20 are bad.` -- BPCALLOUT's wording |
+| `*ABL-OMIT-TAIL*` | `"   (left out)"` | What marks a left-out point's row apart from one the fit tried to hold and missed |
 | `*ABL-PT-TAG*` | `"number"` | The attribute carrying a point's survey number -- what a report calls it, and what you can type to name an end |
 | `*ABL-SNAP*` | `12.0` | How close a **click** has to land to a survey point to name it -- at a run end, a stretch end, a corner, a held point, an omit. A typed number never uses it. The radius `BPCALLOUT`, `ABFIND` and `PERPMARK` share |
 | `*ABL-WALL-LAYER*` | `"POOL-WALLS"` | Layer for the dashed markers of declared stretches, corners and held points |

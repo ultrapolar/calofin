@@ -102,6 +102,20 @@
 ;;; The original it came from is still in.  ABHD's rule, held here
 ;;; word for word; the count is reported.
 ;;;
+;;; LEAVING POINTS OUT: with the whole survey selected, step 8 asks
+;;; which of those points the template should not be pulled by - the
+;;; shot on the coping, the double-shot, the rod held crooked - and a
+;;; Redo asks again.  Each one named gets a dashed ring and leaves the
+;;; fit, the stats and the miss allowance alike; naming a ringed one
+;;; again puts it back.  Nothing is thrown away: a point left out is
+;;; still MEASURED against the outline fitted without it, ringed on
+;;; the miss layer beside the points the fit missed and listed with
+;;; how far off it landed, because that number is what says whether
+;;; leaving it out was right.  Under the lists goes one line naming
+;;; every bad point - "- Pt.12, Pt.15 and Pt.20 are bad." - in
+;;; BPCALLOUT's wording, so a sheet reads the same sentence whichever
+;;; tool wrote it.
+;;;
 ;;; THE POOL BOTTOM assumes a STANDARD HOPPER, so it is generated, not
 ;;; traced: pick which end is deep, type where the two breaks fall and
 ;;; the hopper's side and back offsets, and the bottom is drawn square
@@ -124,7 +138,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v3.3")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.4")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -136,10 +150,10 @@
 (setq fit:*pt-tag*      "number")  ; attribute tag carrying the point
                                    ; number, for the miss report
 (setq fit:*snap*        12.0)      ; a CLICK within this of a survey
-                                   ; point names that point, at the
-                                   ; Redo's omit prompt.  A typed
-                                   ; number never uses it: a name is
-                                   ; exact.  12.0 is what BPCALLOUT,
+                                   ; point names that point, at step 8
+                                   ; and at the Redo's omit prompt.  A
+                                   ; typed number never uses it: a name
+                                   ; is exact.  12.0 is what BPCALLOUT,
                                    ; ABFIND and PERPMARK snap at
 (setq fit:*moved-mark*  "M")       ; a point number carrying this letter
                                    ; is a MOVED point - ABFIND writes
@@ -157,6 +171,23 @@
                                    ; stamps its objects and only ever
                                    ; erases its own
 (setq fit:*miss-radius* 4.0)       ; radius of those rings (4 inches)
+(setq fit:*bad-prefix*  "- ")      ; the one line under the list that
+                                   ; NAMES the bad points leads with
+                                   ; this, the way ABFIND leads every
+                                   ; note it writes, so a sheet's notes
+                                   ; read as one column
+(setq fit:*bad-one*     " is bad.") ; ...its tail when ONE point is bad:
+                                   ; "- Pt.12 is bad."
+(setq fit:*bad-many*    " are bad.") ; ...and when two or more are:
+                                   ; "- Pt.12, Pt.15 and Pt.20 are bad."
+                                   ; BPCALLOUT's wording, so the
+                                   ; sentence reads the same whichever
+                                   ; tool wrote it
+(setq fit:*omit-tail*   "   (left out)") ; what marks a LEFT-OUT point's
+                                   ; row apart from a point the fit
+                                   ; tried to hold and missed.  Both
+                                   ; are bad and both are ringed; only
+                                   ; one of them was the fitter's doing
 (setq fit:*exact-eps*   0.001)     ; duplicate-point fuzz (units)
 (setq fit:*on-eps*      0.25)      ; a point within this of the outline
                                    ; counts as ON it (ABHD's threshold)
@@ -4252,10 +4283,40 @@
           (setq i (1+ i))))))
   (reverse out))
 
+;; The one line that NAMES the bad points, under the list that measures
+;; them.  BPCALLOUT's own wording - commas between all but the last
+;; pair, "and" before the last, is/are by count - so the sentence reads
+;; the same whichever tool wrote it, led by fit:*bad-prefix* because it
+;; is a NOTE:
+;;
+;;     "- Pt.12 is bad."
+;;     "- Pt.12 and Pt.15 are bad."
+;;     "- Pt.12, Pt.15 and Pt.20 are bad."
+(defun fit:bad-phrase (names / n s i)
+  (setq n (length names))
+  (cond
+    ((= n 0) "")
+    ((= n 1) (strcat fit:*bad-prefix* "Pt." (car names) fit:*bad-one*))
+    (T
+     (setq s (strcat fit:*bad-prefix* "Pt." (car names)) i 1)
+     (while (< i (1- n))
+       (setq s (strcat s ", Pt." (nth i names))
+             i (1+ i)))
+     (strcat s " and Pt." (nth (1- n) names) fit:*bad-many*))))
+
 ;; Ring every point beyond the tolerance on the miss layer (stamped, so
 ;; only FITABHD's own rings are ever swept) and print the hit report.
+;;
+;; The points LEFT OUT at step 8 or at a Redo are ringed with them and
+;; listed after them, each MEASURED against the outline that was fitted
+;; without it - which is the number that says whether leaving it out
+;; was right.  Both lists are bad points: a shot the template could not
+;; reach and a shot nobody wanted it to reach are the same thing to
+;; whoever has to go back out and re-shoot it.  Under the two goes one
+;; line naming them all.
 (defun fit:report (res dpts tol allow / segs non noff nbad q d dmin s
-                                        keyed pr worst line)
+                                        keyed pr worst line okeyed omit
+                                        names)
   (setq segs (fit:verts-to-segs (fit:res-world-verts res))
         non 0 noff 0 nbad 0 keyed nil worst 0.0)
   (foreach q dpts
@@ -4292,23 +4353,54 @@
                    " percentage, leave the strays out,"
                    "\n  or the survey may not be a " (fit:rget res 'type)
                    " at all.")))
+  ;; the points left out are measured against this outline too
+  (setq omit   (mapcar 'car fit-omit)
+        okeyed nil)
+  (foreach q omit
+    (setq dmin nil)
+    (foreach s segs
+      (setq d (fit:seg-dist q s))
+      (if (or (null dmin) (< d dmin)) (setq dmin d)))
+    (setq okeyed (cons (cons dmin q) okeyed)))
   ;; rings from an earlier run describe a fit that no longer exists
   (fit:purge-mine fit:*miss-layer*)
-  (if keyed
+  (if (or keyed okeyed)
     (progn
       (cal:ensure-layer fit:*miss-layer* 1)
-      (princ (strcat "\n  POINTS OFF THE FIT (" (itoa nbad)
-                     "), ringed on " fit:*miss-layer* ", worst first:"))
       ;; insertion sort, worst first
-      (setq keyed (fit:sort-desc keyed))
-      (foreach pr keyed
-        (fit:tag-mine (fit:make-circle (cdr pr) fit:*miss-radius*
-                                       fit:*miss-layer*))
-        (princ (strcat "\n    Pt." (fit:pt-name (cdr pr))
-                       "   off by " (rtos (car pr) 4 4))))
-      (princ (strcat "\n  A stray this far off is usually a mis-shot, a"
-                     "\n  duplicate, or a feature the chosen type cannot"
-                     "\n  say - ABHD traces those."))))
+      (setq keyed  (fit:sort-desc keyed)
+            okeyed (fit:sort-desc okeyed))
+      (if keyed
+        (progn
+          (princ (strcat "\n  POINTS OFF THE FIT (" (itoa nbad)
+                         "), ringed on " fit:*miss-layer*
+                         ", worst first:"))
+          (foreach pr keyed
+            (fit:tag-mine (fit:make-circle (cdr pr) fit:*miss-radius*
+                                           fit:*miss-layer*))
+            (princ (strcat "\n    Pt." (fit:pt-name (cdr pr))
+                           "   off by " (rtos (car pr) 4 4))))
+          (princ (strcat "\n  A stray this far off is usually a mis-shot, a"
+                         "\n  duplicate, or a feature the chosen type cannot"
+                         "\n  say - ABHD traces those."))))
+      (if okeyed
+        (progn
+          (princ (strcat "\n  POINTS YOU LEFT OUT (" (itoa (length okeyed))
+                         "), ringed with them on " fit:*miss-layer*
+                         " and measured"
+                         "\n  against the outline fitted without them,"
+                         " worst first:"))
+          (foreach pr okeyed
+            (fit:tag-mine (fit:make-circle (cdr pr) fit:*miss-radius*
+                                           fit:*miss-layer*))
+            (princ (strcat "\n    Pt." (fit:pt-name (cdr pr))
+                           "   off by " (rtos (car pr) 4 4)
+                           fit:*omit-tail*)))))
+      ;; ...and the one line that names them all
+      (setq names (mapcar '(lambda (pr) (fit:pt-name (cdr pr)))
+                          (append keyed okeyed)))
+      (if names
+        (princ (strcat "\n  " (fit:bad-phrase names))))))
   nbad)
 
 ;; sort (key . val) pairs descending by key (insertion sort)
@@ -4905,8 +4997,12 @@
 
 ;; ---- leaving points out ----------------------------------------------
 ;; A fit that came out wrong is usually one bad shot dragging a wall.
-;; On a Redo the user can set those points aside - and pick a ringed
-;; one again to put it back.
+;; At step 8 - with the whole survey in hand, which is the first moment
+;; anybody can see which shot is the bad one - and again on every Redo,
+;; the user can set those points aside, and pick a ringed one again to
+;; put it back.  A point set aside is still measured against the
+;; outline fitted without it, and ringed on the miss layer with the
+;; points that outline failed to hold (fit:report).
 
 ;; T when Q is one of the points currently set aside.
 (defun fit:omitted-p (q / found x)
@@ -4956,7 +5052,6 @@
 ;; The omit/restore loop.  Each pick toggles: a point in the fit goes
 ;; out and gets a ring, a ringed one comes back in and loses it.
 (defun fit:omit-loop ( / cand pick)
-  (princ "\n\n  Any points to leave out this time?")
   (princ "\n  Name each one - click it, or type its number (Enter for none):")
   (princ "\n  mis-shots, duplicates, anything the outline should not chase;")
   (princ "\n  each gets a dashed ring.")
@@ -4969,16 +5064,28 @@
                       "Enter = done" nil
                       (fit:cands-of (append (fit:active) (mapcar 'car fit-omit)))
                       fit:*snap*))
-    (setq pick (fit:omit-choose (car cand)))
-    (cond
-      ((eq (car pick) 'RESTORE)
-       (setq fit-omit (fit:omit-drop (cdr pick)))
-       (princ (strcat "  - Pt." (fit:pt-name (cdr pick)) " back in")))
-      (T
-       (setq fit-omit (cons (list (cdr pick) (fit:omit-ring (cdr pick)))
-                            fit-omit))
-       (princ (strcat "  - leaving out Pt."
-                      (fit:pt-name (cdr pick))))))))
+    ;; the prompt offers no Back: there is nothing behind a list you
+    ;; are still building, and reading Back as Enter would move the run
+    ;; ON, which is the opposite of what was asked for.  So say what to
+    ;; do instead and ask again - naming a ringed point again is how one
+    ;; is taken back here.  Without this the sentinel reached (car ...)
+    ;; below and killed the command.
+    (if (eq cand 'CAL-BACK)
+      (princ (strcat "\n  Nothing to go back to here - name a ringed"
+                     " point again to put it back in, or press Enter"
+                     " when the list is right."))
+      (progn
+        (setq pick (fit:omit-choose (car cand)))
+        (cond
+          ((eq (car pick) 'RESTORE)
+           (setq fit-omit (fit:omit-drop (cdr pick)))
+           (princ (strcat "  - Pt." (fit:pt-name (cdr pick)) " back in")))
+          (T
+           (setq fit-omit (cons (list (cdr pick)
+                                      (fit:omit-ring (cdr pick)))
+                                fit-omit))
+           (princ (strcat "  - leaving out Pt."
+                          (fit:pt-name (cdr pick))))))))))
 
 ;; Erase the omission rings; they are scaffolding, not a result.
 (defun fit:omit-clear ( / x)
@@ -5048,12 +5155,12 @@
   (setq fit-pts nil fit-npt 0 fit-nmoved 0 fit-ptnames nil fit-omit nil
         set (fit:ask-settings (list fit:*ptype* "Square" fit:*tol*
                                     fit:*miss-pct* fit:*oos* fit:*bowed*)
-                              7)
+                              8)
         ptype (nth 0 set))
   (if fit-pick
     (setq ss fit-pick)
     (progn
-      (princ (strcat "\n\n  Step 7 of 7 - select the survey points (POINTS layer or"
+      (princ (strcat "\n\n  Step 7 of 8 - select the survey points (POINTS layer or"
                      "\n  " fit:*point-block* " blocks)."))
       (princ "\n  Select objects: ")
       (setq ss (ssget '((0 . "POINT,INSERT"))))
@@ -5072,6 +5179,23 @@
        (princ (strcat "\nFITABHD: " (itoa n)
                       " points - ordering and fitting will take a"
                       " little while, please wait...")))
+     ;; -- step 8: which of those points to leave out ------------------
+     ;; The whole survey is in hand now, which is the first moment
+     ;; anybody can see WHICH shot is the bad one - the one on the
+     ;; coping, the double-shot, the rod held crooked.  Until this step
+     ;; the omit list was only reachable from a Redo, so the first fit
+     ;; was always pulled out of square by a point the drafter could
+     ;; already see was wrong and then redone.  Enter is the whole
+     ;; question in one keystroke, and every point left out is still
+     ;; MEASURED against the outline that is kept and ringed beside it.
+     (princ "\n\n  Step 8 of 8 - any of those points to leave OUT of the fit?")
+     (fit:omit-loop)
+     (if fit-omit
+       (princ (strcat "\n  " (itoa (length fit-omit))
+                      " point(s) left out - "
+                      (itoa (length (cal:dedupe (fit:active)
+                                                fit:*exact-eps*)))
+                      " in the fit.")))
      (setq again T)
      (while again
        (setq again nil
@@ -5116,6 +5240,7 @@
           (fit:purge-mine fit:*miss-layer*)
           (setq en nil res nil)
           (princ "\n\nRedoing the fit - the same points, new settings.")
+          (princ "\n  Any points to leave out this time?")
           (fit:omit-loop)
           (setq set   (fit:ask-settings set 6)
                 again T))

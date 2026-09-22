@@ -23,6 +23,20 @@ one rule added and one half left out:
   cutoff is out ENTIRELY: not ordered into the loop, not fitted, not
   counted against the miss allowance, and never reported as a point
   the line failed to hold.
+* **Added: leaving points out, up front.** With the survey selected
+  and the cutoff run, **step 9** asks which of the pool's OWN shots
+  the fit should not chase -- the one on the coping, the double-shot,
+  the rod held crooked. Every pick toggles, so naming a ringed one
+  again puts it back, and `Enter` takes none of them. This is not the
+  cutoff: the cutoff draws one line across the whole survey and
+  everything past it stops being a pool-edge shot at all; this picks
+  out strays one at a time, and each one it takes is still **measured
+  against the fit you keep**, ringed on `FGStep` beside the points the
+  fit missed and listed with how far off it landed -- that number is
+  what says whether leaving it out was right. Under the list goes one
+  line naming every bad point, `- Pt.12, Pt.15 and Pt.20 are bad.`, in
+  `BPCALLOUT`'s wording, so a sheet reads the same sentence whichever
+  tool wrote it. A `Redo` asks again.
 * **Left out: the pool bottom.** No shallow/deep breaks, no hopper, no
   slope lines. The command ends at the kept perimeter.
 
@@ -32,9 +46,10 @@ position it *deduced* from two tape readings, so nobody stood there.
 The cutoff and the omit list both keep a point and decide about it; a
 moved point is not in the survey to be decided about.
 
-Everything else is ABHD's: eight questions (max distance from a point,
+Everything else is ABHD's: nine questions (max distance from a point,
 percent of points allowed off, curve cap, declared straight walls,
-sharp corners, held points, the selection, then the cutoff), two modes
+sharp corners, held points, the selection, the cutoff, then the points
+to leave out), two modes
 picked from the selection (guided when POOL geometry is included,
 points-only otherwise), arcs from survey point to survey point meeting
 within 8 degrees of tangent, no arc curving further than the points it
@@ -45,14 +60,27 @@ holding it would break the shape, nice radii (whole feet, half feet,
 whole inches), and **three candidate fits** drawn at once -- most
 curves / as asked / fewest curves -- chosen with
 `[1/2/3/All/None/Redo]` or by clicking an outline. `Redo` refits
-without leaving the command: omit points by clicking them, move the
-cutoff either way, and edit walls, corners and holds with
+without leaving the command: leave more points out by clicking them,
+move the cutoff either way, and edit walls, corners and holds with
 `[Add/Remove/Keep] <Keep>` loops.
 
 The kept fit is a single closed LWPOLYLINE: candidates preview on
 `POOL-FIT`, the keeper moves onto `POOL`. Points the fit could not
-hold are ringed on `FGStep` and listed worst first by their `ab_pt`
-numbers.
+hold -- and the points you left out, tagged `(left out)` -- are ringed
+on `FGStep` and listed worst first by their `ab_pt` numbers, with one
+line under them naming them all:
+
+```
+POINTS OFF THE LINE (4)
+Pt.8    off by 1-7/8"
+Pt.7    off by 1-5/16"
+Pt.51   off by 1-1/16"
+Pt.23   off by 4-1/2"   (left out)
+- Pt.8, Pt.7, Pt.51 and Pt.23 are bad.
+```
+
+What the **cutoff** dropped is in none of that: a bench shot is not a
+bad pool-edge shot.
 
 ## Install & run
 
@@ -82,6 +110,9 @@ All at the top of `CABHD.lsp`; the key ones:
 | `*CAB-SNAP*` | `12.0` | How close a **click** has to land to a survey point to name it -- at a wall end, a corner, a held point, the cutoff's `Pick`, an omit. A typed number never uses it. The radius `BPCALLOUT`, `ABFIND` and `PERPMARK` share |
 | `*CAB-OUT-LAYER*` | `"POOL-FIT"` | Layer the candidate fits preview on |
 | `*CAB-MISS-LAYER*` | `"FGStep"` | Layer for the missed-point rings and list |
+| `*CAB-BAD-PREFIX*` | `"- "` | What the one line naming every bad point leads with -- ABFIND's note prefix, so a sheet's notes read as one column |
+| `*CAB-BAD-ONE*` / `*CAB-BAD-MANY*` | `" is bad."` / `" are bad."` | Its tail, by count: `- Pt.12 is bad.` / `- Pt.12, Pt.15 and Pt.20 are bad.` -- BPCALLOUT's wording |
+| `*CAB-OMIT-TAIL*` | `"   (left out)"` | What marks a left-out point's row apart from one the fit tried to hold and missed |
 | `*CAB-WALL-LAYER*` | `"POOL-WALLS"` | Layer for declared-wall markers |
 | `*CAB-TOL-MAX*` | `2.0` | Hard ceiling on the max-distance prompt (2") |
 | `*CAB-MISS-PCT*` | `0.20` | Recommended share of points allowed off (rounded up) |

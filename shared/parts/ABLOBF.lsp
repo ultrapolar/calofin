@@ -28,6 +28,21 @@
 ;;; ordered BETWEEN those two: a nearest-neighbour walk from the start,
 ;;; the end forced last, then 2-opt uncrossing with both ends pinned.
 ;;;
+;;; LEAVING POINTS OUT: with the whole survey selected, step 6 asks
+;;; which of those points the run should not chase - the mis-shot, the
+;;; double-shot, the rod held crooked - and a Redo asks again.  It
+;;; comes BEFORE the two ends on purpose: a point about to be left out
+;;; has no business being offered as the point the run starts at.  Each
+;;; one named gets a dashed ring and leaves the fit, the stats and the
+;;; miss allowance alike; naming a ringed one again puts it back, its
+;;; duplicate shots with it.  Nothing is thrown away: a point left out
+;;; is still MEASURED against the run that is kept, ringed beside the
+;;; points the fit missed and listed with how far off it landed,
+;;; because that number is what says whether leaving it out was right.
+;;; Under the list goes one line naming every bad point - "- Pt.12,
+;;; Pt.15 and Pt.20 are bad." - in BPCALLOUT's wording, so a sheet
+;;; reads the same sentence whichever tool wrote it.
+;;;
 ;;; NAMING A POINT: the two ends, and every other question about a
 ;;; survey point - a stretch end, a corner, a held point, a point to
 ;;; omit - are asked PERPMARK's way, because each is a question about
@@ -83,7 +98,7 @@
 ;;  this block, and nowhere else in the file.  Edit one and APPLOAD the
 ;;  file again; to try a value for one session, type the setq at the
 ;;  command line, because every knob is read when the command runs.
-(setq *ablobf-version*   "v1.3")     ; announced on load; release_lisp.py
+(setq *ablobf-version*   "v1.4")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *ABL-POOL-LAYER*   "POOL")     ; layer the kept run ends up on -
@@ -99,6 +114,23 @@
                                     ; its objects and only erases its
                                     ; own (see abl:tag-mine)
 (setq *ABL-MISS-RADIUS*  4.0)        ; radius of those rings (4 inches)
+(setq *ABL-BAD-PREFIX*   "- ")       ; the one line under the list that
+                                    ; NAMES the bad points leads with
+                                    ; this, the way ABFIND leads every
+                                    ; note it writes, so a sheet's notes
+                                    ; read as one column
+(setq *ABL-BAD-ONE*      " is bad.") ; ...its tail when ONE point is bad:
+                                    ; "- Pt.12 is bad."
+(setq *ABL-BAD-MANY*     " are bad.") ; ...and when two or more are:
+                                    ; "- Pt.12, Pt.15 and Pt.20 are
+                                    ; bad."  BPCALLOUT's wording, so the
+                                    ; sentence reads the same whichever
+                                    ; tool wrote it
+(setq *ABL-OMIT-TAIL*    "   (left out)") ; what marks a LEFT-OUT point's
+                                    ; row apart from a point the fit
+                                    ; tried to hold and missed.  Both
+                                    ; are bad and both are ringed; only
+                                    ; one of them was the fitter's doing
 (setq *ABL-PT-TAG*       "number")   ; attribute tag on the point block
                                     ; naming the point, as in "Pt.17"
 (setq *ABL-SNAP*         12.0)       ; a CLICK within this of a survey
@@ -1312,49 +1344,225 @@
     (if e (setq out (cons e out))))
   (reverse out))
 
+;; How far each of PTS lands from the nearest of SEGS, worst first, as
+;; (distance . point) pairs - the measurement the list beside the shape
+;; and the command line both read.
+(defun abl:off-keyed (pts segs / out q s d dmin)
+  (setq out nil)
+  (foreach q pts
+    (setq dmin nil)
+    (foreach s segs
+      (setq d (abl:seg-dist q s))
+      (if (or (null dmin) (< d dmin)) (setq dmin d)))
+    (setq out (cons (cons dmin q) out)))
+  (reverse (abl:sort-car out)))
+
+;; The one line that NAMES the bad points, under the list that measures
+;; them.  BPCALLOUT's own wording - commas between all but the last
+;; pair, "and" before the last, is/are by count - so the sentence on
+;; the sheet reads the same whichever tool wrote it, led by
+;; *ABL-BAD-PREFIX* because here it is one of the drawing's notes:
+;;
+;;     "- Pt.12 is bad."
+;;     "- Pt.12 and Pt.15 are bad."
+;;     "- Pt.12, Pt.15 and Pt.20 are bad."
+(defun abl:bad-phrase (names / n s i)
+  (setq n (length names))
+  (cond
+    ((= n 0) "")
+    ((= n 1) (strcat *ABL-BAD-PREFIX* "Pt." (car names) *ABL-BAD-ONE*))
+    (T
+     (setq s (strcat *ABL-BAD-PREFIX* "Pt." (car names)) i 1)
+     (while (< i (1- n))
+       (setq s (strcat s ", Pt." (nth i names))
+             i (1+ i)))
+     (strcat s " and Pt." (nth (1- n) names) *ABL-BAD-MANY*))))
+
 ;; Ring every point the chosen fit could not hold and list them beside
 ;; the shape, worst first.
-(defun abl:mark-unheld (bad segs bb hgt / q d s dmin keyed pair th x y
-                                         line)
+;;
+;; Ring every bad point and list it beside the shape with how far off
+;; it landed.  BAD is what the kept run failed to hold; OMIT is what
+;; the drafter left OUT of the fit at step 6 or at a Redo.  Both are
+;; bad points and both are ringed the same way: a shot the fit could
+;; not reach and a shot nobody wanted it to reach are the same thing to
+;; whoever has to go back out and re-shoot it.  They are listed apart
+;; because only one of them is the fitter's doing - a left-out point is
+;; still MEASURED against the kept run, which is the number that says
+;; whether leaving it out was right.
+;;
+;; Under the two lists goes one line naming them all (abl:bad-phrase).
+;; Returns (bad-pairs left-out-pairs), each (distance . point), worst
+;; first.
+(defun abl:mark-unheld (bad omit segs bb hgt / q keyed okeyed pair th x y
+                                               line names)
   (abl:purge-mine *ABL-MISS-LAYER*)
-  (if bad
+  (setq keyed nil okeyed nil)
+  (if (or bad omit)
     (progn
       (cal:ensure-layer *ABL-MISS-LAYER* 1)
-      (foreach q bad
+      ;; rings on the points themselves - the left-out ones included
+      (foreach q (append bad omit)
         (abl:tag-mine
           (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
                           (cons 8 *ABL-MISS-LAYER*) '(100 . "AcDbCircle")
                           (cons 10 (list (car q) (cadr q) 0.0))
                           (cons 40 *ABL-MISS-RADIUS*)))))
-      (setq keyed nil)
-      (foreach q bad
-        (setq dmin nil)
-        (foreach s segs
-          (setq d (abl:seg-dist q s))
-          (if (or (null dmin) (< d dmin)) (setq dmin d)))
-        (setq keyed (cons (cons dmin q) keyed)))
-      (setq keyed (reverse (abl:sort-car keyed))
-            th    (* 0.5 hgt)
-            x     (+ (caddr bb) (* 0.6 hgt))
-            y     (cadddr bb))
+      (setq keyed  (abl:off-keyed bad segs)
+            okeyed (abl:off-keyed omit segs)
+            th     (* 0.5 hgt)
+            x      (+ (caddr bb) (* 0.6 hgt))
+            y      (cadddr bb))
       (abl:tag-mine
         (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
                         (cons 8 *ABL-MISS-LAYER*) '(100 . "AcDbText")
                         (cons 10 (list x y 0.0))
                         (cons 40 th)
                         (cons 1 (strcat "POINTS OFF THE LINE ("
-                                        (itoa (length bad)) ")")))))
-      (foreach pair keyed
+                                        (itoa (+ (length bad)
+                                                 (length omit)))
+                                        ")")))))
+      (foreach pair (append keyed okeyed)
         (setq y    (- y (* th 1.6))
               line (strcat "Pt." (abl:pt-name (cdr pair))
-                           "   off by " (rtos (car pair) 4 4)))
+                           "   off by " (rtos (car pair) 4 4)
+                           (if (abl:memb (cdr pair) omit)
+                             *ABL-OMIT-TAIL*
+                             "")))
         (abl:tag-mine
           (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
                           (cons 8 *ABL-MISS-LAYER*) '(100 . "AcDbText")
                           (cons 10 (list x y 0.0))
                           (cons 40 th)
-                          (cons 1 line)))))))
-  keyed)
+                          (cons 1 line)))))
+      ;; ...and the line that names them, under the measurements
+      (setq names (mapcar '(lambda (pair) (abl:pt-name (cdr pair)))
+                          (append keyed okeyed))
+            y     (- y (* th 1.6)))
+      (abl:tag-mine
+        (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
+                        (cons 8 *ABL-MISS-LAYER*) '(100 . "AcDbText")
+                        (cons 10 (list x y 0.0))
+                        (cons 40 th)
+                        (cons 1 (abl:bad-phrase names)))))))
+  (list keyed okeyed))
+
+;; ---- leaving points out ----------------------------------------------
+;; Asked once the whole survey is in hand - at step 6, before the two
+;; ends are picked, so a point about to be left out is never offered as
+;; one of them - and again at every Redo.  Every pick TOGGLES: a point
+;; in the fit goes out (it, and any duplicate shot on the same spot,
+;; leave PTS, the stats and the miss allowance alike) and gets a dashed
+;; ring; a ringed one named again comes back in and takes its ring with
+;; it.
+;;
+;; abl-omitted carries (point its-saved-copies ring) per entry, which is
+;; what makes a restore exact rather than a re-add: the duplicates come
+;; back as they were read, not as one merged shot.
+;;
+;; Returns (points-still-in-the-fit points-omitted-by-THIS-call).  The
+;; second list is what a caller with declarations already matched needs
+;; in order to drop the stretches, corners and holds that just lost
+;; their point; step 6 runs before that matching, so there is nothing
+;; there for it to prune and abl:declared-in names and drops them by
+;; itself.
+(defun abl:omit-loop (pts / cand w w1 w2 ent ring pts2 omits)
+  (setq omits nil)
+  (princ "\n  Name each one - click it, or type its number (Enter for none):")
+  (princ "\n  mis-shots, duplicates, anything the line should not chase;")
+  (princ "\n  each gets a dashed ring.")
+  (if abl-omitted
+    (princ (strcat "\n  " (itoa (length abl-omitted))
+                   " point(s) are already out - naming one of those"
+                   " puts it BACK IN.")))
+  (while (setq cand (cal:askpoint
+                      "  Point to omit, or a ringed one to restore - pick it or type its number"
+                      "Enter = done" nil
+                      (abl:cands-of
+                        (append (cal:dedupe pts *ABL-EXACT-EPS*)
+                                (mapcar 'car abl-omitted)))
+                      *ABL-SNAP*))
+    ;; the prompt offers no Back: there is nothing behind a list you
+    ;; are still building, and reading Back as Enter would move the run
+    ;; ON, which is the opposite of what was asked for.  So say what to
+    ;; do instead and ask again - naming a ringed point again is how one
+    ;; is taken back here.  Without this the sentinel reached (car ...)
+    ;; below and killed the command.
+    (if (eq cand 'CAL-BACK)
+      (princ (strcat "\n  Nothing to go back to here - name a ringed"
+                     " point again to put it back in, or press Enter"
+                     " when the list is right."))
+      (progn
+        (setq w1 (car cand)
+              w2 (abl:nearest w1 (mapcar 'car abl-omitted)))
+        (cond
+          ;; a ringed point: naming it again un-omits it - the saved
+          ;; entries (its duplicates too) rejoin the fit, its ring goes
+          ((and w2 (< (cal:dist w1 w2) *ABL-EXACT-EPS*))
+           (setq ent         (assoc w2 abl-omitted)
+                 pts         (append pts (cadr ent))
+                 abl-omitted (abl:remove ent abl-omitted)
+                 omits       (abl:remove w2 omits))
+           (if (and (caddr ent) (entget (caddr ent)))
+             (progn
+               (abl:temp-drop (caddr ent))
+               (entdel (caddr ent))))
+           (princ (strcat "  - Pt." (abl:pt-name w2) " back in")))
+          ;; otherwise omit: pull it - and its duplicates - out of the
+          ;; fit, the stats and the miss allowance alike, and remember
+          ;; how to undo it
+          (w1
+           (setq pts2 nil ent nil)
+           (foreach w pts
+             (if (< (cal:dist w w1) *ABL-EXACT-EPS*)
+               (setq ent (cons w ent))
+               (setq pts2 (cons w pts2))))
+           (setq pts         (reverse pts2)
+                 ring        (abl:temp-add (abl:tag-mine
+                                             (abl:draw-corner-marker w1)))
+                 abl-omitted (cons (list w1 ent ring) abl-omitted)
+                 omits       (cons w1 omits))
+           (princ (strcat "  - omitting Pt." (abl:pt-name w1))))))))
+  (list pts omits))
+
+;; Forget every point left out, rings and all.  The selection is read
+;; again from scratch whenever Back at the first end hands it back, and
+;; the classifier rebuilds every list it fills - so this one starts
+;; clean with them, rather than ringing points the new selection may
+;; not even hold.
+(defun abl:omit-clear ( / x)
+  (foreach x abl-omitted
+    (if (and (caddr x) (entget (caddr x)))
+      (progn
+        (abl:temp-drop (caddr x))
+        (entdel (caddr x)))))
+  (setq abl-omitted nil)
+  (princ))
+
+;; The stretches, corners and holds that just lost a point to OMITS,
+;; gone.  A restored point gets none of them back: the stretch went
+;; when it went out.
+(defun abl:prune-declared (omits / pts2 w)
+  (setq pts2 nil)
+  (foreach w abl-walls
+    (if (not (or (abl:memb (car w) omits) (abl:memb (cadr w) omits)))
+      (setq pts2 (cons w pts2))))
+  (if (< (length pts2) (length abl-walls))
+    (princ "\n  (a declared stretch lost an end and was dropped)"))
+  (setq abl-walls (reverse pts2)
+        pts2      nil)
+  (foreach w abl-corners
+    (if (not (abl:memb w omits)) (setq pts2 (cons w pts2))))
+  (setq abl-corners (reverse pts2)
+        pts2        nil)
+  ;; a held point that was just omitted is out of the fit entirely -
+  ;; nothing left to hold
+  (foreach w abl-holds
+    (if (not (abl:memb w omits)) (setq pts2 (cons w pts2))))
+  (if (< (length pts2) (length abl-holds))
+    (princ "\n  (an omitted point was held - its hold went with it)"))
+  (setq abl-holds (reverse pts2))
+  (princ))
 
 ;; Print the hit report for the fit the user kept.  ALLOW is the run's
 ;; miss allowance; CLOSED says which joint the chain has none of.
@@ -1528,7 +1736,7 @@
 (defun abl:compare (tour pts tol allow
                    / prior vars v e ent lab st onv segs verts bad allbad
                      first i pick idx keep ce bb hgt sel picked keyed pr
-                     res)
+                     res marks okeyed omit names)
   (setq prior (abl:prior-fits))
   (cal:ensure-layer *ABL-OUT-LAYER* 3)
   (setq onv (max *ABL-ON-EPS* (* *ABL-ON-FRAC* tol)))
@@ -1622,7 +1830,7 @@
                        " reach, so it does not get a vote here.)")))
       (setq abl-phase "waiting for the choice of fit")
       (princ "\n\n  Click the outline you want to keep, or type its number.")
-      (princ "\n  Redo refits with new settings, and lets you omit points first.")
+      (princ "\n  Redo refits with new settings, and lets you leave more points out first.")
       (initget "1 2 3 All None Redo")
       (setq pick (getkword
                    "\n  Keep which fit - click one, or [1/2/3/All/None/Redo] <2>: "))
@@ -1676,7 +1884,14 @@
              (abl:set-bylayer (cadr keep))))))
       (if keep
         (progn
-          (setq keyed (abl:mark-unheld (caddr keep) (car keep) bb hgt))
+          ;; the points LEFT OUT are measured against the kept run
+          ;; too, and ringed with the ones it missed: both are bad
+          ;; points to whoever has to go back and re-shoot one
+          (setq omit   (mapcar 'car abl-omitted)
+                marks  (abl:mark-unheld (caddr keep) omit (car keep)
+                                        bb hgt)
+                keyed  (car marks)
+                okeyed (cadr marks))
           (abl:report (car keep) pts tol allow prior)
           (if keyed
             (progn
@@ -1687,7 +1902,23 @@
                              " first:"))
               (foreach pr keyed
                 (princ (strcat "\n    Pt." (abl:pt-name (cdr pr))
-                               "   off by " (rtos (car pr) 4 4))))))))))
+                               "   off by " (rtos (car pr) 4 4))))))
+          (if okeyed
+            (progn
+              (princ (strcat "\n  " (itoa (length okeyed))
+                             " point(s) you left out, ringed with them"
+                             " and measured against the run you kept"
+                             " - worst first:"))
+              (foreach pr okeyed
+                (princ (strcat "\n    Pt." (abl:pt-name (cdr pr))
+                               "   off by " (rtos (car pr) 4 4)
+                               *ABL-OMIT-TAIL*)))))
+          ;; and the one line that names them all, written beside the
+          ;; shape under the measurements and echoed here
+          (setq names (mapcar '(lambda (pr) (abl:pt-name (cdr pr)))
+                              (append keyed okeyed)))
+          (if names
+            (princ (strcat "\n  " (abl:bad-phrase names))))))))
   (princ)
   res)
 
@@ -1954,12 +2185,12 @@
   (if res 'CAL-BACK))
 
 ;; ---- the command -----------------------------------------------------
-(defun c:ABLOBF ( / tol ans go wp1 wp2 rawwalls rawcnrs rawholds w w1 w2
-                   step rstep estep mk decls reselect cands cand c c1 c2
+(defun c:ABLOBF ( / tol ans go wp1 wp2 rawwalls rawcnrs rawholds w
+                   step rstep estep mk decls reselect cands c c1 c2
                    ss i en ed lay typ ext nocs far
                    pts dpts allow tour stale npt
                    v e1 e2
-                   again omits pts2 ent ring abl-omitted
+                   again omits abl-omitted
                    abl-miss-pct abl-walls abl-corners abl-holds
                    abl-temp abl-ptnames abl-ptkeys abl-numbered
                    *error* abl-old-err abl-phase undo-open
@@ -2025,7 +2256,7 @@
       ;; -- step 1: how close must the line stay to the points? ------
       ((= step 1)
        (setq abl-phase "reading the tolerance")
-       (princ "\n\n  Step 1 of 6 - how far may the fitted run sit from a survey point?")
+       (princ "\n\n  Step 1 of 7 - how far may the fitted run sit from a survey point?")
        (princ "\n  Type a distance in drawing units (1 = one inch, 2 at most), or")
        (princ "\n  pick two points in the drawing to measure one.")
        (princ "\n  Smaller = hugs the points.  Bigger = smoother, with fewer curves.")
@@ -2036,7 +2267,7 @@
       ;; -- step 2: how many of the points may sit off the line? -----
       ((= step 2)
        (setq abl-phase "reading the miss percentage")
-       (princ "\n\n  Step 2 of 6 - what percent of the points may sit OFF the line")
+       (princ "\n\n  Step 2 of 7 - what percent of the points may sit OFF the line")
        (princ "\n  (off, but still within the distance above)?")
        (princ (strcat "\n  Press Enter for the standard "
                       (itoa (fix (+ 0.5 (* 100.0 *ABL-MISS-PCT*))))
@@ -2051,7 +2282,7 @@
       ;; -- step 3: optional cap on how many curves the result may use
       ((= step 3)
        (setq abl-phase "reading the curve limit")
-       (princ "\n\n  Step 3 of 6 - limit how many curves the result may use?")
+       (princ "\n\n  Step 3 of 7 - limit how many curves the result may use?")
        (princ "\n  Type a whole number, or None for no limit.")
        (if (eq (abl:ask-cap T) 'CAL-BACK)
          (progn (princ "\n  Stepping back one question.")
@@ -2074,7 +2305,7 @@
              rawholds nil
              decls    nil
              go       T)
-       (princ "\n\n  Step 4 of 6 - any dead-straight stretches, sharp corners, or points")
+       (princ "\n\n  Step 4 of 7 - any dead-straight stretches, sharp corners, or points")
        (princ "\n  to hold ABSOLUTELY?  A held point can never be fudged: the line")
        (princ "\n  passes through it exactly, in every candidate.  Each is named by")
        (princ "\n  its point(s) - click the point, or type its number; dashed markers")
@@ -2178,7 +2409,7 @@
     (if abl-pick
       (setq ss abl-pick)
       (progn
-        (princ "\n\n  Step 5 of 6 - select the survey points (POINT entities on any layer,")
+        (princ "\n\n  Step 5 of 7 - select the survey points (POINT entities on any layer,")
         (princ (strcat "\n  \"" *ABL-POINT-BLOCK* "\" blocks anywhere, and blocks on layer "
                        *ABL-POINT-LAYER* ")."))
         (princ "\n  Select objects: ")
@@ -2189,6 +2420,9 @@
       (progn
         ;; -- sort the selection into points ----------------------------
         (setq abl-phase "reading the selected entities")
+        ;; a second pass starts clean, the omit list with it: its rings
+        ;; describe points the new selection may not even hold
+        (abl:omit-clear)
         (setq pts nil i 0 nocs 0
               npt 0 abl-ptnames nil abl-ptkeys nil abl-numbered 0)
         (while (< i (sslength ss))
@@ -2220,6 +2454,29 @@
                          " selected object(s) are not drawn in the world"
                          " plane; the fit is flat (XY) and may be wrong."
                          "  Set UCS to World and flatten them first.")))
+
+        ;; -- step 6: which of them to leave out ------------------------
+        ;; The whole survey is in hand now, which is the first moment
+        ;; anybody can see WHICH shot is the bad one.  It comes BEFORE
+        ;; the two ends on purpose: a point about to be left out has no
+        ;; business being offered as the point the run starts at.
+        ;; Until this step the omit list was only reachable from a
+        ;; Redo, so the first fit was always drawn round a point the
+        ;; drafter could already see was wrong and then redone.  Enter
+        ;; is the whole question in one keystroke, and every point left
+        ;; out is still MEASURED against the run that is kept and
+        ;; ringed beside it.
+        (if pts
+          (progn
+            (setq abl-phase "picking points to omit")
+            (princ "\n\n  Step 6 of 7 - any of those points to leave OUT of the fit?")
+            (setq pts (car (abl:omit-loop pts)))
+            (if abl-omitted
+              (princ (strcat "\n  " (itoa (length abl-omitted))
+                             " point(s) left out - "
+                             (itoa (length (cal:dedupe pts *ABL-EXACT-EPS*)))
+                             " in the fit.")))))
+
         (setq dpts  (if pts (cal:dedupe pts *ABL-EXACT-EPS*))
               allow (cal:ceil (* (abl:misspct) (length dpts))))
         ;; a declaration was made on a NAMED point before the selection
@@ -2250,6 +2507,13 @@
                          " points - ordering and fitting will take a"
                          " little while, please wait...")))
         (cond
+          ;; leaving every point out is something step 6 lets you do,
+          ;; and "none were found" is the wrong thing to say when the
+          ;; reason is that they were all taken out again
+          ((and (null pts) abl-omitted)
+           (princ (strcat "\nEvery selected point was left out at step 6"
+                          " (" (itoa (length abl-omitted))
+                          " of them) - there is nothing left to fit.")))
           ((null pts)
            (princ (strcat "\nNo survey points found (looked for POINT"
                           " entities, \"" *ABL-POINT-BLOCK*
@@ -2277,7 +2541,7 @@
            ;; is the one a drafter expects to see
            (if (> (abl:pt-key (car far)) (abl:pt-key (cadr far)))
              (setq far (list (cadr far) (car far))))
-           (princ "\n\n  Step 6 of 6 - where does the run START, and where does it END?")
+           (princ "\n\n  Step 7 of 7 - where does the run START, and where does it END?")
            (princ "\n  Click a point or type the survey number it carries; Enter takes")
            (princ "\n  the farthest-apart pair.  Everything else is ordered between them.")
            (if (> abl-numbered 0)
@@ -2319,79 +2583,15 @@
                  (if (eq 'REDO (abl:compare tour pts tol allow))
                        (progn
                          ;; -- redo: maybe omit points, then re-ask ---------
-                         (setq abl-phase "picking points to omit"
-                               omits    nil)
+                         (setq abl-phase "picking points to omit")
                          (princ "\n\nRedoing the fit.  Any points to leave out this time?")
-                         (princ "\n  Name each one - click it, or type its number (Enter for none):")
-                         (princ "\n  mis-shots, duplicates, anything the line should not chase;")
-                         (princ "\n  each gets a dashed ring.")
-                         (if abl-omitted
-                           (princ (strcat "\n  " (itoa (length abl-omitted))
-                                          " point(s) are already out -"
-                                          " naming one of those puts it"
-                                          " BACK IN.")))
-                         (while (setq cand (cal:askpoint
-                                             "  Point to omit, or a ringed one to restore - pick it or type its number"
-                                             "Enter = done" nil
-                                             (abl:cands-of
-                                               (append dpts (mapcar 'car abl-omitted)))
-                                             *ABL-SNAP*))
-                           (setq w1 (car cand)
-                                 w2 (abl:nearest w1 (mapcar 'car abl-omitted)))
-                           (cond
-                             ((and w2 (< (cal:dist w1 w2) *ABL-EXACT-EPS*))
-                              (setq ent        (assoc w2 abl-omitted)
-                                    pts        (append pts (cadr ent))
-                                    dpts       (cal:dedupe pts *ABL-EXACT-EPS*)
-                                    abl-omitted (abl:remove ent abl-omitted)
-                                    omits      (abl:remove w2 omits))
-                              (if (and (caddr ent) (entget (caddr ent)))
-                                (progn
-                                  (abl:temp-drop (caddr ent))
-                                  (entdel (caddr ent))))
-                              (princ (strcat "  - Pt." (abl:pt-name w2)
-                                             " back in")))
-                             (w1
-                              (setq pts2 nil ent nil)
-                              (foreach w pts
-                                (if (< (cal:dist w w1) *ABL-EXACT-EPS*)
-                                  (setq ent (cons w ent))
-                                  (setq pts2 (cons w pts2))))
-                              (setq pts  (reverse pts2)
-                                    dpts (cal:dedupe pts *ABL-EXACT-EPS*)
-                                    ring (abl:temp-add (abl:tag-mine
-                                           (abl:draw-corner-marker w1)))
-                                    abl-omitted (cons (list w1 ent ring)
-                                                     abl-omitted)
-                                    omits      (cons w1 omits))
-                              (princ (strcat "  - omitting Pt."
-                                             (abl:pt-name w1))))))
-                         (if omits
-                           (progn
-                             ;; declared stretches and corners anchored on
-                             ;; an omitted point make no sense any more
-                             (setq pts2 nil)
-                             (foreach w abl-walls
-                               (if (not (or (abl:memb (car w) omits)
-                                            (abl:memb (cadr w) omits)))
-                                 (setq pts2 (cons w pts2))))
-                             (if (< (length pts2) (length abl-walls))
-                               (princ "\n  (a declared stretch lost an end and was dropped)"))
-                             (setq abl-walls (reverse pts2)
-                                   pts2     nil)
-                             (foreach w abl-corners
-                               (if (not (abl:memb w omits))
-                                 (setq pts2 (cons w pts2))))
-                             (setq abl-corners (reverse pts2)
-                                   pts2       nil)
-                             ;; a held point that was just omitted is out of
-                             ;; the fit entirely - nothing left to hold
-                             (foreach w abl-holds
-                               (if (not (abl:memb w omits))
-                                 (setq pts2 (cons w pts2))))
-                             (if (< (length pts2) (length abl-holds))
-                               (princ "\n  (an omitted point was held - its hold went with it)"))
-                             (setq abl-holds (reverse pts2))))
+                         (setq omits (abl:omit-loop pts)
+                               pts   (car omits)
+                               omits (cadr omits)
+                               dpts  (cal:dedupe pts *ABL-EXACT-EPS*))
+                         ;; declared stretches and corners anchored on
+                         ;; an omitted point make no sense any more
+                         (if omits (abl:prune-declared omits))
                          (if abl-omitted
                            (princ (strcat "\n  " (itoa (length abl-omitted))
                                           " point(s) omitted in total - "

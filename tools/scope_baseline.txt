@@ -35,6 +35,10 @@ lisp/abhd/abhd.lsp|pf:guided-fit|setq|bd
 lisp/abhd/abhd.lsp|pf:guided-fit|setq|best
 lisp/abhd/abhd.lsp|pf:guided-fit|setq|pf-miss-left
 lisp/abhd/abhd.lsp|pf:has-arcs|foreach|s
+lisp/abhd/abhd.lsp|pf:omit-loop|setq|pf-omitted
+lisp/abhd/abhd.lsp|pf:prune-declared|setq|pf-corners
+lisp/abhd/abhd.lsp|pf:prune-declared|setq|pf-holds
+lisp/abhd/abhd.lsp|pf:prune-declared|setq|pf-walls
 lisp/abhd/abhd.lsp|pf:sweep-marks|setq|pf-temp
 lisp/abhd/abhd.lsp|pf:temp-add|setq|pf-temp
 lisp/abhd/abhd.lsp|pf:temp-clear|setq|pf-temp
@@ -55,6 +59,11 @@ lisp/ablobf/ABLOBF.lsp|abl:edit-holds|setq|abl-holds
 lisp/ablobf/ABLOBF.lsp|abl:edit-holds|setq|abl-phase
 lisp/ablobf/ABLOBF.lsp|abl:edit-walls|setq|abl-phase
 lisp/ablobf/ABLOBF.lsp|abl:edit-walls|setq|abl-walls
+lisp/ablobf/ABLOBF.lsp|abl:omit-clear|setq|abl-omitted
+lisp/ablobf/ABLOBF.lsp|abl:omit-loop|setq|abl-omitted
+lisp/ablobf/ABLOBF.lsp|abl:prune-declared|setq|abl-corners
+lisp/ablobf/ABLOBF.lsp|abl:prune-declared|setq|abl-holds
+lisp/ablobf/ABLOBF.lsp|abl:prune-declared|setq|abl-walls
 lisp/ablobf/ABLOBF.lsp|abl:sweep-marks|setq|abl-temp
 lisp/ablobf/ABLOBF.lsp|abl:temp-add|setq|abl-temp
 lisp/ablobf/ABLOBF.lsp|abl:temp-clear|setq|abl-temp
@@ -89,6 +98,7 @@ lisp/cabhd/CABHD.lsp|cab:guided-fit|setq|bd
 lisp/cabhd/CABHD.lsp|cab:guided-fit|setq|best
 lisp/cabhd/CABHD.lsp|cab:guided-fit|setq|cab-miss-left
 lisp/cabhd/CABHD.lsp|cab:has-arcs|foreach|s
+lisp/cabhd/CABHD.lsp|cab:omit-loop|setq|cab-omitted
 lisp/cabhd/CABHD.lsp|cab:prune-decls|setq|cab-corners
 lisp/cabhd/CABHD.lsp|cab:prune-decls|setq|cab-holds
 lisp/cabhd/CABHD.lsp|cab:prune-decls|setq|cab-walls
@@ -487,6 +497,11 @@ shared/parts/ABLOBF.lsp|abl:edit-holds|setq|abl-holds
 shared/parts/ABLOBF.lsp|abl:edit-holds|setq|abl-phase
 shared/parts/ABLOBF.lsp|abl:edit-walls|setq|abl-phase
 shared/parts/ABLOBF.lsp|abl:edit-walls|setq|abl-walls
+shared/parts/ABLOBF.lsp|abl:omit-clear|setq|abl-omitted
+shared/parts/ABLOBF.lsp|abl:omit-loop|setq|abl-omitted
+shared/parts/ABLOBF.lsp|abl:prune-declared|setq|abl-corners
+shared/parts/ABLOBF.lsp|abl:prune-declared|setq|abl-holds
+shared/parts/ABLOBF.lsp|abl:prune-declared|setq|abl-walls
 shared/parts/ABLOBF.lsp|abl:sweep-marks|setq|abl-temp
 shared/parts/ABLOBF.lsp|abl:temp-add|setq|abl-temp
 shared/parts/ABLOBF.lsp|abl:temp-clear|setq|abl-temp
@@ -521,6 +536,7 @@ shared/parts/CABHD.lsp|cab:guided-fit|setq|bd
 shared/parts/CABHD.lsp|cab:guided-fit|setq|best
 shared/parts/CABHD.lsp|cab:guided-fit|setq|cab-miss-left
 shared/parts/CABHD.lsp|cab:has-arcs|foreach|s
+shared/parts/CABHD.lsp|cab:omit-loop|setq|cab-omitted
 shared/parts/CABHD.lsp|cab:prune-decls|setq|cab-corners
 shared/parts/CABHD.lsp|cab:prune-decls|setq|cab-holds
 shared/parts/CABHD.lsp|cab:prune-decls|setq|cab-walls
@@ -849,6 +865,10 @@ shared/parts/abhd.lsp|pf:guided-fit|setq|bd
 shared/parts/abhd.lsp|pf:guided-fit|setq|best
 shared/parts/abhd.lsp|pf:guided-fit|setq|pf-miss-left
 shared/parts/abhd.lsp|pf:has-arcs|foreach|s
+shared/parts/abhd.lsp|pf:omit-loop|setq|pf-omitted
+shared/parts/abhd.lsp|pf:prune-declared|setq|pf-corners
+shared/parts/abhd.lsp|pf:prune-declared|setq|pf-holds
+shared/parts/abhd.lsp|pf:prune-declared|setq|pf-walls
 shared/parts/abhd.lsp|pf:sweep-marks|setq|pf-temp
 shared/parts/abhd.lsp|pf:temp-add|setq|pf-temp
 shared/parts/abhd.lsp|pf:temp-clear|setq|pf-temp

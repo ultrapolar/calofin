@@ -229,7 +229,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.8")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.9")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -336,6 +336,20 @@
 (setq lg:*runpaddle*   t)          ; T to hand the new perimeter to
                                    ; PADDLE and pad it; nil to stop after
                                    ; the gut and leave it unpadded
+
+;; The layers a run leaves alone: the setting when it is a list of
+;; NAMES, and nil - none - when it holds anything else.  A knob is
+;; whatever somebody left in it, and this one is reachable: it SHIPS
+;; nil, and LAZTUNE reads a nil-shipped knob as "off, or a value", so
+;; it takes any ATOM - which is both the only thing it will accept
+;; here and the one shape this setting cannot be.  Read rather than
+;; trusted, then: the names go to strcase and strcat, and a T reaching
+;; either is "bad argument type" thrown in the middle of the sweep.
+(defun lg:keeplayers ( / bad s)
+  (if (= (type lg:*keeplayers*) 'LIST)
+    (progn
+      (foreach s lg:*keeplayers* (if (/= (type s) 'STR) (setq bad T)))
+      (if (not bad) lg:*keeplayers*))))
 
 ;;; -------------------- ask layer ---------------------------------------
 ;;; STANDARDS.md section 4, copied from the library so this file loads
@@ -1539,7 +1553,7 @@
         nrad    0
         nother  0
         nspared 0
-        spare   (mapcar 'strcase lg:*keeplayers*))
+        spare   (mapcar 'strcase (lg:keeplayers)))
   (if vts
     (foreach en (lg:ss-ents ss)
       (setq ed  (entget en)
@@ -1664,7 +1678,7 @@
       (if (> nspared 0)
         (princ (strcat "\nLINGUTTER: " (itoa nspared) " object"
                        (lg:s nspared) " left alone on "
-                       (lg:names lg:*keeplayers*) ".")))))
+                       (lg:names (lg:keeplayers)) ".")))))
   (princ))
 
 ;;; -------------------- handing over to PADDLE --------------------------

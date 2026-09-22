@@ -283,6 +283,9 @@ table here.
 | `*PF-OUT-LAYER*` / `*PF-OUT-COLOUR*` | `"POOL-FIT"` / 3 | Layer the three candidates preview on |
 | `*PF-MISS-LAYER*` / `*PF-MISS-COLOUR*` | `"FGStep"` / 1 | Layer for the unheld-point rings and their list |
 | `*PF-MISS-RADIUS*` / `*PF-HOLD-RADIUS*` | `4.0` / half of it | Ring sizes: a miss / corner / omitted point, and a held point |
+| `*PF-BAD-PREFIX*` | `"- "` | What the one line naming every bad point leads with — ABFIND's note prefix, so a sheet's notes read as one column |
+| `*PF-BAD-ONE*` / `*PF-BAD-MANY*` | `" is bad."` / `" are bad."` | Its tail, by count: `- Pt.12 is bad.` / `- Pt.12, Pt.15 and Pt.20 are bad.` — BPCALLOUT's wording |
+| `*PF-OMIT-TAIL*` | `"   (left out)"` | What marks a left-out point's row apart from one the fit tried to hold and missed |
 | `*PF-WALL-LAYER*` / `*PF-WALL-COLOUR*` | `"POOL-WALLS"` / 8 | Layer for the dashed declaration markers |
 | `*PF-BOTTOM-LAYER*` | `"POOL-BOTTOM"` | Legacy: where older versions put the bottom. Nothing is written there now — `ADAB` only skips it when reading a selection |
 | `*PF-MARK-LTYPE*` / `*PF-STUB-LTYPE*` | `"DASHED"` / `"DASHED2"` | Linetype of those markers, and of the deep-break stubs |
@@ -686,16 +689,32 @@ with a 4″ radius circle on layer `FGStep`**, and the whole set is
 your `ab_pt` blocks:
 
 ```
-POINTS OFF THE LINE (3)
+POINTS OFF THE LINE (4)
 Pt.8    off by 1-7/8"
 Pt.7    off by 1-5/16"
 Pt.51   off by 1-1/16"
+Pt.23   off by 4-1/2"   (left out)
+- Pt.8, Pt.7, Pt.51 and Pt.23 are bad.
 ```
 
 So you can work down the list instead of hunting for circles, and
 decide per point whether it is a bad shot, a duplicate, or a real
 feature that needs a tighter distance. The same list prints at the
 command line.
+
+**The points you left out at step 8 are in it too**, ringed the same
+way and tagged `(left out)` — a shot the fit could not reach and a
+shot you told it not to reach are the same thing to whoever has to go
+back out and re-shoot one. Each is still **measured against the line
+you kept**, because that number is what says whether leaving it out
+was right: a point that lands an inch off was arguably worth fighting
+for, and one that lands four inches off was not.
+
+The last line **names them all in one sentence** —
+`- Pt.8, Pt.7, Pt.51 and Pt.23 are bad.` — in `BPCALLOUT`'s own
+wording, so a sheet reads the same sentence whichever tool wrote it.
+The prefix and the two tails are `*PF-BAD-PREFIX*`, `*PF-BAD-ONE*`
+and `*PF-BAD-MANY*`.
 
 A few of those rings may be there **on purpose**: the ones the fit
 gave up on to keep the shape whole (above). They are reported exactly

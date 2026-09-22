@@ -139,7 +139,9 @@ def test_the_commands_wrap_the_fitter():
         return vm
 
     # the seven questions, all taking their Enter default, then Enter at
-    # the step-7 selection
+    # the step-7 selection.  Nothing is selected there, so step 8 - the
+    # points to leave out - is never reached; the runs below that DO
+    # select something carry its Enter of their own.
     WIZARD = [1.0, None, None, 'No', 'No', 'No', None]
 
     for cmd in ('c:ABHD', 'c:ADAB'):
@@ -163,8 +165,8 @@ def test_the_commands_wrap_the_fitter():
     vm.pickfirst = ['<ss>'] + list(vm.entities)
     # with a real survey the fit completes and offers its three
     # candidates; "None" discards them, which is all this case is about
-    vm.run('c:ABHD', WIZARD[:-1] + ['None'])
-    assert 'Step 7 of 7' not in ''.join(vm.printed), 'step 7 was still asked'
+    vm.run('c:ABHD', WIZARD[:-1] + [None, 'None'])
+    assert 'Step 7 of 8' not in ''.join(vm.printed), 'step 7 was still asked'
     assert not any(p == 'ssget' for p, _ in vm.prompts), vm.prompts
     print("  a survey highlighted before ABHD is typed skips step 7")
 

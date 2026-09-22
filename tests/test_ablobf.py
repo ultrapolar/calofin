@@ -39,7 +39,10 @@ LSP = os.path.join(ROOT, 'lisp', 'ablobf', 'ABLOBF.lsp')
 
 #: steps 1-4 on their Enter defaults, then Done at the declare loop.
 #: What follows is the selection, the two ends, and the fit pick.
-WIZARD = [1.0, None, None, 'Done']
+#: steps 1 to 4 (distance, share, cap, the declare loop) and then
+#: step 6 - the points to leave out, asked straight after the
+#: selection and before the two ends.  Enter takes none of them.
+WIZARD = [1.0, None, None, 'Done', None]
 
 FAILS = []
 
@@ -161,9 +164,12 @@ pts = points(vm, BOW)
 vm.pickfirst = ['<ss>'] + pts
 txt = run(vm, WIZARD + [None, None, '1'])
 
-check('it walks all six steps',
-      'Step 1 of 6' in txt and 'Step 6 of 6' in txt, txt[:200])
-check('the sixth step is the two ends',
+check('it walks all seven steps',
+      'Step 1 of 7' in txt and 'Step 7 of 7' in txt, txt[:200])
+check('the sixth step leaves points out, before the ends are picked',
+      'Step 6 of 7 - any of those points to leave OUT' in txt,
+      txt[-2500:])
+check('the seventh step is the two ends',
       'where does the run START, and where does it END' in txt, txt[-2000:])
 check('the run it settled on is named end to end',
       re.search(r'Run: Pt\.\d+ to Pt\.\d+, through \d+ point\(s\)', txt)
@@ -249,6 +255,47 @@ check('a click near a point takes that point',
       clicked[clicked.find('Run:'):][:80])
 
 # ----------------------------------------------------------------------
+print('ablobf -- step 6 leaves points out, and they are called out')
+# ----------------------------------------------------------------------
+# A left-out point is not thrown away: it is ringed with the ones the
+# run missed and measured against the run that was kept, because that
+# number is what says whether leaving it out was right.
+vm = newvm()
+pts = ab_pts(vm, BOW)
+vm.pickfirst = ['<ss>'] + pts
+txt = run(vm, [1.0, None, None, 'Done', '5', None, None, None, '1'])
+check('step 6 names the point it took out',
+      'omitting Pt.5' in txt and '1 point(s) left out' in txt, txt[:600])
+check('...and it comes before the two ends are picked',
+      txt.index('point(s) left out') < txt.index('where does the run START'),
+      txt[:600])
+check('...but the point is still measured against the run that was kept',
+      re.search(r"Pt\.5\s+off by .+\(left out\)", txt) is not None,
+      txt[-800:])
+check('...and ringed on FGStep like a point the fit could not hold',
+      len(live(vm, 'CIRCLE', 'FGStep')) >= 1,
+      len(live(vm, 'CIRCLE', 'FGStep')))
+
+drawn = [grp(d, 1) for _e, d in live(vm, 'TEXT', 'FGStep')]
+check('the list beside the shape tags it as left out',
+      any(str(t).startswith('Pt.5') and '(left out)' in str(t)
+          for t in drawn), drawn)
+check('and the last line names every bad point in one sentence',
+      bool(drawn) and str(drawn[-1]).startswith('- Pt.')
+      and str(drawn[-1]).endswith(' bad.') and 'Pt.5' in str(drawn[-1]),
+      drawn[-3:])
+
+# the sentence itself: BPCALLOUT's wording, by count
+vm2 = newvm()
+for names, want in ((['12'], '- Pt.12 is bad.'),
+                    (['12', '15'], '- Pt.12 and Pt.15 are bad.'),
+                    (['12', '15', '20'],
+                     '- Pt.12, Pt.15 and Pt.20 are bad.')):
+    got = vm2.loads('(abl:bad-phrase (list %s))'
+                    % ' '.join('"%s"' % n for n in names))
+    check('%d name(s) read "%s"' % (len(names), want), got == want, got)
+
+# ----------------------------------------------------------------------
 print('ablobf -- the ends are refused when they are the same point')
 # ----------------------------------------------------------------------
 vm = newvm()
@@ -285,6 +332,7 @@ vm = newvm()
 pts = points(vm, BOW)
 vm.pickfirst = ['<ss>'] + pts
 back = run(vm, [1.0, None, None, 'Done',
+                None,                  # step 6: nothing left out
                 None, 'Back',          # second end -> back to the first
                 None, None, '1'])
 check('Back at the second end re-opens the first',
@@ -298,8 +346,10 @@ vm.pickfirst = ['<ss>'] + pts
 # the selection is asked again after that Back, so the script has to
 # hand it over a second time - which is the point of the test
 back2 = run(vm, [1.0, None, None, 'Done',
+                 None,                 # step 6: nothing left out
                  'Back',               # first end -> back to the selection
                  pts,                  # ...and it really does re-ask
+                 None,                 # step 6 again, on the second pass
                  None, None, '1'])
 check('Back at the FIRST end hands the selection back',
       'Stepping back to the selection' in back2, back2[-1500:])
@@ -317,6 +367,7 @@ pts = points(vm, ELL)
 vm.pickfirst = ['<ss>'] + pts
 held = run(vm, [1.0, None, None,
                 'Hold', (0.0, 90.0, 0.0), 'Done',
+                None,                  # step 6: nothing left out
                 None, None, '1'])
 check('a held point is counted back', 'held point' in held, held[:900])
 onwall = live(vm, layer='POOL-WALLS')
@@ -328,6 +379,7 @@ pts = points(vm, ELL)
 vm.pickfirst = ['<ss>'] + pts
 cnr = run(vm, [1.0, None, None,
                'Corner', (0.0, 90.0, 0.0), 'Done',
+               None,                   # step 6: nothing left out
                None, None, '1'])
 check('a declared corner is counted back', 'corner(s)' in cnr, cnr[:900])
 
@@ -335,7 +387,7 @@ check('a declared corner is counted back', 'corner(s)' in cnr, cnr[:900])
 print('ablobf -- the pickfirst probe, and the empty cases')
 # ----------------------------------------------------------------------
 vm = newvm()
-vm.run('c:ABLOBF', [None] + WIZARD + [None])
+vm.run('c:ABLOBF', [None] + WIZARD[:4] + [None])
 order = [p for p, _ in vm.prompts]
 check('the pickfirst probe is asked before anything else',
       order and order[0] == 'ssget _I', order[:2])
@@ -487,7 +539,7 @@ ARCTAIL = [(120 * math.cos(math.radians(a)), 120 * math.sin(math.radians(a)))
 vm = newvm()
 pts = points(vm, ARCTAIL)
 vm.pickfirst = ['<ss>'] + pts
-run(vm, [0.25, None, None, 'Done', None, None, '2'])
+run(vm, [0.25, None, None, 'Done', None, None, None, '2'])
 d = live(vm, 'LWPOLYLINE', 'POOL')[0][1]
 check('an arc and its tangent tail fit in exactly two segments',
       len(verts(d)) - 1 == 2, len(verts(d)) - 1)
@@ -500,7 +552,7 @@ check('and MEASURED here, not reported there, every point is on it',
 vm = newvm()
 pts = points(vm, BOW)
 vm.pickfirst = ['<ss>'] + pts
-run(vm, [1.0, None, None, 'Done', None, None, '2'])
+run(vm, [1.0, None, None, 'Done', None, None, None, '2'])
 d = live(vm, 'LWPOLYLINE', 'POOL')[0][1]
 w = worst_off(BOW, d)
 check('a bowed run is held inside the 1" that was asked for', w <= 1.0, w)
@@ -649,7 +701,7 @@ for label, wiz in [('tolerance 0.001', [0.001, None, None, 'Done']),
                    ('a cap of no curves', [1.0, None, 0, 'Done'])]:
     vm = newvm()
     vm.pickfirst = ['<ss>'] + points(vm, BOW)
-    txt = run(vm, list(wiz) + [None, None, '1'])
+    txt = run(vm, list(wiz) + [None, None, None, '1'])
     check('%s still produces a run' % label,
           len(live(vm, 'LWPOLYLINE', 'POOL')) == 1
           and 'ABLOBF stopped while' not in txt, txt[-200:])

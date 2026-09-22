@@ -294,6 +294,42 @@ few feet round the shell is what it is really asking for. It is also the
 slowest fit here by a wide margin -- the frame is searched rather than
 measured -- so expect it to think for a few seconds.
 
+## Leaving points out -- step 8
+
+With the whole survey selected, **step 8** asks which of those points
+the template should not be pulled by:
+
+```
+  Step 8 of 8 - any of those points to leave OUT of the fit?
+  Name each one - click it, or type its number (Enter for none):
+  mis-shots, duplicates, anything the outline should not chase;
+  each gets a dashed ring.
+```
+
+That is the first moment anybody can see **which** shot is the bad one
+-- the one on the coping, the double-shot, the rod held crooked -- so
+it is asked there rather than only after a fit has already been pulled
+out of square by it. `Enter` takes none of them, which is the whole
+question in one keystroke, and a `Redo` asks again.
+
+Nothing is thrown away. A point left out is still **measured against
+the outline fitted without it**, ringed on `FGStep` with the points
+that outline failed to hold and listed after them -- that number is
+what says whether leaving it out was right:
+
+```
+  POINTS OFF THE FIT (2), ringed on FGStep, worst first:
+    Pt.8    off by 0'-1 7/8"
+    Pt.7    off by 0'-1 5/16"
+  POINTS YOU LEFT OUT (1), ringed with them on FGStep and measured
+  against the outline fitted without them, worst first:
+    Pt.23   off by 0'-4 1/2"   (left out)
+  - Pt.8, Pt.7 and Pt.23 are bad.
+```
+
+The last line names them all in one sentence, in `BPCALLOUT`'s
+wording, so a sheet reads the same sentence whichever tool wrote it.
+
 ## Redo -- when the fit came out wrong
 
 The fit is not take-it-or-leave-it:
@@ -303,11 +339,12 @@ The fit is not take-it-or-leave-it:
 ```
 
 `Redo` throws the preview away and refits **without leaving the
-command or re-selecting the points**. First it offers to leave points
-out -- name each one, clicked or typed by number the way `PERPMARK`
-names a point (mis-shots, duplicates, a shot that plainly dragged a
-wall) and it gets a dashed red ring; **the pick is a toggle**, so
-naming a ringed point puts it back in. A click has to land within
+command or re-selecting the points**. First it offers to leave more
+points out -- the same question as step 8 above, with whatever is
+already out still out: name each one, clicked or typed by number the
+way `PERPMARK` names a point (mis-shots, duplicates, a shot that
+plainly dragged a wall) and it gets a dashed red ring; **the pick is a
+toggle**, so naming a ringed point puts it back in. A click has to land within
 `fit:*snap*` (12 units) of a point; a click on nothing, a number
 nothing carries and a number two points share are re-asked where they
 stand, never snapped to whatever was nearest. Then all five
@@ -389,7 +426,9 @@ All at the top of `FITABHD.lsp`: layers (`fit:*pool-layer*`,
 `fit:*point-layer*`, `fit:*out-layer*`, `fit:*miss-layer*`), the point
 block and tag (`fit:*point-block*`, `fit:*pt-tag*`), the letter that
 marks a *moved* point (`fit:*moved-mark*`, `"M"`), how close a click
-has to land to name a point at the omit prompt (`fit:*snap*`, 12), the tolerance
+has to land to name a point at the omit prompt (`fit:*snap*`, 12), the
+wording of the bad-point callout (`fit:*bad-prefix*`, `fit:*bad-one*`,
+`fit:*bad-many*`, `fit:*omit-tail*`), the tolerance
 ceiling (`fit:*tol-max*`, 2"), the snapping increments
 (`fit:*nice-dims*`, feet / half feet / inches / half inches), the
 corner-zone sizing (`fit:*corner-zone*`, `fit:*zone-pad*`,
