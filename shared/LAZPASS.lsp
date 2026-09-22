@@ -49798,8 +49798,13 @@
 ;;;    A measurement that repeats around the perimeter is called out
 ;;;    once, with " Typ." after it, and the others are left to that
 ;;;    note rather than dimensioned again.  The one that carries it is
-;;;    the first of its size the tool comes across, so a re-run marks
-;;;    the same side or arc it marked before.
+;;;    whichever member of the group is already dimensioned, if one is
+;;;    - so a size an earlier run (or a dim the drafter placed by hand)
+;;;    already covered is not doubled up on, however many new sides or
+;;;    arcs of that size have since joined the group, and whatever
+;;;    order ssget found them in - or the first of its size the tool
+;;;    comes across otherwise, so a size noted for the first time still
+;;;    marks the same side or arc a re-run would come across first.
 ;;;      * straight sides -> from two equal ones up
 ;;;      * arcs, by radius -> from four equal ones up; a pair or a trio
 ;;;        of matching curves reads better dimensioned where each one
@@ -49881,7 +49886,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v2.0")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v2.1")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -50790,6 +50795,34 @@
       (setq out (cons (append rec (list (polar (caddr rec) pa off))) out))))
   (reverse out))
 
+;; the representative of a repeat group of equal straight sides for the
+;; Typ. note: a member that already carries a dimension, so a size an
+;; earlier run - or the drafter's own DIMALIGNED - already called out is
+;; still recognised as covered however many new sides of the same
+;; length have since joined the group, whichever order ssget found them
+;; in.  Without this, the group's first member (found order, not
+;; dimensioned-first order) is what gets checked, and when THAT one
+;; happens to be new while an already-dimensioned sibling sits later in
+;; the group, the group reads as never dimensioned and gets a second
+;; "Typ." dim of a size that already has one; when the first member is
+;; the already-dimensioned one, the newer sides in the group are left
+;; off the drawing with no note pointing to them and nothing said beyond
+;; a plain skip count.  The group's own first member otherwise, so a
+;; size noted for the first time still notes the one the tool came
+;; across first - unchanged from before this existed.
+(defun ad:linegrouprep (g / hit rec)
+  (foreach rec g
+    (if (and (not hit) (ad:dimmed-p (cadr rec) (caddr rec) (cadddr rec)))
+      (setq hit rec)))
+  (if hit hit (car g)))
+
+;; the same for a repeat group of equal-radius arcs
+(defun ad:radgrouprep (g / hit rec)
+  (foreach rec g
+    (if (and (not hit) (ad:raddimmed-p (cadddr rec) (car rec)))
+      (setq hit rec)))
+  (if hit hit (car g)))
+
 ;; Dimension the perimeter of the highlighted geometry in ss: its
 ;; straight sides, then its arcs by radius.  A measurement that repeats
 ;; is called out once, on the first one found, with ad:*typ-note* after
@@ -50815,7 +50848,7 @@
       ;; the straight sides
       (foreach g (ad:groupsame (ad:perimsegs ss diag eps off) (ad:dupetol))
         (if (and (not all) (>= (length g) ad:*typ-lines*))
-          (setq rec (car g)
+          (setq rec (ad:linegrouprep g)
                 cnt (+ cnt (ad:putaligned (cadr rec) (caddr rec) (cadddr rec)
                                           ad:*style-plan* ad:*typ-note*)))
           (foreach rec g
@@ -50824,7 +50857,7 @@
       ;; the arcs, by radius
       (foreach g (ad:groupsame (ad:perimarcs ss diag eps off) (ad:dupetol))
         (if (and (not all) (>= (length g) ad:*typ-curves*))
-          (setq rec (car g)
+          (setq rec (ad:radgrouprep g)
                 cnt (+ cnt (ad:putradius (car rec) (cadr rec) (caddr rec)
                                          (cadddr rec) (nth 4 rec)
                                          ad:*style-plan* ad:*typ-note*)))
