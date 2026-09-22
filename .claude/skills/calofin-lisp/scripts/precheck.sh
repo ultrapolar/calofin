@@ -1,10 +1,10 @@
 #!/bin/bash
 # The inner loop: the checks that can see THIS edit, in seconds.
 #
-# `make check` is ~90s because six of its nine checks read all three
-# tiers.  Most of that has nothing to say about the file you just
+# `make check` is ~95s because most of its ten checks read every tier.
+# Most of that has nothing to say about the file you just
 # changed.  This runs the per-file checks on the files you name and the
-# tier-scoped ones on lisp/ only -- about 20s -- so the slow full run is
+# tier-scoped ones on lisp/ only -- about 23s -- so the slow full run is
 # something you do once, before committing, instead of every iteration.
 #
 #     precheck.sh lisp/squareup/SQUAREUP.lsp
@@ -45,6 +45,7 @@ done
 # is a fault here, and the full run will catch the tier drift anyway.
 run python3 tools/check_osnap.py --tier lisp
 run python3 tools/check_color.py --tier lisp
+run python3 tools/check_perf.py --tier lisp
 
 # Whole-tree but quick, and both are easy to break from a single edit:
 # a new prompt with no Back, and a tier left behind.

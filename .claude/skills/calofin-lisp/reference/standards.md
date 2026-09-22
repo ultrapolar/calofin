@@ -378,8 +378,21 @@ just named ACI constants: `flag`, `arc`, `olap`, `orig`, `sugg`,
 ```
 
 `check_color.py` fails an `ink` call handed to a layer-making call, and
-a layer knob that is not a number. **Resolve once into a local before a
-loop** — the measurement is a COM round trip.
+a layer knob that is not a number.
+
+**Resolve once into a local before a loop.** Only `'fade` and `'guide`
+measure the drawing's background, and that measurement is a COM round
+trip — once per run when hoisted, once per *entity* when not, and the
+review tools touch every entity in the drawing.
+
+```lisp
+(setq grey (tool:ink tool:*grey-color* 'fade))   ; once, before the loop
+(foreach e ents (tool:set-color e grey))
+```
+
+`check_perf.py` enforces it, and it follows the **call graph**: a loop
+that calls a helper whose body resolves the role fails too, even though
+no ink call is written inside the loop.
 
 ### Layers
 

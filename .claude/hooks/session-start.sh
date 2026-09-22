@@ -109,7 +109,7 @@ echo "           S=.claude/skills/calofin-lisp/scripts"
 echo "           python3 \$S/whereis.py TOOL        every file + registration site"
 echo "           python3 \$S/lspshow.py --map FILE  a big file's forms, one line each"
 echo "           bash \$S/retier.sh TOOL            mirror + regenerate every tier"
-echo "           bash \$S/precheck.sh FILE          the scoped checks (~20s, not 90s)"
+echo "           bash \$S/precheck.sh FILE          the scoped checks (~23s, not 95s)"
 echo
 echo "Checks:  make check      (tiers in step + generated files current + lint,"
 echo "                          check_vb reads the palette as code, and"

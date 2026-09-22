@@ -1,15 +1,15 @@
 ---
 name: calofin-checks
-description: Decoding a failing check or test in the calofin repo - make check, make test, make parity, or any of check_lisp / check_scope / check_standards / check_lazdiag / check_osnap / check_color / check_back / check_vb / check_dcl / check_registry, and the generator staleness checks (mirror_shared, release_lisp, build_shared_bundle, gen_ui_data, gen_ui_charts, gen_knobs, gen_ribbon_icons). Use when a check is red, a test fails, or a tier has drifted, to find the cause and the fix without reading the checker's source.
+description: Decoding a failing check or test in the calofin repo - make check, make test, make parity, or any of check_lisp / check_scope / check_standards / check_lazdiag / check_osnap / check_color / check_perf / check_back / check_vb / check_dcl / check_registry, and the generator staleness checks (mirror_shared, release_lisp, build_shared_bundle, gen_ui_data, gen_ui_charts, gen_knobs, gen_ribbon_icons). Use when a check is red, a test fails, or a tier has drifted, to find the cause and the fix without reading the checker's source.
 ---
 
 # Decoding a calofin check failure
 
-Nine checks, seven generator staleness checks, and a test suite. Each
+Ten checks, seven generator staleness checks, and a test suite. Each
 exists because a specific defect shipped. This maps the message to the
 cause to the fix.
 
-**First, scope it.** `make check` is ~90s. If you know which file you
+**First, scope it.** `make check` is ~95s. If you know which file you
 changed:
 
 ```bash
@@ -147,6 +147,39 @@ when the command returns takes a number. Both stay knobs; `LAZTUNE`
 retunes either.
 
 ---
+
+## `check_perf.py` — an `'auto` colour resolved inside a loop
+
+`ink` answers a `'fade` or `'guide` role by **measuring the drawing's
+background** — a `vla-get-GraphicsWinModelBackgrndColor` COM round trip.
+Resolved outside a loop that costs once per run; resolved inside one it
+costs once per iteration, and the review tools touch every entity in the
+drawing.
+
+The other roles never reach that measurement: `dim`/`hi` follow the
+interface theme, and the eight kind-roles (`flag`, `arc`, `olap`,
+`orig`, `sugg`, `point`, `constr`, `report`) are plain constants. A
+numeric knob or a CALSET override short-circuits it too. **So the check
+fires on `'fade` and `'guide` only.**
+
+**Fix:** hoist it into a local before the loop.
+
+```lisp
+(setq grey (tool:ink tool:*grey-color* 'fade))   ; once
+(foreach e ents (tool:set-color e grey))
+```
+
+It is a **call-graph** check, not a lexical one — it reuses
+`check_osnap.py`'s reach machinery. So the ink call does not have to be
+written inside the loop to fail: a loop calling a helper one `defun`
+away, whose body resolves the role, fails too. That is exactly what
+DIMCHECK, COVERCHECK and LINFINCHECK did — each had an `unstage` helper
+re-resolving the grey on every call instead of taking the value its
+caller had already hoisted.
+
+Being syntactic, it misses leniently: a role passed through a variable
+rather than written `'fade`/`'guide` is not flagged. It never fails
+wrongly. `--tier` and `--list` as usual.
 
 ## `check_back.py` — one-way prompts
 

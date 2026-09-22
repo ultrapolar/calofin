@@ -72,7 +72,7 @@ In order, in one commit:
    name — `whereis.py` prints it, or `grep -n "^    '" tools/mirror_shared.py`.
    Files with no version banner are skipped by `release_lisp.py` and
    reported as skipped; that is expected.
-4. **Check, scoped** (~20s, instead of `make check`'s ~90s):
+4. **Check, scoped** (~23s, instead of `make check`'s ~95s):
    ```bash
    bash .claude/skills/calofin-lisp/scripts/precheck.sh lisp/squareup/SQUAREUP.lsp
    ```
@@ -101,7 +101,9 @@ Each is enforced by a checker; `calofin-checks` decodes the failures.
 - **The load banner is guarded**: `(if (not *calofin-quiet*) (princ ...))`
   as the last form, then `(princ)`.
 - **A cue colour says `'auto`; anything left in the drawing takes a plain
-  ACI number** — above all a layer record.
+  ACI number** — above all a layer record. And a `'fade`/`'guide`
+  resolution is **hoisted out of any loop** — it is a COM round trip,
+  and `check_perf.py` follows the call graph to find it.
 - **Every prompt offers Back**, or gets a line in `tools/back_baseline.txt`
   saying why not.
 - **Locals are declared** after ` / ` in the arglist, `*error*` included.
