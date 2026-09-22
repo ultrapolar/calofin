@@ -150,6 +150,7 @@ namespace Calofin.Ribbon
                 new Item(new Entry("WCALST", "Unroll curved band", "Unrolls a curved constant-width band flat, with darts"), new Entry[0], false, false),
                 new Item(new Entry("CUSTBLOCK", "Block from L/W/H", "Custom block in pictorial view from three typed sizes"), new Entry[0], true, true),
                 new Item(new Entry("SQUAREUP", "Square up to the perimeter", "Turns a highlighted drawing until its perimeter's longest wall (or span) is horizontal"), new Entry[0], false, false),
+                new Item(new Entry("OSR", "Restore my object snaps", "Puts your object snaps back to the preset you chose in Options (LAZSET) - one word, no questions"), new Entry[0], false, false),
             } },
             { "Points", new[]
             {

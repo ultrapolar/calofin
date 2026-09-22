@@ -756,6 +756,11 @@ What it asks, in order:
  2. What should end up horizontal?
  3. Turn the highlighted objects anyway?
 
+== OSR ==
+Puts your running object snaps back to the preset you chose - one word, no questions.
+Choose the preset once in Options (LAZSET): the Object snaps box ticks the same modes as AutoCAD's Drafting Settings, plus Object Snap On, and Use current takes whatever the drawing has ticked now. CALSET - Osnaps does the same at the command line.
+With no preset saved, OSR puts back Endpoint, Midpoint, Center, Node, Quadrant, Intersection and Perpendicular, Object Snap on.
+
 == STAIRDIM ==
 Stair dimensioning.
 What it asks, in order:

@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 73 files, 212 commands:
+;;; 74 files, 214 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABLOBF
@@ -33,19 +33,19 @@
 ;;;   LINFINCHECK  LINFINCHECKRESCUE  LINFINCHECKVER  LINFINSCAN  LINGUTTER  LINGUTTERSCAN
 ;;;   LINGUTTERVER  LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN  LITESPACHECKSCAN
 ;;;   LOBF  LOBFVER  MOHAMADDLE  MOHAMADDLEVER  NORMIESTEP  NORMIESTEPVER
-;;;   OASIS  OASISVER  OLAUTO  OLAUTOVER  PADDLE  PADDLEVER
-;;;   PERPMARK  PERPMARKVER  PERPPTS  PERPPTSVER  POINTRENAMER  POINTRENAMERVER
-;;;   POOL  POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE  POOLSIDEVER
-;;;   POOLVER  SIMPABHD  SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER
-;;;   SORECONV  SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER
-;;;   SPACOVCREATE  SPACOVCREATEVER  SPAVER  SQUAREUP  SQUAREUPVER  STAIRDIM
-;;;   STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB
-;;;   TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK
-;;;   TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE
-;;;   TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER
-;;;   TYLERDRONESUITE  UPADOVER  UPADOVERVER  VSCONV  VSCONVVER  VSRECONV
-;;;   WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP  XFTCONVVER  XFTRECONV
-;;;   XYPLOT  XYPLOTVER
+;;;   OASIS  OASISVER  OLAUTO  OLAUTOVER  OSR  OSRVER
+;;;   PADDLE  PADDLEVER  PERPMARK  PERPMARKVER  PERPPTS  PERPPTSVER
+;;;   POINTRENAMER  POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO  POOLDEMOVER
+;;;   POOLSIDE  POOLSIDEVER  POOLVER  SIMPABHD  SMARTFILLET  SMARTFILLETVER
+;;;   SOCONV  SOCONVVER  SORECONV  SPA  SPACHECK  SPACHECKRESCUE
+;;;   SPACHECKSCAN  SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER  SPAVER  SQUAREUP
+;;;   SQUAREUPVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST
+;;;   TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN
+;;;   TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN
+;;;   TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK
+;;;   TYDRN  TYDRNVER  TYLERDRONESUITE  UPADOVER  UPADOVERVER  VSCONV
+;;;   VSCONVVER  VSRECONV  WCALST  WCALSTVER  XFTCONV  XFTCONV-SETUP
+;;;   XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -71917,6 +71917,175 @@
 
 
 ;;; ======================================================================
+;;; >>> OSR.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; OSR.lsp  --  Object Snap Restore: put the drafter's own osnaps back
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  OSR     set OSMODE to the drafter's saved preset
+;;;            OSRVER  print the loaded version
+;;; ======================================================================
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;;  Object snaps drift.  A drafter ticks Tangent for one arc, Nearest
+;;;  for one leader, turns F3 off to click in open space -- and an hour
+;;;  later the running snaps are whatever the last fiddle left them,
+;;;  and the way back is OSNAP, fourteen tick boxes and OK, from
+;;;  memory.  A tool that crashed without its handler can do the same
+;;;  thing in one go.
+;;;
+;;;  OSR is the way back in one word.  It sets OSMODE to a PRESET the
+;;;  drafter chose once -- which modes are ticked, and whether Object
+;;;  Snap is on at all -- and says what it put back.  Nothing is asked:
+;;;  the preset is chosen in the panel's Options (LAZSET, the "Object
+;;;  snaps" box), or at the command line with CALSET -> Osnaps, and it
+;;;  lives in the AutoCAD profile under CalofinOsnapPreset, so it
+;;;  survives a restart and a rebuild of the tools.
+;;;
+;;;  With no preset saved yet OSR uses osr:*default* below: Endpoint,
+;;;  Midpoint, Center, Node, Quadrant, Intersection and Perpendicular,
+;;;  with Object Snap on.
+;;;
+;;;  WHAT IT DOES NOT DO: it does not touch Object Snap Tracking (that
+;;;  is AUTOSNAP, not OSMODE), polar tracking, or the 3D object snaps
+;;;  (3DOSMODE).  It changes the drafter's setting ON PURPOSE and leaves
+;;;  it changed -- this is the one command in the tree whose job is to
+;;;  move OSMODE and not give it back.
+;;; ======================================================================
+
+(setq *osr-version* "v1.0")
+
+(vl-load-com)
+
+;;; -------------------- tunables ----------------------------------------
+;;; Everything a shop might want changed, all in one block; nothing
+;;; settable lives anywhere else in this file.  setq any of them after
+;;; loading and the next run reads the new value.
+
+;; The OSMODE OSR puts back when the drafter has not saved a preset of
+;; their own (LAZSET's Object snaps box, or CALSET Osnaps).  The sum of
+;; the modes wanted: Endpoint 1, Midpoint 2, Center 4, Node 8, Quadrant
+;; 16, Intersection 32, Insertion 64, Perpendicular 128, Tangent 256,
+;; Nearest 512, Geometric Center 1024, Apparent intersection 2048,
+;; Extension 4096, Parallel 8192; add 16384 to leave Object Snap OFF.
+;; Change it and a drafter with no preset of their own gets this set.
+(setq osr:*default* 191)
+
+;;; -------------------- the modes ----------------------------------------
+
+;; Not a knob either: the profile key the drafter's own preset is stored
+;; under.  LAZPANEL writes it (LAZSET and CALSET, lzp:*osrkey*), so a
+;; change here alone would leave OSR reading a key nothing writes.
+(setq osr:*envkey* "CalofinOsnapPreset")
+
+;;; Not a knob: AutoCAD's own OSMODE bits, in the order its Drafting
+;;; Settings dialog lists them.
+
+(setq osr:*modes*
+  '(("Endpoint"              . 1)
+    ("Midpoint"              . 2)
+    ("Center"                . 4)
+    ("Geometric Center"      . 1024)
+    ("Node"                  . 8)
+    ("Quadrant"              . 16)
+    ("Intersection"          . 32)
+    ("Extension"             . 4096)
+    ("Insertion"             . 64)
+    ("Perpendicular"         . 128)
+    ("Tangent"               . 256)
+    ("Nearest"               . 512)
+    ("Apparent intersection" . 2048)
+    ("Parallel"              . 8192)))
+
+;; The bit that means Object Snap is OFF (F3), modes kept.
+(setq osr:*offbit* 16384)
+
+;;; -------------------- the preset ---------------------------------------
+
+;; T when S reads as an OSMODE: digits only, 0 to 32767.  Spelled out
+;; rather than handed to atoi alone -- atoi reads "12x" as 12 and "red"
+;; as 0, and 0 is a real OSMODE (no snaps at all), so a typo in the
+;; profile must not quietly clear every snap.
+(defun osr:valid-p (s / i n ok)
+  (setq n (strlen s) i 1 ok (and (> n 0) (< n 6)))
+  (while (and ok (<= i n))
+    (if (not (member (substr s i 1)
+                     '("0" "1" "2" "3" "4" "5" "6" "7" "8" "9")))
+      (setq ok nil))
+    (setq i (1+ i)))
+  (if (and ok (<= (atoi s) 32767)) t nil))
+
+;; The preset this run puts back, as (OSMODE . FROM-PROFILE-P).  A value
+;; in the profile that does not read as an OSMODE is ignored -- the
+;; shipped default is used and the drafter is told why.
+(defun osr:preset ( / v)
+  (setq v (getenv osr:*envkey*))
+  (setq v (if v (vl-string-trim " \t" v) ""))
+  (cond
+    ((osr:valid-p v) (cons (atoi v) t))
+    ((/= v "")
+     (princ (strcat "\nOSR: the saved preset \"" v "\" is not an OSMODE"
+                    " -- using the shipped one.  Choose yours again in"
+                    " LAZSET (Options) or CALSET Osnaps."))
+     (cons osr:*default* nil))
+    (t (cons osr:*default* nil))))
+
+;; The modes an OSMODE has ticked, as one readable line.
+(defun osr:describe (m / out p)
+  (setq out "")
+  (foreach p osr:*modes*
+    (if (/= 0 (logand m (cdr p)))
+      (setq out (strcat out (if (= out "") "" ", ") (car p)))))
+  (strcat (if (= out "") "no modes ticked" out)
+          (if (/= 0 (logand m osr:*offbit*))
+            " -- Object Snap OFF"
+            " -- Object Snap on")))
+
+;;; -------------------- the command ---------------------------------------
+
+(defun c:OSR ( / *error* oos p)
+  (defun *error* (msg)
+    ;; FIRST: a run that failed puts back the snaps the drafter had
+    ;; when they typed OSR, not whatever it got as far as -- the same
+    ;; restore every other command here carries (check_osnap.py)
+    (if oos (setvar "OSMODE" oos))
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nOSR error: " msg)))
+    (if lzd:report (lzd:report "OSR" *osr-version* msg))
+    (princ))
+
+  (if lzd:begin (lzd:begin "OSR" *osr-version*))
+  (setq oos (getvar "OSMODE"))
+  (setq p (osr:preset))
+  (setvar "OSMODE" (car p))
+  (princ (strcat "\nOSR: object snaps restored -- "
+                 (osr:describe (car p))
+                 " (OSMODE " (itoa (car p)) ")."))
+  (if (not (cdr p))
+    (princ (strcat "\n     That is the shipped preset.  Choose your own in"
+                   " LAZSET (Options, Object snaps) or CALSET Osnaps.")))
+  (if lzd:end (lzd:end "OSR"))
+  (princ))
+
+(defun c:OSRVER ()
+  (princ (strcat "\nOSR " *osr-version*))
+  (princ))
+
+;;; -------------------- load banner ---------------------------------------
+
+(if (not *calofin-quiet*)
+  (princ (strcat "\nOSR " *osr-version*
+                 " loaded.  Type OSR to put your object snaps back.")))
+(princ)
+
+
+;;; ======================================================================
 ;;; >>> dimcheck.lsp
 ;;; ======================================================================
 
@@ -122030,7 +122199,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.57")
+(setq *lazpanel-version* "v3.58")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -122307,6 +122476,7 @@
     ("LINGUTTER"        "Gut to perimeter, then pads")
     ("LINGUTTERSCAN"    "Gut scan, changes nothing")
     ("OLAUTO"           "Overlay two perimeters")
+    ("OSR"              "Restore my object snaps")
     ("PADDLE"           "Paddle pads")
     ("PERPMARK"         "Measured wall offsets")
     ("PERPPTS"          "Perpendicular points")
@@ -122427,6 +122597,7 @@
     ("LINGUTTER" "Guts a highlighted area back to the pool, walking the outer face")
     ("LINGUTTERSCAN" "LINGUTTER's report only - reads the drawing, changes nothing")
     ("OLAUTO" "Best-fit overlay of a new perimeter on the original, worst error dimensioned")
+    ("OSR" "Puts your object snaps back to the preset you chose in Options (LAZSET) - one word, no questions")
     ("PADDLE" "Paddle perimeter pads")
     ("PERPMARK" "Name a survey point, type what it measured: circle, perpendicular, dimension")
     ("PERPPTS" "Perpendicular offset points along a line or curve")
@@ -122545,6 +122716,7 @@
     ("NORMIESTEP" "Normie step layout.\nWhat it asks, in order:\n 1. Select objects\n 2. Pick a point on the side the steps go\n 3. Pick the line the steps run OFF OF\n 4. Step width (the same for every step)\n 5. Radius for\n 6. Is the cut given as its\n 7. Cut face length for\n 8. Offset back along each line\n 9. Dimension the steps?\n 10. Step - step tread\n 11. Add a side profile?\n 12. Step 1 - step depth (the drop)\n 13. Depth after the last tread\n 14. Pick the top of the first tread for the side profile\n 15. Bead the steps?\n 16. Which steps have beaded side walls?\n 17. Step numbers with beaded sides (B = back)\n 18. Click the side to bead toward")
     ("OASIS" "Continuous-tangent pool drawn live from envelope and radii.\nWhat it asks, in order:\n 1. Which shape is it?\n 2. Kidney type?\n 3. Cloud bottom?\n 4. Simple or complex?\n 5. Insertion base point\n 6. X - overall left-to-right bounds\n 7. Y - overall front-to-back bounds\n 8. center\n 9. right\n 10. Top-right centre to right bulge centre\n 11. Add the bottom of the pool (breaks and hopper)?\n 12. Hopper offset in from the wall")
     ("OLAUTO" "Best-fit overlay of a new perimeter on the original, worst error dimensioned.\nWhat it asks, in order:\n 1. Which perimeter should move onto the other?")
+    ("OSR" "Puts your running object snaps back to the preset you chose - one word, no questions.\nChoose the preset once in Options (LAZSET): the Object snaps box ticks the same modes as AutoCAD's Drafting Settings, plus Object Snap On, and Use current takes whatever the drawing has ticked now. CALSET - Osnaps does the same at the command line.\nWith no preset saved, OSR puts back Endpoint, Midpoint, Center, Node, Quadrant, Intersection and Perpendicular, Object Snap on.")
     ("PADDLE" "Paddle perimeter pads.\nWhat it asks, in order:\n 1. Select objects\n 2. Close the gap the arrow points at with a zero fillet?")
     ("PERPMARK" "Name a survey point, type what it measured: circle, perpendicular, dimension.\nWhat it asks, in order:\n 1. Select the pool perimeter\n 2. Click a spot inside the pool\n 3. Pick a survey point, or type its number\n 4. Draw a polyline through the marks?\n 5. The point the run starts at, or type its number\n 6. The point the run ends at, or type its number\n 7. Click a spot the run passes through")
     ("PERPPTS" "Perpendicular offset points along a line or curve.\nWhat it asks, in order:\n 1. Select a line or polyline\n 2. Click to pick direction / offset side\n 3. Overall width\n 4. Select a boundary for the offsets\n 5. Do the offsets stop at the boundary, or run out to meet it?\n 6. Round - how many values (points) are required?\n 7. points means dimensions. Continue?\n 8. Length for point of , boundary at\n 9. Round - how should the points be joined?\n 10. Which segments are arcs (1 to , e.g. 1 3-5)? (B = back)\n 11. Overall width of the new polyline\n 12. Repeat on the new polyline?\n 13. Dimension style - STANDARD INCHES or SIDE STANDARD?")
@@ -122673,6 +122845,7 @@
     ("LINGUTTER" "guts perimeter highlight erase interior dimensions pad outline")
     ("LINGUTTERSCAN" "perimeter highlight report unchanged question gut keep drop")
     ("OLAUTO" "overlay perimeter alignment fit bead track dimensions rigid")
+    ("OSR" "osnap object snap osmode restore reset preset endpoint midpoint running f3")
     ("PADDLE" "concave perimeter features pads blocks insert find")
     ("PERPMARK" "survey points wall offsets bench ledge gutter dimension")
     ("PERPPTS" "perpendicular offset points line segments arc resize boundary limit meet")
@@ -122915,6 +123088,7 @@
       "UPADOVER"
       "SQUAREUP"
       "DRONOTE"
+      "OSR"
       )
     )
      ("Layout"
@@ -122956,6 +123130,7 @@
       "WCALST"
       "CUSTBLOCK"
       "SQUAREUP"
+      "OSR"
       )
     )
      ("Points"
@@ -125197,6 +125372,14 @@
                  " off the panel -- a hidden tool still runs typed, it"
                  " simply stops being shown"
                  "\n      LAZHIDE picks which, or Hidden below"))
+  ;; not a row either: the profile holds a number, and what a drafter
+  ;; wants to read is which snaps it means
+  (setq v (lzp:osr-get))
+  (princ (strcat "\n  " lzp:*osrkey* " -- what OSR puts back"
+                 "\n      now: " (itoa v) " = " (lzp:osr-describe v)
+                 (if (lzp:osmode-p (lzp:profread lzp:*osrkey*))
+                   "" " (the shipped preset)")
+                 "\n      Osnaps below, or the Object snaps box in LAZSET"))
   (princ))
 
 (defun c:CALSET ( / *error* pick key v role rgb)
@@ -125209,8 +125392,8 @@
   (if lzd:begin (lzd:begin "CALSET" *lazpanel-version*))
   (lzp:hidden-read)
   (lzp:setshow)
-  (initget "Theme Errordir Stockdir Itemcolors Hidden Quit")
-  (setq pick (getkword "\nChange which? [Theme/Errordir/Stockdir/Itemcolors/Hidden/Quit] <Quit>: "))
+  (initget "Theme Errordir Stockdir Itemcolors Hidden Osnaps Quit")
+  (setq pick (getkword "\nChange which? [Theme/Errordir/Stockdir/Itemcolors/Hidden/Osnaps/Quit] <Quit>: "))
   (if lzd:ask (lzd:ask "Change which?" pick) pick)
   (setq key (cond ((= pick "Theme") "CalofinTheme")
                   ((= pick "Errordir") "CalofinErrorDir")
@@ -125257,6 +125440,24 @@
     ;; routes straight to LAZHIDE's own dialog and comes back to this
     ;; prompt -- the same way Back re-enters CALSET below
     ((= pick "Hidden") (c:LAZHIDE) (c:CALSET))
+    ((= pick "Osnaps")
+     ;; OSR's preset.  Current takes the snaps the drawing has now --
+     ;; tick them in OSNAP's own dialog first -- Default the shipped
+     ;; set, and a number is an OSMODE as AutoCAD spells it.  initget 4
+     ;; refuses a negative; getint itself refuses past 32767.
+     (initget 4 "Current Default Back Undo")
+     (setq v (getint "\nOSR preset [Current/Default/Back] or an OSMODE number <Current>: "))
+     (if lzd:ask (lzd:ask "OSR preset" v) v)
+     (cond
+       ((member v '("Back" "Undo")) (c:CALSET))
+       (t
+        (setq v (cond ((= (type v) 'INT) v)
+                      ((= v "Default") lzp:*osrdefault*)
+                      (t (getvar "OSMODE"))))
+        (setenv lzp:*osrkey* (itoa v))
+        (princ (strcat "\nOSR preset is now " (itoa v) " = "
+                       (lzp:osr-describe v)
+                       ".  Type OSR to put it back any time.")))))
     ((null key) (princ "\nNothing changed."))
     ((= key "CalofinTheme")
      ;; Undo is accepted everywhere Back is, unlisted (STANDARDS 1)
@@ -125340,6 +125541,103 @@
     ("Light" . "LIGHT")))
 
 (setq lzp:*setvals* nil)          ; the pending answers, until OK
+
+;;; -------------------- the OSR preset -----------------------------------
+;;  OSR puts the drafter's running object snaps back to one OSMODE they
+;;  chose once.  It is chosen HERE -- the "Object snaps" box in LAZSET
+;;  and CALSET's Osnaps -- and stored in the profile under the key
+;;  below, which lisp/osr/OSR.lsp reads (osr:*envkey*; the two must
+;;  agree, and tests/test_osr.py holds them to it).  The shipped
+;;  preset, what a drafter who never chose one gets, is OSR's own
+;;  osr:*default*; lzp:*osrdefault* is the same number so the dialog can
+;;  paint it with OSR not loaded, and the same test pins the pair.
+(setq lzp:*osrkey* "CalofinOsnapPreset")
+(setq lzp:*osrdefault* 191)
+
+;; AutoCAD's own OSMODE bits, in the order its Drafting Settings dialog
+;; lists them -- the same table as osr:*modes*.  16384 is not a mode:
+;; set, it means Object Snap is OFF (F3) with the modes kept.
+(setq lzp:*osrmodes*
+  '(("Endpoint"              . 1)
+    ("Midpoint"              . 2)
+    ("Center"                . 4)
+    ("Geometric Center"      . 1024)
+    ("Node"                  . 8)
+    ("Quadrant"              . 16)
+    ("Intersection"          . 32)
+    ("Extension"             . 4096)
+    ("Insertion"             . 64)
+    ("Perpendicular"         . 128)
+    ("Tangent"               . 256)
+    ("Nearest"               . 512)
+    ("Apparent intersection" . 2048)
+    ("Parallel"              . 8192)))
+(setq lzp:*osroff* 16384)
+
+;; T when S reads as an OSMODE, 0 to 32767.  Digits only, spelled out
+;; for the reason lzp:aci-p is: atoi reads a typo as a number, and 0 is
+;; a real OSMODE (no snaps at all), so a typo must not clear them all.
+(defun lzp:osmode-p (s / i n ok)
+  (setq n (strlen s) i 1 ok (and (> n 0) (< n 6)))
+  (while (and ok (<= i n))
+    (if (not (lzp:digit-p (substr s i 1))) (setq ok nil))
+    (setq i (1+ i)))
+  (if (and ok (<= (atoi s) 32767)) t nil))
+
+;; The preset as the profile holds it, as an integer: the drafter's
+;; own when it reads as an OSMODE, else the shipped one.
+(defun lzp:osr-get ( / v)
+  (setq v (lzp:profread lzp:*osrkey*))
+  (if (lzp:osmode-p v) (atoi v) lzp:*osrdefault*))
+
+;; The modes an OSMODE has ticked, as one readable line.
+(defun lzp:osr-describe (m / out p)
+  (setq out "")
+  (foreach p lzp:*osrmodes*
+    (if (/= 0 (logand m (cdr p)))
+      (setq out (strcat out (if (= out "") "" ", ") (car p)))))
+  (strcat (if (= out "") "no modes ticked" out)
+          (if (/= 0 (logand m lzp:*osroff*))
+            " -- Object Snap OFF"
+            " -- Object Snap on")))
+
+;; The tile a mode's tick box answers to.
+(defun lzp:osr-tile (p) (strcat "osr_" (itoa (cdr p))))
+
+;; The pending preset in the dialog's store, as an integer.
+(defun lzp:osr-pending ( / v)
+  (setq v (lzp:set-get lzp:*osrkey*))
+  (if (lzp:osmode-p v) (atoi v) lzp:*osrdefault*))
+
+;; Paint every tick box from the pending preset.  lzp:settile, so the
+;; tests can call it with no dialog up.
+(defun lzp:osr-paint ( / m p)
+  (setq m (lzp:osr-pending))
+  (foreach p lzp:*osrmodes*
+    (lzp:settile (lzp:osr-tile p) (if (/= 0 (logand m (cdr p))) "1" "0")))
+  (lzp:settile "osr_on" (if (/= 0 (logand m lzp:*osroff*)) "0" "1"))
+  (princ))
+
+;; A tick box fires.  BIT is the mode; "osr_on" passes the off bit and
+;; INVERT, since ticking "Object Snap On" CLEARS 16384.
+(defun lzp:osr-tick (bit invert v / m on)
+  (setq m (lzp:osr-pending) on (= v "1"))
+  (if invert (setq on (not on)))
+  (setq m (if on (logior m bit) (- m (logand m bit))))
+  (lzp:set-put lzp:*osrkey* (itoa m))
+  (princ))
+
+;; "Use current": the snaps the drawing has right now become the
+;; preset -- the quick way to save a set the drafter just ticked in
+;; OSNAP's own dialog.
+(defun lzp:osr-current ()
+  (lzp:set-put lzp:*osrkey* (itoa (getvar "OSMODE")))
+  (lzp:osr-paint))
+
+;; "Default": back to the shipped preset.
+(defun lzp:osr-default ()
+  (lzp:set-put lzp:*osrkey* (itoa lzp:*osrdefault*))
+  (lzp:osr-paint))
 
 ;; The profile key one item-colour role's override lives under.
 (defun lzp:inkkey (r) (strcat "CalofinInk-" (strcase (cdr r))))
@@ -125446,6 +125744,7 @@
     (lzp:set-put r (lzp:profread r)))
   (foreach r lzp:*inkroles*
     (lzp:set-put (lzp:inkkey r) (lzp:profread (lzp:inkkey r))))
+  (lzp:set-put lzp:*osrkey* (itoa (lzp:osr-get)))
   lzp:*setvals*)
 
 ;; The one place that writes.
@@ -125474,6 +125773,11 @@
   (foreach r lzp:*inkroles*
     (setq v (lzp:set-get (lzp:inkkey r)))
     (if (or (= v "") (lzp:aci-p v)) (setenv (lzp:inkkey r) v)))
+  ;; the OSR preset: only ever an OSMODE by construction (the tick
+  ;; boxes and the two buttons are the only writers), guarded all the
+  ;; same for the reason the colours above are
+  (setq v (lzp:set-get lzp:*osrkey*))
+  (if (lzp:osmode-p v) (setenv lzp:*osrkey* v))
   lzp:*setvals*)
 
 ;; OK, GUARDED.  Greying the button is not a hard stop and this file
@@ -125489,6 +125793,35 @@
     (lzp:set-state)
     (done_dialog 1))
   (princ))
+
+;; The "Object snaps" box: OSR's preset as the fourteen tick boxes
+;; AutoCAD's own Drafting Settings shows, four columns across so the
+;; dialog grows by four rows rather than fourteen, then Object Snap
+;; On and the two shortcuts.  Nothing here is written until OK, the
+;; same as every other box on the page.
+(defun lzp:dcl-osr ( / out col p)
+  (setq out (list "  : boxed_column {"
+                  (strcat "    label = \"Object snaps - what OSR puts back"
+                          " when you type it\";")
+                  "    : row {"))
+  (foreach col (lzp:chunk lzp:*osrmodes* 4)
+    (setq out (append out (list "      : column {")))
+    (foreach p col
+      (setq out (append out
+        (list (strcat "        : toggle { key = \"" (lzp:osr-tile p)
+                      "\"; label = \"" (car p) "\"; }")))))
+    (setq out (append out (list "      }"))))
+  (append out
+    (list "    }"
+          "    : row {"
+          (strcat "      : toggle { key = \"osr_on\"; "
+                  "label = \"Object Snap On (F3)\"; }")
+          (strcat "      : button { label = \"Use current\"; "
+                  "key = \"osr_current\"; fixed_width = true; }")
+          (strcat "      : button { label = \"Default\"; "
+                  "key = \"osr_default\"; fixed_width = true; }")
+          "    }"
+          "  }")))
 
 ;; The dialog.  The dropdown is emitted EMPTY -- DCL has no way to
 ;; write a list into a popup_list from the file, so it is filled with
@@ -125532,7 +125865,9 @@
                   "label = \"Error reports\"; edit_width = 40; }")
           (strcat "    : edit_box { key = \"set_stockdir\"; "
                   "label = \"Stock covers \"; edit_width = 40; }")
-          "  }"
+          "  }")
+    (lzp:dcl-osr)
+    (list
           "  : boxed_row {"
           "    label = \"Panel\";"
           "    : text { key = \"hiddenmsg\"; width = 32; }"
@@ -125641,6 +125976,16 @@
        (set_tile "set_stockdir" (lzp:set-get "StockCover_Folder"))
        (action_tile "set_stockdir"
                     "(lzp:set-put \"StockCover_Folder\" $value)")
+       ;; the OSR preset's tick boxes, painted from the store so a hop
+       ;; through Hidden... or Names... keeps what was ticked
+       (lzp:osr-paint)
+       (foreach r lzp:*osrmodes*
+         (action_tile (lzp:osr-tile r)
+           (strcat "(lzp:osr-tick " (itoa (cdr r)) " nil $value)")))
+       (action_tile "osr_on"
+         (strcat "(lzp:osr-tick " (itoa lzp:*osroff*) " t $value)"))
+       (action_tile "osr_current" "(lzp:osr-current)")
+       (action_tile "osr_default" "(lzp:osr-default)")
        (set_tile "hiddenmsg" (lzp:hiddenmsg))
        (action_tile "set_hidden" "(done_dialog 5)")
        (action_tile "set_names" "(done_dialog 6)")
@@ -125694,7 +126039,8 @@
                        " theme and the item colours on the next colour it"
                        " picks; the toolbar icon takes the theme at the next"
                        " LAZBUTTON or LAZICON, and the VB palette at its"
-                       " next chart.")))
+                       " next chart.  OSR puts back the object snaps ticked"
+                       " here.")))
        (t (princ "\nLAZPANEL: settings unchanged.")))))
   (if lzd:end (lzd:end "LAZSET"))
   (princ))
@@ -127167,6 +127513,8 @@
      ("ola:*fit-warn*" "0.05" "fraction of the bbox diagonal ...and how big the worst error may be, against the diagonal of the original's...")
      ("ola:*piece-frac*" "0.05" "fraction of the chain length A pick that came in as more than one piece -- a stray deck line or coping arc...")
      ("ola:*mirror-ratio*" "0.5" "flipped residual / unflipped, at most -- mirror images ----------------------------------------------------..."))
+    ("OSR" "lisp/osr/OSR.lsp"
+     ("osr:*default*" "191" "The OSMODE OSR puts back when the drafter has not saved a preset of their own (LAZSET's Object snaps box, o..."))
     ("PADDLE" "lisp/paddle/PADDLE.lsp"
      ("*paddle-blkname*" "\"Pad36x36\"" "Edge of the pad in drawing units (a 36\" x 36\" square). This one number sets the pitch of the flush rows alo...")
      ("*paddle-padsize*" "36.0" "The dwg the block definitions are imported from when the drawing does not already hold them. Looked up with...")
@@ -128770,26 +129118,26 @@
   "CORNERSTPVER" "HEMISTEP" "TUTORIALHEMISTEP" "HEMISTEPVER" "NORMIESTEP" "TUTORIALNORMIESTEP"
   "NORMIESTEPVER" "LAZSTEP" "LAZSTEPVER" "COVERCHECKRESCUE" "COVERCHECK" "COVERSCAN"
   "LITECOVERSCAN" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN" "COVERCHECKVER" "COVERCHECKVERSION" "CUSTBLOCK"
-  "CUSTBLOCKVER" "CLEARDIM" "CLEARDIMSCAN" "CLEARDIMVER" "DIMCHECKVER" "DIMCHECKRESCUE"
-  "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN" "DIMCONTEND" "DCE"
-  "DIMCONTENDVER" "DDFIX" "DDSET" "DDCAL" "DDINFO" "DDALT"
-  "DDFIXVER" "DDGPS" "DDELEV" "DDTEST" "DDGPSVER" "FITABHDVER"
-  "FITABHD" "FITABHDCOVER" "LHD" "LHDVER" "LINCHECK" "LINCHECKVER"
-  "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN" "LITELINFINSCAN" "TUTORIALLINFINCHECK"
-  "TUTORIALLINFINSCAN" "LINTXTCHK" "LINTXTCHKVER" "PADDLE" "TUTORIALPADDLE" "PADDLEVER"
-  "MOHAMADDLE" "MOHAMADDLEVER" "UPADOVERVER" "UPADOVER" "LINGUTTER" "LINGUTTERSCAN"
-  "LINGUTTERVER" "PERPPTSVER" "PERPPTS" "CPERPPTSVER" "CPERPPTS" "TUTORIALPERPPTS"
-  "TUTORIALCPERPPTS" "PERPMARKVER" "PERPMARK" "SMARTFILLET" "SMARTFILLETVER" "HONEFILLET"
-  "HONEFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE"
-  "TUTORIALSPACHECK" "SPACOVCREATE" "SPACOVCREATEVER" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER"
-  "STOCKCOVERVER" "DRONE" "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER"
-  "SOCONV" "SORECONV" "SOCONVVER" "VSCONV" "VSRECONV" "VSCONVVER"
-  "G2MCONV" "G2MRECONV" "G2MCONVVER" "WCALST" "WCALSTVER" "XFTCONV"
-  "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION"
-  "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM"
-  "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZHIDE" "LAZBUTTON"
-  "LAZICON" "CALHELP" "CALSET" "LAZSET" "LAZNAME" "LAZBACKUP"
-  "LAZTUNE" "LAZPANELVER"
+  "CUSTBLOCKVER" "CLEARDIM" "CLEARDIMSCAN" "CLEARDIMVER" "OSR" "OSRVER"
+  "DIMCHECKVER" "DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK" "TUTORIALDIMSCAN"
+  "DIMCONTEND" "DCE" "DIMCONTENDVER" "DDFIX" "DDSET" "DDCAL"
+  "DDINFO" "DDALT" "DDFIXVER" "DDGPS" "DDELEV" "DDTEST"
+  "DDGPSVER" "FITABHDVER" "FITABHD" "FITABHDCOVER" "LHD" "LHDVER"
+  "LINCHECK" "LINCHECKVER" "LINFINCHECKVER" "LINFINCHECKRESCUE" "LINFINCHECK" "LINFINSCAN"
+  "LITELINFINSCAN" "TUTORIALLINFINCHECK" "TUTORIALLINFINSCAN" "LINTXTCHK" "LINTXTCHKVER" "PADDLE"
+  "TUTORIALPADDLE" "PADDLEVER" "MOHAMADDLE" "MOHAMADDLEVER" "UPADOVERVER" "UPADOVER"
+  "LINGUTTER" "LINGUTTERSCAN" "LINGUTTERVER" "PERPPTSVER" "PERPPTS" "CPERPPTSVER"
+  "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "PERPMARKVER" "PERPMARK" "SMARTFILLET"
+  "SMARTFILLETVER" "HONEFILLET" "HONEFILLETVER" "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN"
+  "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "SPACOVCREATE" "SPACOVCREATEVER" "STOCKLIST"
+  "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER" "DRONE" "DRONEVER" "TYDRN"
+  "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SORECONV" "SOCONVVER" "VSCONV"
+  "VSRECONV" "VSCONVVER" "G2MCONV" "G2MRECONV" "G2MCONVVER" "WCALST"
+  "WCALSTVER" "XFTCONV" "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT"
+  "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER" "LAZASCII"
+  "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL" "LAZPIN"
+  "LAZHIDE" "LAZBUTTON" "LAZICON" "CALHELP" "CALSET" "LAZSET"
+  "LAZNAME" "LAZBACKUP" "LAZTUNE" "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)
