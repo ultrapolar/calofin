@@ -27,6 +27,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import build_shared_bundle
+import check_osnap
 import check_registry
 import gen_agents_md
 import gen_knobs
@@ -196,7 +197,9 @@ def check_version_reporters(problems):
         cmds = {m.upper() for m in COMMAND.findall(read(p))}
         if not (cmds & head):
             continue                 # satellites answer through their tool
-        if not any(c.endswith("VER") for c in cmds):
+        # a reporter is a VER whose base is one of this file's commands;
+        # STOCKCOVER or UPADOVER alone would have passed a suffix test
+        if not any(c.endswith("VER") and c[:-3] in cmds for c in cmds):
             problems.append(
                 "%s defines %s but no VER command - a tool must be able to "
                 "say which build is loaded"
@@ -241,21 +244,90 @@ def check_grouped_calls_resolve(problems):
                 % (p.name, name, src[:m.start()].count("\n") + 1))
 
 
+def global_defuns(forms):
+    """Every function name FORMS define in the session: a defun at the
+    top AND one nested in another function's body, which becomes global
+    the first time that body runs -- unless the enclosing defun declares
+    the name among its locals, which is the only thing that keeps it
+    private.  *error* is left out: every command nests its own."""
+    out = []
+
+    def visit(f, shadow):
+        if not isinstance(f, list):
+            return
+        if check_osnap.head(f) == "defun" and len(f) >= 3 \
+                and check_osnap.is_sym(f[1]):
+            name = f[1].lower()
+            if name not in shadow and name != "*error*":
+                out.append(name)
+            own = f[2] if isinstance(f[2], list) else []
+            inner = shadow | {x.lower() for x in own
+                              if check_osnap.is_sym(x) and x != "/"}
+            for x in f[3:]:
+                visit(x, inner)
+            return
+        for x in f:
+            visit(x, shadow)
+
+    for form in forms:
+        visit(form, set())
+    return out
+
+
+def top_setqs(forms):
+    """(NAME, value-text) for every global a file SETS as it loads: a
+    top-level (setq ...), so a value inside (if (not (boundp ...)) ...)
+    -- the guarded default the STEPS trio share -- is not one."""
+    def text(x):
+        if isinstance(x, list):
+            return "(" + " ".join(text(y) for y in x) + ")"
+        return ('"%s"' % x[1]) if check_osnap.is_str(x) else x.lower()
+    out = []
+    for f in forms:
+        if isinstance(f, list) and check_osnap.head(f) == "setq":
+            for i in range(1, len(f) - 1, 2):
+                if check_osnap.is_sym(f[i]):
+                    out.append((f[i].lower(), text(f[i + 1])))
+    return out
+
+
 def check_no_collisions(problems):
-    """The grouped tier loads as one session, so no name may repeat."""
+    """The grouped tier loads as one session, so no name may repeat.
+
+    Read as FORMS, not as lines starting "(defun": a defun nested inside
+    another function is just as global once it has run, and POOL and SPA
+    carry dozens of them (qf:, gr:, mu: ...), none of which the column-0
+    scan could see.  A global set at load by two files is the same
+    hazard for data -- the later file's value is the one every tool
+    reads -- so two different values for one name fail too."""
     owner = {}
+    setby = {}
     for p in shared_members():
-        for name in set(DEFUN.findall(read(p))):
-            if name.lower() == "*error*":
-                continue          # every command nests its own, localized
-            first = owner.get(name.lower())
-            if first:
+        forms = check_osnap.sexp(decomment(read(p)))
+        seen = set()
+        for name in global_defuns(forms):
+            if name in seen:
+                problems.append(
+                    "%s is defined twice in shared/parts/%s - the second "
+                    "silently replaces the first" % (name, p.name))
+            seen.add(name)
+            first = owner.get(name)
+            if first and first != p.name:
                 problems.append(
                     "%s is defined in both shared/parts/%s and "
                     "shared/parts/%s - one wins when they load together"
                     % (name, first, p.name))
             else:
-                owner[name.lower()] = p.name
+                owner[name] = p.name
+        for name, val in top_setqs(forms):
+            prev = setby.get(name)
+            if prev and prev[0] != p.name and prev[1] != val:
+                problems.append(
+                    "%s is set to %s by shared/parts/%s and to %s by "
+                    "shared/parts/%s - the later load wins for every tool"
+                    % (name, prev[1], prev[0], val, p.name))
+            elif not prev:
+                setby[name] = (p.name, val)
 
 
 def check_command_parity(problems):

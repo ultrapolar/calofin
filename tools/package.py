@@ -77,7 +77,7 @@ def lisp_payload():
     """What the Lisp lane ships: the one-file build, and the glue.
 
     ``LAZPASS.lsp`` is the file the tree already tells people to hand
-    anyone -- 71 files concatenated, nothing to find beside it -- and
+    anyone -- every member concatenated, nothing to find beside it -- and
     ``calofin.lsp`` is what the palette asks which commands exist, plus
     the form wire.  The glue loads whether or not the DLL ever does:
     without it the palette cannot grey a button and cannot name an

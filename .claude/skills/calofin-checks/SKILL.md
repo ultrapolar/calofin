@@ -45,6 +45,17 @@ under `shared/` are `CALOFIN-LIB.lsp`, `CALOFIN-LOADER.lsp` and
 twin left behind while `lisp/` moved on fails here rather than passing
 quietly — that is the `shared/parts/SPA.lsp` bug it was written for.
 
+### One session, one name
+
+`LAZPASS.lsp` loads every tool into ONE AutoLISP session, where a second
+definition does not fail — it silently replaces the first.
+
+| Message | Cause | Fix |
+| --- | --- | --- |
+| `X is defined in both shared/parts/A and shared/parts/B` | two tools define the same function — at the top **or nested** inside another function, which is global the first time that body runs | rename one with its own prefix, or declare a nested helper among its enclosing defun's locals (` / X`) |
+| `X is defined twice in shared/parts/A` | one file defines it twice; the second wins | delete or rename one |
+| `X is set to V by A and to W by B` | two files set one global to different values as they load; the later load wins for every tool | give each its own prefixed name, or make it a guarded default: `(if (not (boundp 'X)) (setq X ...))` |
+
 ---
 
 ## `check_lisp.py` — per-file statics

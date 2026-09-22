@@ -296,6 +296,14 @@ def sweep_covers():
     return covered | names("QUIET") | names("FILE_CANCEL") | names("MORE")
 
 
+def version_reporter(c, commands):
+    """True when C is a *VER / *VERSION reporter: the suffix off leaves
+    another command's name, which a word that merely ENDS in "ver"
+    (STOCKCOVER, UPADOVER) does not."""
+    return any(c.endswith(s) and c[:-len(s)] in commands
+               for s in ("VERSION", "VER"))
+
+
 def test_census():
     """Problems: commands no test names and no UNTESTED entry excuses,
     and UNTESTED entries a suite has caught up with."""
@@ -303,8 +311,14 @@ def test_census():
     tests = "".join(read(p) for p in (ROOT / "tests").glob("test_*.py")).lower()
     swept = sweep_covers()
     named = set()
-    for c in census():
-        if c.endswith("VER") or c.endswith("VERSION"):
+    everything = census()
+    for c in everything:
+        # a version reporter is excused by its BASE being a command, the
+        # rule callib.satellites and tests/test_versions.py use: a bare
+        # suffix test also excused POOLCOVER, ABHDCOVER, FITABHDCOVER,
+        # LAZFORMCOVER, STOCKCOVER and UPADOVER, six drawing commands the
+        # census then never asked a test of
+        if version_reporter(c, everything):
             continue
         if ("c:" + c.lower()) in tests or c in swept:
             named.add(c)

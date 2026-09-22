@@ -58,14 +58,15 @@
 ;; tells CALOFIN-LIB.lsp it is arriving as part of the whole build
 (setq cal:*build-loading* T)
 
-;; ...and tells all sixty-three members to load QUIETLY.  Each
-;; one announces itself when it is APPLOADed alone, which is
-;; right; all of them announcing themselves here was 83 lines
-;; and 6,681 characters of scrollback in every drawing opened,
-;; before the drafter had done anything.  CALVER reads the whole
-;; roster back whenever it is asked for.  Not a cal: symbol: a
-;; lisp/ file may not call or set one (check_standards), and the
-;; standalone files are where the banners live.
+;; ...and tells every member to load QUIETLY.  Each one
+;; announces itself when it is APPLOADed alone, which is right;
+;; all of them announcing themselves here was 83 lines and 6,681
+;; characters of scrollback in every drawing opened, when there
+;; were sixty-three of them, before the drafter had done anything.
+;; CALVER reads the whole roster back whenever it is asked for.
+;; Not a cal: symbol: a lisp/ file may not call or set one
+;; (check_standards), and the standalone files are where the
+;; banners live.
 (setq *calofin-quiet* T)
 
 
@@ -103,11 +104,11 @@
 (setq cal:*version* "v2.5")
 
 
-;;  WHAT IS LOADED, AND AT WHICH VERSION.  Seventy-two commands report
-;;  their own version and CALVER used to report one of them -- this
-;;  file's -- so the question a support call actually asks ("what are
-;;  you running?") was seventy-two commands' worth of typing, and a
-;;  LAZDIAG report names only the tool that failed.
+;;  WHAT IS LOADED, AND AT WHICH VERSION.  Every tool reports its own
+;;  version with a <TOOL>VER command, and CALVER used to report one of
+;;  them -- this file's -- so the question a support call actually asks
+;;  ("what are you running?") was one command per tool's worth of
+;;  typing, and a LAZDIAG report names only the tool that failed.
 ;;
 ;;  There is no table of versions here and there is not going to be:
 ;;  every tool sets its own banner global as it loads, so the SESSION

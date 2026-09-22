@@ -28,11 +28,11 @@
 (setq cal:*version* "v2.5")
 
 
-;;  WHAT IS LOADED, AND AT WHICH VERSION.  Seventy-two commands report
-;;  their own version and CALVER used to report one of them -- this
-;;  file's -- so the question a support call actually asks ("what are
-;;  you running?") was seventy-two commands' worth of typing, and a
-;;  LAZDIAG report names only the tool that failed.
+;;  WHAT IS LOADED, AND AT WHICH VERSION.  Every tool reports its own
+;;  version with a <TOOL>VER command, and CALVER used to report one of
+;;  them -- this file's -- so the question a support call actually asks
+;;  ("what are you running?") was one command per tool's worth of
+;;  typing, and a LAZDIAG report names only the tool that failed.
 ;;
 ;;  There is no table of versions here and there is not going to be:
 ;;  every tool sets its own banner global as it loads, so the SESSION

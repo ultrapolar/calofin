@@ -95,6 +95,30 @@ def setq_elements(body, start):
     return elems
 
 
+def nested_scopes(body):
+    """(start, end, names) for every defun and lambda nested in BODY:
+    the span of text its own arglist covers, and the names that arglist
+    declares.  A setq or foreach inside one of them is declared when the
+    INNER arglist names it -- POOL's pool:quadflow alone carries dozens
+    of such helpers (qf:geo, gr:..., mu:...), and reading only the outer
+    defun's arglist reported every one of their locals as undeclared,
+    which is roughly half of what the baseline used to hold."""
+    out = []
+    for m in re.finditer(r"\((?:defun\s+[^\s()]+|lambda)\s*\(([^)]*)\)", body):
+        toks = m.group(1).replace("/", " ").split()
+        depth, j = 0, m.start()
+        while j < len(body):
+            if body[j] == "(":
+                depth += 1
+            elif body[j] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        out.append((m.start(), j, {t.lower() for t in toks}))
+    return out
+
+
 def check_file(path):
     """List of (line, defun, kind, detail) findings."""
     src = read(path)
@@ -133,9 +157,16 @@ def check_file(path):
         def line_at(off):
             return base + f[:off].count("\n")
 
+        scopes = nested_scopes(body)
+
+        def declared_at(off, v):
+            lv = v.lower()
+            return lv in declared_low or any(
+                a <= off <= b and lv in names for a, b, names in scopes)
+
         for fv in re.finditer(r"\(foreach\s+([^\s()]+)", body):
             v = fv.group(1)
-            if v.lower() not in declared_low:
+            if not declared_at(fv.start(), v):
                 findings.append((line_at(m.end() + fv.start()), name,
                                  "foreach", v))
 
@@ -151,7 +182,7 @@ def check_file(path):
                     if v.lower() not in globals_declared:
                         findings.append((ln, name, "setq-global", v))
                     continue
-                if (v.lower() not in declared_low
+                if (not declared_at(off, v)
                         and not any(v.startswith(p + ":") for p in prefixes)
                         and v.lower() not in ("nil", "t")):
                     findings.append((ln, name, "setq", v))
