@@ -346,7 +346,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.12") ; printed on load and at command start so a
+(setq *cs-version* "v4.13") ; printed on load and at command start so a
                             ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -1680,9 +1680,9 @@
       ;; explanation lives in the question text.  This is the first
       ;; question of the command, so it offers no Back.
       ((= qstep 1)
-       (setq dflt (or (cs-kwcanon *cs-direction-default*
-                                  '("Inside" "Outside"))
-                      "Inside"))
+       (setq dflt (cond ((cs-kwcanon *cs-direction-default*
+                                     '("Inside" "Outside")))
+                        ("Inside")))
        (if (null (setq key (cs-fkw 'direction "Inside Outside" dflt)))
          (progn
            (initget "Inside Outside")
@@ -1697,9 +1697,9 @@
       ((= qstep 2)
        (if (and mid (not outflag))
          (progn
-           (setq dflt (or (cs-kwcanon *cs-measure-default*
-                                      '("Middle" "True"))
-                          "Middle"))
+           (setq dflt (cond ((cs-kwcanon *cs-measure-default*
+                                         '("Middle" "True")))
+                            ("Middle")))
            (if (null (setq key (cs-fkw 'measure "Middle True" dflt)))
              (progn
                (initget "Middle True Back Undo")
@@ -1740,10 +1740,10 @@
            ;; read once here and then spelled for whichever of the two
            ;; prompts this run puts up
            (setq dflt (if (= "Parallel"
-                             (or (cs-kwcanon *cs-treadmode-default*
-                                             '("Parallel" "True"
-                                               "Equidistant"))
-                                 "Parallel"))
+                             (cond ((cs-kwcanon *cs-treadmode-default*
+                                                '("Parallel" "True"
+                                                  "Equidistant")))
+                                   ("Parallel")))
                         "Parallel"
                         (if outflag "Equidistant" "True")))
            (if (null (setq key (cs-fkw 'treadmode
@@ -1814,7 +1814,7 @@
 
       ;; -- 7. dimension the steps? ------------------------------------
       ((= qstep 4)
-       (setq dflt (or (cs-kwcanon *cs-dims-default* '("Yes" "No")) "Yes"))
+       (setq dflt (cond ((cs-kwcanon *cs-dims-default* '("Yes" "No"))) ("Yes")))
        (if (null (setq fkey (cs-fkw 'dims "Yes No" dflt)))
          (progn
            (initget "Yes No Back Undo")
@@ -1851,7 +1851,7 @@
        (if outflag
          (setq qstep (+ qstep qdir))
          (progn
-           (setq dflt (or (cs-kwcanon *cs-bench-default* '("Yes" "No")) "No"))
+           (setq dflt (cond ((cs-kwcanon *cs-bench-default* '("Yes" "No"))) ("No")))
            (if (null (setq fkey (cs-fkw 'bench "Yes No" dflt)))
              (progn
                (initget "Yes No Back Undo")
@@ -2264,7 +2264,7 @@
   ;; style is restored - the profile places its own dims.
   (if (> drawn 0)
     (progn
-      (setq dflt (or (cs-kwcanon *cs-profile-default* '("Yes" "No")) "Yes"))
+      (setq dflt (cond ((cs-kwcanon *cs-profile-default* '("Yes" "No"))) ("Yes")))
       (if (null (setq fkey (cs-fkw 'profile "Yes No" dflt)))
         (progn
           (initget "Yes No")
@@ -2454,8 +2454,8 @@
         (while (<= bstep 4)
           (cond
             ((= bstep 1)
-             (setq dflt (or (cs-kwcanon *cs-bead-default* '("Yes" "No"))
-                            "Yes"))
+             (setq dflt (cond ((cs-kwcanon *cs-bead-default* '("Yes" "No")))
+                              ("Yes")))
              (if (null (setq fkey (cs-fkw 'bead "Yes No" dflt)))
                (progn
                  (initget "Yes No")
@@ -2477,9 +2477,9 @@
                  ;; not reachable from a form answer -- there is no
                  ;; prompt to step back from, and the question above it
                  ;; came off the same sheet
-                 (setq dflt (or (cs-kwcanon *cs-beadsides-default*
-                                            '("All" "Some" "None"))
-                                "All"))
+                 (setq dflt (cond ((cs-kwcanon *cs-beadsides-default*
+                                               '("All" "Some" "None")))
+                                  ("All")))
                  (if (null (setq bside (cs-fkw 'beadsides
                                                "All Some None" dflt)))
                    (progn

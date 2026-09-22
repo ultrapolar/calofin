@@ -147,7 +147,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.6")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.7")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -417,14 +417,19 @@
         (setq rest nil)))                  ; feet that are not a number
     (setq rest (vl-string-trim " \t" s)))
   (setq inch (if rest (ds:inches rest)))
-  ;; an empty inches part is only an answer when feet carried it
-  (or (if (and inch (or hasfeet (/= rest "")))
-        (progn
-          (setq eighths (fix (+ 0.5 (* 8.0 (+ (* feet 12.0) inch)))))
-          (if (> eighths 0) (list eighths hasfeet))))
-      ;; not a measurement, then a LETTER LABEL -- the other family
-      ;; this tool stamps, and the one the survey points are named in
-      (if (setq lidx (ds:letter-index raw)) (list lidx 'letter))))
+  ;; an empty inches part is only an answer when feet carried it.
+  ;; NOTE: a cond and not an (or ...) -- AutoLISP's or hands back T,
+  ;; never the value that made it true, so (or (list ...) ...) answers
+  ;; T and every caller's (car p) dies "bad argument type: consp T".
+  ;; v3.6 shipped exactly that, and every run failed at its first text.
+  (cond
+    ((and inch (or hasfeet (/= rest ""))
+          (> (setq eighths (fix (+ 0.5 (* 8.0 (+ (* feet 12.0) inch)))))
+             0))
+     (list eighths hasfeet))
+    ;; not a measurement, then a LETTER LABEL -- the other family
+    ;; this tool stamps, and the one the survey points are named in
+    ((setq lidx (ds:letter-index raw)) (list lidx 'letter))))
 
 ;; STR -- a stacked fraction, \S code and all -- wrapped in the height
 ;; code that draws it at ds:*stack-hgt* times the text around it.  A

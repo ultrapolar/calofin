@@ -511,19 +511,24 @@ class VM:
                 return v
         return NIL
 
+    # AutoLISP's and/or answer T or nil -- NEVER the deciding value, the
+    # way Common Lisp's do.  The VM once returned the value, and code
+    # that leaned on it (DIMSTAMP's parse, every (or (canon knob) "Yes")
+    # default) passed every test and died in AutoCAD on "consp T" /
+    # "stringp T".  tests/test_lispvm_logic.py pins this.
     def sf_and(self, a):
         v = T
         for f in a:
             v = self.eval(f)
             if not truthy(v):
                 return NIL
-        return v
+        return T
 
     def sf_or(self, a):
         for f in a:
             v = self.eval(f)
             if truthy(v):
-                return v
+                return T
         return NIL
 
     def sf_while(self, a):

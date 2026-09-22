@@ -192,7 +192,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.8")
+(setq *perpmark-version* "v1.9")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -1398,8 +1398,8 @@
       ;; --- 4. join them up? -------------------------------------------
       ((= stage 4)
        (setq ans (cal:askyn "Draw a polyline through the marks?"
-                           (or (pm:kw-canon pm:*join-default* '("Yes" "No"))
-                               "Yes")
+                           (cond ((pm:kw-canon pm:*join-default* '("Yes" "No")))
+                                 ("Yes"))
                            T))
        (cond
          ((eq ans 'CAL-BACK) (setq stage 3))
@@ -1486,9 +1486,9 @@
           (setq ans (cal:askkw (strcat "Dimension style - " pm:*dimstyle-std*
                                       " or " pm:*dimstyle-side* "?")
                               "STandard SIde" "STandard/SIde"
-                              (or (pm:kw-canon pm:*dimstyle-default*
-                                               '("STandard" "SIde"))
-                                  "STandard")
+                              (cond ((pm:kw-canon pm:*dimstyle-default*
+                                                  '("STandard" "SIde")))
+                                    ("STandard"))
                               T))
           (cond
             ((eq ans 'CAL-BACK) (setq stage (if wayasked 7 6)))

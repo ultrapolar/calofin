@@ -505,6 +505,28 @@ cv.loads('(lzv:put "c2" "60")')
 assert not state(cv).startswith('C2 must'), state(cv)
 cv.loads('(setq stub:*mode* nil) (lzv:restate)')
 assert accept_mode(cv) == 0, "a break between C and D did not let Insert through"
+# ...and NOWHERE ELSE.  lzv:*vals* is keyed across the whole run so a
+# letter both floors carry survives a tab, which means C2 -- a letter
+# only SHallow carries -- is still in the store after tabbing off it.
+# lzv:form sends the live keys alone, so that value cannot reach
+# POOLSIDE; weighing it anyway greyed Insert on a Normal over a box the
+# page does not show, with nothing on the sheet the drafter could
+# change to clear it.
+cv.loads('(lzv:put "c2" "20")')
+assert state(cv).startswith('C2 must be between C and D'), state(cv)
+cv.loads('(setq lzv:*type* "Normal") (setq lzv:*chart* (lzv:chart "Normal"))')
+cv.loads('(setq t:*l* (lzv:livekeys))')
+assert 'c2' not in [str(x) for x in cv.globals['t:*l*']], \
+    "a Normal sheet grew a C2 box"
+assert not state(cv).startswith('C2 must'), \
+    "a C2 left on the SHallow tab is judged on a sheet with no C2: %r" \
+    % state(cv)
+cv.loads('(setq stub:*mode* nil) (lzv:restate)')
+assert accept_mode(cv) == 0, \
+    "Insert stayed grey on a Normal over a C2 the form would never send"
+cv.loads('(setq t:*f* (lzv:form))')
+assert not [p for p in cv.globals['t:*f*'] if str(p.a) == 'c2'], \
+    "c2 travelled off a sheet that has no C2 box"
 # a sheet with every box answered says so, and says what is left
 for k in LIVE:
     rv.loads('(lzv:put "%s" "24")' % k)
@@ -514,7 +536,8 @@ assert full.startswith('All %d boxes filled' % len(LIVE)), full
 assert 'only for the base point' in full, full
 print("   %d boxes, named by their letters; the depth pair POOLSIDE would"
       % len(LIVE))
-print("   refuse is refused here instead, and it greys Insert")
+print("   refuse is refused here instead, and it greys Insert -- on the")
+print("   sheet in front of you, never on a letter another tab carries")
 
 
 print("== Recall last: the sheet you just filled in, back in it ==")

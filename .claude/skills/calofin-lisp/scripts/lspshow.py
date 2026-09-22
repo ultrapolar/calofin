@@ -57,8 +57,10 @@ def top_span(src, opener, name):
 
     Lifted from tools/mirror_shared.py so the two agree about where a
     form begins and ends -- that is the whole point of reading one."""
+    # re.I: AutoLISP symbols are case-insensitive -- POOL:ASKKW IS
+    # pool:askkw, and c:abcdef is the command ABCDEF
     m = re.search(r"^\(" + opener + r"\s+" + re.escape(name) + r"(?=[\s()])",
-                  src, re.M)
+                  src, re.M | re.I)
     if not m:
         return None
     i = m.start()
@@ -151,7 +153,7 @@ def do_show(name, paths):
 
 
 def do_callers(name, paths):
-    pat = re.compile(r"[('](" + re.escape(name) + r")(?=[\s)])")
+    pat = re.compile(r"[('](" + re.escape(name) + r")(?=[\s)])", re.I)
     total = 0
     for path in paths:
         src = read(path)
@@ -178,8 +180,11 @@ def main(argv):
                     help="show the c:NAME command defun")
     a = ap.parse_args(argv)
 
-    given = [pathlib.Path(f) for f in ([a.name] if a.map and a.name else [])
-             + a.files]
+    # --map, --callers and --cmd take no symbol positional, so in those
+    # modes whatever argparse bound to `name` is really the first FILE.
+    # (Dropping it searched the whole tree for `--callers SYM FILE`.)
+    first = [a.name] if (a.map or a.callers or a.cmd) and a.name else []
+    given = [pathlib.Path(f) for f in first + a.files]
     paths = given or list(lsp_files())
 
     if a.map:

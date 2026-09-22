@@ -64,7 +64,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.10")
+(setq *poolside-version* "v1.11")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -857,7 +857,7 @@
   ;; what Enter answers the bottom-type question with, read through
   ;; psd:kwknob so a knob the prompt would refuse leaves the shipped
   ;; "Normal" standing rather than reaching the chain table unspelled
-  (setq bdflt (or (psd:kwknob psd:*btype-default* psd:*btypes*) "Normal"))
+  (setq bdflt (cond ((psd:kwknob psd:*btype-default* psd:*btypes*)) ("Normal")))
   (setq base 'RETRY)
   (while (eq base 'RETRY)
     ;; the form can name the bottom; anything psd:*btypes* does not
@@ -936,7 +936,7 @@
   ;; where psd:*mirror-default* is what Enter means -- read through
   ;; psd:kwknob on the same terms, so a knob that is not one of the two
   ;; words leaves "No" standing
-  (setq mdflt (or (psd:kwknob psd:*mirror-default* "Yes No") "No")
+  (setq mdflt (cond ((psd:kwknob psd:*mirror-default* "Yes No")) ("No"))
         fv  (psd:fkw 'mirror "Yes No" "No")
         mir (if fv
                 (= fv "Yes")

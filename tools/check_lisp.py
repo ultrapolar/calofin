@@ -15,6 +15,8 @@ For each file given (default: every .lsp under lisp/ and shared/parts/):
     * a call to an undefined function in the file's own namespace
     * a quoted 'tool:fn reference to a function the file never defines
       -- the dispatch-table typo no runtime path may ever reach
+    * (or ... "literal") -- AutoLISP's or answers T, so the literal
+      default is never what comes back
 
   advisories (printed, never fatal -- cross-file references make them
   unreliable for the multi-file tools):
@@ -97,6 +99,12 @@ def sym(x):
     return isinstance(x, str) and x != '"'
 
 
+def is_literal(x):
+    """A string or number literal: never a test anybody means."""
+    return x == '"' or (isinstance(x, str)
+                        and re.match(r'^[-+]?(\d+\.?\d*|\.\d+)$', x))
+
+
 def walk(form, a):
     """Collect calls/definitions/arity from one expression form."""
     if not isinstance(form, list) or not form:
@@ -135,6 +143,16 @@ def walk(form, a):
                 for sub in clause:
                     walk(sub, a)
         return
+    if h == "or" and len(form) > 2 and is_literal(form[-1]):
+        # AutoLISP's or answers T, never the value that made it true,
+        # so (or (canon knob) "Yes") is T whenever the knob reads and
+        # the literal is never what comes back.  A default is spelled
+        # (cond ((canon knob)) ("Yes")) -- a test-only clause hands back
+        # its test's value.  Eight step prompts, SPA, POOLSIDE and
+        # PERPMARK shipped the or spelling and died on "stringp T".
+        a.arity.append("(or ... %s) answers T, not the default -- "
+                       "spell a default (cond ((x)) (default))"
+                       % ('"..."' if form[-1] == '"' else form[-1]))
     if h == "if" and len(form) > 4:
         a.arity.append("(if ...) takes 2 or 3 arguments, got %d"
                        % (len(form) - 1))

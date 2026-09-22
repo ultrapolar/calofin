@@ -25,7 +25,7 @@ Two facts explain most of the design:
 ## The tree
 
 ```
-lisp/       82 .lsp -- one self-contained tool per folder.  THE SOURCE OF TRUTH.
+lisp/       one self-contained tool per folder.  THE SOURCE OF TRUTH.
 releases/   dated REV-stamped twins of versioned lisp/ files, flat.  GENERATED.
 shared/
   LAZPASS.lsp     the whole build in one file -- what you hand a drafter.  GENERATED.
@@ -91,7 +91,7 @@ carried into `shared/` at all, and is not expected to be.
 
 ## The `cal:` library
 
-114 helpers in `shared/parts/CALOFIN-LIB.lsp`, in families:
+Over a hundred helpers in `shared/parts/CALOFIN-LIB.lsp`, in families:
 
 | Family | Examples |
 | --- | --- |
@@ -116,7 +116,7 @@ map turns those into `cal:` calls in the twin.
 
 ## The mirror's table
 
-`tools/mirror_shared.py` holds `TOOLS` — 72 entries, one per generated
+`tools/mirror_shared.py` holds `TOOLS` — one entry per generated
 twin, keyed by the **twin's file stem** (`'SQUAREUP'`, `'abhd'`,
 `'AutoDim'` — the case follows the parts filename, not the folder).
 

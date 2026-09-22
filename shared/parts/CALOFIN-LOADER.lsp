@@ -70,7 +70,7 @@
 
 ;; Look beside the loader first, then anywhere AutoCAD searches.
 (defun cal--load (name / f)
-  (setq f (cond ((and cal:*dir* (findfile (strcat cal:*dir* "\\" name))))
+  (setq f (cond ((if cal:*dir* (findfile (strcat cal:*dir* "\\" name))))
                 ((findfile name))))
   (cond (f (load f) t)
         (t (setq cal:*missing* (1+ cal:*missing*))

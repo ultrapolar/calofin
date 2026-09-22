@@ -35,20 +35,13 @@ ROOT = pathlib.Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT / "tools"))
 try:
     from callib import COMMAND, VERSION, VERSION2
+    from callib import headline_commands, held_back
 except ImportError:                                  # stand alone anyway
+    headline_commands = held_back = None
     COMMAND = re.compile(r"^\(defun\s+[cC]:([^\s()]+)", re.M)
     VERSION = re.compile(r'\*[a-z0-9]+-version\*\s+"v(\d+)\.(\d+)"')
     VERSION2 = re.compile(r'\*version\*\s+"(\d{6}) REV(\d{2})"')
 
-#: Where a tool has to be registered.  (label, path, how to spot its line)
-SITES = [
-    ("panel caption", "lisp/lazpanel/LAZPANEL.lsp", None),
-    ("loader slot", "shared/parts/CALOFIN-LOADER.lsp", None),
-    ("mirror table", "tools/mirror_shared.py", None),
-    ("palette tooltip", "ui/calofin_net/blurbs.txt", None),
-    ("palette probe", "ui/calofin_ui/calofin.lsp", None),
-    ("README row", "README.md", None),
-]
 
 
 def read(p):
@@ -137,28 +130,82 @@ def main(argv):
         print("  tests    : %s" % (", ".join(tests) or "(none)"))
         print()
 
-    # registration sites, searched for any of the commands
+    # Registration.  Two different keys, and conflating them is how this
+    # used to cry wolf: the LOADER and the MIRROR list a tool by its
+    # FILE (DroneHeightGPS.lsp), while the panel, the palette tooltip
+    # and the probe list name COMMANDS -- and only the commands that
+    # carry a button.  A satellite (FOOVER, TUTORIALFOO, DD*, FOO-CFG)
+    # has none by design, so its absence there is not a gap.  Which is
+    # which comes from callib, the same place check_registry reads it.
     allcmds = sorted({c for s in srcs for c in commands_in(s)})
+    heads = headline_commands() if headline_commands else None
+    held = held_back() if held_back else {}
     print("== registration ==")
-    for label, path, _ in SITES:
+
+    def hits(path, pred):
         body = read(ROOT / path)
-        if not body:
-            print("  %-16s %s (missing)" % (label, path))
-            continue
-        lines = []
-        for n, line in enumerate(body.split("\n"), 1):
-            if any(re.search(r"\b" + re.escape(c) + r"\b", line, re.I)
-                   for c in allcmds):
-                lines.append((n, line.strip()))
-        if lines:
-            for n, line in lines[:6]:
-                print("  %-16s %s:%d: %s"
-                      % (label, path, n, line[:96]))
-            if len(lines) > 6:
-                print("  %-16s ... and %d more"
-                      % ("", len(lines) - 6))
+        return [(n, ln.strip()) for n, ln in enumerate(body.split("\n"), 1)
+                if pred(ln)]
+
+    def show(label, path, found, empty):
+        if found:
+            for n, ln in found[:3]:
+                print("  %-16s %s:%d: %s" % (label, path, n, ln[:88]))
+            if len(found) > 3:
+                print("  %-16s ... and %d more" % ("", len(found) - 3))
         else:
-            print("  %-16s %s: NOT REGISTERED" % (label, path))
+            print("  %-16s %s" % (label, empty))
+
+    for src in srcs:
+        stem = src.stem
+        twin = "%s.lsp" % stem
+        tag = " [%s]" % twin if len(srcs) > 1 else ""
+        hand = (ROOT / "shared" / "parts" / twin).is_file()
+        show("mirror table" + tag, "tools/mirror_shared.py",
+             hits("tools/mirror_shared.py",
+                  lambda ln: re.match(r"\s*'%s':\s*\{" % re.escape(stem), ln)),
+             "not in mirror_shared.TOOLS -- its twin is kept BY HAND "
+             "(CLAUDE.md allows that for LISPLAB alone)" if hand else
+             "NOT IN mirror_shared.TOOLS -- no twin will be generated")
+        if twin in held or stem + ".LSP" in held:
+            print("  %-16s held back from the bundle: %s"
+                  % ("loader slot" + tag, held.get(twin) or held.get(stem + ".LSP")))
+        else:
+            show("loader slot" + tag, "shared/parts/CALOFIN-LOADER.lsp",
+                 hits("shared/parts/CALOFIN-LOADER.lsp",
+                      lambda ln: re.search(r'"%s"' % re.escape(twin), ln, re.I)),
+                 "NOT IN THE LOADER -- the folder load and the bundle skip it")
+
+    buttons = sorted(c for c in allcmds if heads is None or c in heads)
+    held_srcs = [x for x in srcs
+                 if "%s.lsp" % x.stem in held or "%s.LSP" % x.stem in held]
+    held_cmds = sorted({c for x in held_srcs for c in commands_in(x)})
+    quiet = sorted(c for c in allcmds
+                   if c not in buttons and c not in held_cmds)
+    if held_cmds:
+        print("  %-16s %s: held back, so no button" % ("", ", ".join(held_cmds)))
+    if quiet:
+        print("  %-16s %s: satellite(s), no button by design"
+              % ("", ", ".join(quiet)))
+    for c in buttons:
+        q = re.escape(c)
+        show("panel " + c, "lisp/lazpanel/LAZPANEL.lsp",
+             hits("lisp/lazpanel/LAZPANEL.lsp",
+                  lambda ln: re.search(r'\("%s"\s+"' % q, ln)),
+             "NO CAPTION in lzp:*captions*")
+        show("tooltip " + c, "ui/calofin_net/blurbs.txt",
+             hits("ui/calofin_net/blurbs.txt",
+                  lambda ln: re.match(r"%s\s" % q, ln)),
+             "NO TOOLTIP in ui/calofin_net/blurbs.txt")
+        show("probe " + c, "ui/calofin_ui/calofin.lsp",
+             hits("ui/calofin_ui/calofin.lsp",
+                  lambda ln: re.search(r'"%s"' % q, ln)),
+             "NOT IN THE PROBE LIST -- its button can never grey out")
+    show("README row", "README.md",
+         hits("README.md",
+              lambda ln: ln.startswith("|") and any(
+                  "`%s`" % c in ln for c in allcmds)),
+         "NO ROW in README.md's command tables")
     print("\n(check with: python3 tools/check_registry.py)")
     return 0
 

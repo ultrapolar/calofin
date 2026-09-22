@@ -274,7 +274,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.19")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.20")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -3966,7 +3966,7 @@
 ;; The read-only scan.  lite = T skips the DIMCHECK-style pass - no
 ;; dimension, arc or overlap audit and no DIMENSION AUDIT column -
 ;; for a drawing DIMCHECK already went over.
-(defun lfc:scan (lite / *error* oldecho name ss i e et ed cands dims arcs
+(defun lfc:scan (lite / *error* oldecho name ss i e et ed sty meas cands dims arcs
                      plns segs
                      blks lines olaps pr sgroups scand svgroups pgroups
                      g g1 g2 rest svbb stepht satts liners fgstep linerstep
@@ -4042,7 +4042,9 @@
                   (lfc:sort-dims dims (if (and miny maxy)
                                         (* *lfc-row-band* (- maxy miny))
                                         *lfc-row-flat*)))
-       (setq ed  (entget e)
+       (setq ed   (entget e)
+             sty  (lfc:dim-style e)
+             meas (lfc:dim-meas e)
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
              p14 (cdr (assoc 14 ed))
@@ -4074,10 +4076,10 @@
        (if bad (setq ndbad (1+ ndbad)))
        (if held (setq ndanch (+ ndanch (length held))))
        (setq lines (cons (strcat "Dim " (cdr (assoc 5 ed))
-                                 (if (= (lfc:dim-style e) "") ""
-                                   (strcat " [" (lfc:dim-style e) "]"))
-                                 (if (lfc:dim-meas e)
-                                   (strcat " = " (lfc:dim-meas e)) "")
+                                 (if (= sty "") ""
+                                   (strcat " [" sty "]"))
+                                 (if meas
+                                   (strcat " = " meas) "")
                                  ": "
                                  (if bad
                                    (strcat "NOT attached - " (lfc:join bad ", "))
@@ -4091,14 +4093,15 @@
 
      ;; --- arcs: report unattached endpoints, move nothing
      (foreach e (if lite nil arcs)
-       (setq na  (1+ na)
+       (setq ed  (entget e)
+             na  (1+ na)
              bad nil)
-       (if (lfc:planar-arc-p (entget e))
+       (if (lfc:planar-arc-p ed)
          (foreach s '(("start" . start) ("end" . end))
            (if (lfc:arc-end-target e (cdr s) cands)
              (setq bad (append bad (list (car s)))))))
        (if bad (setq nabad (1+ nabad)))
-       (setq lines (cons (strcat "Arc " (cdr (assoc 5 (entget e))) ": "
+       (setq lines (cons (strcat "Arc " (cdr (assoc 5 ed)) ": "
                                  (if bad
                                    (strcat (lfc:join bad " & ")
                                            " NOT attached to an object end")

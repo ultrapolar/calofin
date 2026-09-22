@@ -131,7 +131,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *g2mconv-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *g2mconv-version* "v1.2")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -565,10 +565,9 @@
 
 ;; Written BEFORE the move and before either restyle, which is the only
 ;; moment the object still carries everything the record is about.
-(defun g2m:stamp (ent lay / obj typ sty ovr tsty thgt)
+(defun g2m:stamp (ent lay obj / typ sty ovr tsty thgt)
   (regapp *g2mconv-xdata-app*)
-  (setq obj (vlax-ename->vla-object ent)
-        typ (cdr (assoc 0 (entget ent))))
+  (setq typ (cdr (assoc 0 (entget ent))))
   ;; only a DIMENSION has a style to lose or overrides to lose it to,
   ;; and group 3 means something else entirely on an MTEXT
   (if (= "DIMENSION" typ)
@@ -740,8 +739,8 @@
               typ  (cdr (assoc 0 (entget ent))))
         ;; the record first: after the move and the restyles the object
         ;; no longer carries any of what the record is about
-        (if *g2mconv-record* (g2m:stamp ent (g2m:layer-of ent)))
         (setq obj (vlax-ename->vla-object ent))
+        (if *g2mconv-record* (g2m:stamp ent (g2m:layer-of ent) obj))
         ;; 1. the layer, and the appearance that has to follow it
         (vla-put-Layer obj (caddr rule))
         (if *g2mconv-force-bylayer*

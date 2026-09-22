@@ -67,12 +67,12 @@ In order, in one commit:
    bash .claude/skills/calofin-lisp/scripts/retier.sh SQUAREUP
    ```
    That runs `mirror_shared.py <TOOL>`, then `release_lisp.py`,
-   `build_shared_bundle.py`, and the four UI generators. The `<TOOL>`
+   `build_shared_bundle.py`, the four UI generators and `gen_agents_md.py`. The `<TOOL>`
    argument is the **twin's file stem**, which is not always the folder
    name — `whereis.py` prints it, or `grep -n "^    '" tools/mirror_shared.py`.
    Files with no version banner are skipped by `release_lisp.py` and
    reported as skipped; that is expected.
-4. **Check, scoped** (~23s, instead of `make check`'s ~95s):
+4. **Check, scoped** (about a third of `make check`'s time):
    ```bash
    bash .claude/skills/calofin-lisp/scripts/precheck.sh lisp/squareup/SQUAREUP.lsp
    ```
@@ -115,11 +115,16 @@ Run these *first*, and if the form and the routine disagree, **fix the
 form, never the canonical routine**:
 
 ```bash
-python3 tests/test_pool_form.py tests/test_spa_form.py   # (run separately)
-python3 tests/test_steps_form.py
-python3 tests/test_lazform.py ; python3 tests/test_lazspa.py ; python3 tests/test_lazstep.py
-python3 tests/test_back_nav.py
+for t in pool_form spa_form steps_form side_form oasis_form chart_form \
+         lazform lazspa lazstep back_nav; do
+  python3 tests/test_$t.py >/dev/null 2>&1 && echo "ok   $t" || echo "FAIL $t"
+done
 ```
+
+Each test is its own script, so `python3 tests/a.py tests/b.py` runs
+only `a`; and `run_tests.py -k` takes ONE substring, so repeating it
+keeps only the last. Hence the loop. Add
+`CALOFIN_LISP_ROOT=shared` in front of `python3` for the grouped tier.
 
 ## If you change a skill
 

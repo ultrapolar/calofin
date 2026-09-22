@@ -364,7 +364,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.17") ; printed on load and at command start so a
+(setq *ns-version* "v3.18") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -1557,10 +1557,10 @@
                       "the corners of the last step"
                       "the back corners")
               rtype (ns-ftreat rsubj
-                               (or (ns-kwcanon *cs-treat-default*
-                                               '("Square" "Radius"
-                                                 "Cut" "NotGiven"))
-                                   "Square")
+                               (cond ((ns-kwcanon *cs-treat-default*
+                                                  '("Square" "Radius"
+                                                    "Cut" "NotGiven")))
+                                     ("Square"))
                                (/= mode "U")))
         (if (eq rtype 'CAL-BACK)
           (setq wid nil rtype nil treatback T)))))
@@ -1606,9 +1606,9 @@
          ;; the offset and the cut face are the two legs and the
          ;; hypotenuse of the same 45 degree triangle, so either one
          ;; gives the other; cutgiven says which one treat-sz is
-         (setq dflt (or (ns-kwcanon *cs-cut-given-default*
-                                    '("Offset" "Cut"))
-                        "Offset"))
+         (setq dflt (cond ((ns-kwcanon *cs-cut-given-default*
+                                       '("Offset" "Cut")))
+                          ("Offset")))
          (if (null (setq fkey (ns-fkw 'cutgiven "Offset Cut" dflt)))
            (progn
              (initget "Offset Cut Back Undo")
@@ -1667,7 +1667,7 @@
               (setq bc1 nil bc2 nil rtype "Square")))))))
 
   ;; ---- 4. dimension the steps? -----------------------------------------
-  (setq dflt (or (ns-kwcanon *cs-dims-default* '("Yes" "No")) "Yes"))
+  (setq dflt (cond ((ns-kwcanon *cs-dims-default* '("Yes" "No"))) ("Yes")))
   (if (null (setq fkey (ns-fkw 'dims "Yes No" dflt)))
     (progn
       (initget "Yes No")
@@ -1965,7 +1965,7 @@
   ;; the depth dim style like the tread chain.
   (if (> drawn 0)
     (progn
-      (setq dflt (or (ns-kwcanon *cs-profile-default* '("Yes" "No")) "Yes"))
+      (setq dflt (cond ((ns-kwcanon *cs-profile-default* '("Yes" "No"))) ("Yes")))
       (if (null (setq fkey (ns-fkw 'profile "Yes No" dflt)))
         (progn
           (initget "Yes No")
@@ -2150,8 +2150,8 @@
         (while (<= bstep 4)
           (cond
             ((= bstep 1)
-             (setq dflt (or (ns-kwcanon *cs-bead-default* '("Yes" "No"))
-                            "Yes"))
+             (setq dflt (cond ((ns-kwcanon *cs-bead-default* '("Yes" "No")))
+                              ("Yes")))
              (if (null (setq fkey (ns-fkw 'bead "Yes No" dflt)))
                (progn
                  (initget "Yes No")
@@ -2172,9 +2172,9 @@
                  ;; not reachable from a form answer -- there is no
                  ;; prompt to step back from, and the question above it
                  ;; came off the same sheet
-                 (setq dflt (or (ns-kwcanon *cs-beadsides-default*
-                                            '("All" "Some" "None"))
-                                "All"))
+                 (setq dflt (cond ((ns-kwcanon *cs-beadsides-default*
+                                               '("All" "Some" "None")))
+                                  ("All")))
                  (if (null (setq bside (ns-fkw 'beadsides
                                                "All Some None" dflt)))
                    (progn
