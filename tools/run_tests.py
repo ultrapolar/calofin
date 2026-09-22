@@ -98,7 +98,14 @@ def run_one(name, tier):
     except subprocess.TimeoutExpired as e:
         # a hang is a failure with a name, not a stuck runner
         code = 124
-        out = (e.stdout or "") + "\n[run_tests] killed after %ds" % limit
+        # what the child printed before the kill arrives as BYTES even
+        # under text=True -- subprocess only decodes a completed run --
+        # and bytes + str raised TypeError, so one hung test took the
+        # whole run down instead of being reported as the hang it was
+        part = e.stdout or ""
+        if isinstance(part, bytes):
+            part = part.decode("utf-8", "replace")
+        out = part + "\n[run_tests] killed after %ds" % limit
     return name, tier, code, time.monotonic() - t0, out
 
 
