@@ -103126,7 +103126,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.18")
+(setq *spacheck-version* "v1.19")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -103782,27 +103782,24 @@
 
 ;;; --- the two outlines together -----------------------------------------
 
-(defun spachk:audit-nesting (cov wat / rows bc bw)
+(defun spachk:audit-nesting (covbb watbb / rows)
   (setq rows nil)
-  (if (and cov wat)
-    (progn
-      (setq bc (cal:bbox-ent cov) bw (cal:bbox-ent wat))
-      (if (and bc bw)
-        (if (spachk:inside-p bw bc spachk:*tiny*)
-          (setq rows (list (spachk:row
-                             (strcat "Cover vs water's edge: cover "
-                                     (rtos (spachk:bw bc)) " x "
-                                     (rtos (spachk:bh bc))
-                                     " contains water's edge "
-                                     (rtos (spachk:bw bw)) " x "
-                                     (rtos (spachk:bh bw)) ", OK")
-                             nil)))
-          (setq rows (list (spachk:row
-                             (strcat "Cover vs water's edge: the water's"
-                                     " edge is NOT INSIDE the cover"
-                                     " - the cover is always the larger"
-                                     " of the two")
-                             1)))))))
+  (if (and covbb watbb)
+    (if (spachk:inside-p watbb covbb spachk:*tiny*)
+      (setq rows (list (spachk:row
+                         (strcat "Cover vs water's edge: cover "
+                                 (rtos (spachk:bw covbb)) " x "
+                                 (rtos (spachk:bh covbb))
+                                 " contains water's edge "
+                                 (rtos (spachk:bw watbb)) " x "
+                                 (rtos (spachk:bh watbb)) ", OK")
+                         nil)))
+      (setq rows (list (spachk:row
+                         (strcat "Cover vs water's edge: the water's"
+                                 " edge is NOT INSIDE the cover"
+                                 " - the cover is always the larger"
+                                 " of the two")
+                         1)))))
   (spachk:res rows nil))
 
 ;;; --- 4. the dimensions --------------------------------------------------
@@ -103814,12 +103811,12 @@
   (foreach e dims
     ;; layer
     (if (not (spachk:on-layer-p e spachk:*lay-dim*))
-      (setq rows (append rows
-                  (list (spachk:row
+      (setq rows (cons (spachk:row
                           (strcat "Dim " (spachk:dxf 5 e) ": on layer "
                                   (spachk:layer e) ", should be "
                                   spachk:*lay-dim*)
-                          1)))
+                          1)
+                        rows)
             ents (cons e ents)))
     ;; style: a Water's Edge dim takes the 0.5 style, everything else
     ;; the cover style
@@ -103827,11 +103824,11 @@
                    spachk:*ds-water* spachk:*ds-cover*)
           sty  (spachk:dim-style e))
     (if (and (/= sty "") (/= (strcase sty) (strcase want)))
-      (setq rows (append rows
-                  (list (spachk:row
+      (setq rows (cons (spachk:row
                           (strcat "Dim " (spachk:dxf 5 e) ": style '"
                                   sty "', should be '" want "'")
-                          1)))
+                          1)
+                        rows)
             ents (cons e ents)))
     ;; does it measure what it spans?
     (if (spachk:linear-p e)
@@ -103843,16 +103840,16 @@
           (progn
             (setq d (distance p1 p2))
             (if (> (abs (- d m)) spachk:*meas-tol*)
-              (setq rows (append rows
-                          (list (spachk:row
+              (setq rows (cons (spachk:row
                                   (strcat "Dim " (spachk:dxf 5 e)
                                           ": reads " (rtos m)
                                           " but spans " (rtos d)
                                           " - the dimension DISAGREES"
                                           " with its own points")
-                                  1)))
+                                  1)
+                                rows)
                     ents (cons e ents))))))))
-  (spachk:res rows (reverse ents)))
+  (spachk:res (reverse rows) (reverse ents)))
 
 ;; Every dimension belongs on spachk:*lay-dim*.  The per-dimension
 ;; audit says so one dimension at a time, in the report's DIMENSION
@@ -103898,14 +103895,13 @@
 
 ;; The roster: are the dimensions a finished spa sheet needs present,
 ;; and do the overalls read the outline's true size?
-(defun spachk:audit-roster (dims cov wat / rows ents covn watn lapn bb
-                                           m want e)
+(defun spachk:audit-roster (dims cov wat covbb watbb / rows ents covn watn
+                                           lapn m want e)
   (setq rows nil ents nil
         covn (spachk:dims-noted dims spachk:*sfx-cover*)
         watn (spachk:dims-noted dims spachk:*sfx-water*)
         lapn (spachk:dims-noted dims spachk:*sfx-lap*))
   ;; --- the cover's overalls
-  (setq bb (if cov (cal:bbox-ent cov) nil))
   (cond
     ((null covn)
      (setq rows (append rows
@@ -103922,19 +103918,19 @@
                                  " noted '" spachk:*sfx-cover* "'")
                          nil))))
      ;; each must read one of the cover's two extents
-     (if bb
+     (if covbb
        (foreach e covn
          (setq m (spachk:dim-meas e))
          (if m
-           (if (and (> (abs (- m (spachk:bw bb))) spachk:*meas-tol*)
-                    (> (abs (- m (spachk:bh bb))) spachk:*meas-tol*))
+           (if (and (> (abs (- m (spachk:bw covbb))) spachk:*meas-tol*)
+                    (> (abs (- m (spachk:bh covbb))) spachk:*meas-tol*))
              (setq rows (append rows
                          (list (spachk:row
                                  (strcat "Overall " (spachk:dxf 5 e)
                                          ": reads " (rtos m)
                                          " but the cover measures "
-                                         (rtos (spachk:bw bb)) " x "
-                                         (rtos (spachk:bh bb)))
+                                         (rtos (spachk:bw covbb)) " x "
+                                         (rtos (spachk:bh covbb)))
                                  1)))
                    ents (cons e ents))))))))
   ;; --- the water's edge overalls, when there is a water's edge
@@ -103964,9 +103960,9 @@
                           1))))
       (progn
         (setq m (spachk:dim-meas (car lapn))
-              want (if (and (cal:bbox-ent cov) (cal:bbox-ent wat))
-                       (* 0.5 (- (spachk:bw (cal:bbox-ent cov))
-                                 (spachk:bw (cal:bbox-ent wat))))
+              want (if (and covbb watbb)
+                       (* 0.5 (- (spachk:bw covbb)
+                                 (spachk:bw watbb)))
                        nil))
         (if (and m want (> (abs (- m want)) spachk:*meas-tol*))
           (setq rows (append rows
@@ -103984,15 +103980,15 @@
 
 ;; The overalls' standoffs -- SPA puts the across dim 2 ft above the
 ;; cover and the up dim 3 ft to its left.
-(defun spachk:audit-standoff (covn cov / rows bb e loc dx dy)
+(defun spachk:audit-standoff (covn covbb / rows e loc dx dy)
   (setq rows nil)
-  (if (and cov covn (setq bb (cal:bbox-ent cov)))
+  (if (and covbb covn)
     (foreach e covn
       (setq loc (spachk:dim-loc e))
       (if loc
         (progn
-          (setq dy (- (cadr loc) (cadadr bb))     ; above the top
-                dx (- (caar bb) (car loc)))       ; left of the left edge
+          (setq dy (- (cadr loc) (cadadr covbb))  ; above the top
+                dx (- (caar covbb) (car loc)))    ; left of the left edge
           (cond
             ;; above the cover: the across dim
             ((> dy 0.0)
@@ -104070,9 +104066,9 @@
               (setq best opt)))
         best)))
 
-(defun spachk:audit-hinges (ss cov grade taper / rows ents hngs labels n xs
+(defun spachk:audit-hinges (ss covbb grade taper / rows ents hngs labels n xs
                                                  row opts allowed fw fl
-                                                 sorted e bb want got
+                                                 sorted e want got
                                                  maxrun maxpiece prev
                                                  allvel hw h r k nm vd lvl)
   (setq rows nil ents nil
@@ -104129,14 +104125,14 @@
                                   (cadr (spachk:dxf 10 e)))))))
       ;; the widest piece, measured before either check so the sheet can
       ;; be chosen from the drawing rather than from the row's order
-      (if (and cov (setq bb (cal:bbox-ent cov)))
+      (if covbb
           (progn
-            (setq maxpiece 0.0 prev (caar bb))
+            (setq maxpiece 0.0 prev (caar covbb))
             (foreach e sorted
               (setq maxpiece (max maxpiece
                                   (- (car (spachk:dxf 10 e)) prev))
                     prev (car (spachk:dxf 10 e))))
-            (setq maxpiece (max maxpiece (- (caadr bb) prev)))))
+            (setq maxpiece (max maxpiece (- (caadr covbb) prev)))))
       (setq row (spachk:foampick opts maxpiece maxrun)
             fw  (car row)
             fl  (cdr row))
@@ -104557,7 +104553,7 @@
 ;; report's second column - and a lite run skips it altogether.
 ;; Returns (main-rows dim-rows flagged-entities).
 (defun spachk:audit (ss lite dofix / rows drows ents blk att g tp cov wat covo
-                                 wato dims covn r)
+                                 wato dims covn r covbb watbb)
   (setq rows nil drows nil ents nil)
 
   ;; 1 -- the block
@@ -104582,6 +104578,9 @@
         ents (append ents (spachk:res-ents r))
         covo (spachk:outline-ents ss spachk:*lay-cover*)
         cov  (if (= 1 (length covo)) (car covo) nil))
+  ;; the cover's bounding box, resolved ONCE here and threaded down to
+  ;; every sibling below instead of each re-resolving it off cov itself
+  (setq covbb (if cov (cal:bbox-ent cov)))
 
   ;; 3 -- the water's edge outline
   (setq r (spachk:audit-outline ss spachk:*lay-water* "Water's edge" nil)
@@ -104589,8 +104588,9 @@
         ents (append ents (spachk:res-ents r))
         wato (spachk:outline-ents ss spachk:*lay-water*)
         wat  (if (= 1 (length wato)) (car wato) nil))
+  (setq watbb (if wat (cal:bbox-ent wat)))
 
-  (setq r (spachk:audit-nesting cov wat)
+  (setq r (spachk:audit-nesting covbb watbb)
         rows (append rows (spachk:res-rows r)))
 
   ;; 4 -- the dimensions.  The per-dimension audit fills the second
@@ -104605,18 +104605,18 @@
     (setq r     (spachk:audit-dims dims cov wat)
           drows (spachk:res-rows r)
           ents  (append ents (spachk:res-ents r))))
-  (setq r (spachk:audit-roster dims cov wat)
+  (setq r (spachk:audit-roster dims cov wat covbb watbb)
         rows (append rows (spachk:res-rows r))
         ents (append ents (spachk:res-ents r)))
   (setq covn (spachk:dims-noted dims spachk:*sfx-cover*)
-        r    (spachk:audit-standoff covn cov)
+        r    (spachk:audit-standoff covn covbb)
         rows (append rows (spachk:res-rows r)))
 
   ;; 5 -- the hinges (only meaningful with a taper)
   (setq rows (append rows (list (spachk:row "THE HINGES" 3))))
   (if tp
     (progn
-      (setq r (spachk:audit-hinges ss cov g tp)
+      (setq r (spachk:audit-hinges ss covbb g tp)
             rows (append rows (spachk:res-rows r))
             ents (append ents (spachk:res-ents r))))
     (setq rows (append rows
