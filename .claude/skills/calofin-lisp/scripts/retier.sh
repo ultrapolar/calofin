@@ -42,6 +42,12 @@ run python3 tools/gen_ui_data.py
 run python3 tools/gen_ui_charts.py
 run python3 tools/gen_ribbon_icons.py
 
+# Not a tier below lisp/ at all: AGENTS.md is generated from the SKILLS,
+# so a lisp/ edit never makes it stale.  It is here anyway because it is
+# sub-second and because "run retier and everything generated is
+# current" is a rule worth being able to state without a footnote.
+run python3 tools/gen_agents_md.py
+
 echo
 if [ "$fail" != 0 ]; then
   echo "retier: something above failed -- fix it before committing."

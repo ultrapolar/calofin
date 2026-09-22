@@ -25,7 +25,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v2.2")
+(setq cal:*version* "v2.3")
 
 
 ;;  WHAT IS LOADED, AND AT WHICH VERSION.  Seventy-two commands report
@@ -494,8 +494,15 @@
 
 ;; T when layer NAME exists and can be drawn on right now.  A read-only
 ;; test -- it repairs nothing.  (From cs-layerok, CORNERSTP.lsp:308.)
+;;
+;; A NAME that is not a string is not a layer, and answers nil the way
+;; a layer that is not there does: tblsearch takes a string and throws
+;; "bad argument type: stringp" on anything else, which is a failure
+;; report in the drafter's Downloads folder rather than an answer.
+;; Every caller here reads its name out of a KNOB, and a knob holds
+;; whatever somebody left in it.
 (defun cal:layer-usable-p (name / ld f cl)
-  (if (setq ld (tblsearch "LAYER" name))
+  (if (and (= (type name) 'STR) (setq ld (tblsearch "LAYER" name)))
     (progn
       (setq f  (cond ((cdr (assoc 70 ld))) (0))
             cl (cond ((cdr (assoc 62 ld))) (7)))

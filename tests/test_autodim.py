@@ -1384,6 +1384,20 @@ assert vm.layer_of(vm.entities[-1]) == 'MY DIMS'
 assert vm.sysvars['CLAYER'] == '0'
 print('   ad:*layer* named: created, used, and the drafter\'s layer put back')
 
+# A knob holds whatever somebody left in it, and this one is reachable:
+# it SHIPS nil, so LAZTUNE reads it as "off, or a value" and lets any
+# atom in - while everything behind it (tblsearch, entmake, setvar
+# "CLAYER") takes a string and throws "bad argument type: stringp" on
+# anything else, in the middle of a run.  nil here means "the current
+# layer", so that is what a setting which is not a NAME falls back to.
+vm = fresh()
+vm.loads('(setq ad:*layer* T)')
+ents = draw(vm, FLIGHT)
+vm.run('c:AUTODIM', [None, ents])
+assert vm.layer_of(vm.entities[-1]) == '0', vm.layer_of(vm.entities[-1])
+assert vm.sysvars['CLAYER'] == '0'
+print('   ad:*layer* set to something that is not a name: the current layer')
+
 vm = fresh()
 vm.loads('(setq ad:*steps-layer* nil)')
 ents = draw(vm, FLIGHT)

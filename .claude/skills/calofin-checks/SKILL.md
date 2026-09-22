@@ -1,6 +1,6 @@
 ---
 name: calofin-checks
-description: Decoding a failing check or test in the calofin repo - make check, make test, make parity, or any of check_lisp / check_scope / check_standards / check_lazdiag / check_osnap / check_color / check_perf / check_back / check_vb / check_dcl / check_registry, and the generator staleness checks (mirror_shared, release_lisp, build_shared_bundle, gen_ui_data, gen_ui_charts, gen_knobs, gen_ribbon_icons). Use when a check is red, a test fails, or a tier has drifted, to find the cause and the fix without reading the checker's source.
+description: Decoding a failing check or test in the calofin repo - make check, make test, make parity, or any of check_lisp / check_scope / check_standards / check_lazdiag / check_osnap / check_color / check_perf / check_back / check_vb / check_dcl / check_registry, and the generator staleness checks (mirror_shared, release_lisp, build_shared_bundle, gen_ui_data, gen_ui_charts, gen_knobs, gen_ribbon_icons, gen_agents_md / a stale AGENTS.md). Use when a check is red, a test fails, or a tier has drifted, to find the cause and the fix without reading the checker's source.
 ---
 
 # Decoding a calofin check failure
@@ -262,6 +262,26 @@ routine that is no longer featured. A name in `gen_ui_data.FEATURED`
 needs a glyph in `gen_ribbon_icons.DESIGN`, and the check fails both ways.
 
 ---
+
+## `gen_agents_md.py --check` — a stale agent router
+
+**Cause:** you edited a skill under `.claude/skills/` — added, renamed,
+re-described, or dropped a script or reference file beside one — and
+`AGENTS.md` still routes to the old shape. Or you hand-edited
+`AGENTS.md`, which is generated.
+
+**Fix:** `python3 tools/gen_agents_md.py`.
+
+`AGENTS.md` is what non-Claude agents (Codex, Jules, Aider…) read;
+Claude Code finds `.claude/skills/` by itself and never reads it. It is
+a **router**, not a second copy — the detail stays in the skills, so
+there is no duplicated prose to drift. To change what it *says* rather
+than what it lists, edit the `HEADER`/`RULES`/`PIPELINE` constants in
+`tools/gen_agents_md.py`, not the output.
+
+`tests/test_agent_docs.py` holds the rest: every skill and script
+reaches the router, every path it names exists, and the branch it names
+is the one CLAUDE.md pins.
 
 ## `gen_knobs.py --check` — a knob not on offer
 
