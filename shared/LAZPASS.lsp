@@ -3547,7 +3547,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092126 REV37")
+(setq pool:*version* "092226 REV38")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -4905,11 +4905,11 @@
 ;; Run a whole block; returns the answers as an assoc list, or the
 ;; symbol CAL-BACK when the user backed out of its FIRST question
 ;; (only offered when bk is non-nil).
-(defun pool:askseq (items / ans i n it v dflt asked)
-  (setq ans (pool:askseqb items nil))
+(defun pool:askseq (items ink / ans i n it v dflt asked)
+  (setq ans (pool:askseqb items nil ink))
   ans)
 
-(defun pool:askseqb (items bk / ans i n it v dflt asked out kind sg)
+(defun pool:askseqb (items bk ink / ans i n it v dflt asked out kind sg)
   (setq ans nil i 0 n (length items) asked nil out nil)
   (while (and (< i n) (not out))
     (setq it (nth i items))
@@ -4920,7 +4920,7 @@
                 i (1+ i))
           ;; a skipped answer is still an answer: the live guide gets
           ;; the 0 too, so a spanned-out E collapses exactly
-          (pool:pvnote (car it) 0.0))
+          (pool:pvnote (car it) 0.0 ink))
         (progn
           (setq dflt (nth 4 it)
                 kind (cadr it))
@@ -4953,7 +4953,7 @@
                       i (1+ i))
                 ;; the live guide reshapes to every accepted answer --
                 ;; including a re-answer after Back, which overwrites
-                (pool:pvnote (car it) v))))))
+                (pool:pvnote (car it) v ink))))))
   (if out 'CAL-BACK ans))
 
 ;;; -------------------- guide preview ----------------------------------
@@ -4996,9 +4996,9 @@
 ;; The guide's corner-label key for a letter string ("A" -> 'lA).
 (defun pool:lblkey (s) (read (strcat "l" s)))
 
-(defun pool:pvline (p1 p2)
+(defun pool:pvline (p1 p2 ink)
   (pool:line p1 p2 pool:*lay-notes*)
-  (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide)))
+  (pool:setcol (entlast) ink))
 
 ;; Guide measuring line -- the cross dims and other ties, drawn WHITE
 ;; and DOTTED so they stand out from the gray pool outline.
@@ -5144,20 +5144,20 @@
 ;; Make one primitive's entity, tracked for pool:pvkill.  LINE / TEXT /
 ;; ARC draw gray on POOL-NOTES exactly as the fixed guides always did;
 ;; LINED is the white dotted measuring line.
-(defun pool:pvmk (pr / ty)
+(defun pool:pvmk (pr ink / ty)
   (setq ty (car pr))
   (cond
-    ((= ty "LINE") (pool:pvadd (pool:pvline (cadr pr) (caddr pr))))
+    ((= ty "LINE") (pool:pvadd (pool:pvline (cadr pr) (caddr pr) ink)))
     ((= ty "LINED") (pool:pvadd (pool:pvlined (cadr pr) (caddr pr))))
     ((= ty "TEXT")
      (pool:text (cadr pr) (caddr pr) (cadddr pr) pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))
+     (pool:pvadd (pool:setcol (entlast) ink)))
     ((= ty "ARC")
      (pool:arc3p (cadr pr) (caddr pr) (cadddr pr) pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))
+     (pool:pvadd (pool:setcol (entlast) ink)))
     ((= ty "ELL")
      (pool:pvell (cadr pr) (caddr pr) (cadddr pr))
-     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))))
+     (pool:pvadd (pool:setcol (entlast) ink)))))
 
 ;; The two primitives of one field-sheet tie -- the dotted measuring
 ;; line and its letter beside the midpoint.
@@ -5207,7 +5207,7 @@
 ;; no longer exists (the corner redraw retires the plain sides) is left
 ;; dead; a three-point arc whose kind changed is remade.  Returns the
 ;; entity holding the primitive now.
-(defun pool:pvmod (e pr / ed ty o r a1 a2 a3 da2 da3 s en mj rt)
+(defun pool:pvmod (e pr ink / ed ty o r a1 a2 a3 da2 da3 s en mj rt)
   (setq ed (if e (entget e)))
   (cond
     ((null ed) e)
@@ -5246,7 +5246,7 @@
            e)
          ;; the kind changed (arc went collinear, or a line-fallback
          ;; arc came back apart) -- remade, references written off
-         (progn (pool:pvdel (list e)) (pool:pvmk pr))))
+         (progn (pool:pvdel (list e)) (pool:pvmk pr ink))))
     ((= (car pr) "ELL")
      (if (>= (caddr pr) (cadddr pr))
          (setq mj (list (* 0.5 (caddr pr)) 0.0 0.0)
@@ -5265,31 +5265,41 @@
 ;; flow's geometry, move every entity onto it, follow with the view,
 ;; then let the flow move what the generic pass cannot see (the corner
 ;; treatments and cross-dim lines it added after the build).
-(defun pool:pvreshape ( / g)
+(defun pool:pvreshape (ink / g)
   (if (and pool:*pvgeo* pool:*pvments*)
       (progn
         (setq g (apply pool:*pvgeo* nil))
-        (setq pool:*pvments* (mapcar 'pool:pvmod pool:*pvments* (car g)))
+        (setq pool:*pvments*
+              (mapcar '(lambda (e pr) (pool:pvmod e pr ink))
+                      pool:*pvments* (car g)))
         (pool:pvzoom (caddr g))
         (if pool:*pvmore* (apply pool:*pvmore* nil)))))
 
 ;; Record one accepted answer and reshape the guide to it.  Harmless
 ;; once the guide is gone -- pool:pvkill disarms the engine, so the
-;; interior (hopper) questions record into the void.
-(defun pool:pvnote (key v)
+;; interior (hopper) questions record into the void.  INK is the
+;; caller's already-hoisted (cal:ink pool:*pv-col* 'guide): a flow
+;; that answers a whole block of questions calls pvnote once per
+;; answer, and re-measuring the background each time would be a COM
+;; round trip per answer instead of once for the whole block.
+(defun pool:pvnote (key v ink)
   (setq pool:*pvdims* (pool:sqput pool:*pvdims* key v))
-  (pool:pvreshape))
+  (pool:pvreshape ink))
 
 ;; Build a live guide from the flow's geometry function: draw the spec,
 ;; register the function for reshaping, zoom to it, and hand back the
 ;; highlight assoc the ask items index by key.
-(defun pool:pvlive (geofn / g ents)
+(defun pool:pvlive (geofn / g ents ink)
   (setq pool:*pvdims* nil
         pool:*pvmore* nil
         pool:*pvbox* nil
         pool:*pvgeo* geofn
         g (apply geofn nil)
-        ents (mapcar 'pool:pvmk (car g))
+        ;; resolved once for the whole build: pvmk runs once per spec
+        ;; entry, and measuring the background per entry would be a
+        ;; COM round trip per entry
+        ink (cal:ink pool:*pv-col* 'guide)
+        ents (mapcar '(lambda (pr) (pool:pvmk pr ink)) (car g))
         pool:*pvments* ents)
   (pool:pvzoom (caddr g))
   (mapcar '(lambda (km)
@@ -5908,8 +5918,13 @@
                        res pts failed notes gcs gce gcarcs
                        xmin xmax ymin ymax w hh doff th cen odim
                        e p qq cc nm tgt act rows k fedge fcross
-                       rbox mprims mlbls)
-  (setq oldclay (getvar "CLAYER"))
+                       rbox mprims mlbls ink)
+  (setq oldclay (getvar "CLAYER")
+        ;; the fade/guide colour, resolved once for the whole flow:
+        ;; gr:crossask re-asks the live guide's cross dims one at a
+        ;; time, and measuring the background per answer would be a
+        ;; COM round trip per answer instead of once per command
+        ink (cal:ink pool:*pv-col* 'guide))
 
   ;; perimeter input method first: measure every edge, or the overall
   ;; sheet (A/B overalls with the sides assumed symmetric).  The
@@ -6120,7 +6135,7 @@
                                   nil nil nil '(pool:sugnahint ans 'ss "S"))
                             (list 'vv 'NAX "V - end width" (cdr (assoc "V" pvo)))
                             (list 's2 'NAX "S2 - corner cut face (check, sets NA S/S1)" (cdr (assoc "S2" pvo)))))
-                    t))
+                    t ink))
         (if (eq ans 'CAL-BACK)
             (setq grback t braw 1.0 araw 1.0 ans nil))
         (setq braw (pool:sq ans 'b)
@@ -6184,7 +6199,7 @@
                                     (append (cdr (assoc 'rtd pv)) (cdr (assoc 'rbd pv))))
                               (list 'rew 'REQ "RIGHT end width (RT-RB)"
                                     (append (cdr (assoc 'rew pv)) (pool:lbl pv '(lRT lRB)))))
-                        t))
+                        t ink))
             (if (eq ans 'CAL-BACK)
                 (setq grback t)
                 (setq bo (pool:sq ans 'bo) tp bo
@@ -6215,7 +6230,7 @@
                                     (append (cdr (assoc 'rbd pv)) (pool:lbl pv '(lB lRB))))
                               (list 'rew 'REQ "RIGHT end width (RT-RB)"
                                     (append (cdr (assoc 'rew pv)) (pool:lbl pv '(lRT lRB)))))
-                        t))
+                        t ink))
             (if (eq ans 'CAL-BACK)
                 (setq grback t)
                 (setq bo (pool:sq ans 'bo) tp (pool:sq ans 'tp)
@@ -6258,7 +6273,7 @@
                                              (pool:lblkey (nth (cadr e) pool:*grecnames*))))))
                        xitems)
           k (1+ k)))
-  (setq ans (if xitems (pool:askseqb (reverse xitems) t) nil) k 0)
+  (setq ans (if xitems (pool:askseqb (reverse xitems) t ink) nil) k 0)
   (if (eq ans 'CAL-BACK)
       (progn (pool:pvdel xg) (setq grback t crosses nil ans nil)))
   (foreach e crosses
@@ -6839,8 +6854,13 @@
                             cen p pr k w hh xmin xmax ymax ymin doff th
                             odim rows lbls dv mquad sq4 elast hxg
                             octy ocsz icty icsz oc ic hcs hce hcarcs ock
-                            rbox mprims mlbls soff)
-  (setq oldclay (getvar "CLAYER"))
+                            rbox mprims mlbls soff ink)
+  (setq oldclay (getvar "CLAYER")
+        ;; the fade/guide colour, resolved once for the whole flow:
+        ;; hx:sides/hx:diags each re-ask the live guide's sides one at
+        ;; a time, and measuring the background per answer would be a
+        ;; COM round trip per answer instead of once per command
+        ink (cal:ink pool:*pv-col* 'guide))
   ;; The live guide geometry (see "live guide reshaping"): each side
   ;; answered so far is held, every side still open takes its nominal
   ;; length scaled by how the answered ones compare to theirs, and
@@ -6922,7 +6942,7 @@
                                 (list 'de "Step D-E (down to the inner corner)" 'de '(lD lE))
                                 (list 'ef "Side E-F (top of main section)" 'ef '(lE lF))
                                 (list 'fa "End F-A (left end)" 'fa '(lF lA)))))
-              nil)
+              nil ink)
         sides (mapcar '(lambda (k) (pool:sq ans k)) '(ab bc cd de ef fa)))
     nil)
   ;; cross dims only when out-of-square; in-square squares up to sides.
@@ -6951,7 +6971,7 @@
                                     ;; the lazy L's bend joint is not taped
                                     (if lazy nil (list (list 'be "B-E" '(lB lE))))
                                     (list (list 'cf "C-F" '(lC lF)))))
-                          t))
+                          t ink))
               (if (eq ans 'CAL-BACK)
                   'CAL-BACK
                   (list (pool:sq ans 'ac) (pool:sq ans 'bd) (pool:sq ans 'ce)
@@ -7997,7 +8017,7 @@
 ;; The four full-length guide sides are replaced by shortened sides
 ;; plus gray chamfer lines / fillet arcs; the pv assoc side keys are
 ;; re-pointed at the new side entities.  Returns the updated pv.
-(defun pool:pvcorners (pv gq corners / ce i k cc ent)
+(defun pool:pvcorners (pv gq corners ink / ce i k cc ent)
   (foreach k (list 'ab 'bc 'dc 'da)
     (pool:pvdel (cdr (assoc k pv))))
   (setq ce (mapcar '(lambda (i)
@@ -8011,7 +8031,7 @@
   (setq i 0)
   (foreach k (list 'ab 'bc 'dc 'da)
     (setq ent (pool:pvadd (pool:pvline (cadr (nth i ce))
-                                       (car (nth (rem (+ i 1) 4) ce))))
+                                       (car (nth (rem (+ i 1) 4) ce)) ink))
           pv (subst (cons k (list ent)) (assoc k pv) pv)
           i (1+ i)))
   ;; the corner treatments themselves
@@ -8019,11 +8039,11 @@
   (foreach cc corners
     (cond
       ((= (car cc) "Cut")
-       (pool:pvadd (pool:pvline (car (nth i ce)) (cadr (nth i ce)))))
+       (pool:pvadd (pool:pvline (car (nth i ce)) (cadr (nth i ce)) ink)))
       ((= (car cc) "Radius")
        (pool:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
                    pool:*lay-notes*)
-       (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide)))))
+       (pool:pvadd (pool:setcol (entlast) ink))))
     (setq i (1+ i)))
   pv)
 
@@ -8638,7 +8658,11 @@
                        / pv h g f e m l k gg tl odl sp
                          hraw graw fraw eraw mraw lraw kraw wh dp c2
                          a b c d cen toth totv hres vres skipe rows
-                         cv hfx vfx ans lmode2 toth2 totv2)
+                         cv hfx vfx ans lmode2 toth2 totv2 ink)
+  ;; the fade/guide colour, resolved once for the whole phase: each
+  ;; depth answer below reshapes the live guide, and measuring the
+  ;; background per answer would be a COM round trip per answer
+  (setq ink (cal:ink pool:*pv-col* 'guide))
   (setq sp (pool:btmspec style))
   ;; wall-to-wall totals through the pool centre: B1 along the run,
   ;; V1 across it
@@ -8766,7 +8790,8 @@
                       (list 'k 'SUG "K - deep end to bottom side"
                             (cdr (assoc "K" pv)) '(m h) nil nil
                             '(pool:chainrest ans '(m l) totv2)
-                            pool:*hopoffset-ladder*))))
+                            pool:*hopoffset-ladder*)))
+              ink)
         hraw (pool:sq ans 'h) graw (pool:sq ans 'g) fraw (pool:sq ans 'f)
         eraw (pool:sq ans 'e) mraw (pool:sq ans 'm) lraw (pool:sq ans 'l)
         kraw (pool:sq ans 'k)
@@ -8780,16 +8805,16 @@
       (progn
         (setq wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv))
                             pool:*wallheight-ladder*))
-        (pool:pvnote 'wh wh)
+        (pool:pvnote 'wh wh ink)
         (setq dp (pool:askdeep "D - deep end depth" (cdr (assoc "D" pv)) wh
                                pool:*deepdepth-ladder*))
-        (pool:pvnote 'dp dp)
+        (pool:pvnote 'dp dp ink)
         (setq c2 (if (cadddr sp)
                      (pool:askc2 "C2 - depth where the shallow floor meets the break"
                                  (cdr (assoc "C2" pv)) wh dp
                                  pool:*breakdepth-ladder*)
                      wh))
-        (if (cadddr sp) (pool:pvnote 'c2 c2))))
+        (if (cadddr sp) (pool:pvnote 'c2 c2 ink))))
   (pool:pvkill)
   ;; resolve the chains: NA takes the remainder (split when several);
   ;; the style's slack member (G with a pad, F without) absorbs any
@@ -8938,24 +8963,28 @@
         (list 'voff (cal:v* (pool:unit (cadr bline)) pool:*mlkoff*))))
 
 (defun pool:hopsportdraw (gg nopad lay pvflag / oblb oblt obrb obrt
-                                                dbl dtl dbr dtr)
+                                                dbl dtl dbr dtr ink)
+  ;; the fade/guide colour, resolved once for the whole hopper when
+  ;; this is a preview pass: measuring it per line would be a COM
+  ;; round trip per line
+  (setq ink (if pvflag (cal:ink pool:*pv-col* 'guide)))
   (setq oblb (cadr (assoc 'oblb gg)) oblt (cadr (assoc 'oblt gg))
         obrb (cadr (assoc 'obrb gg)) obrt (cadr (assoc 'obrt gg))
         dbl (cadr (assoc 'dbl gg)) dtl (cadr (assoc 'dtl gg))
         dbr (cadr (assoc 'dbr gg)) dtr (cadr (assoc 'dtr gg)))
-  (pool:hgl oblb oblt lay pvflag)
-  (pool:hgl obrb obrt lay pvflag)
+  (pool:hgl oblb oblt lay pvflag ink)
+  (pool:hgl obrb obrt lay pvflag ink)
   (if nopad
-      (pool:hgl dbl dtl lay pvflag)     ; G = 0: the V line
+      (pool:hgl dbl dtl lay pvflag ink)     ; G = 0: the V line
       (progn
-        (pool:hgl dbl dtl lay pvflag)
-        (pool:hgl dtl dtr lay pvflag)
-        (pool:hgl dtr dbr lay pvflag)
-        (pool:hgl dbr dbl lay pvflag)))
-  (pool:hgl oblb dbl lay pvflag)
-  (pool:hgl oblt dtl lay pvflag)
-  (pool:hgl obrb dbr lay pvflag)
-  (pool:hgl obrt dtr lay pvflag))
+        (pool:hgl dbl dtl lay pvflag ink)
+        (pool:hgl dtl dtr lay pvflag ink)
+        (pool:hgl dtr dbr lay pvflag ink)
+        (pool:hgl dbr dbl lay pvflag ink)))
+  (pool:hgl oblb dbl lay pvflag ink)
+  (pool:hgl oblt dtl lay pvflag ink)
+  (pool:hgl obrb dbr lay pvflag ink)
+  (pool:hgl obrt dtr lay pvflag ink))
 
 ;; Guided sport bottom: plan hopper (standard-hopper dim logic) plus
 ;; the side profile below with C and D only.  Returns report rows.
@@ -8966,7 +8995,12 @@
 (defun pool:hopsport (lline rline bline tline cen total x0 y0 ymax doff th
                       / wid whn hdn pv e2r f2r gr f1r e1r mraw lraw kraw
                         wh hd res resid e2 f2 g f1 e1 m l k vres gg rows odl
-                        brks tl xd nopad cv hfx vfx ans total2 wid2)
+                        brks tl xd nopad cv hfx vfx ans total2 wid2 ink)
+  ;; the fade/guide colour, resolved once for the whole phase: the
+  ;; chain and depth answers below each reshape the live guide, and
+  ;; measuring the background per answer would be a COM round trip
+  ;; per answer
+  (setq ink (cal:ink pool:*pv-col* 'guide))
   (setq wid (distance (pool:linex cen (cadr lline) (car bline) (cadr bline))
                       (pool:linex cen (cadr lline) (car tline) (cadr tline)))
         whn (* 0.25 wid)
@@ -9038,17 +9072,18 @@
                     (list 'k 'SUG "K - deep flat to bottom side"
                           (cdr (assoc "K" pv)) '(m) nil nil
                           '(pool:chainrest ans '(m l) wid2)
-                          pool:*hopoffset-ladder*)))
+                          pool:*hopoffset-ladder*))
+              ink)
         e2r (pool:sq ans 'e2) f2r (pool:sq ans 'f2) gr (pool:sq ans 'g)
         f1r (pool:sq ans 'f1) e1r (pool:sq ans 'e1)
         mraw (pool:sq ans 'm) lraw (pool:sq ans 'l) kraw (pool:sq ans 'k)
         nopad (and gr (< gr 1.0e-6))
         wh (pool:askh "C - wall height (shallow depth)" (cdr (assoc "C" pv))
                       pool:*wallheight-ladder*))
-  (pool:pvnote 'wh wh)
+  (pool:pvnote 'wh wh ink)
   (setq hd (pool:askdeep "D - deep depth" (cdr (assoc "D" pv)) wh
                          pool:*deepdepth-ladder*))
-  (pool:pvnote 'dp hd)
+  (pool:pvnote 'dp hd ink)
   (pool:pvkill)
   ;; resolve: horizontal chain vs the pool length (G absorbs; the
   ;; no-pad sport fixes G = 0 and splits its residual across F2/F1),
@@ -9169,7 +9204,11 @@
 ;; Draw the profile outline.  x0/y0 = top-left, total = pool length,
 ;; wh = wall height, brks = bottom vertices ((dist . depth) ...) from
 ;; the left wall, left to right.
-(defun pool:profdraw (x0 y0 total wh brks lay pvflag / pts prev p)
+(defun pool:profdraw (x0 y0 total wh brks lay pvflag / pts prev p ink)
+  ;; the fade/guide colour, resolved once for the whole profile when
+  ;; this is a preview pass: measuring it per segment would be a COM
+  ;; round trip per segment
+  (setq ink (if pvflag (cal:ink pool:*pv-col* 'guide)))
   (setq pts (append (list (list x0 y0)
                           (list (+ x0 total) y0)
                           (list (+ x0 total) (- y0 wh)))
@@ -9185,7 +9224,7 @@
     ;; answers move the breaks around
     (if (or (and pvflag pool:*pvcoll*) (> (distance prev p) 1.0e-6))
         (progn
-          (pool:hgl prev p lay pvflag)
+          (pool:hgl prev p lay pvflag ink)
           ;; remember the real (non-preview) section lines so an L
           ;; pool's plan mirror can leave them alone
           (if (not pvflag)
@@ -9197,18 +9236,18 @@
 ;; (pvflag); and, when the live-guide collector is armed, the pvflag
 ;; path emits a spec primitive instead of an entity -- which is how
 ;; the bottom guides reshape with every answer.
-(defun pool:hgl (p q lay pvflag)
+(defun pool:hgl (p q lay pvflag ink)
   (cond
     ((and pvflag pool:*pvcoll*) (pool:pvcput (list "LINE" p q)))
-    (pvflag (pool:pvadd (pool:pvline p q)))
+    (pvflag (pool:pvadd (pool:pvline p q ink)))
     (t (pool:line p q lay))))
 
-(defun pool:hga (p mm q lay pvflag)
+(defun pool:hga (p mm q lay pvflag ink)
   (cond
     ((and pvflag pool:*pvcoll*) (pool:pvcput (list "ARC" p mm q)))
     (pvflag
      (pool:arc3p p mm q pool:*lay-notes*)
-     (pool:pvadd (pool:setcol (entlast) (cal:ink pool:*pv-col* 'guide))))
+     (pool:pvadd (pool:setcol (entlast) ink)))
     (t (pool:arc3p p mm q lay))))
 
 ;;; ---------------- oval pool bottom (True Oval sheet) -----------------
@@ -9268,28 +9307,37 @@
         (list 'pt (pool:linex vc v d (cal:v- c d)))
         (list 'voff (cal:v* u pool:*mlkoff*))))
 
-(defun pool:hopovaldraw (gg lay pvflag / tt tb tip htr hbr brkb brkt)
+(defun pool:hopovaldraw (gg lay pvflag / tt tb tip htr hbr brkb brkt ink)
+  ;; the fade/guide colour, resolved once for the whole hopper when
+  ;; this is a preview pass: measuring it per line would be a COM
+  ;; round trip per line
+  (setq ink (if pvflag (cal:ink pool:*pv-col* 'guide)))
   (setq tt (cadr (assoc 'ttop gg)) tb (cadr (assoc 'tbot gg))
         tip (cadr (assoc 'tip gg))
         htr (cadr (assoc 'htr gg)) hbr (cadr (assoc 'hbr gg))
         brkb (cadr (assoc 'brkb gg)) brkt (cadr (assoc 'brkt gg)))
-  (pool:hgl tt htr lay pvflag)
-  (pool:hgl tb hbr lay pvflag)
-  (pool:hgl htr hbr lay pvflag)
-  (pool:hga tt tip tb lay pvflag)
-  (pool:hgl brkb brkt lay pvflag)
-  (pool:hgl htr brkt lay pvflag)
-  (pool:hgl hbr brkb lay pvflag))
+  (pool:hgl tt htr lay pvflag ink)
+  (pool:hgl tb hbr lay pvflag ink)
+  (pool:hgl htr hbr lay pvflag ink)
+  (pool:hga tt tip tb lay pvflag ink)
+  (pool:hgl brkb brkt lay pvflag ink)
+  (pool:hgl htr brkt lay pvflag ink)
+  (pool:hgl hbr brkb lay pvflag ink))
 
 ;; Guided oval bottom phase.  Returns report rows (nil if skipped).
 (defun pool:hopoval (quad tipl tipr doff th / pv gg rows tl odl
                                               h g f e m l k r3 r3raw w tt o
                                               hraw graw fraw eraw mraw lraw kraw
                                               totv hres vres cv hfx vfx r3wbad
-                                              ans len2 totv2)
+                                              ans len2 totv2 ink)
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
       (progn
+        ;; the fade/guide colour, resolved once for the whole phase:
+        ;; each chain answer below reshapes the live guide, and
+        ;; measuring the background per answer would be a COM round
+        ;; trip per answer
+        (setq ink (cal:ink pool:*pv-col* 'guide))
         ;; The live guide geometry (see "live guide reshaping"): the
         ;; axis chain closes against the tip-to-tip length at every
         ;; answer, the M/L/K chain against the width, and the radius
@@ -9374,7 +9422,8 @@
                           ;; consume-once, so one key could only ever answer
                           ;; the first of them.  A form that has the side
                           ;; length sends it to both under its own name.
-                          (list 'ttc 'NAX "T - straight side length (check)" (cdr (assoc "T" pv)))))
+                          (list 'ttc 'NAX "T - straight side length (check)" (cdr (assoc "T" pv))))
+              ink)
               hraw (pool:sq ans 'h) graw (pool:sq ans 'g) r3raw (pool:sq ans 'r3)
               w (pool:sq ans 'w) fraw (pool:sq ans 'f) eraw (pool:sq ans 'e)
               mraw (pool:sq ans 'm) lraw (pool:sq ans 'l) kraw (pool:sq ans 'k)
@@ -9543,47 +9592,56 @@
   out)
 
 (defun pool:hopgrecdraw (gg lay six pvflag / hbl htl hbr htr brkb brkt
-                                             aa dd ltp lbp ct1 ct2 cb1 cb2)
+                                             aa dd ltp lbp ct1 ct2 cb1 cb2 ink)
+  ;; the fade/guide colour, resolved once for the whole hopper when
+  ;; this is a preview pass: measuring it per line would be a COM
+  ;; round trip per line
+  (setq ink (if pvflag (cal:ink pool:*pv-col* 'guide)))
   (setq hbl (cadr (assoc 'hbl gg)) htl (cadr (assoc 'htl gg))
         hbr (cadr (assoc 'hbr gg)) htr (cadr (assoc 'htr gg))
         brkb (cadr (assoc 'brkb gg)) brkt (cadr (assoc 'brkt gg))
         aa (cadr (assoc 'aa gg)) dd (cadr (assoc 'dd gg))
         ltp (cadr (assoc 'ltp gg)) lbp (cadr (assoc 'lbp gg)))
-  (pool:hgl htr hbr lay pvflag)
-  (pool:hgl brkb brkt lay pvflag)
-  (pool:hgl htr brkt lay pvflag)
-  (pool:hgl hbr brkb lay pvflag)
+  (pool:hgl htr hbr lay pvflag ink)
+  (pool:hgl brkb brkt lay pvflag ink)
+  (pool:hgl htr brkt lay pvflag ink)
+  (pool:hgl hbr brkb lay pvflag ink)
   (if six
       (progn
         (setq ct1 (cadr (assoc 'ct1 gg)) ct2 (cadr (assoc 'ct2 gg))
               cb1 (cadr (assoc 'cb1 gg)) cb2 (cadr (assoc 'cb2 gg)))
-        (pool:hgl ct1 htr lay pvflag)
-        (pool:hgl cb1 hbr lay pvflag)
-        (pool:hgl ct2 cb2 lay pvflag)
-        (pool:hgl ct2 ct1 lay pvflag)
-        (pool:hgl cb2 cb1 lay pvflag)
-        (pool:hgl dd ct1 lay pvflag)
-        (pool:hgl ltp ct2 lay pvflag)
-        (pool:hgl aa cb1 lay pvflag)
-        (pool:hgl lbp cb2 lay pvflag))
+        (pool:hgl ct1 htr lay pvflag ink)
+        (pool:hgl cb1 hbr lay pvflag ink)
+        (pool:hgl ct2 cb2 lay pvflag ink)
+        (pool:hgl ct2 ct1 lay pvflag ink)
+        (pool:hgl cb2 cb1 lay pvflag ink)
+        (pool:hgl dd ct1 lay pvflag ink)
+        (pool:hgl ltp ct2 lay pvflag ink)
+        (pool:hgl aa cb1 lay pvflag ink)
+        (pool:hgl lbp cb2 lay pvflag ink))
       (progn
-        (pool:hgl htl htr lay pvflag)
-        (pool:hgl hbl hbr lay pvflag)
-        (pool:hgl htl hbl lay pvflag)
-        (pool:hgl dd htl lay pvflag)
-        (pool:hgl ltp htl lay pvflag)
-        (pool:hgl aa hbl lay pvflag)
-        (pool:hgl lbp hbl lay pvflag))))
+        (pool:hgl htl htr lay pvflag ink)
+        (pool:hgl hbl hbr lay pvflag ink)
+        (pool:hgl htl hbl lay pvflag ink)
+        (pool:hgl dd htl lay pvflag ink)
+        (pool:hgl ltp htl lay pvflag ink)
+        (pool:hgl aa hbl lay pvflag ink)
+        (pool:hgl lbp hbl lay pvflag ink))))
 
 ;; Guided grecian bottom phase.  Returns report rows (nil if skipped).
 (defun pool:hopgrec (pts doff th / htype six mode pv gg rows tl odl
                                    h g f e m l k w l1 x co coraw xcal sixbad
                                    hraw graw fraw eraw mraw lraw kraw
                                    cen p u vv toth totv hres vres cv hfx vfx ans
-                                   mm ud proj toth2 totv2)
+                                   mm ud proj toth2 totv2 ink)
   (if nil                               ; Yes/No now lives in the dispatcher
       nil
       (progn
+        ;; the fade/guide colour, resolved once for the whole phase:
+        ;; each chain answer below reshapes the live guide, and
+        ;; measuring the background per answer would be a COM round
+        ;; trip per answer
+        (setq ink (cal:ink pool:*pv-col* 'guide))
         ;; the bracket is exactly the keyword list (STANDARDS section
         ;; 1 rule 1): a click on "SIX-sided" sent text initget could
         ;; not accept, so the explanation moved into the question
@@ -9716,7 +9774,8 @@
                             (list 'k 'SUG "K - hopper to bottom side"
                                   (cdr (assoc "K" pv)) '(m h) nil nil
                                   '(pool:chainrest ans '(m l) totv2)
-                                  pool:*hopoffset-ladder*))))
+                                  pool:*hopoffset-ladder*)))
+              ink)
               hraw (pool:sq ans 'h) graw (pool:sq ans 'g)
               coraw (pool:sq ans 'co)
               w (pool:sq ans 'w) l1 (pool:sq ans 'l1) x (pool:sq ans 'x)
@@ -10017,7 +10076,7 @@
                              doff th endoff pr odim k
                              midl midr ml mr tipl tipr
                              ores lrfit rrfit larc rarc
-                             allpts xmax ymax ymin rows rbox mprims)
+                             allpts xmax ymax ymin rows rbox mprims ink)
   (setq oldclay (getvar "CLAYER"))
 
   ;; The live guide geometry (see "live guide reshaping"): each side
@@ -10119,7 +10178,7 @@
   ;; are recreated on the live quad, and the cross-dim guide lines are
   ;; walked onto their reference points on it
   (defun qf:more ( / k tm)
-    (if (and anycut gcorners) (setq pv (pool:pvcorners pv gq gcorners)))
+    (if (and anycut gcorners) (setq pv (pool:pvcorners pv gq gcorners ink)))
     (if (and xg cmode)
         (progn
           (setq k 0)
@@ -10130,10 +10189,16 @@
                                   (pool:cornerpoint gq gcorners (nth 3 tm)
                                                     (nth 4 tm))
                                   (pool:cornerpoint gq gcorners (nth 5 tm)
-                                                    (nth 6 tm)))))
+                                                    (nth 6 tm)))
+                            ink))
             (setq k (1+ k))))))
 
   ;; -------------------------------------- guide preview + input
+  ;; the fade/guide colour, resolved once for the whole flow: qf:more
+  ;; and qf:aftercorners both re-run pool:pvcorners as the guide is
+  ;; reshaped, and measuring the background each time would be a COM
+  ;; round trip per reshape instead of once per command
+  (setq ink (cal:ink pool:*pv-col* 'guide))
   (setq pv (pool:pvlive 'qf:geo)
         pool:*pvmore* 'qf:more)
   (princ "\nA gray guide pool is shown -- the RED element is the dimension being asked for.")
@@ -10164,7 +10229,7 @@
                               nil nil nil
                               (if (= ptype "Rectangle")
                                   '(pool:sughalf ans '(tp)))))
-                  nil)
+                  nil ink)
             tp (pool:sq ans 'tp) bo tp
             le (pool:sq ans 'le) ri le)
       (setq ans (pool:askseqb
@@ -10182,7 +10247,7 @@
                               nil nil nil
                               (if (= ptype "Rectangle")
                                   '(pool:sughalf ans '(tp bo)))))
-                  nil)
+                  nil ink)
             tp (pool:sq ans 'tp) bo (pool:sq ans 'bo)
             le (pool:sq ans 'le) ri (pool:sq ans 'ri)))
     ;; re-flagged on every run, so backing in and out re-derives cleanly
@@ -10211,7 +10276,7 @@
                                     (cdr (assoc 'lrad pv)))
                               (list 'rr 'NAX "RIGHT oval end radius"
                                     (cdr (assoc 'rrad pv)))))
-                    t))
+                    t ink))
         (if (eq ans 'CAL-BACK)
             'CAL-BACK
             (progn
@@ -10226,7 +10291,7 @@
                                "\nThe total length is needed when an end radius is NA."))
                     (setq totl (pool:askh "Total pool length (arc tip to arc tip)"
                                           (cdr (assoc 'tot pv)) nil))
-                    (pool:pvnote 'tot totl)))
+                    (pool:pvnote 'tot totl ink)))
               (if (or tpna bona) (qf:ovalsides))
               nil)))))
 
@@ -10272,8 +10337,8 @@
                       (pool:fmtlen v) " closes the overall against the other side."))))
     ;; the guide takes the read-back sides too, so it closes up the
     ;; way the drawn pool will
-    (pool:pvnote 'tp tp)
-    (pool:pvnote 'bo bo))
+    (pool:pvnote 'tp tp ink)
+    (pool:pvnote 'bo bo ink))
 
   ;; -------- corner treatments (rectangle only; side lengths are to
   ;; the TRUE corner, treatments cut inward)
@@ -10332,7 +10397,7 @@
     (setq anycut nil)
     (foreach c corners (if (pool:cutp (car c)) (setq anycut t)))
     (setq gcorners corners)
-    (if anycut (setq pv (pool:pvcorners pv gq gcorners)))
+    (if anycut (setq pv (pool:pvcorners pv gq gcorners ink)))
     (princ))
 
   ;; -------- cross-dim reference mode (only when corners are cut and
@@ -10386,7 +10451,7 @@
                                xitems)
                   k (1+ k)))
           (setq xg (reverse xg)
-                ans (pool:askseqb (reverse xitems) t))
+                ans (pool:askseqb (reverse xitems) t ink))
           (if (eq ans 'CAL-BACK)
               ;; drop this round's guide lines so a re-entry redraws
               ;; them cleanly for whatever mode is chosen next
@@ -10702,8 +10767,13 @@
 
 ;; Full guided flow for round pools.
 (defun pool:roundflow ( / oldclay pv ans braw araw b a cen quad tipl tipr
-                          doff th rows notes xmax ymax rbox)
-  (setq oldclay (getvar "CLAYER"))
+                          doff th rows notes xmax ymax rbox ink)
+  (setq oldclay (getvar "CLAYER")
+        ;; the fade/guide colour, resolved once for the whole flow: the
+        ;; overall answers below each reshape the live guide, and
+        ;; measuring the background per answer would be a COM round
+        ;; trip per answer
+        ink (cal:ink pool:*pv-col* 'guide))
   ;; The live guide geometry (see "live guide reshaping"): a circle
   ;; until the two overalls part company, then the ellipse they make.
   ;; The guide body is always an ELLIPSE entity so it can be morphed
@@ -10733,7 +10803,8 @@
                   (list (list 'b 'REQ "B - overall length (across)"
                               (cdr (assoc "B" pv)))
                         (list 'a 'REQ "A - overall width (up)"
-                              (cdr (assoc "A" pv))))))
+                              (cdr (assoc "A" pv)))))
+              ink)
         braw (pool:sq ans 'b)
         araw (if pool:*insq* braw (pool:sq ans 'a))
         b braw a araw)
@@ -10839,8 +10910,13 @@
                           dac dbd fq quad failed a b c d cen meas notes
                           ml mr lend rend tipl tipr doff th odim pr
                           rcs rce rcarcs
-                          allpts xmax ymax ymin rows xcol xcolr xa rbox)
-  (setq oldclay (getvar "CLAYER"))
+                          allpts xmax ymax ymin rows xcol xcolr xa rbox ink)
+  (setq oldclay (getvar "CLAYER")
+        ;; the fade/guide colour, resolved once for the whole flow:
+        ;; rm:letters/rm:cross each re-ask the live guide's letters one
+        ;; at a time, and measuring the background per answer would be
+        ;; a COM round trip per answer instead of once per command
+        ink (cal:ink pool:*pv-col* 'guide))
   ;; PERFECT ENDS -- asked on every Roman, in square and out.
   ;; Squareness is a question about the BODY: whether the
   ;; rectangle between the two end lines is true.  It says nothing
@@ -10972,7 +11048,7 @@
                           (list 'r1 'NAX "R1 - LEFT end radius (check)" (cdr (assoc "R1" pv)))
                           (list 'r2 'NAX "R2 - RIGHT end radius (check)"
                                 (cdr (assoc "R2" pv))))))
-              t))
+              t ink))
   (if (eq ans 'CAL-BACK)
       'CAL-BACK
       (progn
@@ -10996,7 +11072,7 @@
                 ans (pool:askseqb
                       (list (list 'ac 'NAX "Cross dim body A-C" (cdr (assoc "XAC" pv)))
                             (list 'bd 'NAX "Cross dim body B-D" (cdr (assoc "XBD" pv))))
-                      t))
+                      t ink))
           (if (eq ans 'CAL-BACK)
               (progn (pool:pvdel xg) 'CAL-BACK)
               (progn (setq dac (pool:sq ans 'ac)
@@ -11452,8 +11528,13 @@
                          dac dbd fq quad failed a b c d cen meas notes
                          uab udc ml mr lend rend tipl tipr
                          pab0 pab1 pdc0 pdc1 doff th odim
-                         allpts xmax ymax ymin rows xcol xa rbox)
-  (setq oldclay (getvar "CLAYER"))
+                         allpts xmax ymax ymin rows xcol xa rbox ink)
+  (setq oldclay (getvar "CLAYER")
+        ;; the fade/guide colour, resolved once for the whole flow:
+        ;; mu:letters/mu:cross each re-ask the live guide's letters one
+        ;; at a time, and measuring the background per answer would be
+        ;; a COM round trip per answer instead of once per command
+        ink (cal:ink pool:*pv-col* 'guide))
 
   (defun mu:ends ( / v)
     (setq v (pool:askkwf 'dstyle "DEEP end (left) style"
@@ -11619,7 +11700,7 @@
                               (cdr (assoc "A" pv))))
                   (mu:enditems dstyle "L" "Deep" 'dsl 'ds1 'dv 'ds2 'dr)
                   (mu:enditems sstyle "R" "Shallow" 'ssl 'ss1 'sv 'ss2 'sr))
-                t))
+                t ink))
     (if (eq ans 'CAL-BACK)
         'CAL-BACK
         (progn
@@ -11645,7 +11726,7 @@
                                   (cdr (assoc "XAC" pv)))
                             (list 'bd 'NAX "Cross dim body B-D"
                                   (cdr (assoc "XBD" pv))))
-                      t))
+                      t ink))
           (if (eq ans 'CAL-BACK)
               (progn (pool:pvdel xg) 'CAL-BACK)
               (progn (setq dac (pool:sq ans 'ac)
@@ -13148,7 +13229,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.9")
+(setq *poolside-version* "v1.10")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -13307,9 +13388,9 @@
 
 ;; Guide outline (gray) and guide measuring tie (white, so it reads
 ;; over the outline).
-(defun psd:pvline (p1 p2)
+(defun psd:pvline (p1 p2 ink)
   (psd:line p1 p2 "POOL-NOTES")
-  (psd:setcol (entlast) (cal:ink psd:*pv-col* 'guide)))
+  (psd:setcol (entlast) ink))
 
 (defun psd:pvtieline (p1 p2)
   (psd:line p1 p2 "POOL-NOTES")
@@ -13814,7 +13895,11 @@
 ;; sitting exactly on its neighbour (G answered 0 -- a slope bottom, or
 ;; a sport V) repeats a point, so zero-length segments are dropped
 ;; rather than special-cased per style.
-(defun psd:secdraw (total sta lay pvflag / pts prev p)
+(defun psd:secdraw (total sta lay pvflag / pts prev p ink)
+  ;; the fade/guide colour, resolved once for the whole run when this
+  ;; is a preview pass: measuring it per segment would be a COM round
+  ;; trip per segment
+  (setq ink (if pvflag (cal:ink psd:*pv-col* 'guide)))
   (setq pts (append (list (list 0.0 0.0) (list total 0.0))
                     (mapcar '(lambda (s) (list (car s) (- (cdr s))))
                             (reverse sta))
@@ -13823,7 +13908,7 @@
   (foreach p (cdr pts)
     (if (> (distance prev p) 1.0e-6)
         (if pvflag
-            (psd:pvadd (psd:pvline prev p))
+            (psd:pvadd (psd:pvline prev p ink))
             (psd:line prev p lay)))
     (setq prev p)))
 
@@ -15469,7 +15554,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092126 REV27")
+(setq spa:*version* "092226 REV28")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -16835,9 +16920,9 @@
   (setq spa:*pvents* (cons e spa:*pvents*))
   e)
 
-(defun spa:pvline (p1 p2)
+(defun spa:pvline (p1 p2 ink)
   (spa:line p1 p2 spa:*lay-notes* nil)
-  (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))
+  (spa:setcol (entlast) ink))
 
 ;; Guide measuring line, drawn WHITE and DOTTED so it stands out from
 ;; the gray outline.
@@ -18252,7 +18337,10 @@
 ;; the picture matches what will be built.  gq = the guide quad,
 ;; corners = per-corner (type size) with the sizes already clamped for
 ;; display.  Returns the updated pv.
-(defun spa:pvcorners (pv gq corners / ce i k cc ent)
+(defun spa:pvcorners (pv gq corners / ce i k cc ent ink)
+  ;; the fade/guide colour, resolved once for the whole call: measuring
+  ;; it per side/corner would be a COM round trip each time
+  (setq ink (cal:ink spa:*pv-col* 'guide))
   (foreach k (list 'ab 'bc 'cd 'da)
     (spa:pvdel (cdr (assoc k pv))))
   (setq ce (spa:allends gq corners))
@@ -18260,7 +18348,7 @@
   (setq i 0)
   (foreach k (list 'ab 'bc 'cd 'da)
     (setq ent (spa:pvadd (spa:pvline (cadr (nth i ce))
-                                     (car (nth (rem (+ i 1) 4) ce))))
+                                     (car (nth (rem (+ i 1) 4) ce)) ink))
           pv (subst (cons k (list ent)) (assoc k pv) pv)
           i (1+ i)))
   ;; the corner treatments themselves
@@ -18268,11 +18356,11 @@
   (foreach cc corners
     (cond
       ((= (car cc) "Cut")
-       (spa:pvadd (spa:pvline (car (nth i ce)) (cadr (nth i ce)))))
+       (spa:pvadd (spa:pvline (car (nth i ce)) (cadr (nth i ce)) ink)))
       ((= (car cc) "Radius")
        (spa:arc3p (car (nth i ce)) (caddr (nth i ce)) (cadr (nth i ce))
                   spa:*lay-notes* nil)
-       (spa:pvadd (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide)))))
+       (spa:pvadd (spa:setcol (entlast) ink))))
     (setq i (1+ i)))
   pv)
 
@@ -18395,22 +18483,25 @@
 ;;; -------------------- rectangle flow ---------------------------------
 
 ;; Gray nominal rectangle with its corner letters.
-(defun spa:rectpreview ( / gq cen pr ent all pv)
+(defun spa:rectpreview ( / gq cen pr ent all pv ink)
+  ;; the fade/guide colour, resolved once for the whole preview: the
+  ;; label loop below would otherwise measure it once per corner
+  (setq ink (cal:ink spa:*pv-col* 'guide))
   (setq gq (list (list 0.0 0.0) (list spa:*pv-w* 0.0)
                  (list spa:*pv-w* spa:*pv-l*) (list 0.0 spa:*pv-l*))
         cen (list (* 0.5 spa:*pv-w*) (* 0.5 spa:*pv-l*))
         all nil pv nil)
-  (setq pv (list (cons 'ab (list (spa:pvline (nth 0 gq) (nth 1 gq))))
-                 (cons 'bc (list (spa:pvline (nth 1 gq) (nth 2 gq))))
-                 (cons 'cd (list (spa:pvline (nth 2 gq) (nth 3 gq))))
-                 (cons 'da (list (spa:pvline (nth 3 gq) (nth 0 gq)))))
+  (setq pv (list (cons 'ab (list (spa:pvline (nth 0 gq) (nth 1 gq) ink)))
+                 (cons 'bc (list (spa:pvline (nth 1 gq) (nth 2 gq) ink)))
+                 (cons 'cd (list (spa:pvline (nth 2 gq) (nth 3 gq) ink)))
+                 (cons 'da (list (spa:pvline (nth 3 gq) (nth 0 gq) ink))))
         all (apply 'append (mapcar 'cdr pv)))
   (foreach pr (list (list (nth 0 gq) "A") (list (nth 1 gq) "B")
                     (list (nth 2 gq) "C") (list (nth 3 gq) "D"))
     (spa:text (cal:v+ (car pr)
                       (cal:v* (spa:unit (cal:v- (car pr) cen)) spa:*pv-lbl*))
               spa:*pv-th* (cadr pr) spa:*lay-notes*)
-    (setq ent (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))
+    (setq ent (spa:setcol (entlast) ink)
           all (cons ent all)
           pv (cons (cons (spa:lblkey (cadr pr)) (list ent)) pv)))
   (setq spa:*pvents* all)
@@ -18806,20 +18897,23 @@
 ;; Gray nominal octagon (a regular one -- that is what the shape being
 ;; measured looks like) plus the overall-sheet ties.  Returns
 ;; (outline-pv . tie-pv).
-(defun spa:octpreview ( / npts cen e p q ent all pv k pvo)
+(defun spa:octpreview ( / npts cen e p q ent all pv k pvo ink)
+  ;; the fade/guide colour, resolved once for the whole preview: both
+  ;; loops below would otherwise measure it once per edge/corner
+  (setq ink (cal:ink spa:*pv-col* 'guide))
   (setq npts (spa:octpts 240.0 240.0 70.294 70.294)
         cen (spa:centroid npts)
         all nil pv nil)
   (foreach e spa:*octedges*
     (setq p (nth (car e) npts) q (nth (cadr e) npts)
-          ent (spa:pvline p q)
+          ent (spa:pvline p q ink)
           pv (cons (cons (list (car e) (cadr e)) (list ent)) pv)
           all (cons ent all)))
   (setq k 0)
   (foreach p npts
     (spa:text (spa:lbloff p cen npts spa:*pv-olbl*) spa:*pv-th*
               (nth k spa:*octnames*) spa:*lay-notes*)
-    (setq ent (spa:setcol (entlast) (cal:ink spa:*pv-col* 'guide))
+    (setq ent (spa:setcol (entlast) ink)
           all (cons ent all)
           pv (cons (cons (spa:lblkey (nth k spa:*octnames*)) (list ent)) pv)
           k (1+ k)))
@@ -26107,7 +26201,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.18")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.19")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -27510,10 +27604,10 @@
 ;; because what it rings is a REAL point already in the drawing, not a
 ;; place one might move to.  Scaffolding all the same - the suggestion
 ;; layer, swept at the end of the round.
-(defun abf:dupe-ring (p)
+(defun abf:dupe-ring (p ink)
   (entmake (list '(0 . "CIRCLE") '(100 . "AcDbEntity")
                  (cons 8 abf:*sug-layer*)
-                 (cons 62 (cal:ink abf:*dupe-color* 'guide))
+                 (cons 62 ink)
                  '(100 . "AcDbCircle")
                  (list 10 (car p) (cadr p) 0.0)
                  (cons 40 abf:*dupe-radius*)))
@@ -27521,10 +27615,10 @@
 
 ;; The tag that says which one it is, up and to the right of the ring so
 ;; it clears both the ring and the point's own number underneath it.
-(defun abf:dupe-tag (p tag)
+(defun abf:dupe-tag (p tag ink)
   (entmake (list '(0 . "TEXT") '(100 . "AcDbEntity")
                  (cons 8 abf:*sug-layer*)
-                 (cons 62 (cal:ink abf:*dupe-color* 'guide))
+                 (cons 62 ink)
                  '(100 . "AcDbText")
                  (list 10 (+ (car  p) abf:*dupe-radius*)
                           (+ (cadr p) abf:*dupe-radius*) 0.0)
@@ -27535,27 +27629,27 @@
 ;; AB line it belongs to.  The label is the answer, so two points on the
 ;; SAME line - a number a survey used twice, which is a drawing fault
 ;; rather than a second survey - are told apart by a letter after it.
-(defun abf:mark-dupe (p tag)
-  (append (abf:dupe-ring p) (abf:dupe-tag p tag)))
+(defun abf:mark-dupe (p tag ink)
+  (append (abf:dupe-ring p ink) (abf:dupe-tag p tag ink)))
 
 ;; One AB line drawn whole: both stakes ringed, the tie between them
 ;; dashed, and the line's tag at the middle of it.  This is what
 ;; ABPCREATE shows when it asks which line a point it is about to plot
 ;; belongs to - there is no point to ring yet, so the lines themselves
 ;; are what is picked between.
-(defun abf:mark-line (l / out)
+(defun abf:mark-line (l ink / out)
   (abf:ensure-dashed)
-  (setq out (append (abf:dupe-ring (abf:ln-a l))
-                    (abf:dupe-ring (abf:ln-b l))))
+  (setq out (append (abf:dupe-ring (abf:ln-a l) ink)
+                    (abf:dupe-ring (abf:ln-b l) ink)))
   (entmake (list '(0 . "LINE") '(100 . "AcDbEntity")
                  (cons 8 abf:*sug-layer*)
-                 (cons 62 (cal:ink abf:*dupe-color* 'guide))
+                 (cons 62 ink)
                  (cons 6 abf:*locus-ltype*) '(100 . "AcDbLine")
                  (list 10 (car (abf:ln-a l)) (cadr (abf:ln-a l)) 0.0)
                  (list 11 (car (abf:ln-b l)) (cadr (abf:ln-b l)) 0.0)))
   (setq out (append out (list (entlast))))
   (append out (abf:dupe-tag (abf:loc (abf:ln-a l) (abf:ln-b l) 0.0)
-                            (abf:ln-tag l))))
+                            (abf:ln-tag l) ink)))
 
 ;; How far a click landed from one of the things on screen: from the
 ;; point, or - for an AB line, which is given as its two stakes - from
@@ -27722,7 +27816,7 @@
 ;; furthest candidate one way round to the furthest the other, through
 ;; the point itself: a dashed grey line through all of them.  Returns
 ;; what it made, in a list, or nil when the group is empty.
-(defun abf:draw-locus (ctr rad pp sugs held / a0 lo hi c d)
+(defun abf:draw-locus (ctr rad pp sugs held ink / a0 lo hi c d)
   (setq a0 (angle (cal:2d ctr) (cal:2d pp))
         lo 0.0
         hi 0.0)
@@ -27738,7 +27832,7 @@
       (abf:ensure-dashed)
       (entmake (list '(0 . "ARC") '(100 . "AcDbEntity")
                      (cons 8 abf:*sug-layer*)
-                     (cons 62 (cal:ink abf:*locus-color* 'guide))
+                     (cons 62 ink)
                      (cons 6 abf:*locus-ltype*)
                      '(100 . "AcDbCircle")
                      (list 10 (car ctr) (cadr ctr) 0.0)
@@ -27802,7 +27896,8 @@
                        np newpt newnm tried lasthold ments ring note
                        npair spots hits h astep movep createp near ra rb
                        why fromfind built deft tmpl pents mk
-                       lines curln pend lsel dtag dupes l oldln snm)
+                       lines curln pend lsel dtag dupes l oldln snm
+                       dupeink locusink)
 
   (defun *error* (m)
     ;; user settings come back FIRST so nothing below can skip them
@@ -28016,7 +28111,12 @@
          (setq hist nil done nil made 0 moves 0 built 0 temps nil
                stage (cond ((and createp pend) 11)
                            (createp 6)
-                           (t 1)))
+                           (t 1))
+               ;; the two dupe-marker colours, resolved once for the
+               ;; whole run: each is a COM round trip if 'auto, and the
+               ;; stage loop below can re-ask either of them many times
+               dupeink  (cal:ink abf:*dupe-color*  'guide)
+               locusink (cal:ink abf:*locus-color* 'guide))
          (while (not done)
            (cond
 
@@ -28100,7 +28200,7 @@
                         (foreach c dtag
                           (setq temps (append temps
                                               (abf:mark-dupe (cadr c)
-                                                             (car c)))))
+                                                             (car c) dupeink))))
                         (princ (strcat "\n  " (itoa (length dupes))
                                        " points are numbered \""
                                        (abf:as-number ans)
@@ -28312,10 +28412,10 @@
                   (setq temps (append temps
                                       (abf:draw-locus
                                         pb (cal:dist pb pp) pp sugs
-                                        abf:*b-name*)
+                                        abf:*b-name* locusink)
                                       (abf:draw-locus
                                         pa (cal:dist pa pp) pp sugs
-                                        abf:*a-name*)))
+                                        abf:*a-name* locusink)))
                   (setq tried (+ (length (abf:deltas (cal:dist pa pp)))
                                  (length (abf:deltas (cal:dist pb pp)))))
                   (princ (strcat "\n\n  Where Pt." nm
@@ -28495,7 +28595,7 @@
               (abf:drop temps)
               (setq temps nil lsel nil)
               (foreach l lines
-                (setq temps (append temps (abf:mark-line l))))
+                (setq temps (append temps (abf:mark-line l dupeink))))
               (princ (strcat "\n  " (itoa (length lines)) " AB lines,"
                              " each ringed at its stakes and labelled on"
                              " the tie between them."))
@@ -48713,7 +48813,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.9"      ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.10"     ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -48927,9 +49027,11 @@
         (setq i (1+ i)))
       best)))
 
-(defun autobead-ixpoints (bead step / o1 o2 v a l res)
-  ;; WCS points where 'step' (extended to infinity) crosses 'bead'.
-  (setq o1 (vlax-ename->vla-object bead)
+(defun autobead-ixpoints (beadobj step / o1 o2 v a l res)
+  ;; WCS points where 'step' (extended to infinity) crosses the bead
+  ;; BEADOBJ is already a vla-object -- the caller's, converted once
+  ;; per bead rather than once per step it is tested against
+  (setq o1 beadobj
         o2 (vlax-ename->vla-object step)
         v  (vl-catch-all-apply 'vla-IntersectWith (list o1 o2 2))) ; 2 = acExtendOtherEntity
   (setq res '())
@@ -48992,7 +49094,7 @@
                          beadcount failcount c e i src dup drift
                          gaps g sp ep perimchains stepchains steplines
                          perimbeads bps pieces mp kept culled filtered
-                         misses brks dirw hit p)
+                         misses brks dirw hit p eobj)
 
   (setq beadoff *autobead-offset*
         layname *autobead-layer*
@@ -49163,10 +49265,13 @@
            (progn
              (setq filtered T)
              (foreach e perimbeads
-               (setq bps '())
+               ;; e is constant across the brks loop below -- converted
+               ;; once per bead here, not once per step it is tested
+               ;; against
+               (setq bps '() eobj (vlax-ename->vla-object e))
                (foreach c brks
                  (if (entget (car c))
-                   (setq bps (append bps (autobead-ixpoints e (car c))))))
+                   (setq bps (append bps (autobead-ixpoints eobj (car c))))))
                (setq pieces (list e))
                (foreach g bps
                  (setq pieces (autobead-break-at pieces g)))
@@ -64601,7 +64706,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.22")
+(setq *cchk-version* "v1.23")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -65136,10 +65241,12 @@
   (if (and (entget ent) (not (member ent keep)))
     (cchk:set-color ent (cdr (assoc ent saved)))))
 
-(defun cchk:unstage (ent keep)
-  ;; send a reviewed entity back into the grey background
+(defun cchk:unstage (ent keep grey)
+  ;; send a reviewed entity back into the grey background -- grey is
+  ;; the caller's already-hoisted (cal:ink *cchk-grey-color* 'fade),
+  ;; never resolved here: that would be a COM round trip per entity
   (if (and (entget ent) (not (member ent keep)))
-    (cchk:set-color ent (cal:ink *cchk-grey-color* 'fade))))
+    (cchk:set-color ent grey)))
 
 (defun cchk:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -67940,12 +68047,12 @@
           (setq res (cchk:review-olap (car pr) (cadr pr) n total))
           (cond
             ((null res)                       ; absorbed by an earlier merge
-             (cchk:unstage e1 keep)
-             (cchk:unstage e2 keep))
+             (cchk:unstage e1 keep grey)
+             (cchk:unstage e2 keep grey))
             ((eq (caddr res) 'left)
              (setq noleft (1+ noleft))
-             (cchk:unstage e1 keep)
-             (cchk:unstage e2 keep)
+             (cchk:unstage e1 keep grey)
+             (cchk:unstage e2 keep grey)
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
             (t
              (if (eq (caddr res) 'merged)
@@ -71360,7 +71467,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.22")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.23")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -71811,10 +71918,12 @@
   (if (and (entget ent) (not (member ent keep)))
     (dchk:set-color ent (cdr (assoc ent saved)))))
 
-(defun dchk:unstage (ent keep)
-  ;; send a reviewed entity back into the grey background
+(defun dchk:unstage (ent keep grey)
+  ;; send a reviewed entity back into the grey background -- grey is
+  ;; the caller's already-hoisted (cal:ink *dchk-grey-color* 'fade),
+  ;; never resolved here: that would be a COM round trip per entity
   (if (and (entget ent) (not (member ent keep)))
-    (dchk:set-color ent (cal:ink *dchk-grey-color* 'fade))))
+    (dchk:set-color ent grey)))
 
 (defun dchk:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -72927,12 +73036,12 @@
           (setq res (dchk:review-olap (car pr) (cadr pr) n total))
           (cond
             ((null res)                       ; absorbed by an earlier merge
-             (dchk:unstage e1 keep)
-             (dchk:unstage e2 keep))
+             (dchk:unstage e1 keep grey)
+             (dchk:unstage e2 keep grey))
             ((eq (caddr res) 'left)
              (setq noleft (1+ noleft))
-             (dchk:unstage e1 keep)
-             (dchk:unstage e2 keep)
+             (dchk:unstage e1 keep grey)
+             (dchk:unstage e2 keep grey)
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
             (t
              (if (eq (caddr res) 'merged)
@@ -84791,7 +84900,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.18")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.19")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -85315,10 +85424,12 @@
   (if (and (entget ent) (not (member ent keep)))
     (lfc:set-color ent (cdr (assoc ent saved)))))
 
-(defun lfc:unstage (ent keep)
-  ;; send a reviewed entity back into the grey background
+(defun lfc:unstage (ent keep grey)
+  ;; send a reviewed entity back into the grey background -- grey is
+  ;; the caller's already-hoisted (cal:ink *lfc-grey-color* 'fade),
+  ;; never resolved here: that would be a COM round trip per entity
   (if (and (entget ent) (not (member ent keep)))
-    (lfc:set-color ent (cal:ink *lfc-grey-color* 'fade))))
+    (lfc:set-color ent grey)))
 
 (defun lfc:mark-x (pt col / p s)
   ;; diagonal cross - marks WHERE YOU DREW IT
@@ -87546,12 +87657,12 @@
           (setq res (lfc:review-olap (car pr) (cadr pr) n total))
           (cond
             ((null res)                       ; absorbed by an earlier merge
-             (lfc:unstage e1 keep)
-             (lfc:unstage e2 keep))
+             (lfc:unstage e1 keep grey)
+             (lfc:unstage e2 keep grey))
             ((eq (caddr res) 'left)
              (setq noleft (1+ noleft))
-             (lfc:unstage e1 keep)
-             (lfc:unstage e2 keep)
+             (lfc:unstage e1 keep grey)
+             (lfc:unstage e2 keep grey)
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
             (t
              (if (eq (caddr res) 'merged)
@@ -87624,7 +87735,7 @@
                             (rtos *lfc-step-maxgap*) " apart."))
              (setq ans (cal:ask-yn "\n  Are these lines steps?" "Yes"))
              (foreach e (lfc:group-ents g) (if (entget e) (redraw e 4)))
-             (foreach e (lfc:group-ents g) (lfc:unstage e keep))
+             (foreach e (lfc:group-ents g) (lfc:unstage e keep grey))
              (redraw)
              (if ans
                (setq stepsp  T
@@ -87667,7 +87778,7 @@
                     (redraw)
                     (if ans
                       (progn
-                        (lfc:unstage b keep)
+                        (lfc:unstage b keep grey)
                         (setq lines (cons (strcat "Step Attachment "
                                                   (cdr (assoc 5 (entget b)))
                                                   ": confirmed correct")

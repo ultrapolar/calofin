@@ -21,6 +21,13 @@ tests/      Python test suite - stdlib only, no AutoCAD or Blender needed
 
 ## Working in this repo
 
+Working with an AI coding agent? Start at `AGENTS.md` in this folder --
+a short router into `.claude/skills/`, which holds the task-scoped
+working subset of `CLAUDE.md`, `STANDARDS.md` and this file, plus
+scripts that beat reading a 9,000-line tool file. Claude Code picks the
+skills up by itself; `AGENTS.md` is generated from them for every other
+agent.
+
 A tool exists at up to four levels of packaging, and they have to stay
 in step:
 

@@ -13,6 +13,10 @@
   },
   "permissions": {
     "allow": [
+      "Bash(python3 .claude/skills/calofin-lisp/scripts/lspshow.py:*)",
+      "Bash(python3 .claude/skills/calofin-lisp/scripts/whereis.py:*)",
+      "Bash(bash .claude/skills/calofin-lisp/scripts/precheck.sh:*)",
+      "Bash(bash .claude/skills/calofin-lisp/scripts/retier.sh:*)",
       "Bash(python3 tools/check_lisp.py:*)",
       "Bash(python3 tools/check_scope.py:*)",
       "Bash(python3 tools/check_standards.py:*)",

@@ -4,6 +4,53 @@ AutoLISP tools for pool/spa drafting, plus Blender add-ons and an AutoCAD
 palette. Read this before changing anything; `STANDARDS.md` is the full
 rulebook for the `.lsp` files themselves.
 
+## Skills — read these instead of the whole rulebook
+
+This file, `STANDARDS.md` and `README.md` are ~260KB together. Nobody
+should read them front to back to change one prompt. `.claude/skills/`
+holds the working subset, distilled and task-scoped:
+
+| Skill | For |
+| --- | --- |
+| `calofin-lisp` | editing an existing `.lsp` — the change pipeline, the standards digest, navigation, the test idiom, the architecture |
+| `calofin-new-tool` | a new tool or command — a checked skeleton plus the whole registration chain |
+| `calofin-checks` | a red check or test — message to cause to fix |
+
+They carry four scripts that replace opening a 9,000-line file or
+running the 95-second full check:
+
+```bash
+S=.claude/skills/calofin-lisp/scripts
+python3 $S/whereis.py SQUAREUP            # every file and registration site
+python3 $S/lspshow.py --map lisp/pool/POOL.LSP   # a file's forms, one line each
+python3 $S/lspshow.py pool:askcorner      # one defun, with its comment block
+bash   $S/retier.sh SQUAREUP              # mirror + regenerate every tier
+bash   $S/precheck.sh lisp/squareup/SQUAREUP.lsp  # the scoped checks, ~23s
+```
+
+The rules below are still the authority; the skills are the map to them.
+
+**Claude Code needs no install for these** — a project skill under
+`.claude/skills/` is found automatically. Do not copy them to
+`~/.claude/skills/`: they are calofin-specific and would then fire in
+unrelated repos, and a personal copy is a second home that drifts from
+this one. Repo-scoped is the decision, not a fallback.
+
+Other agents (Codex, Jules, Aider…) read `AGENTS.md` at the repo root
+instead — Claude Code never reads it — and that file is
+**generated from these skills** by `tools/gen_agents_md.py` — a router,
+not a second copy, so there is nothing to keep in step by hand. Edit a
+skill, then:
+
+```bash
+python3 tools/gen_agents_md.py          # rewrite AGENTS.md
+```
+
+`check_standards.py` runs the `--check`, so a stale `AGENTS.md` fails
+`make check` the way a stale twin does. `tools/gen_agents_md.py`'s
+`ADAPTERS` table is the seam for a second format (a Cursor rule file, a
+Copilot instructions file): one entry and a renderer, nothing else.
+
 ## Branch convention
 
 **All work in this repository goes on `claude/lisp-consolidation-strategy-9nrc7a`.**
@@ -43,6 +90,8 @@ on stale work.
 ## Layout
 
 ```
+AGENTS.md   The router non-Claude agents read. GENERATED from
+            .claude/skills/ by tools/gen_agents_md.py - never hand-edited
 ariel/      Windows helper for the Ariel anchor step. Python, NOT AutoLISP
 blender/    Blender add-ons (DXF import/export, mesh tools)
 lisp/       AutoLISP tools, one self-contained file each (the source of truth)
@@ -532,6 +581,22 @@ python3 tools/check_color.py     # the drafter's CURRENT COLOUR and CURRENT
                                  # the command and colours everything
                                  # ByLayer on it for whoever opens the
                                  # drawing next
+python3 tools/check_perf.py      # an 'auto ink colour that costs a COM
+       [--list] [--tier T]       # round trip ('fade/'guide) is resolved
+                                 # OUTSIDE loops -- never reachable, even
+                                 # through a helper, from inside a
+                                 # foreach/repeat/while.  Reuses
+                                 # check_osnap's call-graph machinery to
+                                 # close over what a loop calls, as far
+                                 # as the tier defines it, and flags any
+                                 # reachable function that resolves the
+                                 # colour itself.  A plain lexical scan
+                                 # would have missed the bug it exists
+                                 # for: DIMCHECK/COVERCHECK/LINFINCHECK's
+                                 # unstage helpers re-resolved the grey
+                                 # fade colour on every reviewed entity
+                                 # instead of reusing the caller's
+                                 # already-hoisted value
 python3 tools/probe_report.py    # not a check: replays a failure report in
                    REPORT.dxf    # the VM and varies its inputs one at a
                                  # time, to say which one the failure is
@@ -581,6 +646,19 @@ python3 tools/gen_ribbon_icons.py# the ribbon's 82 icons: one per category
                                  # picture for a routine that is no longer
                                  # featured, which would otherwise be
                                  # copied into every bundle for ever
+python3 tools/gen_agents_md.py   # AGENTS.md, the router every non-Claude
+                        [--check]# agent reads, out of .claude/skills/'s
+                                 # own frontmatter, reference files and
+                                 # scripts.  A ROUTER, not a second copy:
+                                 # it carries the commands and the rules
+                                 # whose cost is highest if missed, and
+                                 # points at the skill for the rest, so
+                                 # there is no duplicated prose to drift.
+                                 # A skill added, renamed, re-described
+                                 # or given a new script makes it stale
+                                 # and check_standards fails until it is
+                                 # re-run.  ADAPTERS is the seam: a
+                                 # Cursor or Copilot file is one entry
 python3 tools/gen_knobs.py       # LAZTUNE's knob catalog (lzp:*knobs*
                         [--check]# in LAZPANEL.lsp), transcribed from
                                  # every tool's tunables block; a knob

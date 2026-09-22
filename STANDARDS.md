@@ -634,7 +634,9 @@ dialog's own `-15` and `-16`. A knob left as a number is used exactly
 as given -- that is what keeps a shop's own palette, and every test
 that sets one, working. Resolve once into a local before a loop: the
 measurement is a COM round trip and the review tools touch every
-entity in the drawing.
+entity in the drawing. `tools/check_perf.py` fails a `fade`/`guide`
+resolution reachable from inside a loop, whether the `ink` call sits
+in the loop itself or one call away, inside a helper the loop invokes.
 
 A second set of roles is about what KIND of thing is being drawn
 rather than the screen: `flag`, `arc`, `olap`, `orig`, `sugg`, `point`,
