@@ -14313,7 +14313,7 @@
 
 (vl-load-com)
 
-(setq *lazside-version* "v1.0")
+(setq *lazside-version* "v1.1")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -14737,10 +14737,18 @@
     (strcat (cal:andjoin named nil) " and " (itoa (- n 3)) " more")
     (cal:andjoin named t)))
 
-;; The number in a box, or nil when there is not one there.
+;; The number in a box ON THE SHEET IN FRONT OF YOU, or nil when there
+;; is not one there.  The live test is the point of it: lzv:*vals* is
+;; keyed across the whole run, so a letter THIS bottom does not carry
+;; is still in there holding what the last tab typed against it.
+;; lzv:form sends the live keys and nothing else, so such a value
+;; cannot reach POOLSIDE -- and a check that read it anyway would judge
+;; the sheet by a box the page does not show.
 (defun lzv:num (key / v)
-  (setq v (cal:formanswer (cal:trim (lzv:get key))))
-  (if (numberp v) v))
+  (if (member key (lzv:livekeys))
+    (progn
+      (setq v (cal:formanswer (cal:trim (lzv:get key))))
+      (if (numberp v) v))))
 
 ;;  THE DEPTH PAIR POOLSIDE WOULD REFUSE.  A deep end that is not deeper
 ;;  than the wall is not a deep end, and the SHallow break sits between
@@ -14748,6 +14756,12 @@
 ;;  right thing at a prompt and the wrong thing to hand a sheet to: the
 ;;  run would draw half a section and then stop to argue.  A form can
 ;;  see both numbers at once, so it says so here instead.
+;;
+;;  C2 is read through the same live test as the other two and that is
+;;  not belt and braces: only SHallow has a break to measure, so a C2
+;;  typed on that tab and left behind would otherwise still be weighed
+;;  on a Normal -- greying Insert over a letter with no box on the page
+;;  and no message the drafter could act on without tabbing back.
 (defun lzv:depthbad ( / cv dv c2v)
   (setq cv (lzv:num "c") dv (lzv:num "d") c2v (lzv:num "c2"))
   (cond
@@ -37560,7 +37574,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.7")
+(setq *abpcheck-version* "v1.8")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value ABPCHECK reads that someone might want to
@@ -37880,7 +37894,7 @@
 ;; Its own rings and report are never read back as geometry -- a stale
 ;; red ring from the last run would otherwise BE the nearest line.
 (defun abp:harvest (ss / i en ed typ lay ext nm pts segs npt nspl nocs
-                         nmine)
+                         nmine sg)
   (setq pts nil segs nil npt 0 nspl 0 nocs 0 nmine 0 i 0)
   (while (< i (sslength ss))
     (setq en (ssname ss i)
@@ -37932,9 +37946,9 @@
               ;; the segment math does not cover these, and guessing
               ;; would report a point sitting ON a spline as off the line
               ((member typ abp:*uncovered-types*) (setq nspl (1+ nspl)))
-              (T (setq segs (append segs (abp:ent-segs en))))))))))
+              (T (foreach sg (abp:ent-segs en) (setq segs (cons sg segs))))))))))
   (list (cal:dedupe (reverse pts) abp:*exact-eps*)
-        segs nspl nocs nmine))
+        (reverse segs) nspl nocs nmine))
 
 ;; Every point against every segment: (distance . point), ascending.
 (defun abp:measure (pts segs / keyed q s d dmin)
@@ -65284,7 +65298,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.23")
+(setq *cchk-version* "v1.24")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -67771,7 +67785,7 @@
   (cons (reverse out) nskip))
 
 (defun cchk:pool-loop (pents borrow / segs e bl res loops opens best
-                             bestarea a l)
+                             bestarea a l sg)
   ;; the pool outline: the largest closed loop chained from the
   ;; candidates' bulge-aware segments.  BORROW is ((layer . ents) ...)
   ;; read off *cchk-perim-layers* -- a stretch of the same perimeter
@@ -67790,10 +67804,13 @@
   ;; to an anchor, a loop of its own -- and it is neither the outline
   ;; nor a gap in it, so it is not measured and not counted.
   (foreach e pents
-    (setq segs (append segs (cchk:pv-tag-segs (cchk:pv-ent-segs e) nil))))
+    (foreach sg (cchk:pv-tag-segs (cchk:pv-ent-segs e) nil)
+      (setq segs (cons sg segs))))
   (foreach bl borrow
     (foreach e (cdr bl)
-      (setq segs (append segs (cchk:pv-tag-segs (cchk:pv-ent-segs e) (car bl))))))
+      (foreach sg (cchk:pv-tag-segs (cchk:pv-ent-segs e) (car bl))
+        (setq segs (cons sg segs)))))
+  (setq segs (reverse segs))
   ;; with nothing borrowed there is nothing to cut, and the walk is
   ;; the one it always was
   (if borrow
@@ -68762,7 +68779,7 @@
 (defun cchk:scan (lite / *error* oldecho name ss i e et ed cands dims arcs
                        plns segs blks lines olaps pr bb bad
                        nd ndbad na nabad ndanch anchors q dq held hdr dhdr l cres dimlay units datev
-                       minx miny maxx maxy p13 p14 near s)
+                       minx miny maxx maxy p13 p14 near s sty meas)
 
   (setq name (if lite "LITECOVERSCAN" "COVERSCAN"))
   (defun *error* (msg)
@@ -68825,7 +68842,9 @@
                   (cchk:sort-dims dims (if (and miny maxy)
                                          (* *cchk-row-band* (- maxy miny))
                                          *cchk-row-flat*)))
-       (setq ed  (entget e)
+       (setq ed   (entget e)
+             sty  (cchk:dim-style e)
+             meas (cchk:dim-meas e)
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
              p14 (cdr (assoc 14 ed))
@@ -68857,10 +68876,10 @@
        (if bad (setq ndbad (1+ ndbad)))
        (if held (setq ndanch (+ ndanch (length held))))
        (setq lines (cons (strcat "Dim " (cdr (assoc 5 ed))
-                                 (if (= (cchk:dim-style e) "") ""
-                                   (strcat " [" (cchk:dim-style e) "]"))
-                                 (if (cchk:dim-meas e)
-                                   (strcat " = " (cchk:dim-meas e)) "")
+                                 (if (= sty "") ""
+                                   (strcat " [" sty "]"))
+                                 (if meas
+                                   (strcat " = " meas) "")
                                  ": "
                                  (if bad
                                    (strcat "NOT attached - " (cchk:join bad ", "))
@@ -68874,14 +68893,15 @@
 
      ;; --- arcs: report unattached endpoints, move nothing
      (foreach e (if lite nil arcs)
-       (setq na  (1+ na)
+       (setq ed  (entget e)
+             na  (1+ na)
              bad nil)
-       (if (cchk:planar-arc-p (entget e))
+       (if (cchk:planar-arc-p ed)
          (foreach s '(("start" . start) ("end" . end))
            (if (cchk:arc-end-target e (cdr s) cands)
              (setq bad (append bad (list (car s)))))))
        (if bad (setq nabad (1+ nabad)))
-       (setq lines (cons (strcat "Arc " (cdr (assoc 5 (entget e))) ": "
+       (setq lines (cons (strcat "Arc " (cdr (assoc 5 ed)) ": "
                                  (if bad
                                    (strcat (cchk:join bad " & ")
                                            " NOT attached to an object end")
@@ -72045,7 +72065,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.23")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.24")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -73761,7 +73781,7 @@
 ;;  except writing the report. Use it as a quick pre-flight, or when
 ;;  you want the findings without touching a released sheet.
 
-(defun c:DIMSCAN ( / *error* oldecho ss i e et ed cands dims arcs plns segs
+(defun c:DIMSCAN ( / *error* oldecho ss i e et ed sty meas cands dims arcs plns segs
                      lines olaps pr anchors
                      nd ndbad na nabad ndanch h m ins txt nlin ref hdr l
                      minx miny maxx maxy bb p13 p14 near q dq s bad held w)
@@ -73814,7 +73834,9 @@
      (foreach e (dchk:sort-dims dims (if (and miny maxy)
                                        (* *dchk-row-band* (- maxy miny))
                                        *dchk-row-flat*))
-       (setq ed  (entget e)
+       (setq ed   (entget e)
+             sty  (dchk:dim-style e)
+             meas (dchk:dim-meas e)
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
              p14 (cdr (assoc 14 ed))
@@ -73846,10 +73868,10 @@
        (if bad (setq ndbad (1+ ndbad)))
        (if held (setq ndanch (+ ndanch (length held))))
        (setq lines (cons (strcat "Dim " (cdr (assoc 5 ed))
-                                 (if (= (dchk:dim-style e) "") ""
-                                   (strcat " [" (dchk:dim-style e) "]"))
-                                 (if (dchk:dim-meas e)
-                                   (strcat " = " (dchk:dim-meas e)) "")
+                                 (if (= sty "") ""
+                                   (strcat " [" sty "]"))
+                                 (if meas
+                                   (strcat " = " meas) "")
                                  ": "
                                  (if bad
                                    (strcat "NOT attached - " (dchk:join bad ", "))
@@ -73863,14 +73885,15 @@
 
      ;; --- arcs: report unattached endpoints, move nothing
      (foreach e arcs
-       (setq na  (1+ na)
+       (setq ed  (entget e)
+             na  (1+ na)
              bad nil)
-       (if (dchk:planar-arc-p (entget e))
+       (if (dchk:planar-arc-p ed)
          (foreach s '(("start" . start) ("end" . end))
            (if (dchk:arc-end-target e (cdr s) cands)
              (setq bad (append bad (list (car s)))))))
        (if bad (setq nabad (1+ nabad)))
-       (setq lines (cons (strcat "Arc " (cdr (assoc 5 (entget e))) ": "
+       (setq lines (cons (strcat "Arc " (cdr (assoc 5 ed)) ": "
                                  (if bad
                                    (strcat (dchk:join bad " & ")
                                            " NOT attached to an object end")
@@ -85603,7 +85626,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.19")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.20")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -89059,7 +89082,7 @@
 ;; The read-only scan.  lite = T skips the DIMCHECK-style pass - no
 ;; dimension, arc or overlap audit and no DIMENSION AUDIT column -
 ;; for a drawing DIMCHECK already went over.
-(defun lfc:scan (lite / *error* oldecho name ss i e et ed cands dims arcs
+(defun lfc:scan (lite / *error* oldecho name ss i e et ed sty meas cands dims arcs
                      plns segs
                      blks lines olaps pr sgroups scand svgroups pgroups
                      g g1 g2 rest svbb stepht satts liners fgstep linerstep
@@ -89135,7 +89158,9 @@
                   (lfc:sort-dims dims (if (and miny maxy)
                                         (* *lfc-row-band* (- maxy miny))
                                         *lfc-row-flat*)))
-       (setq ed  (entget e)
+       (setq ed   (entget e)
+             sty  (lfc:dim-style e)
+             meas (lfc:dim-meas e)
              nd  (1+ nd)
              p13 (cdr (assoc 13 ed))
              p14 (cdr (assoc 14 ed))
@@ -89167,10 +89192,10 @@
        (if bad (setq ndbad (1+ ndbad)))
        (if held (setq ndanch (+ ndanch (length held))))
        (setq lines (cons (strcat "Dim " (cdr (assoc 5 ed))
-                                 (if (= (lfc:dim-style e) "") ""
-                                   (strcat " [" (lfc:dim-style e) "]"))
-                                 (if (lfc:dim-meas e)
-                                   (strcat " = " (lfc:dim-meas e)) "")
+                                 (if (= sty "") ""
+                                   (strcat " [" sty "]"))
+                                 (if meas
+                                   (strcat " = " meas) "")
                                  ": "
                                  (if bad
                                    (strcat "NOT attached - " (lfc:join bad ", "))
@@ -89184,14 +89209,15 @@
 
      ;; --- arcs: report unattached endpoints, move nothing
      (foreach e (if lite nil arcs)
-       (setq na  (1+ na)
+       (setq ed  (entget e)
+             na  (1+ na)
              bad nil)
-       (if (lfc:planar-arc-p (entget e))
+       (if (lfc:planar-arc-p ed)
          (foreach s '(("start" . start) ("end" . end))
            (if (lfc:arc-end-target e (cdr s) cands)
              (setq bad (append bad (list (car s)))))))
        (if bad (setq nabad (1+ nabad)))
-       (setq lines (cons (strcat "Arc " (cdr (assoc 5 (entget e))) ": "
+       (setq lines (cons (strcat "Arc " (cdr (assoc 5 ed)) ": "
                                  (if bad
                                    (strcat (lfc:join bad " & ")
                                            " NOT attached to an object end")
@@ -96788,13 +96814,13 @@
 ;; point on it can be further off than -- and IntersectWith reports the
 ;; crossings.  The line is erased before this returns, whatever came
 ;; back, so a run cannot litter the drawing one probe at a time.
-(defun perp:capdist (bnd p u / near far prev ln rtn lst q d best)
+(defun perp:capdist (bndobj p u / near far prev ln rtn lst q d best)
   ;; the nearest point of bnd may not be readable on a degenerate
   ;; curve; its own length alone still reaches a boundary that crosses
   ;; the run, which is the case a cap is wanted for
-  (setq near (vlax-curve-getClosestPointTo bnd (trans p 1 0))
+  (setq near (vlax-curve-getClosestPointTo bndobj (trans p 1 0))
         far  (+ (if near (distance p (trans near 0 1)) 0.0)
-                (vlax-curve-getDistAtParam bnd (vlax-curve-getEndParam bnd))))
+                (vlax-curve-getDistAtParam bndobj (vlax-curve-getEndParam bndobj))))
   (if (< far 1e-9) (setq far 1.0))
   (setq prev (entlast))
   (entmake (list '(0 . "LINE") '(8 . "PERPPTS-TEMP")
@@ -96812,7 +96838,7 @@
       (setq rtn (vl-catch-all-apply
                   'vlax-invoke
                   (list (vlax-ename->vla-object ln) 'IntersectWith
-                        (vlax-ename->vla-object bnd)
+                        bndobj
                         ;; acExtendNone: neither object is stretched to
                         ;; reach the other.  The symbol is AutoCAD's own
                         ;; and is nil where it was never loaded, so the
@@ -96838,7 +96864,7 @@
 ;; scales the whole line and can carry a point that was sitting ON the
 ;; boundary out beyond it.  A line that quietly crosses a boundary the
 ;; drafter asked it to respect is worth a line of its own.
-(defun perp:past-bnd (bnd bases pts / i n a b dx dy d u cap out)
+(defun perp:past-bnd (bndobj bases pts / i n a b dx dy d u cap out)
   (setq i 0 n (min (length bases) (length pts)) out 0)
   (while (< i n)
     (setq a  (nth i bases)
@@ -96849,7 +96875,7 @@
     (if (> d 1e-9)
       (progn
         (setq u   (list (/ dx d) (/ dy d))
-              cap (perp:capdist bnd a u))
+              cap (perp:capdist bndobj a u))
         (if (and cap (> d (+ cap 1e-8))) (setq out (1+ out)))))
     (setq i (1+ i)))
   out)
@@ -96866,6 +96892,14 @@
     (if (or (null q) (> (distance p (trans q 0 1)) 1e-6))
       (setq out (1+ out))))
   out)
+
+;; bnd (an ename) as the vla-object perp:capdist and perp:past-bnd
+;; measure through -- made ONCE, when bnd is fixed for the round,
+;; rather than once per point as perp:capdist used to.  nil in, nil
+;; out, so a call site does not have to guard the no-boundary case
+;; itself.
+(defun perp:bnd-obj (bnd)
+  (if bnd (vlax-ename->vla-object bnd)))
 
 ;; --- command ---------------------------------------------------------
 
@@ -97206,6 +97240,14 @@
                      "every offset runs out to that "
                      "no offset will cross that ")
                    (cdr (assoc 0 (entget bnd))) ".")))
+  ;; bnd is fixed for the rest of the run once this chain settles -- so
+  ;; it is turned into the vla-object perp:capdist and perp:past-bnd
+  ;; measure through right here, ONCE, rather than once per point as
+  ;; perp:capdist used to.  Every reference to bnd below this line
+  ;; reads that vla-object; the ename it started as was only ever
+  ;; needed for the entget above and the eq/curve-p checks in the
+  ;; selection loop, both already behind us.
+  (setq bnd (perp:bnd-obj bnd))
 
   ;; --- offset rounds --------------------------------------------------
   ;; the path the points are spaced along.  Round 1 uses the selected
@@ -97838,7 +97880,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.20")
+(setq *cperp-version* "v0.21")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -98338,13 +98380,13 @@
 ;; point on it can be further off than -- and IntersectWith reports the
 ;; crossings.  The line is erased before this returns, whatever came
 ;; back, so a run cannot litter the drawing one probe at a time.
-(defun cperp:capdist (bnd p u / near far prev ln rtn lst q d best)
+(defun cperp:capdist (bndobj p u / near far prev ln rtn lst q d best)
   ;; the nearest point of bnd may not be readable on a degenerate
   ;; curve; its own length alone still reaches a boundary that crosses
   ;; the run, which is the case a cap is wanted for
-  (setq near (vlax-curve-getClosestPointTo bnd (trans p 1 0))
+  (setq near (vlax-curve-getClosestPointTo bndobj (trans p 1 0))
         far  (+ (if near (distance p (trans near 0 1)) 0.0)
-                (cperp:curvelen bnd)))
+                (cperp:curvelen bndobj)))
   (if (< far 1e-9) (setq far 1.0))
   (setq prev (entlast))
   (entmake (list '(0 . "LINE") '(8 . "PERPPTS-TEMP")
@@ -98362,7 +98404,7 @@
       (setq rtn (vl-catch-all-apply
                   'vlax-invoke
                   (list (vlax-ename->vla-object ln) 'IntersectWith
-                        (vlax-ename->vla-object bnd)
+                        bndobj
                         ;; acExtendNone: neither object is stretched to
                         ;; reach the other.  The symbol is AutoCAD's own
                         ;; and is nil where it was never loaded, so the
@@ -98388,7 +98430,7 @@
 ;; scales the whole curve and can carry a point that was sitting ON the
 ;; boundary out beyond it.  A curve that quietly crosses a boundary the
 ;; drafter asked it to respect is worth a line of its own.
-(defun cperp:past-bnd (bnd bases pts / i n a b dx dy d u cap out)
+(defun cperp:past-bnd (bndobj bases pts / i n a b dx dy d u cap out)
   (setq i 0 n (min (length bases) (length pts)) out 0)
   (while (< i n)
     (setq a  (nth i bases)
@@ -98399,7 +98441,7 @@
     (if (> d 1e-9)
       (progn
         (setq u   (list (/ dx d) (/ dy d))
-              cap (cperp:capdist bnd a u))
+              cap (cperp:capdist bndobj a u))
         (if (and cap (> d (+ cap 1e-8))) (setq out (1+ out)))))
     (setq i (1+ i)))
   out)
@@ -98416,6 +98458,14 @@
     (if (or (null q) (> (distance p (trans q 0 1)) 1e-6))
       (setq out (1+ out))))
   out)
+
+;; bnd (an ename) as the vla-object cperp:capdist and cperp:past-bnd
+;; measure through -- made ONCE, when bnd is fixed for the round,
+;; rather than once per point as cperp:capdist used to.  nil in, nil
+;; out, so a call site does not have to guard the no-boundary case
+;; itself.
+(defun cperp:bnd-obj (bnd)
+  (if bnd (vlax-ename->vla-object bnd)))
 
 ;; --- command ---------------------------------------------------------
 
@@ -98751,6 +98801,14 @@
                      "every offset runs out to that "
                      "no offset will cross that ")
                    (cdr (assoc 0 (entget bnd))) ".")))
+  ;; bnd is fixed for the rest of the run once this chain settles -- so
+  ;; it is turned into the vla-object cperp:capdist and cperp:past-bnd
+  ;; measure through right here, ONCE, rather than once per point as
+  ;; cperp:capdist used to.  Every reference to bnd below this line
+  ;; reads that vla-object; the ename it started as was only ever
+  ;; needed for the entget above and the eq/curve-p checks in the
+  ;; selection loop, both already behind us.
+  (setq bnd (cperp:bnd-obj bnd))
 
   ;; --- offset rounds --------------------------------------------------
   ;; Every round samples and offsets from the NEWEST curve: the selected
@@ -103910,7 +103968,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.18")
+(setq *spacheck-version* "v1.19")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -104566,27 +104624,24 @@
 
 ;;; --- the two outlines together -----------------------------------------
 
-(defun spachk:audit-nesting (cov wat / rows bc bw)
+(defun spachk:audit-nesting (covbb watbb / rows)
   (setq rows nil)
-  (if (and cov wat)
-    (progn
-      (setq bc (cal:bbox-ent cov) bw (cal:bbox-ent wat))
-      (if (and bc bw)
-        (if (spachk:inside-p bw bc spachk:*tiny*)
-          (setq rows (list (spachk:row
-                             (strcat "Cover vs water's edge: cover "
-                                     (rtos (spachk:bw bc)) " x "
-                                     (rtos (spachk:bh bc))
-                                     " contains water's edge "
-                                     (rtos (spachk:bw bw)) " x "
-                                     (rtos (spachk:bh bw)) ", OK")
-                             nil)))
-          (setq rows (list (spachk:row
-                             (strcat "Cover vs water's edge: the water's"
-                                     " edge is NOT INSIDE the cover"
-                                     " - the cover is always the larger"
-                                     " of the two")
-                             1)))))))
+  (if (and covbb watbb)
+    (if (spachk:inside-p watbb covbb spachk:*tiny*)
+      (setq rows (list (spachk:row
+                         (strcat "Cover vs water's edge: cover "
+                                 (rtos (spachk:bw covbb)) " x "
+                                 (rtos (spachk:bh covbb))
+                                 " contains water's edge "
+                                 (rtos (spachk:bw watbb)) " x "
+                                 (rtos (spachk:bh watbb)) ", OK")
+                         nil)))
+      (setq rows (list (spachk:row
+                         (strcat "Cover vs water's edge: the water's"
+                                 " edge is NOT INSIDE the cover"
+                                 " - the cover is always the larger"
+                                 " of the two")
+                         1)))))
   (spachk:res rows nil))
 
 ;;; --- 4. the dimensions --------------------------------------------------
@@ -104598,12 +104653,12 @@
   (foreach e dims
     ;; layer
     (if (not (spachk:on-layer-p e spachk:*lay-dim*))
-      (setq rows (append rows
-                  (list (spachk:row
+      (setq rows (cons (spachk:row
                           (strcat "Dim " (spachk:dxf 5 e) ": on layer "
                                   (spachk:layer e) ", should be "
                                   spachk:*lay-dim*)
-                          1)))
+                          1)
+                        rows)
             ents (cons e ents)))
     ;; style: a Water's Edge dim takes the 0.5 style, everything else
     ;; the cover style
@@ -104611,11 +104666,11 @@
                    spachk:*ds-water* spachk:*ds-cover*)
           sty  (spachk:dim-style e))
     (if (and (/= sty "") (/= (strcase sty) (strcase want)))
-      (setq rows (append rows
-                  (list (spachk:row
+      (setq rows (cons (spachk:row
                           (strcat "Dim " (spachk:dxf 5 e) ": style '"
                                   sty "', should be '" want "'")
-                          1)))
+                          1)
+                        rows)
             ents (cons e ents)))
     ;; does it measure what it spans?
     (if (spachk:linear-p e)
@@ -104627,16 +104682,16 @@
           (progn
             (setq d (distance p1 p2))
             (if (> (abs (- d m)) spachk:*meas-tol*)
-              (setq rows (append rows
-                          (list (spachk:row
+              (setq rows (cons (spachk:row
                                   (strcat "Dim " (spachk:dxf 5 e)
                                           ": reads " (rtos m)
                                           " but spans " (rtos d)
                                           " - the dimension DISAGREES"
                                           " with its own points")
-                                  1)))
+                                  1)
+                                rows)
                     ents (cons e ents))))))))
-  (spachk:res rows (reverse ents)))
+  (spachk:res (reverse rows) (reverse ents)))
 
 ;; Every dimension belongs on spachk:*lay-dim*.  The per-dimension
 ;; audit says so one dimension at a time, in the report's DIMENSION
@@ -104682,14 +104737,13 @@
 
 ;; The roster: are the dimensions a finished spa sheet needs present,
 ;; and do the overalls read the outline's true size?
-(defun spachk:audit-roster (dims cov wat / rows ents covn watn lapn bb
-                                           m want e)
+(defun spachk:audit-roster (dims cov wat covbb watbb / rows ents covn watn
+                                           lapn m want e)
   (setq rows nil ents nil
         covn (spachk:dims-noted dims spachk:*sfx-cover*)
         watn (spachk:dims-noted dims spachk:*sfx-water*)
         lapn (spachk:dims-noted dims spachk:*sfx-lap*))
   ;; --- the cover's overalls
-  (setq bb (if cov (cal:bbox-ent cov) nil))
   (cond
     ((null covn)
      (setq rows (append rows
@@ -104706,19 +104760,19 @@
                                  " noted '" spachk:*sfx-cover* "'")
                          nil))))
      ;; each must read one of the cover's two extents
-     (if bb
+     (if covbb
        (foreach e covn
          (setq m (spachk:dim-meas e))
          (if m
-           (if (and (> (abs (- m (spachk:bw bb))) spachk:*meas-tol*)
-                    (> (abs (- m (spachk:bh bb))) spachk:*meas-tol*))
+           (if (and (> (abs (- m (spachk:bw covbb))) spachk:*meas-tol*)
+                    (> (abs (- m (spachk:bh covbb))) spachk:*meas-tol*))
              (setq rows (append rows
                          (list (spachk:row
                                  (strcat "Overall " (spachk:dxf 5 e)
                                          ": reads " (rtos m)
                                          " but the cover measures "
-                                         (rtos (spachk:bw bb)) " x "
-                                         (rtos (spachk:bh bb)))
+                                         (rtos (spachk:bw covbb)) " x "
+                                         (rtos (spachk:bh covbb)))
                                  1)))
                    ents (cons e ents))))))))
   ;; --- the water's edge overalls, when there is a water's edge
@@ -104748,9 +104802,9 @@
                           1))))
       (progn
         (setq m (spachk:dim-meas (car lapn))
-              want (if (and (cal:bbox-ent cov) (cal:bbox-ent wat))
-                       (* 0.5 (- (spachk:bw (cal:bbox-ent cov))
-                                 (spachk:bw (cal:bbox-ent wat))))
+              want (if (and covbb watbb)
+                       (* 0.5 (- (spachk:bw covbb)
+                                 (spachk:bw watbb)))
                        nil))
         (if (and m want (> (abs (- m want)) spachk:*meas-tol*))
           (setq rows (append rows
@@ -104768,15 +104822,15 @@
 
 ;; The overalls' standoffs -- SPA puts the across dim 2 ft above the
 ;; cover and the up dim 3 ft to its left.
-(defun spachk:audit-standoff (covn cov / rows bb e loc dx dy)
+(defun spachk:audit-standoff (covn covbb / rows e loc dx dy)
   (setq rows nil)
-  (if (and cov covn (setq bb (cal:bbox-ent cov)))
+  (if (and covbb covn)
     (foreach e covn
       (setq loc (spachk:dim-loc e))
       (if loc
         (progn
-          (setq dy (- (cadr loc) (cadadr bb))     ; above the top
-                dx (- (caar bb) (car loc)))       ; left of the left edge
+          (setq dy (- (cadr loc) (cadadr covbb))  ; above the top
+                dx (- (caar covbb) (car loc)))    ; left of the left edge
           (cond
             ;; above the cover: the across dim
             ((> dy 0.0)
@@ -104854,9 +104908,9 @@
               (setq best opt)))
         best)))
 
-(defun spachk:audit-hinges (ss cov grade taper / rows ents hngs labels n xs
+(defun spachk:audit-hinges (ss covbb grade taper / rows ents hngs labels n xs
                                                  row opts allowed fw fl
-                                                 sorted e bb want got
+                                                 sorted e want got
                                                  maxrun maxpiece prev
                                                  allvel hw h r k nm vd lvl)
   (setq rows nil ents nil
@@ -104913,14 +104967,14 @@
                                   (cadr (spachk:dxf 10 e)))))))
       ;; the widest piece, measured before either check so the sheet can
       ;; be chosen from the drawing rather than from the row's order
-      (if (and cov (setq bb (cal:bbox-ent cov)))
+      (if covbb
           (progn
-            (setq maxpiece 0.0 prev (caar bb))
+            (setq maxpiece 0.0 prev (caar covbb))
             (foreach e sorted
               (setq maxpiece (max maxpiece
                                   (- (car (spachk:dxf 10 e)) prev))
                     prev (car (spachk:dxf 10 e))))
-            (setq maxpiece (max maxpiece (- (caadr bb) prev)))))
+            (setq maxpiece (max maxpiece (- (caadr covbb) prev)))))
       (setq row (spachk:foampick opts maxpiece maxrun)
             fw  (car row)
             fl  (cdr row))
@@ -105341,7 +105395,7 @@
 ;; report's second column - and a lite run skips it altogether.
 ;; Returns (main-rows dim-rows flagged-entities).
 (defun spachk:audit (ss lite dofix / rows drows ents blk att g tp cov wat covo
-                                 wato dims covn r)
+                                 wato dims covn r covbb watbb)
   (setq rows nil drows nil ents nil)
 
   ;; 1 -- the block
@@ -105366,6 +105420,9 @@
         ents (append ents (spachk:res-ents r))
         covo (spachk:outline-ents ss spachk:*lay-cover*)
         cov  (if (= 1 (length covo)) (car covo) nil))
+  ;; the cover's bounding box, resolved ONCE here and threaded down to
+  ;; every sibling below instead of each re-resolving it off cov itself
+  (setq covbb (if cov (cal:bbox-ent cov)))
 
   ;; 3 -- the water's edge outline
   (setq r (spachk:audit-outline ss spachk:*lay-water* "Water's edge" nil)
@@ -105373,8 +105430,9 @@
         ents (append ents (spachk:res-ents r))
         wato (spachk:outline-ents ss spachk:*lay-water*)
         wat  (if (= 1 (length wato)) (car wato) nil))
+  (setq watbb (if wat (cal:bbox-ent wat)))
 
-  (setq r (spachk:audit-nesting cov wat)
+  (setq r (spachk:audit-nesting covbb watbb)
         rows (append rows (spachk:res-rows r)))
 
   ;; 4 -- the dimensions.  The per-dimension audit fills the second
@@ -105389,18 +105447,18 @@
     (setq r     (spachk:audit-dims dims cov wat)
           drows (spachk:res-rows r)
           ents  (append ents (spachk:res-ents r))))
-  (setq r (spachk:audit-roster dims cov wat)
+  (setq r (spachk:audit-roster dims cov wat covbb watbb)
         rows (append rows (spachk:res-rows r))
         ents (append ents (spachk:res-ents r)))
   (setq covn (spachk:dims-noted dims spachk:*sfx-cover*)
-        r    (spachk:audit-standoff covn cov)
+        r    (spachk:audit-standoff covn covbb)
         rows (append rows (spachk:res-rows r)))
 
   ;; 5 -- the hinges (only meaningful with a taper)
   (setq rows (append rows (list (spachk:row "THE HINGES" 3))))
   (if tp
     (progn
-      (setq r (spachk:audit-hinges ss cov g tp)
+      (setq r (spachk:audit-hinges ss covbb g tp)
             rows (append rows (spachk:res-rows r))
             ents (append ents (spachk:res-ents r))))
     (setq rows (append rows
@@ -108146,7 +108204,7 @@
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
-(setq *drone-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *drone-version* "v1.6")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -108339,6 +108397,7 @@
         (vla-put-StyleName obj *drone-text-style*)
         (vla-put-Height obj *drone-text-height*)
         (drone:force-bylayer obj)
+        (vl-catch-all-apply 'drone:orient (list obj))
         (setq n-text (1+ n-text)
               i      (1+ i)))))
 
@@ -108374,20 +108433,6 @@
         (vla-put-Color obj *drone-pink*)
         (setq n-anch (1+ n-anch)
               i      (1+ i)))))
-
-  ;; ------------------------------------------------------------
-  ;; 5. Orient the converted text to read west -> east, right side
-  ;;    up, each label pivoting about its insertion point (= the
-  ;;    point it labels).
-  ;; ------------------------------------------------------------
-  (if ss-text
-    (progn
-      (setq i 0)
-      (while (< i (sslength ss-text))
-        (vl-catch-all-apply
-          'drone:orient
-          (list (vlax-ename->vla-object (ssname ss-text i))))
-        (setq i (1+ i)))))
 
   ;; Re-lock whatever we unlocked and close the undo group.
   (drone:relock-layers unlocked)
@@ -108470,7 +108515,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.7")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -108644,6 +108689,7 @@
         (vla-put-StyleName obj *tydrn-text-style*)
         (vla-put-Height obj *tydrn-text-height*)
         (tydrn:force-bylayer obj)
+        (vl-catch-all-apply 'tydrn:orient (list obj))
         (setq n-text (1+ n-text)
               i      (1+ i)))))
 
@@ -108667,20 +108713,6 @@
         (vla-put-Color obj *tydrn-pink*)
         (setq n-anch (1+ n-anch)
               i      (1+ i)))))
-
-  ;; ------------------------------------------------------------
-  ;; 4. Orient the converted text to read west -> east, right side
-  ;;    up, each label pivoting about its insertion point (= the
-  ;;    point it labels).
-  ;; ------------------------------------------------------------
-  (if ss-text
-    (progn
-      (setq i 0)
-      (while (< i (sslength ss-text))
-        (vl-catch-all-apply
-          'tydrn:orient
-          (list (vlax-ename->vla-object (ssname ss-text i))))
-        (setq i (1+ i)))))
 
   ;; Re-lock whatever we unlocked and close the undo group.
   (tydrn:relock-layers unlocked)
@@ -109075,7 +109107,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.4")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -109324,10 +109356,9 @@
 
 ;; Written BEFORE the move, which is the only moment the object still
 ;; carries what the record is about.
-(defun soconv:stamp (ent lay / obj forced)
+(defun soconv:stamp (ent lay obj / forced)
   (regapp *soconv-xdata-app*)
-  (setq obj    (vlax-ename->vla-object ent)
-        forced *soconv-force-bylayer*)
+  (setq forced *soconv-force-bylayer*)
   (soconv:xput ent *soconv-xdata-app*
     (list (cons 1000 *soconv-xdata-app*)
           (cons 1000 *soconv-version*)
@@ -109438,8 +109469,8 @@
       (foreach job jobs
         ;; the record first: after the move the object no longer
         ;; carries the layer, or the properties, it is about
-        (if *soconv-record* (soconv:stamp (car job) (soconv:layer-of (car job))))
         (setq obj (vlax-ename->vla-object (car job)))
+        (if *soconv-record* (soconv:stamp (car job) (soconv:layer-of (car job)) obj))
         (vla-put-Layer obj (cdr job))
         (if *soconv-force-bylayer*
           (soconv:force-bylayer obj)))
@@ -109675,7 +109706,7 @@
 ;;; so; nothing else about the round trip is approximate.
 ;;; ======================================================================
 
-(setq *vsconv-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *vsconv-version* "v1.4")   ; announced on load; release_lisp.py
                                  ; reads this banner and stamps the
                                  ; dated twin in releases/ from it
 
@@ -109946,10 +109977,9 @@
 
 ;; Written BEFORE the move and before the restyle, which is the only
 ;; moment the object still carries everything the record is about.
-(defun vsconv:stamp (ent lay / obj typ sty ovr)
+(defun vsconv:stamp (ent lay obj / typ sty ovr)
   (regapp *vsconv-xdata-app*)
-  (setq obj (vlax-ename->vla-object ent)
-        typ (cdr (assoc 0 (entget ent))))
+  (setq typ (cdr (assoc 0 (entget ent))))
   ;; only a DIMENSION has a style to lose or overrides to lose it to,
   ;; and group 3 means something else entirely on an MTEXT
   (if (= "DIMENSION" typ)
@@ -110109,8 +110139,8 @@
                 ;; the record first: after the move and the restyle the
                 ;; object no longer carries the layer, the properties or
                 ;; the overrides it is about
-                (if *vsconv-record* (vsconv:stamp ent lay))
                 (setq obj (vlax-ename->vla-object ent))
+                (if *vsconv-record* (vsconv:stamp ent lay obj))
                 (vla-put-Layer obj dest)
                 (if *vsconv-force-bylayer* (vsconv:force-bylayer obj))
                 (setq tally   (vsconv:bump (strcase lay) tally)
@@ -110471,7 +110501,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *g2mconv-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *g2mconv-version* "v1.2")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -110875,10 +110905,9 @@
 
 ;; Written BEFORE the move and before either restyle, which is the only
 ;; moment the object still carries everything the record is about.
-(defun g2m:stamp (ent lay / obj typ sty ovr tsty thgt)
+(defun g2m:stamp (ent lay obj / typ sty ovr tsty thgt)
   (regapp *g2mconv-xdata-app*)
-  (setq obj (vlax-ename->vla-object ent)
-        typ (cdr (assoc 0 (entget ent))))
+  (setq typ (cdr (assoc 0 (entget ent))))
   ;; only a DIMENSION has a style to lose or overrides to lose it to,
   ;; and group 3 means something else entirely on an MTEXT
   (if (= "DIMENSION" typ)
@@ -111050,8 +111079,8 @@
               typ  (cdr (assoc 0 (entget ent))))
         ;; the record first: after the move and the restyles the object
         ;; no longer carries any of what the record is about
-        (if *g2mconv-record* (g2m:stamp ent (g2m:layer-of ent)))
         (setq obj (vlax-ename->vla-object ent))
+        (if *g2mconv-record* (g2m:stamp ent (g2m:layer-of ent) obj))
         ;; 1. the layer, and the appearance that has to follow it
         (vla-put-Layer obj (caddr rule))
         (if *g2mconv-force-bylayer*

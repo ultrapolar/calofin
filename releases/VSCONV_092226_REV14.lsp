@@ -79,7 +79,7 @@
 ;;; so; nothing else about the round trip is approximate.
 ;;; ======================================================================
 
-(setq *vsconv-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *vsconv-version* "v1.4")   ; announced on load; release_lisp.py
                                  ; reads this banner and stamps the
                                  ; dated twin in releases/ from it
 
@@ -380,10 +380,9 @@
 
 ;; Written BEFORE the move and before the restyle, which is the only
 ;; moment the object still carries everything the record is about.
-(defun vsconv:stamp (ent lay / obj typ sty ovr)
+(defun vsconv:stamp (ent lay obj / typ sty ovr)
   (regapp *vsconv-xdata-app*)
-  (setq obj (vlax-ename->vla-object ent)
-        typ (cdr (assoc 0 (entget ent))))
+  (setq typ (cdr (assoc 0 (entget ent))))
   ;; only a DIMENSION has a style to lose or overrides to lose it to,
   ;; and group 3 means something else entirely on an MTEXT
   (if (= "DIMENSION" typ)
@@ -543,8 +542,8 @@
                 ;; the record first: after the move and the restyle the
                 ;; object no longer carries the layer, the properties or
                 ;; the overrides it is about
-                (if *vsconv-record* (vsconv:stamp ent lay))
                 (setq obj (vlax-ename->vla-object ent))
+                (if *vsconv-record* (vsconv:stamp ent lay obj))
                 (vla-put-Layer obj dest)
                 (if *vsconv-force-bylayer* (vsconv:force-bylayer obj))
                 (setq tally   (vsconv:bump (strcase lay) tally)

@@ -1,27 +1,31 @@
 #!/bin/bash
 # The inner loop: the checks that can see THIS edit, in seconds.
 #
-# `make check` is ~95s because most of its ten checks read every tier.
+# `make check` is slow because most of its checks read every tier.
 # Most of that has nothing to say about the file you just
 # changed.  This runs the per-file checks on the files you name and the
-# tier-scoped ones on lisp/ only -- about 23s -- so the slow full run is
+# tier-scoped ones on lisp/ only -- about a third of the time -- so the slow full run is
 # something you do once, before committing, instead of every iteration.
 #
 #     precheck.sh lisp/squareup/SQUAREUP.lsp
 #     precheck.sh $(git diff --name-only | grep '\.lsp$')
 #     precheck.sh                       # whatever git says changed
 #
-# It is NOT a substitute for `make check`.  check_lazdiag, check_back
-# and check_dcl read the whole tree by design, and releases/ is only
-# covered by the full run.  Finish with `make check && make test`.
+# It is NOT a substitute for `make check`: check_dcl and check_vb are
+# not run, osnap/color/perf see lisp/ only, and releases/ is covered by
+# the full run alone.  Finish with `make check && make test`.
 
 set -uo pipefail
 cd "${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}" || exit 1
 
 files=("$@")
 if [ ${#files[@]} -eq 0 ]; then
-  mapfile -t files < <(git diff --name-only HEAD -- '*.lsp' '*.LSP' \
-                       | grep -E '^(lisp|wip)/' || true)
+  # changed AND untracked: a brand-new tool is untracked until its first
+  # commit, and it is exactly the file this is most wanted for
+  mapfile -t files < <( { git diff --name-only HEAD -- '*.lsp' '*.LSP'
+                          git ls-files --others --exclude-standard \
+                            -- '*.lsp' '*.LSP'; } \
+                        | grep -E '^(lisp|wip)/' | sort -u || true)
 fi
 
 if [ ${#files[@]} -eq 0 ]; then
@@ -46,6 +50,11 @@ done
 run python3 tools/check_osnap.py --tier lisp
 run python3 tools/check_color.py --tier lisp
 run python3 tools/check_perf.py --tier lisp
+
+# Whole-tree only (it takes no file or tier) -- and worth it: a new
+# (setq v (getX ...)) with no lzd:ask after it is the likeliest thing an
+# edit breaks, and nothing else here would say so before make check.
+run python3 tools/check_lazdiag.py
 
 # Whole-tree but quick, and both are easy to break from a single edit:
 # a new prompt with no Back, and a tier left behind.

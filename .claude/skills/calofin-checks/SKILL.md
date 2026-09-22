@@ -9,7 +9,7 @@ Ten checks, seven generator staleness checks, and a test suite. Each
 exists because a specific defect shipped. This maps the message to the
 cause to the fix.
 
-**First, scope it.** `make check` is ~95s. If you know which file you
+**First, scope it.** `make check` takes minutes. If you know which file you
 changed:
 
 ```bash

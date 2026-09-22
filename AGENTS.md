@@ -46,7 +46,7 @@ bash .claude/skills/calofin-lisp/scripts/retier.sh SQUAREUP
 # Every file that has to move when one tool does.
 python3 .claude/skills/calofin-lisp/scripts/whereis.py SQUAREUP
 ```
-A tool file here runs to 9,400 lines.  `lspshow.py --map FILE` gives you
+A tool file here runs past 9,000 lines.  `lspshow.py --map FILE` gives you
 its shape in one screen, and `lspshow.py SYMBOL FILE` gives you the one
 form you came for, with its comment block and line numbers.
 
@@ -90,9 +90,9 @@ In order, in one commit:
 2. Bump its version banner if it has one
    (`(setq *<tool>-version* "vN.N")`).
 3. Regenerate every tier below `lisp/` (the mirror, the dated twins,
-   the bundle and the four UI generators, in dependency order):
+   the bundle, and every UI generator, in dependency order):
    `bash .claude/skills/calofin-lisp/scripts/retier.sh <TOOL>`
-4. Check, scoped to what you touched (~23s):
+4. Check, scoped to what you touched (a third of `make check`):
    `bash .claude/skills/calofin-lisp/scripts/precheck.sh <file>`
 5. Test the tier and its twin, then the full run:
    `python3 tests/test_<tool>.py`
@@ -103,7 +103,7 @@ In order, in one commit:
 
 | Command | What it does |
 | --- | --- |
-| `make check` | every static check + every generated file byte-compared against a fresh regeneration (~95s) |
+| `make check` | every static check + every generated file byte-compared against a fresh regeneration |
 | `make test` | the full suite, `lisp/` tier |
 | `make parity` | the full suite at BOTH tiers -- the standalone-vs-grouped drift check |
 | `make fast` | the suite without the slowest files, for the inner loop |
