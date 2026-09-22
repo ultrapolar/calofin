@@ -75,7 +75,7 @@
 
 (vl-load-com)
 
-(setq *lazside-version* "v1.0")
+(setq *lazside-version* "v1.1")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -686,10 +686,18 @@
     (strcat (lzv:join named nil) " and " (itoa (- n 3)) " more")
     (lzv:join named t)))
 
-;; The number in a box, or nil when there is not one there.
+;; The number in a box ON THE SHEET IN FRONT OF YOU, or nil when there
+;; is not one there.  The live test is the point of it: lzv:*vals* is
+;; keyed across the whole run, so a letter THIS bottom does not carry
+;; is still in there holding what the last tab typed against it.
+;; lzv:form sends the live keys and nothing else, so such a value
+;; cannot reach POOLSIDE -- and a check that read it anyway would judge
+;; the sheet by a box the page does not show.
 (defun lzv:num (key / v)
-  (setq v (lzv:answer (lzv:trim (lzv:get key))))
-  (if (numberp v) v))
+  (if (member key (lzv:livekeys))
+    (progn
+      (setq v (lzv:answer (lzv:trim (lzv:get key))))
+      (if (numberp v) v))))
 
 ;;  THE DEPTH PAIR POOLSIDE WOULD REFUSE.  A deep end that is not deeper
 ;;  than the wall is not a deep end, and the SHallow break sits between
@@ -697,6 +705,12 @@
 ;;  right thing at a prompt and the wrong thing to hand a sheet to: the
 ;;  run would draw half a section and then stop to argue.  A form can
 ;;  see both numbers at once, so it says so here instead.
+;;
+;;  C2 is read through the same live test as the other two and that is
+;;  not belt and braces: only SHallow has a break to measure, so a C2
+;;  typed on that tab and left behind would otherwise still be weighed
+;;  on a Normal -- greying Insert over a letter with no box on the page
+;;  and no message the drafter could act on without tabbing back.
 (defun lzv:depthbad ( / cv dv c2v)
   (setq cv (lzv:num "c") dv (lzv:num "d") c2v (lzv:num "c2"))
   (cond
