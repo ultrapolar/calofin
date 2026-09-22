@@ -519,6 +519,10 @@ def house_rules(path, src, problems):
     """
     body = decomment(src)                 # rules ABOUT strings need them
     name = pathlib.Path(path).name
+    # every rule below walks the same top-level forms of the same body,
+    # so they are found once.  Its own name: rule 5 binds ``spans`` to a
+    # form's HANDLER spans, and rule 4 must not read those.
+    tops_spans = top_level_forms(body)
 
     # 1. (command ...) inside *error* needs a push declaration, because
     #    AutoCAD 2015+ refuses one otherwise.  command-s does not, which
@@ -542,7 +546,7 @@ def house_rules(path, src, problems):
     #     Five tools did exactly this until v3.2.  The pop may sit in a
     #     helper both exits call (perp:finish, xft:restore); it may not
     #     sit only inside (defun *error* ...).
-    for a, b in top_level_forms(body):
+    for a, b in tops_spans:
         form = body[a:b]
         if "(*push-error-using-command*)" not in form:
             continue
@@ -568,12 +572,11 @@ def house_rules(path, src, problems):
     #     same thing with a narrower window (STANDARDS 5: localized
     #     *error*).  At top level it is global by construction.
     #     The deprecated acady matcher keeps its swap idiom (STANDARDS 8).
-    spans = top_level_forms(body)
     deprecated = "standards_checker" in pathlib.Path(path).parts
     for m in ([] if deprecated else
               list(ERR_DEFUN.finditer(body)) + list(ERR_SETQ.finditer(body))):
         line = body[:m.start()].count("\n") + 1
-        outer = [(a, b) for a, b in spans if a <= m.start() < b]
+        outer = [(a, b) for a, b in tops_spans if a <= m.start() < b]
         if not outer:
             continue                      # unbalanced; balance() reports it
         a, b = outer[0]
@@ -589,7 +592,7 @@ def house_rules(path, src, problems):
 
     # 2. A pickfirst probe must come BEFORE the undo group: opening one
     #    is itself a command, and a command clears the pickfirst set.
-    for a, b in top_level_forms(body):
+    for a, b in tops_spans:
         form = body[a:b]
         if not re.match(r"\(defun\s+[cC]:", form):
             continue
@@ -602,7 +605,7 @@ def house_rules(path, src, problems):
                 % (src[:a + begin].count("\n") + 1))
 
     # 3. Every undo group asks whether undo is recording first.
-    for a, b in top_level_forms(body):
+    for a, b in tops_spans:
         form = body[a:b]
         if '"_Begin"' in form and "UNDOCTL" not in form:
             problems.append(
@@ -626,7 +629,7 @@ def house_rules(path, src, problems):
     #     callers carry it, and this rule checks them where they are.
     flags = {(m.group(1) or m.group(2)).lower()
              for m in OPEN_FLAG.finditer(body)}
-    for a, b in top_level_forms(body):
+    for a, b in tops_spans:
         form = body[a:b]
         owner = re.match(r"\(defun\s+([^\s()]+)", form)
         if owner and owner.group(1).lower().endswith("undoend"):
@@ -654,7 +657,7 @@ def house_rules(path, src, problems):
     #    the helper, not a command, and is skipped.
     OPEN = re.compile(r'"_Begin"|:undobegin\)')
     CLOSE = re.compile(r'"_End"|:undoend\)')
-    for a, b in top_level_forms(body):
+    for a, b in tops_spans:
         form = body[a:b]
         if not OPEN.search(form) or re.match(r"\(defun\s+\S*undobegin\s", form):
             continue
@@ -689,7 +692,7 @@ def house_rules(path, src, problems):
     #     column 0 inside another defun.  The command census is a
     #     regex over line starts, so a nested one is counted, listed,
     #     documented -- and uncallable.  (Caught exactly that, once.)
-    tops = {a for a, b in top_level_forms(body)}
+    tops = {a for a, b in tops_spans}
     for m in re.finditer(r"^\(defun\s+[cC]:([^\s()]+)", body, re.MULTILINE):
         if m.start() not in tops:
             problems.append(
@@ -709,10 +712,9 @@ def house_rules(path, src, problems):
     if name not in LIBRARY_FILES:
         vm = VERSION_SYM.search(body)
         if vm:
-            spans = top_level_forms(body)
-            last = max((i for i, (a, b) in enumerate(spans)
+            last = max((i for i, (a, b) in enumerate(tops_spans)
                         if body[a:b].startswith("(defun")), default=-1)
-            tail = [body[a:b] for a, b in spans[last + 1:]]
+            tail = [body[a:b] for a, b in tops_spans[last + 1:]]
             said = [t for t in tail
                     if t.startswith(("(princ", "(if")) and vm.group(1) in t]
             if not said:
@@ -743,8 +745,11 @@ def check_file(path):
     # deprecated acady matcher is exempt (STANDARDS 8) and keeps its em
     # dashes and plus-minus signs.
     if "standards_checker" not in pathlib.Path(path).parts:
-        bad = sorted({i + 1 for i, line in enumerate(src.splitlines())
-                      if any(ord(ch) > 127 for ch in line)})
+        # the whole file is almost always ASCII, and saying so is one
+        # C-level pass; only a file that is not is read line by line
+        bad = [] if src.isascii() else sorted(
+            {i + 1 for i, line in enumerate(src.splitlines())
+             if not line.isascii()})
         for ln in bad[:5]:
             problems.append("line %d: non-ASCII character "
                             "(STANDARDS 5: ASCII only, use --)" % ln)

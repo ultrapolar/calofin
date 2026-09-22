@@ -49,7 +49,7 @@ sys.path.insert(0, str(HERE))
 
 import check_color as cc  # noqa: E402  (INK_RE: the <pfx>:ink / cal:ink call shape)
 import check_osnap as co  # noqa: E402  (sexp/walk/head/is_sym/called/reach)
-from callib import LISP_DIR, PARTS_DIR, RELEASES_DIR, decomment, lsp_files  # noqa: E402
+from callib import LISP_DIR, PARTS_DIR, RELEASES_DIR, lsp_files  # noqa: E402
 
 #: the two roles that measure the drawing's background through COM
 #: (cal:bg -> vla-get-GraphicsWinModelBackgrndColor) unless a CALSET
@@ -69,9 +69,7 @@ def read_tier(paths):
     OSMODE-specific bookkeeping the rest of that class computes."""
     dmap, per_file = {}, {}
     for path in paths:
-        forms = co.sexp(decomment(path.read_text(encoding="utf-8",
-                                                 errors="replace")))
-        d = co.defuns(forms)
+        d = co.defuns(co.read_forms(path))
         per_file[path] = d
         for name, bodies in d.items():
             dmap.setdefault(name, []).extend(bodies)
@@ -118,6 +116,7 @@ def audit(paths):
     Both empty means the loop is clean."""
     dmap, per_file = read_tier(paths)
     hot = com_cost_funcs(dmap)
+    calls = co.callees(dmap)      # each defun walked once, not per loop
     rows = []
     for path, d in per_file.items():
         for name, bodies in d.items():
@@ -129,7 +128,7 @@ def audit(paths):
                 for loop in loops:
                     for f in com_cost_calls(loop):
                         direct.add(co.head(f))
-                    indirect |= co.reach(co.called(loop), dmap) & hot
+                    indirect |= co.reach(co.called(loop), dmap, calls) & hot
                 rows.append({"path": path, "name": name,
                             "direct": direct, "indirect": indirect})
     return rows

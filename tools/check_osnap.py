@@ -126,6 +126,30 @@ def sexp(text):
     return top
 
 
+#: file text -> its forms.  The same files are read over and over:
+#: check_color reads each tier for two sysvars and four other passes,
+#: and a releases/ twin is byte-for-byte its lisp/ file until the next
+#: banner bump.  Keyed by the TEXT, not the path, so each distinct text
+#: is parsed once per process however many paths and passes read it.
+#: The trees are therefore shared, and nothing may change one in place
+#: -- nothing does: every reader here walks them, and without_handlers
+#: builds new lists.
+_FORMS = {}
+
+
+def forms_of(text):
+    """TEXT decommented and read -- sexp(decomment(TEXT)), memoised."""
+    forms = _FORMS.get(text)
+    if forms is None:
+        forms = _FORMS[text] = sexp(decomment(text))
+    return forms
+
+
+def read_forms(path):
+    """The forms of the file at PATH, through forms_of."""
+    return forms_of(path.read_text(encoding="utf-8", errors="replace"))
+
+
 def is_sym(x):
     return isinstance(x, str)
 
@@ -181,10 +205,15 @@ def restores_by_table(body):
 
 def names_osmode(body):
     """"OSMODE" as a table entry -- what a syssave was handed."""
+    return names_sysvar(body, OSMODE)
+
+
+def names_sysvar(body, var):
+    """"VAR" as a table entry -- names_osmode for any sysvar."""
     for f in walk(body):
         if isinstance(f, list):
             for x in f:
-                if is_str(x) and x[1].upper() == OSMODE:
+                if is_str(x) and x[1].upper() == var:
                     return True
     return False
 
@@ -192,6 +221,13 @@ def names_osmode(body):
 def called(body):
     return set(f[0].lower() for f in walk(body)
                if isinstance(f, list) and f and is_sym(f[0]))
+
+
+def callees(dmap):
+    """name -> every head any of its bodies calls: called() per name,
+    walked once, so a question asked again reads a set."""
+    return {n: set().union(*(called(b) for b in bs))
+            for n, bs in dmap.items()}
 
 
 # ---------------------------------------------------------------------
@@ -251,73 +287,112 @@ def without_handlers(body):
     return prune(body)
 
 
-def reach(names, dmap):
-    """NAMES and everything they call, as far as this tier defines it."""
+def reach(names, dmap, calls=None):
+    """NAMES and everything they call, as far as this tier defines it.
+
+    CALLS is DMAP's own callees() map when the caller has one (a Tier
+    carries it as .calls); without it every body reached is walked
+    again.  Either way the answer is the same set."""
     seen, todo = set(), [n for n in names if n in dmap]
     while todo:
         n = todo.pop()
         if n in seen:
             continue
         seen.add(n)
+        if calls is not None:
+            todo += [c for c in calls[n] if c in dmap and c not in seen]
+            continue
         for body in dmap.get(n, []):
             todo += [c for c in called(body) if c in dmap and c not in seen]
     return seen
 
 
-class Tier:
-    """One loadable tier, read once: every defun in it, by name."""
+class Core:
+    """The half of a Tier that is the same whichever sysvar is asked
+    about: every defun by name, what each calls, which restore through
+    a computed (setvar V ...) and which can throw from a handler.
+
+    check_color asks its two sysvars of one tier, and builds this once
+    for both; the Tier for each sysvar is then a cheap classification
+    on top of it."""
 
     def __init__(self, paths):
         self.paths = list(paths)
         self.dmap = {}
         self.per_file = {}
         for path in self.paths:
-            d = defuns(sexp(decomment(path.read_text(encoding="utf-8",
-                                                     errors="replace"))))
+            d = defuns(read_forms(path))
             self.per_file[path] = d
             for name, bodies in d.items():
                 self.dmap.setdefault(name, []).extend(bodies)
+        self.calls = callees(self.dmap)
+        self.callers = {}
+        for name, cs in self.calls.items():
+            for c in cs:
+                self.callers.setdefault(c, set()).add(name)
+        self.table = {name for name, bodies in self.dmap.items()
+                      if any(restores_by_table(b) for b in bodies)}
+        # reaches an unwrapped (command ...): a caller of something
+        # risky is risky too
+        self.risky = self.closure(
+            {name for name, bodies in self.dmap.items()
+             if any(unwrapped_command(b) for b in bodies)})
+
+    def closure(self, seed):
+        """SEED and every defun that calls into it, however indirectly.
+
+        This is the fixed point the old pass-until-nothing-grows loops
+        reached ("a caller of one is one too"), walked backwards over
+        the callers map once instead of re-walking every body per pass."""
+        out, todo = set(seed), list(seed)
+        while todo:
+            for name in self.callers.get(todo.pop(), ()):
+                if name not in out:
+                    out.add(name)
+                    todo.append(name)
+        return out
+
+
+class Tier:
+    """One loadable tier, read once: every defun in it, by name, and
+    what each does to ONE sysvar.
+
+    That is OSMODE, with this file's own mutes/restores_direct, unless
+    the caller says otherwise: VAR is the sysvar and RULES its (mutes,
+    restores_direct) pair, which is how check_color audits CECOLOR and
+    CLAYER without touching this module's globals.  CORE is Core(PATHS)
+    when the caller already has one to share."""
+
+    def __init__(self, paths, var=OSMODE, rules=None, core=None):
+        if core is None:
+            core = Core(paths)
+        elif core.paths != list(paths):
+            # a core read off other files would audit those, silently
+            raise ValueError("Tier: core was built from other paths")
+        self.var = var
+        self.mutes, self.restores_direct = \
+            rules if rules is not None else (mutes, restores_direct)
+        self.paths = core.paths
+        self.dmap = core.dmap
+        self.per_file = core.per_file
+        self.calls = core.calls
+        self.table = core.table
+        self.risky = core.risky
         self.direct = set()
-        self.table = set()
         self.tables = set()
         self.muters = set()
-        self.risky = set()        # reaches an unwrapped (command ...)
         for name, bodies in self.dmap.items():
             for body in bodies:
-                if restores_direct(body):
+                if self.restores_direct(body):
                     self.direct.add(name)
-                if restores_by_table(body):
-                    self.table.add(name)
-                if names_osmode(body):
+                if names_sysvar(body, var):
                     self.tables.add(name)
-                if mutes(body):
+                if self.mutes(body):
                     self.muters.add(name)
-                if unwrapped_command(body):
-                    self.risky.add(name)
-        # a caller of something risky is risky too
-        for _ in range(len(self.dmap)):
-            grew = False
-            for name, bodies in self.dmap.items():
-                if name in self.risky:
-                    continue
-                if any(c in self.risky for b in bodies for c in called(b)):
-                    self.risky.add(name)
-                    grew = True
-            if not grew:
-                break
-        self.putters = set(self.direct)
-        for _ in range(len(self.dmap)):
-            grew = False
-            for name, bodies in self.dmap.items():
-                if name in self.putters:
-                    continue
-                if any(c in self.putters for b in bodies for c in called(b)) \
-                        or (bool(self.tables) and
-                            any(restores_by_table(b) for b in bodies)):
-                    self.putters.add(name)
-                    grew = True
-            if not grew:
-                break
+        # a caller of a putter puts back too; with any table naming the
+        # sysvar, so does every foreach-over-the-snapshot restore
+        self.putters = core.closure(
+            self.direct | (self.table if self.tables else set()))
 
     def puts_back(self, body, scope):
         """Does BODY restore OSMODE, directly or through the snapshot?
@@ -325,8 +400,8 @@ class Tier:
         SCOPE is the command's whole reach: a foreach-over-the-snapshot
         restore only counts when something in the run named OSMODE to
         the matching syssave."""
-        names = reach(called(body), self.dmap)
-        if restores_direct(body) or (names & self.direct):
+        names = reach(called(body), self.dmap, self.calls)
+        if self.restores_direct(body) or (names & self.direct):
             return True
         return bool(names & self.table) and bool(scope & self.tables)
 
@@ -337,8 +412,9 @@ def audit(tier):
     for path in tier.paths:
         for cmd in sorted(n for n in tier.per_file[path] if n.startswith("c:")):
             for body in tier.per_file[path][cmd]:
-                scope = reach(called(body), tier.dmap) | {cmd}
-                if not (scope & tier.muters) and not restores_direct(body) \
+                scope = reach(called(body), tier.dmap, tier.calls) | {cmd}
+                if not (scope & tier.muters) \
+                        and not tier.restores_direct(body) \
                         and not (scope & tier.direct):
                     continue          # never touches OSMODE at all
                 if not (scope & tier.muters) and not (scope & tier.tables):
@@ -440,6 +516,10 @@ def ordering(tier):
     the throwing one is skipped, the OSMODE restore included.  So the
     restore being present in the source is not the same as the restore
     running.  STANDARDS section 5 puts it first for this reason."""
+    # seen is per FILE: a handler is met once under its command and
+    # again as dmap["*error*"], and must be reported once -- but two
+    # byte-identical files share their parse (forms_of), and each is
+    # still owed its own finding.
     out, seen = [], set()
     for path, dmap in tier.per_file.items():
         # commands first, so a handler nested in one is reported under
@@ -449,9 +529,9 @@ def ordering(tier):
             bodies = dmap[owner]
             for body in bodies:
                 for h in handlers(body):
-                    if id(h) in seen:
+                    if (path, id(h)) in seen:
                         continue
-                    seen.add(id(h))
+                    seen.add((path, id(h)))
                     risk = put = None
                     for i, st in enumerate(effective(body_of(h), dmap)):
                         if not isinstance(st, list):
@@ -459,7 +539,7 @@ def ordering(tier):
                         if risk is None and (unwrapped_command(st) or
                                              (called(st) & tier.risky)):
                             risk = (i, st)
-                        if put is None and (restores_direct(st) or
+                        if put is None and (tier.restores_direct(st) or
                                             (called(st) & tier.putters)):
                             put = (i, st)
                     if risk and put and risk[0] < put[0]:
@@ -486,7 +566,7 @@ def stranding(tier):
                 for i, st in enumerate(body_of(body)):
                     if not isinstance(st, list):
                         continue
-                    if put is None and (restores_direct(st) or
+                    if put is None and (tier.restores_direct(st) or
                                         restores_by_table(st)):
                         put = i
                     if risk is None and unwrapped_command(st):
@@ -531,7 +611,8 @@ def borrowed_but_unmoved(tier):
         for cmd in sorted(n for n in dmap if n.startswith("c:")):
             if cmd.endswith("ver"):
                 continue
-            scope = reach(called(dmap[cmd][0]), tier.dmap) | {cmd}
+            scope = reach(called(dmap[cmd][0]), tier.dmap,
+                          tier.calls) | {cmd}
             if (scope & savers) and not (scope & tier.muters):
                 out.append((path, cmd))
     return out
