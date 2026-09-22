@@ -224,7 +224,9 @@ docstring saying **which defects it exists to catch**; that is the house
 style and it is what makes the suite readable.
 
 If it is slow (>~20s), add its filename to `SLOW` in
-`tools/run_tests.py`: `make fast` skips it, and the full run starts it
-first and allows it the longer timeout. You do not have to time it
-yourself -- every run ends with a `note:` line naming each file outside
-`SLOW` that took longer than 20s.
+`tools/run_tests.py`, with its rough seconds: `make fast` skips it, and
+the full run starts the heaviest first and allows them the longer
+timeout. You do not have to time it yourself -- a run that sees a file
+outside `SLOW` take longer than 20s names it in a `note:` line just
+above the summary, and one that sees a `SLOW` file finish in under 10s
+names that too, so it can leave the set.
