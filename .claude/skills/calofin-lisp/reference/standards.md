@@ -425,6 +425,18 @@ handler whose enclosing command does not declare it, because a handler
 that outlives its command is the handler of whatever runs next.
 `(vl-load-com)` once at the top of the file, not inside a command body.
 
+### `and` / `or` answer T, not a value
+
+AutoLISP is not Common Lisp here: `(or x "Yes")` is **T** whenever `x`
+is non-nil, and `(and p (car p))` is T too. A default or a lookup is
+spelled `(cond ((canon knob)) ("Yes"))` or `(if p (car p))` — a
+test-only cond clause hands back its test's value. A cond clause whose
+test is itself an `and` answers T for the same reason. `check_lisp.py`
+fails `(or ... "literal")`, and the test VM returns T like AutoCAD
+(`tests/test_lispvm_logic.py`), so a test that leans on the value fails
+here instead of at the drafter's command line. DIMSTAMP v3.6, the step
+routines, SPA, POOLSIDE, PERPMARK and the loader all shipped this.
+
 ### Per-tool README
 
 `lisp/<tool>/README.md`, sections:

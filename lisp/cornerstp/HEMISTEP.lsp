@@ -311,7 +311,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.22") ; printed on load and at command start so a
+(setq *hs-version* "v3.23") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -1739,7 +1739,7 @@
   (while (<= hstep 2)
     (cond
       ((= hstep 1)
-       (setq dflt (or (hs-kwcanon *cs-dims-default* '("Yes" "No")) "Yes"))
+       (setq dflt (cond ((hs-kwcanon *cs-dims-default* '("Yes" "No"))) ("Yes")))
        (if (null (setq fkey (hs-fkw 'dims "Yes No" dflt)))
          (progn
            (initget "Yes No")
@@ -2001,8 +2001,8 @@
                 kx  (if crown
                       (+ (length ea) (if wallA 1 0)))))
         (progn
-          (setq dflt (or (hs-kwcanon *cs-boundary-default* '("Yes" "No"))
-                         "Yes"))
+          (setq dflt (cond ((hs-kwcanon *cs-boundary-default* '("Yes" "No")))
+                           ("Yes")))
           (if (null (setq fkey (hs-fkw 'boundary "Yes No" dflt)))
             (progn
               (initget "Yes No")
@@ -2047,7 +2047,7 @@
       ;; what the run starts at, and so what the flight starts at: the
       ;; wall in base-line mode, the curve itself in the curve modes
       (setq wnoun (if cmode "the curve" "the wall"))
-      (setq dflt (or (hs-kwcanon *cs-profile-default* '("Yes" "No")) "Yes"))
+      (setq dflt (cond ((hs-kwcanon *cs-profile-default* '("Yes" "No"))) ("Yes")))
       (if (null (setq fkey (hs-fkw 'profile "Yes No" dflt)))
         (progn
           (initget "Yes No")
@@ -2235,8 +2235,8 @@
         (while (<= bstep 4)
           (cond
             ((= bstep 1)
-             (setq dflt (or (hs-kwcanon *cs-bead-default* '("Yes" "No"))
-                            "Yes"))
+             (setq dflt (cond ((hs-kwcanon *cs-bead-default* '("Yes" "No")))
+                              ("Yes")))
              (if (null (setq fkey (hs-fkw 'bead "Yes No" dflt)))
                (progn
                  (initget "Yes No")
@@ -2257,9 +2257,9 @@
                  ;; not reachable from a form answer -- there is no
                  ;; prompt to step back from, and the question above it
                  ;; came off the same sheet
-                 (setq dflt (or (hs-kwcanon *cs-beadsides-default*
-                                            '("All" "Some" "None"))
-                                "All"))
+                 (setq dflt (cond ((hs-kwcanon *cs-beadsides-default*
+                                               '("All" "Some" "None")))
+                                  ("All")))
                  (if (null (setq bside (hs-fkw 'beadsides
                                                "All Some None" dflt)))
                    (progn

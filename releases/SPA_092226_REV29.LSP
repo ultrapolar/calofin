@@ -228,7 +228,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092226 REV28")
+(setq spa:*version* "092226 REV29")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -2446,16 +2446,16 @@
                            (strcat "Draw the " (spa:modeword (spa:othermode))
                                    " as well")
                            "Yes No" "Yes/No"
-                           (or (spa:kw-canon spa:*second-default*
-                                             '("Yes" "No"))
-                               "Yes")
+                           (cond ((spa:kw-canon spa:*second-default*
+                                                '("Yes" "No")))
+                                 ("Yes"))
                            nil))
       (if (eq 'SPA-BACK
               (setq v (spa:askkwf 'method "Take it from" "Offset Dims"
                                   "Offset/Dims"
-                                  (or (spa:kw-canon spa:*method-default*
-                                                    '("Offset" "Dims"))
-                                      "Offset")
+                                  (cond ((spa:kw-canon spa:*method-default*
+                                                       '("Offset" "Dims")))
+                                        ("Offset"))
                                   t)))
           (spa:askother2)
           v)))
@@ -2928,8 +2928,8 @@
   (princ "\n(a spillaway is named on the spa AS MEASURED; the drawing may be turned to clear it)")
   (while (not done)
     (setq v (spa:askkw "Is there a spillaway" "Yes No" "Yes/No"
-                       (or (spa:kw-canon spa:*spill-default* '("Yes" "No"))
-                           "No")
+                       (cond ((spa:kw-canon spa:*spill-default* '("Yes" "No")))
+                             ("No"))
                        (if spills t nil)))
     (cond
       ;; Back from the top question: drop the last spillaway and re-ask
@@ -2951,9 +2951,9 @@
             (setq loc (spa:askkw
                         "Spillaway location (a wall one is centred on it)"
                         "Corner Wall" "Corner/Wall"
-                        (or (spa:kw-canon spa:*spillloc-default*
-                                          '("Corner" "Wall"))
-                            "Wall")
+                        (cond ((spa:kw-canon spa:*spillloc-default*
+                                             '("Corner" "Wall")))
+                              ("Wall"))
                         t))
             (setq stage (if (eq loc 'SPA-BACK) nil 1)))
            ((= stage 1)
@@ -3250,9 +3250,9 @@
         spa:*hingeon*
         (= "Yes" (spa:askkwf 'autohinge "Auto-hinge the cover"
                              "Yes No" "Yes/No"
-                             (or (spa:kw-canon spa:*autohinge-default*
-                                               '("Yes" "No"))
-                                 "Yes")
+                             (cond ((spa:kw-canon spa:*autohinge-default*
+                                                  '("Yes" "No")))
+                                   ("Yes"))
                              nil)))
   (if spa:*hingeon*
       (setq spa:*spills* (spa:askspill)))
@@ -3804,9 +3804,9 @@
                      "No"
                      (spa:askkwf 'samecorners "Are all four corners the same?"
                                  "Yes No" "Yes/No"
-                                 (or (spa:kw-canon spa:*samecorners-default*
-                                                   '("Yes" "No"))
-                                     "Yes")
+                                 (cond ((spa:kw-canon spa:*samecorners-default*
+                                                      '("Yes" "No")))
+                                       ("Yes"))
                                  t)))
       (cond
         ((eq same 'SPA-BACK) (setq back t done t))

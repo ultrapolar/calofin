@@ -229,7 +229,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.9")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.10")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -581,7 +581,7 @@
 ;; the block definition's base point, (0 0) when it has none
 (defun lg:blk-base (name / rec p)
   (setq rec (tblsearch "BLOCK" name)
-        p   (and rec (cdr (assoc 10 rec))))
+        p   (if rec (cdr (assoc 10 rec))))
   (if p (cal:2d p) '(0.0 0.0)))
 
 ;; The definition's segments in the BLOCK's own coordinates.  Group -2 of
@@ -590,7 +590,7 @@
 ;; because lg:plverts reads a heavy polyline's vertices itself.
 (defun lg:blk-segs (name depth / rec e ed typ skip out)
   (setq rec  (tblsearch "BLOCK" name)
-        e    (and rec (cdr (assoc -2 rec)))
+        e    (if rec (cdr (assoc -2 rec)))
         skip (mapcar 'strcase lg:*skiplayers*))
   (while (and e (setq ed (entget e))
               (/= "ENDBLK" (cdr (assoc 0 ed))))

@@ -13229,7 +13229,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.10")
+(setq *poolside-version* "v1.11")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -14022,7 +14022,7 @@
   ;; what Enter answers the bottom-type question with, read through
   ;; psd:kwknob so a knob the prompt would refuse leaves the shipped
   ;; "Normal" standing rather than reaching the chain table unspelled
-  (setq bdflt (or (psd:kwknob psd:*btype-default* psd:*btypes*) "Normal"))
+  (setq bdflt (cond ((psd:kwknob psd:*btype-default* psd:*btypes*)) ("Normal")))
   (setq base 'RETRY)
   (while (eq base 'RETRY)
     ;; the form can name the bottom; anything psd:*btypes* does not
@@ -14101,7 +14101,7 @@
   ;; where psd:*mirror-default* is what Enter means -- read through
   ;; psd:kwknob on the same terms, so a knob that is not one of the two
   ;; words leaves "No" standing
-  (setq mdflt (or (psd:kwknob psd:*mirror-default* "Yes No") "No")
+  (setq mdflt (cond ((psd:kwknob psd:*mirror-default* "Yes No")) ("No"))
         fv  (psd:fkw 'mirror "Yes No" "No")
         mir (if fv
                 (= fv "Yes")
@@ -15554,7 +15554,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092226 REV28")
+(setq spa:*version* "092226 REV29")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -17206,16 +17206,16 @@
                            (strcat "Draw the " (spa:modeword (spa:othermode))
                                    " as well")
                            "Yes No" "Yes/No"
-                           (or (spa:kw-canon spa:*second-default*
-                                             '("Yes" "No"))
-                               "Yes")
+                           (cond ((spa:kw-canon spa:*second-default*
+                                                '("Yes" "No")))
+                                 ("Yes"))
                            nil))
       (if (eq 'CAL-BACK
               (setq v (spa:askkwf 'method "Take it from" "Offset Dims"
                                   "Offset/Dims"
-                                  (or (spa:kw-canon spa:*method-default*
-                                                    '("Offset" "Dims"))
-                                      "Offset")
+                                  (cond ((spa:kw-canon spa:*method-default*
+                                                       '("Offset" "Dims")))
+                                        ("Offset"))
                                   t)))
           (spa:askother2)
           v)))
@@ -17681,8 +17681,8 @@
   (princ "\n(a spillaway is named on the spa AS MEASURED; the drawing may be turned to clear it)")
   (while (not done)
     (setq v (cal:askkw "Is there a spillaway" "Yes No" "Yes/No"
-                       (or (spa:kw-canon spa:*spill-default* '("Yes" "No"))
-                           "No")
+                       (cond ((spa:kw-canon spa:*spill-default* '("Yes" "No")))
+                             ("No"))
                        (if spills t nil)))
     (cond
       ;; Back from the top question: drop the last spillaway and re-ask
@@ -17704,9 +17704,9 @@
             (setq loc (cal:askkw
                         "Spillaway location (a wall one is centred on it)"
                         "Corner Wall" "Corner/Wall"
-                        (or (spa:kw-canon spa:*spillloc-default*
-                                          '("Corner" "Wall"))
-                            "Wall")
+                        (cond ((spa:kw-canon spa:*spillloc-default*
+                                             '("Corner" "Wall")))
+                              ("Wall"))
                         t))
             (setq stage (if (eq loc 'CAL-BACK) nil 1)))
            ((= stage 1)
@@ -18003,9 +18003,9 @@
         spa:*hingeon*
         (= "Yes" (spa:askkwf 'autohinge "Auto-hinge the cover"
                              "Yes No" "Yes/No"
-                             (or (spa:kw-canon spa:*autohinge-default*
-                                               '("Yes" "No"))
-                                 "Yes")
+                             (cond ((spa:kw-canon spa:*autohinge-default*
+                                                  '("Yes" "No")))
+                                   ("Yes"))
                              nil)))
   (if spa:*hingeon*
       (setq spa:*spills* (spa:askspill)))
@@ -18557,9 +18557,9 @@
                      "No"
                      (spa:askkwf 'samecorners "Are all four corners the same?"
                                  "Yes No" "Yes/No"
-                                 (or (spa:kw-canon spa:*samecorners-default*
-                                                   '("Yes" "No"))
-                                     "Yes")
+                                 (cond ((spa:kw-canon spa:*samecorners-default*
+                                                      '("Yes" "No")))
+                                       ("Yes"))
                                  t)))
       (cond
         ((eq same 'CAL-BACK) (setq back t done t))
@@ -53211,7 +53211,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.6")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.7")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -53481,14 +53481,19 @@
         (setq rest nil)))                  ; feet that are not a number
     (setq rest (vl-string-trim " \t" s)))
   (setq inch (if rest (ds:inches rest)))
-  ;; an empty inches part is only an answer when feet carried it
-  (or (if (and inch (or hasfeet (/= rest "")))
-        (progn
-          (setq eighths (fix (+ 0.5 (* 8.0 (+ (* feet 12.0) inch)))))
-          (if (> eighths 0) (list eighths hasfeet))))
-      ;; not a measurement, then a LETTER LABEL -- the other family
-      ;; this tool stamps, and the one the survey points are named in
-      (if (setq lidx (ds:letter-index raw)) (list lidx 'letter))))
+  ;; an empty inches part is only an answer when feet carried it.
+  ;; NOTE: a cond and not an (or ...) -- AutoLISP's or hands back T,
+  ;; never the value that made it true, so (or (list ...) ...) answers
+  ;; T and every caller's (car p) dies "bad argument type: consp T".
+  ;; v3.6 shipped exactly that, and every run failed at its first text.
+  (cond
+    ((and inch (or hasfeet (/= rest ""))
+          (> (setq eighths (fix (+ 0.5 (* 8.0 (+ (* feet 12.0) inch)))))
+             0))
+     (list eighths hasfeet))
+    ;; not a measurement, then a LETTER LABEL -- the other family
+    ;; this tool stamps, and the one the survey points are named in
+    ((setq lidx (ds:letter-index raw)) (list lidx 'letter))))
 
 ;; STR -- a stacked fraction, \S code and all -- wrapped in the height
 ;; code that draws it at ds:*stack-hgt* times the text around it.  A
@@ -56741,7 +56746,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.12") ; printed on load and at command start so a
+(setq *cs-version* "v4.13") ; printed on load and at command start so a
                             ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -57611,9 +57616,9 @@
       ;; explanation lives in the question text.  This is the first
       ;; question of the command, so it offers no Back.
       ((= qstep 1)
-       (setq dflt (or (cs-kwcanon *cs-direction-default*
-                                  '("Inside" "Outside"))
-                      "Inside"))
+       (setq dflt (cond ((cs-kwcanon *cs-direction-default*
+                                     '("Inside" "Outside")))
+                        ("Inside")))
        (if (null (setq key (cs-fkw 'direction "Inside Outside" dflt)))
          (progn
            (initget "Inside Outside")
@@ -57628,9 +57633,9 @@
       ((= qstep 2)
        (if (and mid (not outflag))
          (progn
-           (setq dflt (or (cs-kwcanon *cs-measure-default*
-                                      '("Middle" "True"))
-                          "Middle"))
+           (setq dflt (cond ((cs-kwcanon *cs-measure-default*
+                                         '("Middle" "True")))
+                            ("Middle")))
            (if (null (setq key (cs-fkw 'measure "Middle True" dflt)))
              (progn
                (initget "Middle True Back Undo")
@@ -57671,10 +57676,10 @@
            ;; read once here and then spelled for whichever of the two
            ;; prompts this run puts up
            (setq dflt (if (= "Parallel"
-                             (or (cs-kwcanon *cs-treadmode-default*
-                                             '("Parallel" "True"
-                                               "Equidistant"))
-                                 "Parallel"))
+                             (cond ((cs-kwcanon *cs-treadmode-default*
+                                                '("Parallel" "True"
+                                                  "Equidistant")))
+                                   ("Parallel")))
                         "Parallel"
                         (if outflag "Equidistant" "True")))
            (if (null (setq key (cs-fkw 'treadmode
@@ -57745,7 +57750,7 @@
 
       ;; -- 7. dimension the steps? ------------------------------------
       ((= qstep 4)
-       (setq dflt (or (cs-kwcanon *cs-dims-default* '("Yes" "No")) "Yes"))
+       (setq dflt (cond ((cs-kwcanon *cs-dims-default* '("Yes" "No"))) ("Yes")))
        (if (null (setq fkey (cs-fkw 'dims "Yes No" dflt)))
          (progn
            (initget "Yes No Back Undo")
@@ -57782,7 +57787,7 @@
        (if outflag
          (setq qstep (+ qstep qdir))
          (progn
-           (setq dflt (or (cs-kwcanon *cs-bench-default* '("Yes" "No")) "No"))
+           (setq dflt (cond ((cs-kwcanon *cs-bench-default* '("Yes" "No"))) ("No")))
            (if (null (setq fkey (cs-fkw 'bench "Yes No" dflt)))
              (progn
                (initget "Yes No Back Undo")
@@ -58195,7 +58200,7 @@
   ;; style is restored - the profile places its own dims.
   (if (> drawn 0)
     (progn
-      (setq dflt (or (cs-kwcanon *cs-profile-default* '("Yes" "No")) "Yes"))
+      (setq dflt (cond ((cs-kwcanon *cs-profile-default* '("Yes" "No"))) ("Yes")))
       (if (null (setq fkey (cs-fkw 'profile "Yes No" dflt)))
         (progn
           (initget "Yes No")
@@ -58385,8 +58390,8 @@
         (while (<= bstep 4)
           (cond
             ((= bstep 1)
-             (setq dflt (or (cs-kwcanon *cs-bead-default* '("Yes" "No"))
-                            "Yes"))
+             (setq dflt (cond ((cs-kwcanon *cs-bead-default* '("Yes" "No")))
+                              ("Yes")))
              (if (null (setq fkey (cs-fkw 'bead "Yes No" dflt)))
                (progn
                  (initget "Yes No")
@@ -58408,9 +58413,9 @@
                  ;; not reachable from a form answer -- there is no
                  ;; prompt to step back from, and the question above it
                  ;; came off the same sheet
-                 (setq dflt (or (cs-kwcanon *cs-beadsides-default*
-                                            '("All" "Some" "None"))
-                                "All"))
+                 (setq dflt (cond ((cs-kwcanon *cs-beadsides-default*
+                                               '("All" "Some" "None")))
+                                  ("All")))
                  (if (null (setq bside (cs-fkw 'beadsides
                                                "All Some None" dflt)))
                    (progn
@@ -59020,7 +59025,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.22") ; printed on load and at command start so a
+(setq *hs-version* "v3.23") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -59982,7 +59987,7 @@
   (while (<= hstep 2)
     (cond
       ((= hstep 1)
-       (setq dflt (or (hs-kwcanon *cs-dims-default* '("Yes" "No")) "Yes"))
+       (setq dflt (cond ((hs-kwcanon *cs-dims-default* '("Yes" "No"))) ("Yes")))
        (if (null (setq fkey (hs-fkw 'dims "Yes No" dflt)))
          (progn
            (initget "Yes No")
@@ -60244,8 +60249,8 @@
                 kx  (if crown
                       (+ (length ea) (if wallA 1 0)))))
         (progn
-          (setq dflt (or (hs-kwcanon *cs-boundary-default* '("Yes" "No"))
-                         "Yes"))
+          (setq dflt (cond ((hs-kwcanon *cs-boundary-default* '("Yes" "No")))
+                           ("Yes")))
           (if (null (setq fkey (hs-fkw 'boundary "Yes No" dflt)))
             (progn
               (initget "Yes No")
@@ -60290,7 +60295,7 @@
       ;; what the run starts at, and so what the flight starts at: the
       ;; wall in base-line mode, the curve itself in the curve modes
       (setq wnoun (if cmode "the curve" "the wall"))
-      (setq dflt (or (hs-kwcanon *cs-profile-default* '("Yes" "No")) "Yes"))
+      (setq dflt (cond ((hs-kwcanon *cs-profile-default* '("Yes" "No"))) ("Yes")))
       (if (null (setq fkey (hs-fkw 'profile "Yes No" dflt)))
         (progn
           (initget "Yes No")
@@ -60478,8 +60483,8 @@
         (while (<= bstep 4)
           (cond
             ((= bstep 1)
-             (setq dflt (or (hs-kwcanon *cs-bead-default* '("Yes" "No"))
-                            "Yes"))
+             (setq dflt (cond ((hs-kwcanon *cs-bead-default* '("Yes" "No")))
+                              ("Yes")))
              (if (null (setq fkey (hs-fkw 'bead "Yes No" dflt)))
                (progn
                  (initget "Yes No")
@@ -60500,9 +60505,9 @@
                  ;; not reachable from a form answer -- there is no
                  ;; prompt to step back from, and the question above it
                  ;; came off the same sheet
-                 (setq dflt (or (hs-kwcanon *cs-beadsides-default*
-                                            '("All" "Some" "None"))
-                                "All"))
+                 (setq dflt (cond ((hs-kwcanon *cs-beadsides-default*
+                                               '("All" "Some" "None")))
+                                  ("All")))
                  (if (null (setq bside (hs-fkw 'beadsides
                                                "All Some None" dflt)))
                    (progn
@@ -61152,7 +61157,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.17") ; printed on load and at command start so a
+(setq *ns-version* "v3.18") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -62345,10 +62350,10 @@
                       "the corners of the last step"
                       "the back corners")
               rtype (ns-ftreat rsubj
-                               (or (ns-kwcanon *cs-treat-default*
-                                               '("Square" "Radius"
-                                                 "Cut" "NotGiven"))
-                                   "Square")
+                               (cond ((ns-kwcanon *cs-treat-default*
+                                                  '("Square" "Radius"
+                                                    "Cut" "NotGiven")))
+                                     ("Square"))
                                (/= mode "U")))
         (if (eq rtype 'CAL-BACK)
           (setq wid nil rtype nil treatback T)))))
@@ -62394,9 +62399,9 @@
          ;; the offset and the cut face are the two legs and the
          ;; hypotenuse of the same 45 degree triangle, so either one
          ;; gives the other; cutgiven says which one treat-sz is
-         (setq dflt (or (ns-kwcanon *cs-cut-given-default*
-                                    '("Offset" "Cut"))
-                        "Offset"))
+         (setq dflt (cond ((ns-kwcanon *cs-cut-given-default*
+                                       '("Offset" "Cut")))
+                          ("Offset")))
          (if (null (setq fkey (ns-fkw 'cutgiven "Offset Cut" dflt)))
            (progn
              (initget "Offset Cut Back Undo")
@@ -62455,7 +62460,7 @@
               (setq bc1 nil bc2 nil rtype "Square")))))))
 
   ;; ---- 4. dimension the steps? -----------------------------------------
-  (setq dflt (or (ns-kwcanon *cs-dims-default* '("Yes" "No")) "Yes"))
+  (setq dflt (cond ((ns-kwcanon *cs-dims-default* '("Yes" "No"))) ("Yes")))
   (if (null (setq fkey (ns-fkw 'dims "Yes No" dflt)))
     (progn
       (initget "Yes No")
@@ -62753,7 +62758,7 @@
   ;; the depth dim style like the tread chain.
   (if (> drawn 0)
     (progn
-      (setq dflt (or (ns-kwcanon *cs-profile-default* '("Yes" "No")) "Yes"))
+      (setq dflt (cond ((ns-kwcanon *cs-profile-default* '("Yes" "No"))) ("Yes")))
       (if (null (setq fkey (ns-fkw 'profile "Yes No" dflt)))
         (progn
           (initget "Yes No")
@@ -62938,8 +62943,8 @@
         (while (<= bstep 4)
           (cond
             ((= bstep 1)
-             (setq dflt (or (ns-kwcanon *cs-bead-default* '("Yes" "No"))
-                            "Yes"))
+             (setq dflt (cond ((ns-kwcanon *cs-bead-default* '("Yes" "No")))
+                              ("Yes")))
              (if (null (setq fkey (ns-fkw 'bead "Yes No" dflt)))
                (progn
                  (initget "Yes No")
@@ -62960,9 +62965,9 @@
                  ;; not reachable from a form answer -- there is no
                  ;; prompt to step back from, and the question above it
                  ;; came off the same sheet
-                 (setq dflt (or (ns-kwcanon *cs-beadsides-default*
-                                            '("All" "Some" "None"))
-                                "All"))
+                 (setq dflt (cond ((ns-kwcanon *cs-beadsides-default*
+                                               '("All" "Some" "None")))
+                                  ("All")))
                  (if (null (setq bside (ns-fkw 'beadsides
                                                "All Some None" dflt)))
                    (progn
@@ -94242,7 +94247,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.9")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.10")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -94594,7 +94599,7 @@
 ;; the block definition's base point, (0 0) when it has none
 (defun lg:blk-base (name / rec p)
   (setq rec (tblsearch "BLOCK" name)
-        p   (and rec (cdr (assoc 10 rec))))
+        p   (if rec (cdr (assoc 10 rec))))
   (if p (cal:2d p) '(0.0 0.0)))
 
 ;; The definition's segments in the BLOCK's own coordinates.  Group -2 of
@@ -94603,7 +94608,7 @@
 ;; because lg:plverts reads a heavy polyline's vertices itself.
 (defun lg:blk-segs (name depth / rec e ed typ skip out)
   (setq rec  (tblsearch "BLOCK" name)
-        e    (and rec (cdr (assoc -2 rec)))
+        e    (if rec (cdr (assoc -2 rec)))
         skip (mapcar 'strcase lg:*skiplayers*))
   (while (and e (setq ed (entget e))
               (/= "ENDBLK" (cdr (assoc 0 ed))))
@@ -96098,7 +96103,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.20")
+(setq *perp-version* "v0.21")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -97262,7 +97267,7 @@
          ;; with arcs is measured along the curve itself (pathEnt); a
          ;; straight one is measured along its own points, which is the same
          ;; walk over the chords.
-         (setq basePts (cond ((and pathEnt (perp:ent-pts pathEnt n)))
+         (setq basePts (cond ((if pathEnt (perp:ent-pts pathEnt n)))
                              ((perp:sample path n))))
          (setvar "CLAYER" "PERPPTS-TEMP")
          (setq newPts '() guideEnts '() askd '() i 0 rstep 2))
@@ -100191,7 +100196,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.8")
+(setq *perpmark-version* "v1.9")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -101397,8 +101402,8 @@
       ;; --- 4. join them up? -------------------------------------------
       ((= stage 4)
        (setq ans (cal:askyn "Draw a polyline through the marks?"
-                           (or (pm:kw-canon pm:*join-default* '("Yes" "No"))
-                               "Yes")
+                           (cond ((pm:kw-canon pm:*join-default* '("Yes" "No")))
+                                 ("Yes"))
                            T))
        (cond
          ((eq ans 'CAL-BACK) (setq stage 3))
@@ -101485,9 +101490,9 @@
           (setq ans (cal:askkw (strcat "Dimension style - " pm:*dimstyle-std*
                                       " or " pm:*dimstyle-side* "?")
                               "STandard SIde" "STandard/SIde"
-                              (or (pm:kw-canon pm:*dimstyle-default*
-                                               '("STandard" "SIde"))
-                                  "STandard")
+                              (cond ((pm:kw-canon pm:*dimstyle-default*
+                                                  '("STandard" "SIde")))
+                                    ("STandard"))
                               T))
           (cond
             ((eq ans 'CAL-BACK) (setq stage (if wayasked 7 6)))

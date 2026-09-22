@@ -249,7 +249,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.20")
+(setq *perp-version* "v0.21")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -1918,7 +1918,7 @@
          ;; with arcs is measured along the curve itself (pathEnt); a
          ;; straight one is measured along its own points, which is the same
          ;; walk over the chords.
-         (setq basePts (cond ((and pathEnt (perp:ent-pts pathEnt n)))
+         (setq basePts (cond ((if pathEnt (perp:ent-pts pathEnt n)))
                              ((perp:sample path n))))
          (setvar "CLAYER" "PERPPTS-TEMP")
          (setq newPts '() guideEnts '() askd '() i 0 rstep 2))
