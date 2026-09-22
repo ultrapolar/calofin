@@ -66,7 +66,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.7")
+(setq *abpcheck-version* "v1.8")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value ABPCHECK reads that someone might want to
@@ -386,7 +386,7 @@
 ;; Its own rings and report are never read back as geometry -- a stale
 ;; red ring from the last run would otherwise BE the nearest line.
 (defun abp:harvest (ss / i en ed typ lay ext nm pts segs npt nspl nocs
-                         nmine)
+                         nmine sg)
   (setq pts nil segs nil npt 0 nspl 0 nocs 0 nmine 0 i 0)
   (while (< i (sslength ss))
     (setq en (ssname ss i)
@@ -438,9 +438,9 @@
               ;; the segment math does not cover these, and guessing
               ;; would report a point sitting ON a spline as off the line
               ((member typ abp:*uncovered-types*) (setq nspl (1+ nspl)))
-              (T (setq segs (append segs (abp:ent-segs en))))))))))
+              (T (foreach sg (abp:ent-segs en) (setq segs (cons sg segs))))))))))
   (list (cal:dedupe (reverse pts) abp:*exact-eps*)
-        segs nspl nocs nmine))
+        (reverse segs) nspl nocs nmine))
 
 ;; Every point against every segment: (distance . point), ascending.
 (defun abp:measure (pts segs / keyed q s d dmin)
