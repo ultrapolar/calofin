@@ -121,6 +121,22 @@ python3 tests/test_lazform.py ; python3 tests/test_lazspa.py ; python3 tests/tes
 python3 tests/test_back_nav.py
 ```
 
+## If you change a skill
+
+These skill files are a source tier of their own. `AGENTS.md` at the
+repo root — the router every non-Claude agent reads — is **generated**
+from them by `tools/gen_agents_md.py`, off the frontmatter, the
+reference files and the scripts. So after editing, adding or renaming a
+skill:
+
+```bash
+python3 tools/gen_agents_md.py
+```
+
+`check_standards.py` runs the `--check`, so a stale `AGENTS.md` fails
+`make check`. Never hand-edit it; the prose it carries lives in the
+generator's `HEADER`/`RULES`/`PIPELINE` constants.
+
 ## Branch
 
 All work goes on `claude/lisp-consolidation-strategy-9nrc7a` — the

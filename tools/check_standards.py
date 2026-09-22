@@ -28,6 +28,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import build_shared_bundle
 import check_registry
+import gen_agents_md
 import gen_knobs
 import gen_ribbon_icons
 import gen_ui_charts
@@ -342,7 +343,15 @@ def check_generated(problems):
     text: a PNG whose glyph or palette no longer matches what
     gen_ribbon_icons.py would draw is as stale as a twin two revisions
     back, and `zlib` over a fixed input is deterministic, so the
-    comparison is bytes either way."""
+    comparison is bytes either way.
+
+    AGENTS.md is the last entry and the only one generated from
+    something other than the tool sources: it is the router every
+    non-Claude agent reads, written from the skills under
+    .claude/skills/.  Claude Code finds those by itself and never reads
+    it, which is exactly why it needs a check -- a skill renamed or
+    added would otherwise leave every other agent routed at a shape
+    that is gone, and nothing would say so."""
     problems.extend(mirror_shared.check())
     problems.extend(release_lisp.check())
     problems.extend(build_shared_bundle.check())
@@ -350,6 +359,7 @@ def check_generated(problems):
     problems.extend(gen_ui_charts.check())
     problems.extend(gen_knobs.check())
     problems.extend(gen_ribbon_icons.check())
+    problems.extend(gen_agents_md.check())
 
 
 def check_registrations(problems):

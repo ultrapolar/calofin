@@ -16,7 +16,7 @@ holds the working subset, distilled and task-scoped:
 | `calofin-new-tool` | a new tool or command — a checked skeleton plus the whole registration chain |
 | `calofin-checks` | a red check or test — message to cause to fix |
 
-They carry three scripts that replace opening a 9,000-line file or
+They carry four scripts that replace opening a 9,000-line file or
 running the 95-second full check:
 
 ```bash
@@ -29,6 +29,27 @@ bash   $S/precheck.sh lisp/squareup/SQUAREUP.lsp  # the scoped checks, ~23s
 ```
 
 The rules below are still the authority; the skills are the map to them.
+
+**Claude Code needs no install for these** — a project skill under
+`.claude/skills/` is found automatically. Do not copy them to
+`~/.claude/skills/`: they are calofin-specific and would then fire in
+unrelated repos, and a personal copy is a second home that drifts from
+this one. Repo-scoped is the decision, not a fallback.
+
+Other agents (Codex, Jules, Aider…) read `AGENTS.md` at the repo root
+instead — Claude Code never reads it — and that file is
+**generated from these skills** by `tools/gen_agents_md.py` — a router,
+not a second copy, so there is nothing to keep in step by hand. Edit a
+skill, then:
+
+```bash
+python3 tools/gen_agents_md.py          # rewrite AGENTS.md
+```
+
+`check_standards.py` runs the `--check`, so a stale `AGENTS.md` fails
+`make check` the way a stale twin does. `tools/gen_agents_md.py`'s
+`ADAPTERS` table is the seam for a second format (a Cursor rule file, a
+Copilot instructions file): one entry and a renderer, nothing else.
 
 ## Branch convention
 
@@ -69,6 +90,8 @@ on stale work.
 ## Layout
 
 ```
+AGENTS.md   The router non-Claude agents read. GENERATED from
+            .claude/skills/ by tools/gen_agents_md.py - never hand-edited
 ariel/      Windows helper for the Ariel anchor step. Python, NOT AutoLISP
 blender/    Blender add-ons (DXF import/export, mesh tools)
 lisp/       AutoLISP tools, one self-contained file each (the source of truth)
@@ -623,6 +646,19 @@ python3 tools/gen_ribbon_icons.py# the ribbon's 82 icons: one per category
                                  # picture for a routine that is no longer
                                  # featured, which would otherwise be
                                  # copied into every bundle for ever
+python3 tools/gen_agents_md.py   # AGENTS.md, the router every non-Claude
+                        [--check]# agent reads, out of .claude/skills/'s
+                                 # own frontmatter, reference files and
+                                 # scripts.  A ROUTER, not a second copy:
+                                 # it carries the commands and the rules
+                                 # whose cost is highest if missed, and
+                                 # points at the skill for the rest, so
+                                 # there is no duplicated prose to drift.
+                                 # A skill added, renamed, re-described
+                                 # or given a new script makes it stale
+                                 # and check_standards fails until it is
+                                 # re-run.  ADAPTERS is the seam: a
+                                 # Cursor or Copilot file is one entry
 python3 tools/gen_knobs.py       # LAZTUNE's knob catalog (lzp:*knobs*
                         [--check]# in LAZPANEL.lsp), transcribed from
                                  # every tool's tunables block; a knob
