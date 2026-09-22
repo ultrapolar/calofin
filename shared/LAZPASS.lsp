@@ -108291,7 +108291,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.4")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -108540,10 +108540,9 @@
 
 ;; Written BEFORE the move, which is the only moment the object still
 ;; carries what the record is about.
-(defun soconv:stamp (ent lay / obj forced)
+(defun soconv:stamp (ent lay obj / forced)
   (regapp *soconv-xdata-app*)
-  (setq obj    (vlax-ename->vla-object ent)
-        forced *soconv-force-bylayer*)
+  (setq forced *soconv-force-bylayer*)
   (soconv:xput ent *soconv-xdata-app*
     (list (cons 1000 *soconv-xdata-app*)
           (cons 1000 *soconv-version*)
@@ -108654,8 +108653,8 @@
       (foreach job jobs
         ;; the record first: after the move the object no longer
         ;; carries the layer, or the properties, it is about
-        (if *soconv-record* (soconv:stamp (car job) (soconv:layer-of (car job))))
         (setq obj (vlax-ename->vla-object (car job)))
+        (if *soconv-record* (soconv:stamp (car job) (soconv:layer-of (car job)) obj))
         (vla-put-Layer obj (cdr job))
         (if *soconv-force-bylayer*
           (soconv:force-bylayer obj)))
@@ -108891,7 +108890,7 @@
 ;;; so; nothing else about the round trip is approximate.
 ;;; ======================================================================
 
-(setq *vsconv-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *vsconv-version* "v1.4")   ; announced on load; release_lisp.py
                                  ; reads this banner and stamps the
                                  ; dated twin in releases/ from it
 
@@ -109162,10 +109161,9 @@
 
 ;; Written BEFORE the move and before the restyle, which is the only
 ;; moment the object still carries everything the record is about.
-(defun vsconv:stamp (ent lay / obj typ sty ovr)
+(defun vsconv:stamp (ent lay obj / typ sty ovr)
   (regapp *vsconv-xdata-app*)
-  (setq obj (vlax-ename->vla-object ent)
-        typ (cdr (assoc 0 (entget ent))))
+  (setq typ (cdr (assoc 0 (entget ent))))
   ;; only a DIMENSION has a style to lose or overrides to lose it to,
   ;; and group 3 means something else entirely on an MTEXT
   (if (= "DIMENSION" typ)
@@ -109325,8 +109323,8 @@
                 ;; the record first: after the move and the restyle the
                 ;; object no longer carries the layer, the properties or
                 ;; the overrides it is about
-                (if *vsconv-record* (vsconv:stamp ent lay))
                 (setq obj (vlax-ename->vla-object ent))
+                (if *vsconv-record* (vsconv:stamp ent lay obj))
                 (vla-put-Layer obj dest)
                 (if *vsconv-force-bylayer* (vsconv:force-bylayer obj))
                 (setq tally   (vsconv:bump (strcase lay) tally)
@@ -109687,7 +109685,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *g2mconv-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *g2mconv-version* "v1.2")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -110091,10 +110089,9 @@
 
 ;; Written BEFORE the move and before either restyle, which is the only
 ;; moment the object still carries everything the record is about.
-(defun g2m:stamp (ent lay / obj typ sty ovr tsty thgt)
+(defun g2m:stamp (ent lay obj / typ sty ovr tsty thgt)
   (regapp *g2mconv-xdata-app*)
-  (setq obj (vlax-ename->vla-object ent)
-        typ (cdr (assoc 0 (entget ent))))
+  (setq typ (cdr (assoc 0 (entget ent))))
   ;; only a DIMENSION has a style to lose or overrides to lose it to,
   ;; and group 3 means something else entirely on an MTEXT
   (if (= "DIMENSION" typ)
@@ -110266,8 +110263,8 @@
               typ  (cdr (assoc 0 (entget ent))))
         ;; the record first: after the move and the restyles the object
         ;; no longer carries any of what the record is about
-        (if *g2mconv-record* (g2m:stamp ent (g2m:layer-of ent)))
         (setq obj (vlax-ename->vla-object ent))
+        (if *g2mconv-record* (g2m:stamp ent (g2m:layer-of ent) obj))
         ;; 1. the layer, and the appearance that has to follow it
         (vla-put-Layer obj (caddr rule))
         (if *g2mconv-force-bylayer*

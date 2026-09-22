@@ -79,7 +79,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.4")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -328,10 +328,9 @@
 
 ;; Written BEFORE the move, which is the only moment the object still
 ;; carries what the record is about.
-(defun soconv:stamp (ent lay / obj forced)
+(defun soconv:stamp (ent lay obj / forced)
   (regapp *soconv-xdata-app*)
-  (setq obj    (vlax-ename->vla-object ent)
-        forced *soconv-force-bylayer*)
+  (setq forced *soconv-force-bylayer*)
   (soconv:xput ent *soconv-xdata-app*
     (list (cons 1000 *soconv-xdata-app*)
           (cons 1000 *soconv-version*)
@@ -442,8 +441,8 @@
       (foreach job jobs
         ;; the record first: after the move the object no longer
         ;; carries the layer, or the properties, it is about
-        (if *soconv-record* (soconv:stamp (car job) (soconv:layer-of (car job))))
         (setq obj (vlax-ename->vla-object (car job)))
+        (if *soconv-record* (soconv:stamp (car job) (soconv:layer-of (car job)) obj))
         (vla-put-Layer obj (cdr job))
         (if *soconv-force-bylayer*
           (soconv:force-bylayer obj)))
