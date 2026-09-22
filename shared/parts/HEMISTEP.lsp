@@ -315,7 +315,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.21") ; printed on load and at command start so a
+(setq *hs-version* "v3.22") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -708,6 +708,26 @@
   (foreach w kws (if (= u (strcase w)) (setq out w)))
   out)
 
+;; A setting that has to be a NAME - a layer, a dim style: V when it is
+;; a string, DFLT when it is not.  The third guard, beside hs-num's for
+;; a number and hs-kwcanon's for a keyword, and the one that was
+;; missing.  A name does not stay in Lisp: it reaches tblsearch, setvar
+;; "CLAYER" and strcat, and every one of those is "bad argument type:
+;; stringp" thrown in the middle of a run on anything else.  That is
+;; reachable rather than theoretical -- LAZTUNE reads a knob SHIPPED
+;; nil as "off, or a value" and so lets any atom into it, and nil in
+;; *cs-dim-layer* means "the current layer" rather than "off", so a T
+;; put there sails past the (and *cs-dim-layer* ...) guard and dies at
+;; the tblsearch behind it.
+(defun hs-name (v dflt) (if (= (type v) 'STR) v dflt))
+
+;; A setting NAME as a note says it back: quoted when it is one, and
+;; named for what it is when it is not - a note that quotes T as a name
+;; reads like a layer somebody forgot to make, rather than a setting
+;; nobody can use.
+(defun hs-showname (v)
+  (if (= (type v) 'STR) (strcat "\"" v "\"") "(not a name)"))
+
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
 ;; a string where a value would be a list or a number.
@@ -781,7 +801,8 @@
 ;; already current.  Uses ActiveX so style names containing spaces are
 ;; handled correctly (the -DIMSTYLE command would read a space as ENTER).
 (defun hs-setstyle (name / doc)
-  (if (and (tblsearch "DIMSTYLE" name)
+  (if (and (hs-name name nil)
+           (tblsearch "DIMSTYLE" name)
            (/= (strcase name) (strcase (getvar "DIMSTYLE"))))
     ;; the argument list is required, even for a lambda that takes
     ;; none - without it this is a "too few arguments" error every
@@ -1267,16 +1288,16 @@
        (if dimflag
          (progn
            (setq oldstyle (getvar "DIMSTYLE")) ; restored when the command ends
-           (if (not (tblsearch "DIMSTYLE" *cs-depth-dimstyle*))
-             (princ (strcat "\nNote: dim style \"" *cs-depth-dimstyle*
-                            "\" not found - step treads use the current style.")))
-           (if (not (tblsearch "DIMSTYLE" *cs-width-dimstyle*))
-             (princ (strcat "\nNote: dim style \"" *cs-width-dimstyle*
-                            "\" not found - step widths use the current style.")))
+           (if (not (tblsearch "DIMSTYLE" (hs-name *cs-depth-dimstyle* "")))
+             (princ (strcat "\nNote: dim style " (hs-showname *cs-depth-dimstyle*)
+                            " not found - step treads use the current style.")))
+           (if (not (tblsearch "DIMSTYLE" (hs-name *cs-width-dimstyle* "")))
+             (princ (strcat "\nNote: dim style " (hs-showname *cs-width-dimstyle*)
+                            " not found - step widths use the current style.")))
            (if (and *cs-dim-layer* (not (cal:layer-usable-p *cs-dim-layer*)))
-             (princ (strcat "\nNote: dim layer \"" *cs-dim-layer*
-                            "\" is missing or not drawable - using the"
-                            " current layer.")))))
+             (princ (strcat "\nNote: dim layer " (hs-showname *cs-dim-layer*)
+                            " is missing, not drawable,"
+                            " or not a layer name - using the current layer.")))))
        (setq hstep 2))
       ((= hstep 2)
        ;; the curve modes never put this question, so there is nothing

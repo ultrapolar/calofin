@@ -242,7 +242,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v2.1")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v2.2")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -562,9 +562,18 @@
 
 ;; make the layer a setting names current, and return the layer that
 ;; was current so the caller can put it back - nil when the setting is
-;; nil and the dims go on whatever layer is current
+;; nil and the dims go on whatever layer is current.
+;;
+;; A setting that is not a NAME reads as that nil too, rather than
+;; being carried on to tblsearch and entmake, which take a string and
+;; throw "bad argument type: stringp" on anything else - in the middle
+;; of a run, where it costs the drafter a failure report instead of a
+;; dimension.  ad:*layer* is reachable that way: it SHIPS nil, and
+;; LAZTUNE reads a nil-shipped knob as "off, or a value" and lets any
+;; atom into it.  Here nil means "the current layer", so that is what
+;; an unusable setting falls back to.
 (defun ad:enterlayer (name / old)
-  (if name
+  (if (= (type name) 'STR)
     (progn
       (setq old (getvar "CLAYER"))
       (ad:setlayer name)

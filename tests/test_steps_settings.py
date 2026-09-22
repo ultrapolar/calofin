@@ -337,6 +337,45 @@ def test_a_knob_set_to_nonsense_draws_the_default():
     print("a knob set to nonsense - or to its own default - draws the default")
 
 
+def test_a_knob_set_to_T_draws_the_default_too():
+    """The half a string cannot reach.  "not a number" is nonsense to a
+    knob that holds a number and a perfectly good value to one that
+    holds a NAME, so the test above walks past every layer and dim
+    style setting in the file.  T is nonsense to all of them - and it
+    is the value that actually turns up, because LAZTUNE reads a knob
+    SHIPPED nil as "off, or a value" and so lets any atom into it.
+    *cs-dim-layer* ships nil meaning "the current layer": a T put there
+    sailed straight through the (and *cs-dim-layer* ...) guard and died
+    at the tblsearch behind it, "bad argument type: stringp T", after
+    the last question and before the first tread."""
+    for cmd, (path, script) in SCRIPT.items():
+        base = geometry(run(path, cmd, script("Yes"), cmd + " default"))
+        for knob in sorted(knobs(path)):
+            junk = run(path, cmd, script("Yes"), "%s %s = T" % (cmd, knob),
+                       setup=('(setq %s T)' % knob,))
+            assert geometry(junk) == base, \
+                ("%s: %s set to T changed the drawing - the reader is not "
+                 "guarding it" % (cmd, knob))
+    print("a knob set to T draws the default too - the name knobs included")
+
+
+def test_a_dim_layer_that_is_not_a_name_is_said_to_be_one():
+    """And it is SAID, rather than passed over in silence: a note that
+    quoted T as a layer name would read like a layer somebody forgot to
+    make."""
+    for cmd, (path, script) in SCRIPT.items():
+        vm = run(path, cmd, script("Yes"), cmd + " dim layer = T",
+                 setup=('(setq *cs-dim-layer* T)',))
+        assert "not a layer name" in said(vm), said(vm)[:400]
+        assert "(not a name)" in said(vm), said(vm)[:400]
+        for e in vm.entities:
+            if any(isinstance(g, Dot) and g.a == 0 and g.b == 'DIMENSION'
+                   for g in vm.entdata.get(e, [])):
+                assert vm.layer_of(e) == '0', \
+                    "%s put a dim on %r" % (cmd, vm.layer_of(e))
+    print("a dim layer that is not a name is named for what it is")
+
+
 def test_the_standoff_knobs_move_the_dims():
     for cmd, (path, script) in SCRIPT.items():
         base = dim_points(run(path, cmd, script("Yes"), cmd + " base"))
@@ -710,6 +749,8 @@ def main():
     test_each_reader_falls_back_to_the_value_the_block_sets()
     test_the_shared_knobs_agree_across_the_three_files()
     test_a_knob_set_to_nonsense_draws_the_default()
+    test_a_knob_set_to_T_draws_the_default_too()
+    test_a_dim_layer_that_is_not_a_name_is_said_to_be_one()
     test_the_standoff_knobs_move_the_dims()
     test_the_tolerance_knob_decides_what_snaps()
     test_the_parallel_knob_decides_when_it_warns()

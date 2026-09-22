@@ -734,6 +734,20 @@ res = analyze(vm)
 check("P4 lg:*keeplayers* spares the text", d['text'] not in set(res['kill']))
 check("P4 ...and counts what it spared", res['nspared'] == 1, res['nspared'])
 
+# ...and a setting that is not a list of names spares nothing rather
+# than throwing.  This one is the odd knob out: it SHIPS nil, so
+# LAZTUNE reads it as "off, or a value" and takes any ATOM for it --
+# which is both the only shape it will accept here and the one shape
+# this setting cannot be.  Read rather than trusted, then, because the
+# names go straight to strcase and strcat.
+vm, d = keepvm()
+vm.loads('(setq lg:*keeplayers* T)')
+res = analyze(vm)
+check("P4 lg:*keeplayers* set to something that is not a list of names"
+      " spares nothing", res['nspared'] == 0, res['nspared'])
+check("P4 ...and the text is swept as it would have been",
+      d['text'] in set(res['kill']))
+
 # the styles are tunable, not baked in -- narrowing the default back to
 # the two exact names is what a shop that wants STANDARD INCHES gone does
 vm, d = keepvm()

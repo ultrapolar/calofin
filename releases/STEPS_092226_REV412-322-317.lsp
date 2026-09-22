@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_092226_REV411-321-316.lsp
+;;; STEPS_092226_REV412-322-317.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,9 +8,9 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v4.11 -> REV411   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
-;;;     HEMISTEP.lsp    v3.21 -> REV321   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
-;;;     NORMIESTEP.lsp  v3.16 -> REV316   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
+;;;     CORNERSTP.lsp   v4.12 -> REV412   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
+;;;     HEMISTEP.lsp    v3.22 -> REV322   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
+;;;     NORMIESTEP.lsp  v3.17 -> REV317   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
 ;;;        window) and every command listed above comes with it.
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v4.11) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v4.12) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -372,7 +372,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.11") ; printed on load and at command start so a
+(setq *cs-version* "v4.12") ; printed on load and at command start so a
                             ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -606,6 +606,26 @@
   (foreach w kws (if (= u (strcase w)) (setq out w)))
   out)
 
+;; A setting that has to be a NAME - a layer, a dim style: V when it is
+;; a string, DFLT when it is not.  The third guard, beside cs-num's for
+;; a number and cs-kwcanon's for a keyword, and the one that was
+;; missing.  A name does not stay in Lisp: it reaches tblsearch, setvar
+;; "CLAYER" and strcat, and every one of those is "bad argument type:
+;; stringp" thrown in the middle of a run on anything else.  That is
+;; reachable rather than theoretical -- LAZTUNE reads a knob SHIPPED
+;; nil as "off, or a value" and so lets any atom into it, and nil in
+;; *cs-dim-layer* means "the current layer" rather than "off", so a T
+;; put there sails past the (and *cs-dim-layer* ...) guard and dies at
+;; the tblsearch behind it.
+(defun cs-name (v dflt) (if (= (type v) 'STR) v dflt))
+
+;; A setting NAME as a note says it back: quoted when it is one, and
+;; named for what it is when it is not - a note that quotes T as a name
+;; reads like a layer somebody forgot to make, rather than a setting
+;; nobody can use.
+(defun cs-showname (v)
+  (if (= (type v) 'STR) (strcat "\"" v "\"") "(not a name)"))
+
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
 ;; a string where a value would be a list or a number.
@@ -682,7 +702,8 @@
 ;; already current.  Uses ActiveX so style names containing spaces are
 ;; handled correctly (the -DIMSTYLE command would read a space as ENTER).
 (defun cs-setstyle (name / doc)
-  (if (and (tblsearch "DIMSTYLE" name)
+  (if (and (cs-name name nil)
+           (tblsearch "DIMSTYLE" name)
            (/= (strcase name) (strcase (getvar "DIMSTYLE"))))
     ;; the argument list is required, even for a lambda that takes
     ;; none - without it this is a "too few arguments" error every
@@ -696,7 +717,7 @@
 
 ;; T when layer NAME exists and can be drawn on right now
 (defun cs-layerok (name / ld f cl)
-  (if (setq ld (tblsearch "LAYER" name))
+  (if (and (cs-name name nil) (setq ld (tblsearch "LAYER" name)))
     (progn
       (setq f  (cond ((cdr (assoc 70 ld))) (0))
             cl (cond ((cdr (assoc 62 ld))) (7)))
@@ -1834,16 +1855,16 @@
            (if dimflag
              (progn
                (setq oldstyle (getvar "DIMSTYLE")) ; restored when the command ends
-               (if (not (tblsearch "DIMSTYLE" *cs-depth-dimstyle*))
-                 (princ (strcat "\nNote: dim style \"" *cs-depth-dimstyle*
-                                "\" not found - step treads use the current style.")))
-               (if (not (tblsearch "DIMSTYLE" *cs-width-dimstyle*))
-                 (princ (strcat "\nNote: dim style \"" *cs-width-dimstyle*
-                                "\" not found - step widths use the current style.")))
+               (if (not (tblsearch "DIMSTYLE" (cs-name *cs-depth-dimstyle* "")))
+                 (princ (strcat "\nNote: dim style " (cs-showname *cs-depth-dimstyle*)
+                                " not found - step treads use the current style.")))
+               (if (not (tblsearch "DIMSTYLE" (cs-name *cs-width-dimstyle* "")))
+                 (princ (strcat "\nNote: dim style " (cs-showname *cs-width-dimstyle*)
+                                " not found - step widths use the current style.")))
                (if (and *cs-dim-layer* (not (cs-layerok *cs-dim-layer*)))
-                 (princ (strcat "\nNote: dim layer \"" *cs-dim-layer*
-                                "\" is missing or not drawable - using the"
-                                " current layer.")))))
+                 (princ (strcat "\nNote: dim layer " (cs-showname *cs-dim-layer*)
+                                " is missing, not drawable,"
+                                " or not a layer name - using the current layer.")))))
            (setq qstep 5 qdir 1))))
 
       ;; -- 7b. a bench along one wall? (inside out only) --------------
@@ -2773,7 +2794,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> HEMISTEP.lsp (v3.21) - verbatim from lisp/cornerstp/HEMISTEP.lsp
+;;; >>> HEMISTEP.lsp (v3.22) - verbatim from lisp/cornerstp/HEMISTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; HEMISTEP.lsp
@@ -3088,7 +3109,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.21") ; printed on load and at command start so a
+(setq *hs-version* "v3.22") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -3485,6 +3506,26 @@
   (foreach w kws (if (= u (strcase w)) (setq out w)))
   out)
 
+;; A setting that has to be a NAME - a layer, a dim style: V when it is
+;; a string, DFLT when it is not.  The third guard, beside hs-num's for
+;; a number and hs-kwcanon's for a keyword, and the one that was
+;; missing.  A name does not stay in Lisp: it reaches tblsearch, setvar
+;; "CLAYER" and strcat, and every one of those is "bad argument type:
+;; stringp" thrown in the middle of a run on anything else.  That is
+;; reachable rather than theoretical -- LAZTUNE reads a knob SHIPPED
+;; nil as "off, or a value" and so lets any atom into it, and nil in
+;; *cs-dim-layer* means "the current layer" rather than "off", so a T
+;; put there sails past the (and *cs-dim-layer* ...) guard and dies at
+;; the tblsearch behind it.
+(defun hs-name (v dflt) (if (= (type v) 'STR) v dflt))
+
+;; A setting NAME as a note says it back: quoted when it is one, and
+;; named for what it is when it is not - a note that quotes T as a name
+;; reads like a layer somebody forgot to make, rather than a setting
+;; nobody can use.
+(defun hs-showname (v)
+  (if (= (type v) 'STR) (strcat "\"" v "\"") "(not a name)"))
+
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
 ;; a string where a value would be a list or a number.
@@ -3556,7 +3597,7 @@
 
 ;; T when layer NAME exists and can be drawn on right now
 (defun hs-layerok (name / ld f cl)
-  (if (setq ld (tblsearch "LAYER" name))
+  (if (and (hs-name name nil) (setq ld (tblsearch "LAYER" name)))
     (progn
       (setq f  (cond ((cdr (assoc 70 ld))) (0))
             cl (cond ((cdr (assoc 62 ld))) (7)))
@@ -3568,7 +3609,8 @@
 ;; already current.  Uses ActiveX so style names containing spaces are
 ;; handled correctly (the -DIMSTYLE command would read a space as ENTER).
 (defun hs-setstyle (name / doc)
-  (if (and (tblsearch "DIMSTYLE" name)
+  (if (and (hs-name name nil)
+           (tblsearch "DIMSTYLE" name)
            (/= (strcase name) (strcase (getvar "DIMSTYLE"))))
     ;; the argument list is required, even for a lambda that takes
     ;; none - without it this is a "too few arguments" error every
@@ -4506,16 +4548,16 @@
        (if dimflag
          (progn
            (setq oldstyle (getvar "DIMSTYLE")) ; restored when the command ends
-           (if (not (tblsearch "DIMSTYLE" *cs-depth-dimstyle*))
-             (princ (strcat "\nNote: dim style \"" *cs-depth-dimstyle*
-                            "\" not found - step treads use the current style.")))
-           (if (not (tblsearch "DIMSTYLE" *cs-width-dimstyle*))
-             (princ (strcat "\nNote: dim style \"" *cs-width-dimstyle*
-                            "\" not found - step widths use the current style.")))
+           (if (not (tblsearch "DIMSTYLE" (hs-name *cs-depth-dimstyle* "")))
+             (princ (strcat "\nNote: dim style " (hs-showname *cs-depth-dimstyle*)
+                            " not found - step treads use the current style.")))
+           (if (not (tblsearch "DIMSTYLE" (hs-name *cs-width-dimstyle* "")))
+             (princ (strcat "\nNote: dim style " (hs-showname *cs-width-dimstyle*)
+                            " not found - step widths use the current style.")))
            (if (and *cs-dim-layer* (not (hs-layerok *cs-dim-layer*)))
-             (princ (strcat "\nNote: dim layer \"" *cs-dim-layer*
-                            "\" is missing or not drawable - using the"
-                            " current layer.")))))
+             (princ (strcat "\nNote: dim layer " (hs-showname *cs-dim-layer*)
+                            " is missing, not drawable,"
+                            " or not a layer name - using the current layer.")))))
        (setq hstep 2))
       ((= hstep 2)
        ;; the curve modes never put this question, so there is nothing
@@ -5295,7 +5337,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> NORMIESTEP.lsp (v3.16) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
+;;; >>> NORMIESTEP.lsp (v3.17) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; NORMIESTEP.lsp
@@ -5659,7 +5701,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.16") ; printed on load and at command start so a
+(setq *ns-version* "v3.17") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -6029,6 +6071,26 @@
   (foreach w kws (if (= u (strcase w)) (setq out w)))
   out)
 
+;; A setting that has to be a NAME - a layer, a dim style: V when it is
+;; a string, DFLT when it is not.  The third guard, beside ns-num's for
+;; a number and ns-kwcanon's for a keyword, and the one that was
+;; missing.  A name does not stay in Lisp: it reaches tblsearch, setvar
+;; "CLAYER" and strcat, and every one of those is "bad argument type:
+;; stringp" thrown in the middle of a run on anything else.  That is
+;; reachable rather than theoretical -- LAZTUNE reads a knob SHIPPED
+;; nil as "off, or a value" and so lets any atom into it, and nil in
+;; *cs-dim-layer* means "the current layer" rather than "off", so a T
+;; put there sails past the (and *cs-dim-layer* ...) guard and dies at
+;; the tblsearch behind it.
+(defun ns-name (v dflt) (if (= (type v) 'STR) v dflt))
+
+;; A setting NAME as a note says it back: quoted when it is one, and
+;; named for what it is when it is not - a note that quotes T as a name
+;; reads like a layer somebody forgot to make, rather than a setting
+;; nobody can use.
+(defun ns-showname (v)
+  (if (= (type v) 'STR) (strcat "\"" v "\"") "(not a name)"))
+
 ;; T when a prompt that DOES take keywords was answered Back - or its
 ;; hidden synonym Undo.  getpoint/getdist/getint hand a keyword back as
 ;; a string where a value would be a list or a number.
@@ -6169,7 +6231,7 @@
 
 ;; T when layer NAME exists and can be drawn on right now
 (defun ns-layerok (name / ld f cl)
-  (if (setq ld (tblsearch "LAYER" name))
+  (if (and (ns-name name nil) (setq ld (tblsearch "LAYER" name)))
     (progn
       (setq f  (cond ((cdr (assoc 70 ld))) (0))
             cl (cond ((cdr (assoc 62 ld))) (7)))
@@ -6181,7 +6243,8 @@
 ;; already current.  Uses ActiveX so style names containing spaces are
 ;; handled correctly (the -DIMSTYLE command would read a space as ENTER).
 (defun ns-setstyle (name / doc)
-  (if (and (tblsearch "DIMSTYLE" name)
+  (if (and (ns-name name nil)
+           (tblsearch "DIMSTYLE" name)
            (/= (strcase name) (strcase (getvar "DIMSTYLE"))))
     ;; the argument list is required, even for a lambda that takes
     ;; none - without it this is a "too few arguments" error every
@@ -7453,16 +7516,16 @@
   (if dimflag
     (progn
       (setq oldstyle (getvar "DIMSTYLE")) ; restored when the command ends
-      (if (not (tblsearch "DIMSTYLE" *cs-depth-dimstyle*))
-        (princ (strcat "\nNote: dim style \"" *cs-depth-dimstyle*
-                       "\" not found - step treads use the current style.")))
-      (if (not (tblsearch "DIMSTYLE" *cs-width-dimstyle*))
-        (princ (strcat "\nNote: dim style \"" *cs-width-dimstyle*
-                       "\" not found - the step width uses the current style.")))
+      (if (not (tblsearch "DIMSTYLE" (ns-name *cs-depth-dimstyle* "")))
+        (princ (strcat "\nNote: dim style " (ns-showname *cs-depth-dimstyle*)
+                       " not found - step treads use the current style.")))
+      (if (not (tblsearch "DIMSTYLE" (ns-name *cs-width-dimstyle* "")))
+        (princ (strcat "\nNote: dim style " (ns-showname *cs-width-dimstyle*)
+                       " not found - the step width uses the current style.")))
       (if (and *cs-dim-layer* (not (ns-layerok *cs-dim-layer*)))
-        (princ (strcat "\nNote: dim layer \"" *cs-dim-layer*
-                       "\" is missing or not drawable - using the"
-                       " current layer.")))))
+        (princ (strcat "\nNote: dim layer " (ns-showname *cs-dim-layer*)
+                       " is missing, not drawable,"
+                       " or not a layer name - using the current layer.")))))
   ;; The step-tread chain runs just off the run's axis, the way the corner
   ;; and hemisphere routines (and the shop's own example drawings) do -
   ;; NOT outside the whole run, which would drag every chain dim's
