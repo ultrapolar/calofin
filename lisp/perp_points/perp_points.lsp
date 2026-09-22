@@ -249,7 +249,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.20")
+(setq *perp-version* "v0.21")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -1439,13 +1439,13 @@
 ;; point on it can be further off than -- and IntersectWith reports the
 ;; crossings.  The line is erased before this returns, whatever came
 ;; back, so a run cannot litter the drawing one probe at a time.
-(defun perp:capdist (bnd p u / near far prev ln rtn lst q d best)
+(defun perp:capdist (bndobj p u / near far prev ln rtn lst q d best)
   ;; the nearest point of bnd may not be readable on a degenerate
   ;; curve; its own length alone still reaches a boundary that crosses
   ;; the run, which is the case a cap is wanted for
-  (setq near (vlax-curve-getClosestPointTo bnd (trans p 1 0))
+  (setq near (vlax-curve-getClosestPointTo bndobj (trans p 1 0))
         far  (+ (if near (distance p (trans near 0 1)) 0.0)
-                (vlax-curve-getDistAtParam bnd (vlax-curve-getEndParam bnd))))
+                (vlax-curve-getDistAtParam bndobj (vlax-curve-getEndParam bndobj))))
   (if (< far 1e-9) (setq far 1.0))
   (setq prev (entlast))
   (entmake (list '(0 . "LINE") '(8 . "PERPPTS-TEMP")
@@ -1463,7 +1463,7 @@
       (setq rtn (vl-catch-all-apply
                   'vlax-invoke
                   (list (vlax-ename->vla-object ln) 'IntersectWith
-                        (vlax-ename->vla-object bnd)
+                        bndobj
                         ;; acExtendNone: neither object is stretched to
                         ;; reach the other.  The symbol is AutoCAD's own
                         ;; and is nil where it was never loaded, so the
@@ -1489,7 +1489,7 @@
 ;; scales the whole line and can carry a point that was sitting ON the
 ;; boundary out beyond it.  A line that quietly crosses a boundary the
 ;; drafter asked it to respect is worth a line of its own.
-(defun perp:past-bnd (bnd bases pts / i n a b dx dy d u cap out)
+(defun perp:past-bnd (bndobj bases pts / i n a b dx dy d u cap out)
   (setq i 0 n (min (length bases) (length pts)) out 0)
   (while (< i n)
     (setq a  (nth i bases)
@@ -1500,7 +1500,7 @@
     (if (> d 1e-9)
       (progn
         (setq u   (list (/ dx d) (/ dy d))
-              cap (perp:capdist bnd a u))
+              cap (perp:capdist bndobj a u))
         (if (and cap (> d (+ cap 1e-8))) (setq out (1+ out)))))
     (setq i (1+ i)))
   out)
@@ -1517,6 +1517,14 @@
     (if (or (null q) (> (distance p (trans q 0 1)) 1e-6))
       (setq out (1+ out))))
   out)
+
+;; bnd (an ename) as the vla-object perp:capdist and perp:past-bnd
+;; measure through -- made ONCE, when bnd is fixed for the round,
+;; rather than once per point as perp:capdist used to.  nil in, nil
+;; out, so a call site does not have to guard the no-boundary case
+;; itself.
+(defun perp:bnd-obj (bnd)
+  (if bnd (vlax-ename->vla-object bnd)))
 
 ;; --- command ---------------------------------------------------------
 
@@ -1857,6 +1865,14 @@
                      "every offset runs out to that "
                      "no offset will cross that ")
                    (cdr (assoc 0 (entget bnd))) ".")))
+  ;; bnd is fixed for the rest of the run once this chain settles -- so
+  ;; it is turned into the vla-object perp:capdist and perp:past-bnd
+  ;; measure through right here, ONCE, rather than once per point as
+  ;; perp:capdist used to.  Every reference to bnd below this line
+  ;; reads that vla-object; the ename it started as was only ever
+  ;; needed for the entget above and the eq/curve-p checks in the
+  ;; selection loop, both already behind us.
+  (setq bnd (perp:bnd-obj bnd))
 
   ;; --- offset rounds --------------------------------------------------
   ;; the path the points are spaced along.  Round 1 uses the selected
