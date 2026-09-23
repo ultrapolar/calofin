@@ -31,7 +31,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lispvm import VM, LispError, Dot  # noqa: E402
+from lispvm import VM, LispError, Dot, MISS  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, '..')
@@ -741,12 +741,7 @@ print('ablobf -- a click that misses the outlines is asked again')
 # ----------------------------------------------------------------------
 # entsel answers nil for Enter AND for a click on empty space; only
 # ERRNO 7 tells them apart.  Taken as Enter, a near-miss kept fit 2 and
-# erased the fit reached for.
-
-
-def miss(vm):
-    vm.sysvars['ERRNO'] = 7
-    return None
+# erased the fit reached for.  MISS is that click.
 
 
 def click_fit(n):
@@ -761,7 +756,7 @@ vm = newvm()
 pts = points(vm, BOW)
 vm.pickfirst = ['<ss>'] + pts
 try:
-    txt = run(vm, WIZARD + [None, None, None, miss, click_fit(3)])
+    txt = run(vm, WIZARD + [None, None, None, MISS, click_fit(3)])
     err = ''
 except AssertionError as e:
     txt, err = said(vm), str(e).splitlines()[0]

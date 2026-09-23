@@ -30,7 +30,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lispvm import VM, LispError  # noqa: E402
+from lispvm import VM, LispError, MISS  # noqa: E402
 
 LSP = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..',
                    'lisp', 'lhd', 'lhd.lsp')
@@ -198,12 +198,9 @@ def on_layer(vm, lay, kind=None):
 print('lhd -- a click that misses the outlines is asked again')
 
 
-def miss(vm):
-    """entsel answers nil for Enter AND for a click on empty space; only
-    ERRNO 7 tells them apart.  Taken as Enter, a near-miss kept fit 2
-    and erased the fit reached for."""
-    vm.sysvars['ERRNO'] = 7
-    return None
+# entsel answers nil for Enter AND for a click on empty space (MISS);
+# only ERRNO 7 tells them apart.  Taken as Enter, a near-miss kept fit 2
+# and erased the fit reached for.
 
 
 def click_fit(n):
@@ -217,7 +214,7 @@ def click_fit(n):
 vm = newvm()
 pts = ab_pts(vm, RING)
 vm.pickfirst = ['<ss>'] + pts
-err = attempt(vm, [1.0, None, None, 'Closed', 'Done', None, miss,
+err = attempt(vm, [1.0, None, None, 'Closed', 'Done', None, MISS,
                    click_fit(3)])
 check('the miss is named and the pick asked again',
       not err and 'nothing there - click one of the outlines' in said_of(vm),

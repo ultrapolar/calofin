@@ -1814,9 +1814,10 @@ def test_abpcreate_restores_a_frozen_points_layer():
 
 
 def test_a_name_that_strips_to_nothing_is_not_offered():
-    """"Pt", "#" and a line of spaces all strip to nothing, and a point
-    cannot be created with no number to be looked up by."""
-    for typed in ('Pt', 'Pt.', '#', '  '):
+    """"Pt" and "#" strip to nothing, and a point cannot be created
+    with no number to be looked up by.  (A line of spaces is not asked:
+    the prompt is a getpoint, where each space is an Enter.)"""
+    for typed in ('Pt', 'Pt.', '#'):
         vm = newvm()
         survey(vm)
         run(vm, 'c:ABFIND', [typed, '17', 'No', None], 'strip %r' % typed)

@@ -12,11 +12,13 @@ the length of one test, and put back afterwards:
   * entmod and entdel answer nil, and change nothing, on an object whose
     layer is locked; entmake still builds there (the demo layers,
     OLAUTO's picks).
-  * entsel answers nil to a click that lands on nothing, exactly as it
-    does to Enter, and sets ERRNO 7 -- which is sticky: nothing but a
-    setvar puts it back to 0 (the fillet line prompts).
   * vlax-create-object answers nil, not an error, for a shell that is
     not registered or is blocked (LAZPANEL's certutil route).
+
+The VM itself models a click that lands on nothing (the fillet line
+prompts): lispvm.MISS at an entsel answers nil, exactly as Enter does,
+and sets ERRNO 7 -- which is sticky: nothing but a setvar puts it back
+to 0.
 
 Run: python3 tests/test_guardfix_misc.py
      CALOFIN_LISP_ROOT=shared python3 tests/test_guardfix_misc.py
@@ -29,7 +31,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 from lispvm import (VM, LispError, Ent, Dot, Sym, NIL,  # noqa: E402
-                    BUILTINS, truthy)
+                    BUILTINS, truthy, MISS)
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -203,12 +205,6 @@ def locks_honoured():
         yield
 
 
-def miss(vm):
-    """A click that lands on nothing: nil, as Enter is, and ERRNO 7."""
-    vm.sysvars['ERRNO'] = 7
-    return None
-
-
 # ================================================================ [1] [2]
 print("SMARTFILLET / HONEFILLET -- a re-tuned series offers each radius once")
 # sf:*first* re-tuned to 3 puts the series on 3, 9, 15 -- which is
@@ -286,7 +282,7 @@ C4 = lambda e4: [e4, [300.0, 50.0, 0.0]]
 vm, e1, e2, e3, e4 = fillet_vm(SMARTFILLET)
 err = drive(vm, 'c:SMARTFILLET',
             FIRST(e1, e2) + [sf_clicker(12.0, PREV_SF), 'Yes',
-                             miss, C3(e3), C4(e4), None])
+                             MISS, C3(e3), C4(e4), None])
 check("a miss in the repeat loop says 'nothing there' and asks again",
       not err and 'nothing there' in said(vm), err or said(vm)[-300:])
 check("...and the corner picked after it is still cut",
@@ -297,7 +293,7 @@ check("...and the corner picked after it is still cut",
 vm, e1, e2, e3, e4 = fillet_vm(SMARTFILLET)
 err = drive(vm, 'c:SMARTFILLET',
             FIRST(e1, e2) + [sf_clicker(12.0, PREV_SF), 'Yes',
-                             C3(e3), miss, C4(e4), None])
+                             C3(e3), MISS, C4(e4), None])
 check("a miss at the second line keeps the first line picked",
       not err and len(fillets(vm)) == 2, err or '%d fillets' % len(fillets(vm)))
 
@@ -305,7 +301,7 @@ check("a miss at the second line keeps the first line picked",
 # before every pick or the Enter would read as a second miss for ever
 vm, e1, e2, e3, e4 = fillet_vm(SMARTFILLET)
 err = drive(vm, 'c:SMARTFILLET',
-            FIRST(e1, e2) + [sf_clicker(12.0, PREV_SF), 'Yes', miss, None])
+            FIRST(e1, e2) + [sf_clicker(12.0, PREV_SF), 'Yes', MISS, None])
 check("Enter after a miss is Done, not a second miss",
       not err and len(fillets(vm)) == 1 and 'nothing there' in said(vm),
       err or said(vm)[-300:])
@@ -313,7 +309,7 @@ check("Enter after a miss is Done, not a second miss",
 # and a miss at the very first prompt no longer cancels the command
 vm, e1, e2, e3, e4 = fillet_vm(SMARTFILLET)
 err = drive(vm, 'c:SMARTFILLET',
-            [miss] + FIRST(e1, e2) + [sf_clicker(12.0, PREV_SF), 'No'])
+            [MISS] + FIRST(e1, e2) + [sf_clicker(12.0, PREV_SF), 'No'])
 check("a miss at the first prompt is asked again, not Cancel",
       not err and len(fillets(vm)) == 1, err or said(vm)[-300:])
 
@@ -326,7 +322,7 @@ HONED = lambda: [sf_clicker(12.0, PREV_HN), sf_clicker(18.0, PREV_HN),
 
 vm, e1, e2, e3, e4 = fillet_vm(HONEFILLET)
 err = drive(vm, 'c:HONEFILLET',
-            FIRST(e1, e2) + HONED() + ['Yes', miss, C3(e3), C4(e4), None])
+            FIRST(e1, e2) + HONED() + ['Yes', MISS, C3(e3), C4(e4), None])
 check("a miss in the repeat loop says 'nothing there' and asks again",
       not err and 'nothing there' in said(vm), err or said(vm)[-300:])
 check("...and the corner picked after it is still cut",
@@ -335,12 +331,12 @@ check("...and the corner picked after it is still cut",
 
 vm, e1, e2, e3, e4 = fillet_vm(HONEFILLET)
 err = drive(vm, 'c:HONEFILLET',
-            FIRST(e1, e2) + HONED() + ['Yes', C3(e3), miss, C4(e4), None])
+            FIRST(e1, e2) + HONED() + ['Yes', C3(e3), MISS, C4(e4), None])
 check("a miss at the second line keeps the first line picked",
       not err and len(fillets(vm)) == 2, err or '%d fillets' % len(fillets(vm)))
 
 vm, e1, e2, e3, e4 = fillet_vm(HONEFILLET)
-err = drive(vm, 'c:HONEFILLET', FIRST(e1, e2) + HONED() + ['Yes', miss, None])
+err = drive(vm, 'c:HONEFILLET', FIRST(e1, e2) + HONED() + ['Yes', MISS, None])
 check("Enter after a miss is Done, not a second miss",
       not err and len(fillets(vm)) == 1 and 'nothing there' in said(vm),
       err or said(vm)[-300:])

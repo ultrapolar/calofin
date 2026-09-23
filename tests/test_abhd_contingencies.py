@@ -34,7 +34,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lispvm import VM, Dot, LispError, Sym            # noqa: E402
+from lispvm import VM, Dot, LispError, Sym, MISS      # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 #: the standalone file; CALOFIN_LISP_ROOT=shared remaps it to the twin
@@ -276,7 +276,7 @@ vm, ents = survey_vm()
 run(vm, 'c:ABHD',
     [None, None, None, None,
      'Yes', "Pt.1", "#7", 'No',
-     'Yes', "pt 4", None,
+     'Yes', "pt4", None,          # unspaced: a getpoint's space is Enter
      'Yes', "010", None,
      ents, NO_OMITS, 'None'])
 check("typed numbers name a wall's ends, a corner and a held point",
@@ -625,13 +625,6 @@ check("SIMPABHD's default of \"7\" still keeps a fit, and says so",
       and 'Keeping fit 2' in said(vm), err or said(vm)[-300:])
 
 
-def miss(vm):
-    """A click that hit nothing: entsel answers nil, as Enter does, and
-    AutoCAD sets ERRNO 7 to say which of the two it was."""
-    vm.sysvars['ERRNO'] = 7
-    return None
-
-
 def click_fit(n):
     """A click on candidate N, whose ename exists only once it is drawn."""
     def pick(vm):
@@ -641,9 +634,10 @@ def click_fit(n):
 
 
 # a click that lands between the thin preview lines is not an Enter:
-# taken as one, it kept the default and erased the fit reached for
+# taken as one, it kept the default and erased the fit reached for.
+# MISS is that click -- nil, as Enter is, with ERRNO 7 to say which.
 vm, ents = survey_vm()
-err = attempt(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, None, miss,
+err = attempt(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, None, MISS,
                                         click_fit(3), 'No'])
 check("a click that misses every outline is asked again, not kept as 2",
       not err and 'nothing there - click one of the outlines' in said(vm)
@@ -654,7 +648,7 @@ check("a click that misses every outline is asked again, not kept as 2",
 # Enter that follows as a second miss, and the prompt would never let
 # go, unless it is cleared before every pick
 vm, ents = survey_vm()
-err = attempt(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, None, miss,
+err = attempt(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, None, MISS,
                                         None, 'No'])
 txt = said(vm)
 check("Enter after a miss keeps the default fit",
@@ -1168,7 +1162,7 @@ print("\nthe smaller contingencies")
 # keeps getstring and its own wording.
 vm, ents, pl = adab_vm()
 run(vm, 'c:ADAB', [None, [pl]] + BREAKS
-    + ['0', 'not a distance', '18', None, None, None, None])
+    + ['0', 'not-a-distance', '18', None, None, None, None])
 check("a zero offset is refused, with the reason",
       'must be more than zero' in said(vm))
 check("text that is not a distance is refused, with the spelling shown",

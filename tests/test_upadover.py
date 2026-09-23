@@ -529,7 +529,9 @@ check("it walked backwards along the wall to get there",
 # ---- naming the two ends ---------------------------------------------
 
 print("UPADOVER -- an end is clicked or typed, and the spellings agree")
-for spell in ("4", "Pt.4", "pt 4", "#4", "004"):
+# "pt4", not "pt 4": the end prompt is a getpoint, where the spacebar
+# is Enter and a spaced "pt 4" is two answers
+for spell in ("4", "Pt.4", "pt4", "#4", "004"):
     vm = fresh()
     per = rect(vm)
     ab_pt(vm, 60, 0, 4)

@@ -47,7 +47,8 @@ REPO = HERE.parent
 sys.path.insert(0, str(REPO / "tests"))
 sys.path.insert(0, str(HERE))
 
-from lispvm import VM, LispError, Sym, T, Ent, Dot  # noqa: E402
+from lispvm import (VM, LispError, Sym, T, Ent, Dot,  # noqa: E402
+                    Unanswerable, NotModelled)
 from callib import COMMAND, LISP_DIR, RELEASES_DIR, NOT_A_TOOL, lsp_files  # noqa: E402
 
 ERRLAYER = "CALOFIN-ERROR"
@@ -546,6 +547,16 @@ def run_once(tool_path, command, layers, ents, nselp, answers, with_output):
     script = [a.value for a in answers if not a.selection]
     try:
         vm.run("c:" + command, script)
+    except (Unanswerable, NotModelled) as e:
+        # the VM refused an answer rather than guess at it: a replayed
+        # answer that cannot be typed where the run now is (a varied
+        # value that landed a prompt early or late, a spaced word at a
+        # getpoint), or one it has no model of.  The run went somewhere
+        # the report's did not -- that is a divergence, not a crash of
+        # the probe, and the probe goes on to the next variant
+        return Outcome(Outcome.DIVERGED, "the transcript's answer cannot be "
+                       "given at the prompt the replay reached: %s"
+                       % str(e).splitlines()[0], len(vm.prompts))
     except LispError as e:
         msg = str(e).splitlines()[0]
         if "SCRIPT EXHAUSTED" in msg:

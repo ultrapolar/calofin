@@ -425,7 +425,7 @@ So it is asked the way `PERPMARK` asks it:
   Second end, from Pt.17 - pick it or type its number [Back]:
 ```
 
-- **click the point, or type its number**: `17`, `Pt.17`, `pt 17`,
+- **click the point, or type its number**: `17`, `Pt.17`, `pt17`,
   `#17` and `017` all name the same one;
 - a click has to land within `*PF-SNAP*` (12 units — what
   `BPCALLOUT`, `ABFIND` and `PERPMARK` snap at) of a point to pick it;

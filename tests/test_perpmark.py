@@ -250,13 +250,15 @@ def test_a_point_is_named_by_click_or_by_number():
 
 
 def test_the_spellings_of_a_number_all_meet_in_the_middle():
-    for typed in ("17", "Pt.17", "pt 17", "#17", "017"):
+    # "pt17", not "pt 17": the prompt is a getpoint, where the
+    # spacebar is Enter and a spaced "pt 17" is two answers
+    for typed in ("17", "Pt.17", "pt17", "#17", "017"):
         vm = newvm()
         rect(vm)
         ab_pt(vm, 40, 0, 17)
         run(vm, [vm.entities[0], typed, 9.0, None, "No"])
         assert len(live(vm, 'LINE')) == 1, (typed, live(vm, 'LINE'))
-    print("ok  spellings   -> 17, Pt.17, pt 17, #17 and 017 all name Pt.17")
+    print("ok  spellings   -> 17, Pt.17, pt17, #17 and 017 all name Pt.17")
 
 
 def test_the_distance_prompt_names_the_point():

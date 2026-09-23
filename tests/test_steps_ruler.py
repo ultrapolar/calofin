@@ -255,7 +255,9 @@ def test_a_fraction_types_and_enter_at_the_first_depth_is_refused():
                     script([24.0, 24.0, 24.0], [7.5, 10.75, 10.75, 10.5]),
                     name + " decimal")
         spelt = run(path, cmd, pair,
-                    script(["24", "2'", "24 1/8"], [None, "7 1/2", "10-3/4",
+                    # dashed: the spacebar is Enter at this prompt,
+                    # so a spaced 24 1/8 is two answers, 24 and 1/8
+                    script(["24", "2'", "24-1/8"], [None, "7-1/2", "10-3/4",
                                                      None, "10.5"]),
                     name + " spelt")
         want = geometry(run(path, cmd, pair,
@@ -263,11 +265,11 @@ def test_a_fraction_types_and_enter_at_the_first_depth_is_refused():
                                    [7.5, 10.75, 10.75, 10.5]),
                             name + " check"))
         assert geometry(spelt) == want, \
-            "%s: 2' and 24 1/8 and 10-3/4 must read as their numbers" % name
+            "%s: 2' and 24-1/8 and 10-3/4 must read as their numbers" % name
         assert geometry(typed) != want, name   # the check run really differs
         assert "A depth is required." in said(spelt), \
             "%s: Enter at the first depth must be refused" % name
-        print("%s: 2', 24 1/8 and 10-3/4 read; Enter at the first depth"
+        print("%s: 2', 24-1/8 and 10-3/4 read; Enter at the first depth"
               " is refused" % name)
 
 

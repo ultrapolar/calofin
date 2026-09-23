@@ -29,7 +29,7 @@ nothing else can).
 2. **Where the pads start**, and **where they end** -- or **`Whole`**,
    which pads all of it and skips both (below). Either end is a
    click anywhere on the wall **or** a survey point's number: `17`,
-   `Pt.17`, `pt 17`, `#17` and `017` all name the same point, and a
+   `Pt.17`, `pt17`, `#17` and `017` all name the same point, and a
    click landing within `upad:*snap*` of one **is** that point and is
    named like one in the report. A pick that sits off the wall is
    projected onto it and the run says how far it had to come. The two

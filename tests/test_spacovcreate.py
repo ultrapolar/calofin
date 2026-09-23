@@ -525,19 +525,14 @@ check("  and every hinge on it is velcro",
 # -- a click that missed the block.  entsel answers nil for it, as for
 #    Enter; ERRNO 7 is the difference.  Taken for Skip, a click just
 #    beside a Thermo-Light block drew a STANDARD 4-2 cover and the report
-#    said, in red, that no taper was given.
-
-
-def missed(vm):
-    vm.sysvars["ERRNO"] = 7
-    return None
+#    said, in red, that no taper was given.  lispvm.MISS is that click.
 
 
 vm = fresh(RECT)
 spa = list(vm.entities)
 vm.loads(block("Thermo-Light", "1-3/8"))
 blk = [e for e in vm.entities if e not in spa][0]
-said = run(vm, [spa, None, missed, [blk, [400.0, 400.0, 0.0]]])
+said = run(vm, [spa, None, lispvm.MISS, [blk, [400.0, 400.0, 0.0]]])
 check("a click that misses the block is asked again, not taken for Skip",
       row_after(vm, "GRADE / TAPER") == "THERMO 1-3/8",
       str(row_after(vm, "GRADE / TAPER")))

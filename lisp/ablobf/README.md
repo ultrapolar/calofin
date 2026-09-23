@@ -100,7 +100,7 @@ underneath is ABHD's, walked in a straight line instead of round a loop.
    ```
 
    One prompt takes both, the way `PERPMARK` names a point: `17`,
-   `Pt.17`, `pt 17`, `#17` and `017` all name the same one, and a click
+   `Pt.17`, `pt17`, `#17` and `017` all name the same one, and a click
    has to land within `*ABL-SNAP*` (12 units) of a point to pick it.
    Naming one point for both ends is refused and re-asked -- a run from a
    point to itself is not a run. A number no selected point carries is

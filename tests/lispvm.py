@@ -26,10 +26,47 @@ Deliberately AutoLISP-strict where it matters:
     LOCKED layer (tests/test_lispvm_values.py).  angtos is NOT in that
     list: it still ignores DIMZIN, AUNITS and AUPREC.
 
-Interaction is scripted: getdist / getint / getkword / getpoint / getreal pop
-answers from a queue.  Numbers are distances, strings are keywords,
-None is Enter.  Running out of script, or ending with script left
-over, is a test failure -- the prompt log tells you where.
+Interaction is scripted: every input -- getpoint, getdist, getint,
+getreal, getkword, getstring, entsel and the rest -- pops its answer
+from a queue.  A number is the number, a list a point, None is Enter,
+and a string is what the drafter TYPES: a keyword where the initget
+list has it, else the number getdist / getreal / getint read from it
+(below), else the text itself under initget 128, else refused.
+Running out of script, or ending with script left over, is a test
+failure -- the prompt log tells you where.
+
+MISS is a click on empty paper.  At an entsel, nentsel or nentselp it
+answers nil -- the nil Enter gets -- and sets ERRNO 7, AutoCAD's "pick
+failed" and the only thing that tells the two apart.  ERRNO is sticky:
+a hit and a keyword leave it as it was, and only a setvar clears it.
+Enter leaves it too, and THAT is VM policy rather than AutoCAD fact:
+AutoCAD's code for it is 52, "Entity selection: null response", which
+releases differ on writing, so the VM writes nothing -- the reading
+under which a pick that reads ERRNO without zeroing it first is wrong
+(tests/test_lispvm_input_miss.py, the V pins).  Scripted anywhere else
+MISS is refused with Unanswerable: a click at getpoint is a point, and
+there is nothing there to miss.
+
+The spacebar is Enter at every input but (getstring T ...), so a
+scripted string with a space in it anywhere else -- '44 1/2' at a
+length prompt -- is two answers in AutoCAD and none a drafter can give
+as one.  It is refused with Untypeable (an Unanswerable, message
+UNTYPEABLE); a line break is Enter everywhere and is refused the same
+way.  VM(spacebar='split') or LISPVM_SPACEBAR=split cuts it as AutoCAD
+does instead, the first word to this prompt and the rest to the next,
+and keys('44 1/2') spells that cut in a script.  Text typed at getdist
+is a distance in the current LUNITS (2', 1/8, 4'-6-1/2" and .5 in
+architectural), at getint a whole number and at getreal a decimal one,
+initget 128 or not; a spelling of some other units format is refused
+as NotModelled.  And an initget is spent by the next input it speaks
+to (HONOURS_INITGET): its keywords do not answer at the prompt after
+(tests/test_lispvm_input_space.py).
+
+So vm.run raises three things that are NOT LispErrors -- Unanswerable,
+its Untypeable, and NotModelled, all AssertionErrors -- and a harness
+that drives the VM and sorts what comes out by catching LispError has
+to catch those too: they say the SCRIPT reached a prompt it cannot
+answer there, which in a replay is a run that has left its transcript.
 """
 
 import functools
@@ -38,14 +75,54 @@ import os
 import re
 
 
+def _where(msg, vm):
+    """MSG with the call chain and the last prompts answered appended --
+    what a failure message needs to say where in the run it happened."""
+    if vm is not None and getattr(vm, 'calls', None):
+        msg += "\n  in: " + " > ".join(vm.calls[-8:])
+    if vm is not None and vm.prompts:
+        msg += "\n  last prompts:\n    " + "\n    ".join(
+            f"{p!r} -> {a!r}" for p, a in vm.prompts[-8:])
+    return msg
+
+
 class LispError(Exception):
     def __init__(self, msg, vm=None):
-        if vm is not None and getattr(vm, 'calls', None):
-            msg += "\n  in: " + " > ".join(vm.calls[-8:])
-        if vm is not None and vm.prompts:
-            msg += "\n  last prompts:\n    " + "\n    ".join(
-                f"{p!r} -> {a!r}" for p, a in vm.prompts[-8:])
-        super().__init__(msg)
+        super().__init__(_where(msg, vm))
+
+
+class Unanswerable(AssertionError):
+    """A scripted answer no drafter can give at the prompt it reached --
+    a MISS at a getpoint, where a click is always a point.  The TEST is
+    wrong, not the routine, so this is not a LispError: no *error*
+    handler and no vl-catch-all-apply in the code under test can take it
+    for a failure of its own and carry on."""
+
+    def __init__(self, msg, vm=None):
+        super().__init__(_where(msg, vm))
+
+
+class NotModelled(AssertionError):
+    """An input the VM will not invent an answer for, because it has no
+    model of what AutoCAD would hand back -- nentselp given a point, which
+    selects there without asking.  Not a LispError, for Unanswerable's
+    reason: a routine that caught it would run on an answer made up."""
+
+    def __init__(self, msg, vm=None):
+        super().__init__(_where(msg, vm))
+
+
+class Untypeable(Unanswerable):
+    """A scripted STRING no drafter can type at the prompt it reached:
+    one with a space in it at a prompt the spacebar ends -- every input
+    but (getstring T ...) -- or a line break anywhere.  AutoCAD reads the
+    first word as this answer and hands the rest to the next prompt, so
+    the one answer the script means never arrives.  Its message starts
+    UNTYPEABLE.  An Unanswerable, not a LispError, for that class's
+    reason: a routine that wraps its prompt in vl-catch-all-apply to
+    catch Esc would otherwise take the refusal for an Esc and carry on.
+    VM(spacebar='split') -- or LISPVM_SPACEBAR=split -- does what AutoCAD
+    does instead, and lispvm.keys spells that split in a script."""
 
 
 class CaughtError:
@@ -122,6 +199,133 @@ class Ent:
 
 NIL = None
 T = Sym("t")
+
+
+class _Miss:
+    """The one MISS: a click that landed on nothing.  One object, kept
+    one through copy, deepcopy and pickle, so `v is MISS` is the test."""
+    __slots__ = ()
+
+    def __repr__(self):
+        return 'MISS'
+
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
+
+    def __reduce__(self):
+        return 'MISS'
+
+
+MISS = _Miss()
+
+#: the inputs a click can miss at: the single-object picks.  AutoCAD's
+#: ERRNO 7 is "Object selection: pick failed", and these are the three
+#: calls that select one object and hand back nil when the click hits
+#: none.  Everywhere else a click is a point (getpoint and getcorner
+#: answer with it, getdist takes it as the first of two), a window's
+#: first corner (the default ssget) or no answer at all.  One exception
+#: is not modelled because nothing in the tree reaches it: a
+#: single-selection ssget -- (ssget "_+.:E:S") and the like -- comes
+#: back nil from a click on nothing.  The tree calls ssget with "_X"
+#: and "_I" only; whoever adds the first ":S" or "+." site widens this
+#: for it (the kind pop_script is given there would have to say which
+#: ssget it is).
+PICKS = frozenset({'entsel', 'nentsel', 'nentselp'})
+
+#: the inputs initget speaks to -- the AutoLISP Reference's own list
+#: (initget: 'establishes various options for use by the next entsel,
+#: getangle, getcorner, getdist, getint, getkword, getorient, getpoint,
+#: getreal, nentsel, or nentselp function call') -- and so the calls
+#: that SPEND it: 'The control bits and keywords established by initget
+#: apply only to the next user-input function call.  They are discarded
+#: immediately afterward.'  getstring, ssget and getfiled are not in
+#: it: whether they spend a pending initget is not documented, so they
+#: leave it as they find it (VM policy, tests/test_lispvm_input_space.py)
+HONOURS_INITGET = frozenset({
+    'entsel', 'getangle', 'getcorner', 'getdist', 'getint', 'getkword',
+    'getorient', 'getpoint', 'getreal', 'nentsel', 'nentselp'})
+
+#: what the spacebar may do in a scripted string: 'strict' refuses a
+#: string it would cut (Untypeable), 'split' cuts it as AutoCAD does --
+#: the first word to this prompt, the rest to the next.  There is no
+#: third setting that takes a spaced string whole: that is the kindness
+#: this rule exists to take away.
+SPACEBAR_MODES = ('strict', 'split')
+
+
+def _cut(text, breaks):
+    out, cur = [], ''
+    for ch in text.replace('\r\n', '\n').replace('\r', '\n'):
+        if ch in breaks:
+            out.append(cur if cur else None)
+            cur = ''
+        else:
+            cur += ch
+    if cur:
+        out.append(cur)
+    return out
+
+
+def keys(text):
+    """TEXT as the answers AutoCAD reads from it at any prompt but a
+    (getstring T ...): the spacebar is Enter there, so '44 1/2' is
+    ['44', '1/2'] -- 44 to this prompt, 1/2 to the next.  A space with
+    nothing before it is an Enter of its own (None): ' 12' is
+    [None, '12'] and 'a  b' is ['a', None, 'b'].  A space that ends the
+    text is only the Enter that ends it: '44 ' is ['44'].  A line break
+    is Enter at every prompt and cuts the same way.
+
+    Splice it into a script where a test means to show what the real
+    keystrokes do:  vm.run('c:X', [..., *keys('24 1/8'), ...])."""
+    return _cut(text, ' \n')
+
+
+def _typed(vm, v, prompt, kind, line=False):
+    """V as the prompt really receives it.  Only a string can hold a
+    space; any other answer, and a string with no break in it, passes
+    as it is.  LINE is (getstring T ...)'s cr flag: a space is text
+    there and only a line break ends the answer."""
+    if not isinstance(v, str):
+        return v
+    breaks = '\n' if line else ' \n'
+    if not any(c in breaks for c in v.replace('\r', '\n')):
+        return v
+    toks = _cut(v, breaks)
+    first, rest = (toks[0], toks[1:]) if toks else (None, [])
+    if rest and vm.spacebar != 'split':
+        what = "a line break is Enter" if line else "the spacebar is Enter"
+
+        def said(x):
+            return 'Enter' if x is None else repr(x)
+        split = f"spell the split with lispvm.keys({v!r})"
+        if line:
+            fix = "Script each line as an answer of its own"
+        elif kind in ('getpoint', 'getdist'):
+            fix = (f"Script what the drafter can type -- a dashed fraction "
+                   f"(44-1/2), the unit touching the number (1524mm) -- "
+                   f"{split}, or ask with (getstring T ...)")
+        elif kind in ('getreal', 'getint'):
+            fix = f"Script the one number the drafter types, or {split}"
+        elif kind == 'getstring':
+            fix = (f"Script one word, {split}, or -- where the answer is "
+                   f"a line of text -- ask with (getstring T ...)")
+        else:
+            fix = (f"Script one word -- a keyword has no space in it -- "
+                   f"or {split}")
+        raise Untypeable(
+            f"UNTYPEABLE at the {kind} prompt {prompt!r}: {v!r} -- {what} "
+            f"here, so AutoCAD reads {said(first)} as this answer and "
+            f"hands [{', '.join(said(r) for r in rest)}] to the prompts "
+            f"after it.  {fix}", vm)
+    if rest:
+        vm.script[0:0] = rest
+    if vm.prompts and vm.prompts[-1][1] is v:
+        # the log says what THIS prompt got; the rest logs at its own
+        vm.prompts[-1] = (vm.prompts[-1][0], first)
+    return first
 
 
 def tokenize(src):
@@ -278,7 +482,7 @@ def truthy(v):
 
 
 class VM:
-    def __init__(self):
+    def __init__(self, spacebar=None):
         self.globals = {}
         self.stack = []          # list of dicts (dynamic scope frames)
         self.calls = []          # defun names currently on the stack
@@ -303,6 +507,16 @@ class VM:
                                  # left for the next command's "_I"
         self.initget_kws = ""
         self.initget_bits = 0
+        # an initget is spent by the next input that honours it
+        # (HONOURS_INITGET): True from the initget until that input
+        # starts, and the input after that finds it cleared
+        self.initget_live = False
+        # what a space in a scripted string does (SPACEBAR_MODES)
+        self.spacebar = (spacebar or os.environ.get('LISPVM_SPACEBAR')
+                         or 'strict')
+        if self.spacebar not in SPACEBAR_MODES:
+            raise ValueError(f"spacebar {self.spacebar!r}: one of "
+                             f"{SPACEBAR_MODES} (LISPVM_SPACEBAR)")
         self.sysvars = {
             'CMDECHO': 1, 'OSMODE': 4133, 'CLAYER': '0', 'LUNITS': 2,
             # acad.dwt's; (rtos v) with no precision reads it
@@ -436,6 +650,12 @@ class VM:
 
     # ---------------- scripted input
     def pop_script(self, prompt, kind):
+        if kind in HONOURS_INITGET:
+            # this input spends the initget made for it; one made for an
+            # input before it is gone (HONOURS_INITGET)
+            if not self.initget_live:
+                self.initget_bits, self.initget_kws = 0, ""
+            self.initget_live = False
         if not self.script:
             raise LispError(f"SCRIPT EXHAUSTED at {kind} prompt: {prompt!r}",
                             self)
@@ -455,6 +675,13 @@ class VM:
             # has no entity name until the command has made it.
             v = v(self)
         self.prompts.append((prompt, v))
+        if v is MISS and kind not in PICKS:
+            raise Unanswerable(
+                f"MISS scripted at the {kind} prompt {prompt!r}: only an "
+                f"entsel, nentsel or nentselp can miss.  Anywhere else a "
+                f"click is a point (at ssget, a window's first corner) or "
+                f"no answer at all -- script what the drafter gives "
+                f"there", self)
         return v
 
     # ---------------- name lookup (dynamic scope)
@@ -2505,6 +2732,7 @@ def _initget(vm, a):
     vm.initget_bits = a[0] if a and isinstance(a[0], (int, float)) else 0
     kws = [x for x in a if isinstance(x, str)]
     vm.initget_kws = kws[0] if kws else ""
+    vm.initget_live = True
     return NIL
 
 
@@ -2517,14 +2745,30 @@ def _match_kw(vm, v):
     return None
 
 
+def _enter(vm, kind, prompt):
+    """What Enter answers at an input under the current initget bits.
+    Bit 1 refuses it (AutoCAD asks again; the VM cannot, so the script
+    is wrong).  But bit 128 'takes precedence over bit 0; if bits 7 and
+    0 are set and the user presses Enter, a null string is returned'
+    (AutoLISP Reference, initget) -- so (initget 129) or (initget (+ 7
+    128)) hands back "" for Enter, which UPADOVER and SPA rely on.
+    Without bit 1 Enter is nil.  getpoint and getcorner do not refuse
+    under bit 1 alone here -- not modelled yet -- but do return "" under
+    1 + 128."""
+    bits = vm.initget_bits or 0
+    if bits & 1 and bits & 128:
+        return ""
+    if bits & 1 and kind not in ('getpoint', 'getcorner'):
+        raise LispError(f"{kind}: Enter not allowed at {prompt!r}", vm)
+    return NIL
+
+
 @bi('getkword')
 def _getkword(vm, a):
     prompt = a[0] if a else ""
-    v = vm.pop_script(prompt, 'getkword')
+    v = _typed(vm, vm.pop_script(prompt, 'getkword'), prompt, 'getkword')
     if v is None:
-        if vm.initget_bits & 1:
-            raise LispError(f"getkword: Enter not allowed at {prompt!r}", vm)
-        return NIL
+        return _enter(vm, 'getkword', prompt)
     kw = _match_kw(vm, str(v))
     if kw is None:
         raise LispError(f"getkword: {v!r} not among "
@@ -2532,29 +2776,91 @@ def _getkword(vm, a):
     return kw
 
 
+#: a number as typed at getreal, and at getdist in decimal units:
+#: 12, -3, 12.5, .5, 12.  -- and getint's whole number
+_DECIMAL = re.compile(r'^\s*[-+]?(?:\d+\.?\d*|\.\d+)\s*$')
+_INTEGER = re.compile(r'^\s*[-+]?\d+\s*$')
+_SCIENTIFIC = re.compile(r'^\s*[-+]?(?:\d+\.?\d*|\.\d+)[eE][-+]?\d+\s*$')
+
+
+def _read_number(vm, s, kind, prompt):
+    """The number getdist, getreal or getint makes of text S typed at
+    it that no keyword took -- or None when S is no number at all, which
+    is arbitrary input under initget 128 and refused without it.
+
+    getdist reads 'a number in the AutoCAD current distance units
+    format' (AutoLISP Reference, getdist) and always returns a real, so
+    in architectural or engineering units (LUNITS 4 / 3) 1/8, 2', 4'6
+    and 4'-6-1/2" are distances, read by distof in that mode; fractional
+    (5) reads 17-1/2 and 1/2; decimal (2) and scientific (1) read a
+    decimal number, and scientific its 1.75E+01 as well.  A decimal
+    number is inches in 3, 4 and 5 too, in every spelling of one --
+    52.5, .5, 5., -.5 -- so no units format is stricter about it than
+    decimal units are.  getint reads
+    a whole number and nothing else -- 12.5 is AutoCAD's 'Requires an
+    integer value' -- and getreal a decimal one.
+
+    A spelling some OTHER units format reads -- 2' or 1/2 in decimal
+    units, 1/2 at a getreal, an exponent anywhere but scientific -- is
+    refused as NotModelled: whether AutoCAD takes it there is not
+    settled, and a guess either way would decide the test."""
+    if kind == 'getint':
+        return int(s) if _INTEGER.match(s) else None
+    mode = int(vm.sysvars.get('LUNITS') or 2)
+    if kind == 'getdist' and mode in (3, 4, 5):
+        v = _distof(vm, [s, mode])
+        if v is not NIL:
+            return v
+        # a decimal number is a count of inches in these units however
+        # it is spelled: 52.5 reads through distof above, and .5, 5. and
+        # -.5 -- AutoCAD's own spellings of a decimal, which distof's
+        # feet-inch grammar here does not take -- are the same reading
+        if _DECIMAL.match(s):
+            return float(s)
+    elif _DECIMAL.match(s) or (kind == 'getdist' and mode == 1
+                               and _SCIENTIFIC.match(s)):
+        return float(s)
+    if _SCIENTIFIC.match(s) or any(_distof(vm, [s, m]) is not NIL
+                                   for m in (4, 5)):
+        where = (f"getdist in LUNITS {mode}" if kind == 'getdist'
+                 else "getreal")
+        raise NotModelled(
+            f"{kind}: {s!r} typed at {prompt!r} -- whether AutoCAD reads "
+            f"that spelling at a {where} is not settled, so the VM will "
+            f"not guess a number or hand the text back.  Script the "
+            f"number, or set LUNITS to the units the spelling is in", vm)
+    return None
+
+
 @bi('getdist')
-def _getdist(vm, a):
+def _getdist(vm, a, kind='getdist'):
+    # getreal shares this (below); KIND is which of the two was called,
+    # so a refusal or an exhausted script names the prompt's own input
     prompt = a[-1] if a and isinstance(a[-1], str) else ""
-    v = vm.pop_script(prompt, 'getdist')
+    v = _typed(vm, vm.pop_script(prompt, kind), prompt, kind)
     if v is None:
-        if vm.initget_bits & 1:
-            raise LispError(f"getdist: Enter not allowed at {prompt!r}", vm)
-        return NIL
+        return _enter(vm, kind, prompt)
     if isinstance(v, str):
         kw = _match_kw(vm, v)
-        if kw is None:
+        if kw is not None:
+            return kw
+        # typed text that is a number IS the number -- initget 128 or
+        # not: arbitrary input is what no other reading took ('first
+        # honoring any other control bits and listed keywords')
+        n = _read_number(vm, v, kind, prompt)
+        if n is None:
             # initget bit 128 = arbitrary input: unmatched text comes
             # back as the string itself instead of being rejected
             if vm.initget_bits & 128:
                 return v
-            raise LispError(f"getdist: keyword {v!r} not among "
+            raise LispError(f"{kind}: keyword {v!r} not among "
                             f"{vm.initget_kws!r} at {prompt!r}", vm)
-        return kw
+        v = n
     v = float(v)
     if v == 0 and vm.initget_bits & 2:
-        raise LispError(f"getdist: zero not allowed at {prompt!r}", vm)
+        raise LispError(f"{kind}: zero not allowed at {prompt!r}", vm)
     if v < 0 and vm.initget_bits & 4:
-        raise LispError(f"getdist: negative not allowed at {prompt!r}", vm)
+        raise LispError(f"{kind}: negative not allowed at {prompt!r}", vm)
     return v
 
 
@@ -2563,17 +2869,20 @@ def _getint(vm, a):
     # (getint [prompt]) -- a whole number, honouring the same initget
     # bits and keywords getdist does
     prompt = a[-1] if a and isinstance(a[-1], str) else ""
-    v = vm.pop_script(prompt, 'getint')
+    v = _typed(vm, vm.pop_script(prompt, 'getint'), prompt, 'getint')
     if v is None:
-        if vm.initget_bits & 1:
-            raise LispError(f"getint: Enter not allowed at {prompt!r}", vm)
-        return NIL
+        return _enter(vm, 'getint', prompt)
     if isinstance(v, str):
         kw = _match_kw(vm, v)
-        if kw is None:
+        if kw is not None:
+            return kw
+        n = _read_number(vm, v, 'getint', prompt)
+        if n is None:
+            if vm.initget_bits & 128:
+                return v
             raise LispError(f"getint: keyword {v!r} not among "
                             f"{vm.initget_kws!r} at {prompt!r}", vm)
-        return kw
+        v = n
     v = int(v)
     if v == 0 and vm.initget_bits & 2:
         raise LispError(f"getint: zero not allowed at {prompt!r}", vm)
@@ -2585,9 +2894,9 @@ def _getint(vm, a):
 @bi('getpoint')
 def _getpoint(vm, a):
     prompt = a[-1] if a and isinstance(a[-1], str) else ""
-    v = vm.pop_script(prompt, 'getpoint')
+    v = _typed(vm, vm.pop_script(prompt, 'getpoint'), prompt, 'getpoint')
     if v is None:
-        return NIL
+        return _enter(vm, 'getpoint', prompt)
     # a scripted NUMBER at a prompt that allows arbitrary input is the
     # drafter typing digits, and AutoCAD hands those back as the text
     # typed, never as a point: "44" is not a coordinate pair.  It is
@@ -2619,9 +2928,9 @@ def _getcorner(vm, a):
     # rubber-banded from BASEPT in AutoCAD; scripted here exactly as a
     # getpoint is: a point, nil for Enter, a string for a keyword
     prompt = a[-1] if a and isinstance(a[-1], str) else ""
-    v = vm.pop_script(prompt, 'getcorner')
+    v = _typed(vm, vm.pop_script(prompt, 'getcorner'), prompt, 'getcorner')
     if v is None:
-        return NIL
+        return _enter(vm, 'getcorner', prompt)
     if isinstance(v, str):
         kw = _match_kw(vm, v)
         if kw is None:
@@ -2631,20 +2940,74 @@ def _getcorner(vm, a):
     return list(v)
 
 
+def _getangle(vm, a, kind):
+    # (getangle [pt] [msg]) and (getorient [pt] [msg]).  The tree calls
+    # neither; they are here so that a spaced answer is refused and an
+    # initget spent at them exactly as at every other input.  What they
+    # hand back for an angle typed or picked -- radians, after AUNITS,
+    # ANGBASE and ANGDIR, getorient ignoring the last two -- is not
+    # modelled, so anything but Enter and a keyword is refused as that
+    prompt = a[-1] if a and isinstance(a[-1], str) else ""
+    v = _typed(vm, vm.pop_script(prompt, kind), prompt, kind)
+    if v is None:
+        return _enter(vm, kind, prompt)
+    if isinstance(v, str):
+        kw = _match_kw(vm, v)
+        if kw is not None:
+            return kw
+    raise NotModelled(f"{kind} answered {v!r} at {prompt!r}: the VM has "
+                      f"no model of the angle AutoCAD would hand back", vm)
+
+
+@bi('getangle')
+def _getangle_bi(vm, a):
+    return _getangle(vm, a, 'getangle')
+
+
+@bi('getorient')
+def _getorient_bi(vm, a):
+    return _getangle(vm, a, 'getorient')
+
+
 @bi('getstring')
 def _getstring(vm, a):
-    # (getstring [cr] [prompt]) -- Enter gives "", never nil
-    prompt = a[-1] if a and isinstance(a[-1], str) else ""
-    v = vm.pop_script(prompt, 'getstring')
+    # (getstring [cr] [prompt]) -- Enter gives "", never nil.  CR is the
+    # first argument when that is not the prompt: non-nil, the answer
+    # is a whole line and a space is text in it; otherwise the spacebar
+    # ends it, as it ends every other input (AutoLISP Reference,
+    # getstring)
+    # Of two arguments the first IS cr, whatever its type -- a string
+    # is non-nil, so (getstring "" "x") takes a whole line.  A lone
+    # argument is the prompt when it is text and cr when it is not.
+    # (A symbol is a str in this VM, so "is it text" asks for a str that
+    # is not a Sym: the T of (getstring T) is the flag, not the prompt.)
+    text = [isinstance(x, str) and not isinstance(x, Sym) for x in a]
+    prompt = a[-1] if a and text[-1] else ""
+    line = (truthy(a[0]) if len(a) > 1
+            else bool(a) and not text[0] and truthy(a[0]))
+    v = _typed(vm, vm.pop_script(prompt, 'getstring'), prompt,
+               'getstring', line)
     return "" if v is None else str(v)
 
 
-@bi('entsel')
-def _entsel(vm, a):
-    # (entsel [prompt]) -- nil when the user just presses Enter,
-    # otherwise (ename point) as AutoLISP returns it.
-    prompt = a[-1] if a and isinstance(a[-1], str) else ""
-    v = vm.pop_script(prompt, 'entsel')
+def _pick(vm, a, kind):
+    # (entsel [prompt]), (nentsel [prompt]), (nentselp [prompt]) -- nil
+    # when the user just presses Enter, nil with ERRNO 7 for a click
+    # that hit nothing (MISS), otherwise (ename point) as AutoLISP
+    # returns it.  A scripted list is handed back whole, which is how a
+    # test gives nentsel the matrix and inserts of a nested pick.
+    prompt = next((x for x in a if isinstance(x, str)), "")
+    v = _typed(vm, vm.pop_script(prompt, kind), prompt, kind)
+    if v is MISS:
+        # ERRNO is written by the miss and by nothing else here: a hit
+        # and a keyword leave whatever was there -- a 7 some earlier
+        # miss left included -- which is why a pick that tells the two
+        # apart zeroes ERRNO right before it asks.  Enter leaves it too,
+        # by POLICY: AutoCAD's own code for Enter is 52 and releases
+        # differ on writing it, so the VM writes nothing, the reading a
+        # pick that skips the zero cannot pass (the module docstring)
+        vm.sysvars['ERRNO'] = 7
+        return NIL
     if v is None:
         return NIL
     if isinstance(v, Ent):
@@ -2657,10 +3020,32 @@ def _entsel(vm, a):
         # list like every other keyword answer.
         kw = _match_kw(vm, v)
         if kw is None:
-            raise LispError(f"entsel: keyword {v!r} not among "
+            raise LispError(f"{kind}: keyword {v!r} not among "
                             f"{vm.initget_kws!r} at {prompt!r}", vm)
         return kw
     return list(v)
+
+
+@bi('entsel')
+def _entsel(vm, a):
+    return _pick(vm, a, 'entsel')
+
+
+@bi('nentsel')
+def _nentsel(vm, a):
+    return _pick(vm, a, 'nentsel')
+
+
+@bi('nentselp')
+def _nentselp(vm, a):
+    # (nentselp [prompt] [pt]) -- given a point it selects THERE and asks
+    # the drafter nothing.  What it would find is the drawing's business,
+    # which the VM has no model of, so it refuses rather than hand the
+    # routine a pick nobody made -- or take one off the script.
+    if any(isinstance(x, list) for x in a):
+        raise NotModelled(f"nentselp at a given point {a!r}: the VM does "
+                          f"not select by point", vm)
+    return _pick(vm, a, 'nentselp')
 
 
 def _wc_re(pat):
@@ -2746,7 +3131,7 @@ def _logop(vm, args, op, unit):
     return out
 
 
-BUILTINS[Sym('getreal')] = _getdist
+BUILTINS[Sym('getreal')] = lambda vm, a: _getdist(vm, a, 'getreal')
 # getint is the validated @bi('getint') above -- it honours initget
 # bits and keywords exactly as getdist does
 BUILTINS[Sym('exit')] = lambda vm, a: (_ for _ in ()).throw(

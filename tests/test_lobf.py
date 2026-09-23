@@ -17,7 +17,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lispvm import VM, LispError, Dot  # noqa: E402
+from lispvm import VM, LispError, Dot, MISS  # noqa: E402
 
 HERE = os.path.dirname(__file__)
 ROOT = os.path.join(HERE, '..')
@@ -417,10 +417,8 @@ check("...and a later run does not sweep them away",
 
 # A click that lands between the thin preview lines is not an Enter.
 # entsel answers nil to both, and only ERRNO 7 tells them apart; taken
-# as Enter, the miss kept fit 2 and erased the line reached for.
-def miss(vm):
-    vm.sysvars['ERRNO'] = 7
-    return None
+# as Enter, the miss kept fit 2 and erased the line reached for.  MISS
+# is that click: the VM answers it with nil and ERRNO 7, as AutoCAD does.
 
 
 def click_fit(n):
@@ -433,7 +431,7 @@ def click_fit(n):
 
 vm = vm_with(DRAWING)
 try:
-    txt = run(vm, [None, None, miss, click_fit(1)])
+    txt = run(vm, [None, None, MISS, click_fit(1)])
     err = ''
 except AssertionError as e:
     txt, err = said(vm), str(e).splitlines()[0]
@@ -450,7 +448,7 @@ check("...and the line then clicked is the one kept (fit 1, not fit 2)",
 # never let go, unless it is cleared before every pick
 vm = vm_with(DRAWING)
 try:
-    txt = run(vm, [None, None, miss, None])
+    txt = run(vm, [None, None, MISS, None])
     err = ''
 except AssertionError as e:
     txt, err = said(vm), str(e).splitlines()[0]

@@ -35,12 +35,12 @@ plus the passes no suite entered: COVERCHECK's and LINFINCHECK's arc
 re-fit and overlap merge, DIMCHECK's unstage, and the RESCUE / CLEAN
 sweeps run over real marks instead of an empty drawing.
 
-The VM models none of locked layers, a missed pick's ERRNO, paper
-space or a layout viewport, so each is modelled here: entmod/entdel
-refuse on a layer whose table record carries the lock bit; entsel
-answers a scripted 'MISS' with nil and ERRNO 7; entities carry an
-explicit (410 . "Layout1"); and TILEMODE/CVPORT/CTAB are set the way a
-viewport on a layout reads.
+The VM models none of locked layers, paper space or a layout
+viewport, so each is modelled here: entmod/entdel refuse on a layer
+whose table record carries the lock bit; entities carry an explicit
+(410 . "Layout1"); and TILEMODE/CVPORT/CTAB are set the way a viewport
+on a layout reads.  A missed pick the VM models itself: lispvm.MISS at
+an entsel answers nil and sets ERRNO 7.
 
 Run: python3 tests/test_fix_review_a.py
      CALOFIN_LISP_ROOT=shared python3 tests/test_fix_review_a.py
@@ -326,23 +326,6 @@ def _entmod_throwing(vm, a):
 BUILTINS[Sym('entmod')] = _entmod_throwing
 # set-layer-lock clears the bit with (logand old (~ 4))
 BUILTINS.setdefault(Sym('~'), lambda vm, a: ~int(a[0]))
-
-
-# a missed click: entsel answers nil exactly as it does for Enter, and
-# only ERRNO (7) tells the two apart
-_BASE_ENTSEL = BUILTINS[Sym('entsel')]
-
-
-def _entsel_miss(vm, a):
-    if vm.script and vm.script[0] == 'MISS':
-        vm.script[0] = None
-        r = _BASE_ENTSEL(vm, a)
-        vm.sysvars['ERRNO'] = 7
-        return r
-    return _BASE_ENTSEL(vm, a)
-
-
-BUILTINS[Sym('entsel')] = _entsel_miss
 
 
 # ------------------------------------------------------------------
@@ -961,7 +944,7 @@ def disclaimer_missed_click():
     vm.loads('(defun t:audit ( / ss) (setq ss (ssadd)) (ssadd t:pool ss)'
              ' (cchk:cover-audit ss nil T nil))')
     try:
-        r = vm.run('t:audit', ['Yes', 'MISS', repl])
+        r = vm.run('t:audit', ['Yes', lispvm.MISS, repl])
     except LispError as e:
         r = str(e)
     lines_ = '\n'.join(r[0]) if isinstance(r, list) else str(r)

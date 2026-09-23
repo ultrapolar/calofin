@@ -22,7 +22,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lispvm import VM, LispError, Dot, Sym, BUILTINS, NIL  # noqa: E402
+from lispvm import VM, LispError, Dot, Sym, BUILTINS, NIL, MISS  # noqa: E402
 
 HERE = os.path.dirname(__file__)
 LSP = os.path.join(HERE, '..', 'lisp', 'pointrenamer', 'POINTRENAMER.lsp')
@@ -137,13 +137,6 @@ def heavy(flag_detour, flag_frame=16):
             + vert(0.0, 600.0, flag_frame)
             + '''
   (entmake (list '(0 . "SEQEND") '(8 . "POOL") '(410 . "Model")))''')
-
-
-def miss(vm):
-    """A click that hit nothing: entsel answers nil, exactly as Enter
-    does, and AutoCAD sets ERRNO 7 to say which of the two it was."""
-    vm.sysvars['ERRNO'] = 7
-    return None
 
 
 #: a point block with NO attribute chain at all -- nowhere to write
@@ -545,7 +538,7 @@ print("a mis-click at the perimeter pick")
 
 vm = newvm([RECT_CCW, ab_pt(60, 0, 17), ab_pt(0, 60, 9)])
 txt = run(vm, [None,       # highlight: whole drawing
-               miss,       # a click that hit nothing
+               MISS,       # a click that hit nothing
                None,       # NOW Enter, which does take the found loop
                (0.0, 0.0, 0.0), 'Clockwise', 6.0, 1, 'Yes'], 'mis-click')
 check("a click that hit nothing says so instead of taking the candidate",
@@ -560,7 +553,7 @@ vm.load(LSP)
 vm.loads(LAYER_POOL)
 lin = made(vm, LINE)[0]
 vm.loads(ab_pt(20, 0, 'a') + ab_pt(80, 0, 'b'))
-txt = run(vm, [None, miss, [lin, (0.0, 0.0, 0.0)],
+txt = run(vm, [None, MISS, [lin, (0.0, 0.0, 0.0)],
                (0.0, 0.0, 0.0), 'CO', 6.0, 1, 'Yes'], 'mis-click-nocand')
 check("with nothing found, the miss does not offer an Enter that would "
       "not work",

@@ -659,12 +659,7 @@ check('and the fit still ran to a kept polyline',
 print('CABHD -- a click that misses the outlines is asked again')
 # entsel answers nil for Enter AND for a click on empty space; only
 # ERRNO 7 tells them apart.  Taken as Enter, a near-miss kept the
-# default and erased the fit reached for.
-
-
-def miss(vm):
-    vm.sysvars['ERRNO'] = 7
-    return None
+# default and erased the fit reached for.  lispvm.MISS is that click.
 
 
 def click_fit(n):
@@ -678,7 +673,7 @@ def click_fit(n):
 
 
 try:
-    vm = run(18, keep=None, extra=[miss, click_fit(3)])
+    vm = run(18, keep=None, extra=[lispvm.MISS, click_fit(3)])
     err = ''
 except LispError as e:
     err = str(e).splitlines()[0]

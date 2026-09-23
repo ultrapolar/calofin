@@ -26,7 +26,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
-from lispvm import VM, LispError, Sym, Dot, NIL  # noqa: E402
+from lispvm import VM, LispError, Sym, Dot, NIL, MISS  # noqa: E402
 
 POOL = os.path.join(REPO, 'lisp', 'pool', 'POOL.LSP')
 TUT = os.path.join(REPO, 'lisp', 'pool', 'TUTORIALPOOL.LSP')
@@ -288,12 +288,6 @@ check("POOLDEMO draws no Given marks after a stale opt-in",
 print("== F11. a missed click at the Given pick is said and asked again ==")
 
 
-def miss(vm):
-    # entsel on empty space: nil, with ERRNO 7 -- Enter leaves ERRNO 0
-    vm.sysvars['ERRNO'] = 7
-    return None
-
-
 def pick_first_mark(vm):
     pairs = glob(vm, 'pool:*giventxts*') or []
     en = pairs[-1].a if pairs else None
@@ -302,7 +296,7 @@ def pick_first_mark(vm):
 
 vm = pool_vm()
 attempt("miss then pick",
-        lambda: vm.run('c:POOL', GIVEN_RUN + [miss, pick_first_mark, None]))
+        lambda: vm.run('c:POOL', GIVEN_RUN + [MISS, pick_first_mark, None]))
 said = ''.join(vm.printed)
 check("the miss was named", 'Nothing there - click the dimension text' in said)
 check("the pick after it still flipped a mark",

@@ -12,7 +12,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lispvm import VM, Ent, LispError, Dot, Sym, NIL  # noqa: E402
+from lispvm import VM, Ent, LispError, Dot, Sym, NIL, MISS  # noqa: E402
 
 LSP = os.path.join(os.path.dirname(__file__), '..',
                    'lisp', 'spa', 'SPA.LSP')
@@ -1003,13 +1003,6 @@ THERMO = BLOCK.replace('GRADE: Standard', 'GRADE: Thermo-Light') \
               .replace('TAPER: 4-3', 'TAPER: 1-3/8')
 
 
-def missed(vm):
-    """A click that hit nothing: entsel answers nil, as it does for
-    Enter, and ERRNO is 7 -- the only thing that tells the two apart."""
-    vm.sysvars['ERRNO'] = 7
-    return None
-
-
 def thermo_run(head):
     vm = VM()
     vm.load(LSP)
@@ -1030,7 +1023,7 @@ def test_a_missed_click_at_the_details_block_is_asked_again():
     A miss is asked again now, and the block clicked second time round
     gives exactly the run a first-time hit does."""
     hit = thermo_run([])
-    vm = thermo_run([missed])
+    vm = thermo_run([MISS])        # a click that hit nothing
     picks = [p for p, _ in vm.prompts if 'Spa Cover Details' in p]
     assert len(picks) == 2, [p for p, _ in vm.prompts]
     assert 'Nothing there' in ''.join(vm.printed), ''.join(vm.printed)

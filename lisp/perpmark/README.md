@@ -46,7 +46,7 @@ not one of the pool's points and is never offered.
    Distance from the perimeter at Pt.17 [Back]:
    ```
 
-   - click the point, or type its number: `17`, `Pt.17`, `pt 17`, `#17`
+   - click the point, or type its number: `17`, `Pt.17`, `pt17`, `#17`
      and `017` all name the same one;
    - a click within `pm:*snap*` of a point picks it; a click on nothing,
      a number nothing carries and a number two points share are all

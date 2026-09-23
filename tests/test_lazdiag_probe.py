@@ -277,6 +277,24 @@ try:
 except LookupError:
     check("an unknown command is an error, not a guess", True)
 
+print("\na replayed answer the VM refuses is a divergence, not a crash")
+# The VM refuses an answer no drafter can type where the replay has got
+# to -- a spaced word at a getpoint -- with an AssertionError, so no
+# *error* in the tool can take it for its own failure.  run_once caught
+# only LispError, and one such answer took the whole probe down.
+
+
+class _A:
+    def __init__(self, v):
+        self.value, self.selection = v, False
+
+
+out = pr.run_once(DEMOR, "DEMOR", [], [], 0,
+                  [_A("Pool 1"), _A(20.0), _A(3)], False)
+check("a spaced word at the getpoint comes back DIVERGED",
+      out.kind == pr.Outcome.DIVERGED and "cannot be given" in out.message,
+      (out.kind, out.message))
+
 if failures:
     print("\n%d probe check(s) FAILED" % len(failures))
     sys.exit(1)
