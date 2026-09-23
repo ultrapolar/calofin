@@ -27,12 +27,12 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "092326 REV16")
+(setq tut:*version* "092326 REV17")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
 ;;;  Standard 4-3.  Chosen because it exercises nearly everything:
-;;;  mixed corners (so flats and a 90 Typ. mark appear), both outlines,
+;;;  mixed corners (so every corner is called out), both outlines,
 ;;;  the overlap dimension, three pieces (so a fold hinge AND a velcro
 ;;;  hinge get drawn), and a hinge run long enough to call for a double
 ;;;  C channel.
@@ -145,10 +145,9 @@
     "    That follows from which outline it is, not which you drew first."
     "*   HOW MANY CORNER CALLOUTS.  Four identical corners get ONE, with"
     "    a Typ. suffix, at the bottom-right.  Mixed corners are called"
-    "    out one by one, and the square ones share a single 90 mark."
-    "    Four 90 corners get none at all."
-    "*   WHICH FLATS TO DIMENSION.  Only the sides a cut corner actually"
-    "    shortened, and only when the corners are not all identical."
+    "    out one by one, each square one with its own 90 mark -- POOL's"
+    "    rectangle rule.  The second outline is called out the same way,"
+    "    and the inner one's callouts read inward, clear of the cover's."
     "*   WHICH FOAM SHEET.  A taper can carry more than one -- Standard"
     "    3-2 and 4-2 each come as 48 x 144/96 and as 49-1/2 x 102 -- and"
     "    one can work where the other will not.  Every sheet is solved"
@@ -329,34 +328,15 @@
   (if (not stop)
       (setq stop
         (eq 'TUT-STOP
-          (tut:step "STEP 3 -- THE FLATS"
-            (list "The cut at corner C shortened the TOP and the RIGHT, so"
-                  "each gets its remaining straight run dimensioned,"
-                  "inboard of the overalls.  The bottom and left were not"
-                  "shortened, so they get nothing."
+          (tut:step "STEP 3 -- THE CORNER CALLOUTS"
+            (list "The corners are not all the same, so each one is"
+                  "called out on its own, the way POOL does a rectangle."
+                  "The cut face is dimensioned across itself, outside the"
+                  "corner.  Each square corner gets its own mark -- a"
+                  "circled corner point with a 90 leader.  No flats: the"
+                  "overalls and the callouts say it all."
                   ""
-                  "Had all four corners matched, there would be no flats"
-                  "at all -- the overalls and one Typ. callout would be"
-                  "the whole drawing.")
-            '(lambda ()
-               (spa:dimalg (spa:cornerpoint quad corners 1 'next)
-                           (spa:cornerpoint quad corners 2 'prev)
-                           (spa:outoff (nth 1 quad) (nth 2 quad) cen
-                                       spa:*flatoff*) nil)
-               (spa:dimalg (spa:cornerpoint quad corners 2 'next)
-                           (spa:cornerpoint quad corners 3 'prev)
-                           (spa:outoff (nth 2 quad) (nth 3 quad) cen
-                                       spa:*flatoff*) nil))))))
-
-  (if (not stop)
-      (setq stop
-        (eq 'TUT-STOP
-          (tut:step "STEP 4 -- THE CORNER CALLOUTS"
-            (list "The cut face is dimensioned across itself, outside the"
-                  "corner on its 45-degree line.  The three square corners"
-                  "share ONE mark -- a circled corner point with a 90"
-                  "leader, Typ. because there is more than one."
-                  ""
+                  "Had all four matched, ONE callout with Typ. would do."
                   "A radius corner would get R12\" instead, read from"
                   "outside the arc.  Corner callouts never carry the"
                   "Cover Size note -- they are corners, not overalls.")
@@ -365,7 +345,7 @@
   (if (not stop)
       (setq stop
         (eq 'TUT-STOP
-          (tut:step "STEP 5 -- THE WATER'S EDGE"
+          (tut:step "STEP 4 -- THE WATER'S EDGE"
             (list "Offset 3\" INWARD, because the cover is always the"
                   "larger of the two.  This is a true parallel offset, so"
                   "the corner moves with it: the 21\" cut face shrinks by"
@@ -373,7 +353,9 @@
                   ""
                   "Dashed, on the POOL layer.  Its own overalls go a third"
                   "of the way INTO it, hooked to points on the dimension"
-                  "line so the arrows land on the outline.")
+                  "line so the arrows land on the outline.  Its corners"
+                  "are called out too -- pointing INWARD, so they cannot"
+                  "land on the cover's callouts at the same corner.")
             '(lambda ()
                (setq w2 (- w (* 2.0 gap))
                      l2 (- l (* 2.0 gap))
@@ -390,12 +372,13 @@
                (spa:dimstylenow th)
                (spa:dimoveralls nil (nth 0 ip2) (nth 1 ip2)
                                 (nth 2 ip2) (nth 3 ip2) 0.0 l)
+               (spa:dimcornersat q2 c2 cen doff 3 t)
                (spa:setmode "Coversize"))))))
 
   (if (not stop)
       (setq stop
         (eq 'TUT-STOP
-          (tut:step "STEP 6 -- THE OVERLAP"
+          (tut:step "STEP 5 -- THE OVERLAP"
             (list "How far the cover laps the water's edge, at the bottom."
                   "The lap itself is far too small to hold its text, so"
                   "the note is parked under the cover with a leader.")
@@ -406,7 +389,7 @@
   (if (not stop)
       (setq stop
         (eq 'TUT-STOP
-          (tut:step "STEP 7 -- THE HINGES"
+          (tut:step "STEP 6 -- THE HINGES"
             (list "Standard 4-3 foam: 48\" wide, 144\" long, 2 to 4 pieces."
                   ""
                   "140\" / 48\" needs 3 pieces, so 2 hinges, evenly spaced."
@@ -441,7 +424,7 @@
                  (setq k (1+ k))))))))
 
   (if (not stop)
-      (tut:step "STEP 8 -- THE REPORT"
+      (tut:step "STEP 7 -- THE REPORT"
         (list "Target / actual / delta for everything that was measured,"
               "off to the right.  Problems print under it in RED --"
               "adjusted octagon letters, a hinge over the foam length, a"

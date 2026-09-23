@@ -5908,7 +5908,7 @@
      ("spa:*dimvars*" "'(\"DIMLUNIT\" \"DIMFRAC\" \"DIMDEC\" \"DIMZIN\" \"DIMPOST\" \"DIMTAD\" \"DIMTMOVE\" \"DIMTXT\" \"DIMASZ\" \"DIMEXE\" \"DIMEXO\" \"DIMGAP\" \"DIMSCALE\" \"DIMTIX\" \"DIMTOFL\" \"DIMATFIT\")" "The system variables the routine sets for the run and puts back afterwards. A variable this release does no...")
      ("spa:*dimoff*" "36.0" "3 ft: cover outline -> the LEFT overall dim ---- where the dimension lines stand off The COVER's overalls g...")
      ("spa:*topoff*" "24.0" "2 ft: cover outline -> the TOP overall dim ---- where the dimension lines stand off The COVER's overalls go...")
-     ("spa:*flatoff*" "18.0" "outline -> the inboard flat dims ---- where the dimension lines stand off The COVER's overalls go outside t...")
+     ("spa:*flatoff*" "18.0" "outline -> an octagon's inboard flat dims ---- where the dimension lines stand off The COVER's overalls go...")
      ("spa:*insetfrac*" "0.3333" "water's edge dims, a third of the way in ---- where the dimension lines stand off The COVER's overalls go o...")
      ("spa:*lapoff*" "14.0" "how far under the cover the lap note sits ---- where the dimension lines stand off The COVER's overalls go...")
      ("spa:*mark-r*" "0.18" "circle radius on the corner point ---- corner callouts, as multiples of doff A radius corner takes a radius...")

@@ -30,7 +30,7 @@ RELEASES = os.path.join(REPO_DIR, 'releases')
 
 #: the demo pauses after each of its steps, plus the one bare pause
 #: before them; Enter carries on, "X" stops the tour
-PAUSES = [''] * 9
+PAUSES = [''] * 8
 
 failures = []
 

@@ -16163,24 +16163,26 @@
 ;;;  ----------------
 ;;;  The overall ACROSS goes on the TOP and the overall UP on the LEFT,
 ;;;  on every shape, with the text centred on its dimension line as
-;;;  normal.  What else appears depends on the corners:
+;;;  normal.  A rectangle then takes its corner callouts the way POOL's
+;;;  rectangle does, and nothing else -- no inboard flats:
 ;;;
-;;;    All four corners identical -- the two overalls plus ONE corner
-;;;    callout with a Typ. suffix, at the bottom-right.  That is the
-;;;    whole drawing for an all-radius or all-diagonal cover, and for a
-;;;    true square octagon.  A plain 90-corner rectangle gets no corner
-;;;    callout at all: the two overalls are the drawing.
+;;;    All four corners identical -- ONE corner callout with a Typ.
+;;;    suffix, at the bottom-right.  That is the whole drawing for an
+;;;    all-radius, all-diagonal or all-90 cover, and for a true square
+;;;    octagon.
 ;;;
-;;;    Corners NOT identical -- each cut corner is called out on its own
-;;;    (no Typ.), the square ones among them share one 90-degree mark,
-;;;    and every side a cut has SHORTENED also gets its remaining FLAT
-;;;    dimensioned, inboard of the overalls.  So a cover with one cut
-;;;    top-right reads: overall across, overall up, the top flat, the
-;;;    right flat, the cut face, and 90 Typ. on the square corners.
+;;;    Corners NOT identical -- every corner is called out on its own
+;;;    (no Typ.): the radius, the cut face, its own 90 mark, or its own
+;;;    boxed ? and Not Given note.
+;;;
+;;;  With both outlines drawn, the second outline is called out the same
+;;;  way (its Typ. at the top-left), and whichever outline is the INNER
+;;;  one -- the water's edge -- reads its callouts inward, so the two
+;;;  outlines' callouts at one corner never land on each other.
 ;;;
 ;;;  The round spa takes one overall; only an out-of-round one gets the
-;;;  second.  An octagon whose eight sides come out unequal picks up the
-;;;  bottom and right flats the same way the rectangle does.
+;;;  second.  An octagon whose eight sides come out unequal picks up its
+;;;  bottom and right flats, inboard of the overalls.
 ;;;
 ;;;  RECTANGLE CORNERS
 ;;;  -----------------
@@ -16251,7 +16253,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092326 REV34")
+(setq spa:*version* "092326 REV35")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -16318,7 +16320,7 @@
 ;;;  outline rather than trailing extension lines across the cover.
 (setq spa:*dimoff*    36.0)     ; 3 ft: cover outline -> the LEFT overall dim
 (setq spa:*topoff*    24.0)     ; 2 ft: cover outline -> the TOP overall dim
-(setq spa:*flatoff*   18.0)     ; outline -> the inboard flat dims
+(setq spa:*flatoff*   18.0)     ; outline -> an octagon's inboard flat dims
 (setq spa:*insetfrac* 0.3333)   ; water's edge dims, a third of the way in
 (setq spa:*lapoff*    14.0)     ; how far under the cover the lap note sits
 
@@ -17107,14 +17109,28 @@
 ;; The style for whichever outline is being drawn right now.
 (defun spa:dimstylenow (th) (spa:dimstyle spa:*dstyle* th spa:*dsfac*))
 
-;; Aligned dimension between two points, dragged to pt.  note is appended
+;; One dimension between two points, dragged to pt.  note is appended
 ;; to the measurement inside a text override ("\\XCover Size" to stack it,
 ;; " Typ." to run it on); pass nil for a plain dimension.
-(defun spa:dimalg (p1 p2 pt note)
-  (if (and note (/= note ""))
-      (command "_.DIMALIGNED" (spa:wp p1) (spa:wp p2)
-               "_T" (strcat "<>" note) (spa:wp pt))
-      (command "_.DIMALIGNED" (spa:wp p1) (spa:wp p2) (spa:wp pt))))
+;;
+;; A horizontal or vertical pair comes out as a true LINEAR dimension,
+;; its orientation forced so the placement point cannot flip it -- the
+;; way POOL dimensions a rectangle (pool:dimalg).  Only a genuinely
+;; skewed pair -- a cut face, an octagon's diagonal -- is DIMALIGNED.
+(defun spa:dimalg (p1 p2 pt note / how)
+  (setq how (cond ((< (abs (- (cadr p1) (cadr p2))) 1.0e-6) "_H")
+                  ((< (abs (- (car p1) (car p2))) 1.0e-6) "_V")))
+  (cond
+    ((and how note (/= note ""))
+     (command "_.DIMLINEAR" (spa:wp p1) (spa:wp p2) how
+              "_T" (strcat "<>" note) (spa:wp pt)))
+    (how
+     (command "_.DIMLINEAR" (spa:wp p1) (spa:wp p2) how (spa:wp pt)))
+    ((and note (/= note ""))
+     (command "_.DIMALIGNED" (spa:wp p1) (spa:wp p2)
+              "_T" (strcat "<>" note) (spa:wp pt)))
+    (t
+     (command "_.DIMALIGNED" (spa:wp p1) (spa:wp p2) (spa:wp pt)))))
 
 ;; Park a dimension's text at an explicit point.  DXF 11 is the text
 ;; midpoint and bit 128 of DXF 70 marks it as user-placed.  Used only for
@@ -17148,10 +17164,11 @@
 ;; at a prompt the user never asked for.  So the arc it asks for is
 ;; built from the corner's own three points, dimensioned, and taken
 ;; away again: the drawing keeps its one bounded outline and gains a
-;; real radius dimension.  ce is the corner's (prev-end next-end mid).
-(defun spa:dimrad (ce outd doff sfx / tip loc was e od)
+;; real radius dimension.  ce is the corner's (prev-end next-end mid);
+;; the dimension line is dragged reach along outd from the arc.
+(defun spa:dimrad (ce outd reach sfx / tip loc was e od)
   (setq tip (caddr ce)
-        loc (spa:wp (cal:v+ tip (cal:v* outd (* spa:*rad-off* doff))))
+        loc (spa:wp (cal:v+ tip (cal:v* outd reach)))
         was (entlast))
   (spa:arc3p (car ce) tip (cadr ce) (getvar "CLAYER") nil)
   (setq e (entlast))
@@ -19102,14 +19119,12 @@
 ;; The order sheet's 90-degree corner mark: a small circle on the corner
 ;; point, DIMENSIONED -- a radius dim on that circle with its
 ;; measurement replaced by the mark, so the arrow lands on the circle,
-;; the leader runs out along the corner's outward diagonal and the text
-;; comes out in the sheet's own dimension style.  That is how the
-;; approved sample sheet draws it, and it is what POOL ports.  Assumes
-;; CLAYER is already DIMENSION.
-(defun spa:dim90 (quad i cen doff txt / p outd r)
-  (setq p (nth i quad)
-        outd (spa:unit (cal:v- p cen))
-        r (* spa:*mark-r* doff))
+;; the leader runs out along outd and the text comes out in the sheet's
+;; own dimension style.  That is how the approved sample sheet draws
+;; it, and it is what POOL ports (pool:dim90 takes the same arguments).
+;; Assumes CLAYER is already DIMENSION.
+(defun spa:dim90 (p outd doff txt / r)
+  (setq r (* spa:*mark-r* doff))
   (entmake (list '(0 . "CIRCLE")
                  (cons 8 spa:*lay-dim*)
                  (cons 10 (spa:ww p))
@@ -19129,35 +19144,33 @@
 ;; own annotation, so AutoCAD hangs it on the side the leader points
 ;; and it cannot read back across itself into the shape.
 ;; (pool:dimng is the donor; STANDARDS section 2.)
-(defun spa:dimng (quad i cen doff sfx / p outd og)
-  (setq p (nth i quad)
-        outd (spa:unit (cal:v- p cen))
-        og (getvar "DIMGAP"))
+(defun spa:dimng (p outd doff sfx / og)
+  (setq og (getvar "DIMGAP"))
   (setvar "DIMGAP" (- (abs og)))
-  (spa:dim90 quad i cen doff (strcat "?" sfx))
+  (spa:dim90 p outd doff (strcat "?" sfx))
   (setvar "DIMGAP" og)
   (command "_.LEADER"
            (spa:wp (cal:v+ p (cal:v* outd (* spa:*ng-lead* doff))))
            (spa:wp (cal:v+ p (cal:v* outd (* spa:*ng-off* doff))))
            "" "Not Given" ""))
 
-;; Corner callouts, laid out the way the order sheet does them: the note
-;; sits OUTSIDE the corner, on the 45-degree line out of it.
+;; One corner's callout, laid out the way POOL's rectangle does it
+;; (pool:dimtreat1): the note sits OUTSIDE the corner, on the line out
+;; of it from the centre.
 ;;   Radius    -> a radius dimension read from outside the arc  (R12")
-;;   Diagonal  -> an aligned dimension across the cut face      (21")
-;;   90        -> a circled corner point with a 90%%d leader
+;;   Cut       -> an aligned dimension across the cut face      (21")
+;;   Square    -> a circled corner point with a 90%%d leader
+;;   NotGiven  -> the same mark asking a boxed ?, plus its note
 ;;
-;; Four identical corners are called out ONCE, at the bottom-right, with
-;; a Typ. suffix -- that is the whole annotation an all-radius or
-;; all-diagonal cover needs.  Mixed corners are called out one by one,
-;; and the square ones among them share a single 90-degree mark (Typ.
-;; when there is more than one).  A plain rectangle -- four 90 corners,
-;; nothing cut -- gets no corner notes at all.
+;; inb turns the callout round to point INTO the shape.  With both
+;; outlines drawn the inner one's corners sit a lap inside the outer
+;; one's, on the same line out of the centre, so two outward callouts
+;; would land on top of each other; the inner outline's read inward.
 ;;
 ;; None of these ever carry the Water's Edge / Cover Size note: they are
 ;; corners, not overalls.  Assumes CLAYER is already DIMENSION.
-(defun spa:dimcorner1 (quad corners cen doff i sfx / cc ce p pp pn ty
-                                                     outd fm)
+(defun spa:dimcorner1 (quad corners cen doff i sfx inb / cc ce p pp pn ty
+                                                         outd fm)
   (setq p (nth i quad)
         pp (nth (rem (+ i 3) 4) quad)
         pn (nth (rem (+ i 1) 4) quad)
@@ -19165,31 +19178,41 @@
         ty (car cc)
         ce (spa:cornerends p pp pn ty (cadr cc))
         outd (spa:unit (cal:v- p cen)))
+  (if inb (setq outd (cal:v* outd -1.0)))
   (cond
     ((= ty "Radius")
-     (spa:dimrad ce outd doff sfx))
+     ;; inward, the text stops halfway to the arc's centre: dragged
+     ;; past it, DIMRADIUS would measure the far side of the circle
+     (spa:dimrad ce outd (if inb
+                             (* 0.5 (cadr cc))
+                             (* spa:*rad-off* doff))
+                 sfx))
     ((= ty "Cut")
      (setq fm (cal:mid (car ce) (cadr ce)))
      (spa:dimalg (car ce) (cadr ce)
                  (cal:v+ fm (cal:v* outd (* spa:*cut-off* doff))) sfx))
     ((= ty "NotGiven")
-     (spa:dimng quad i cen doff sfx))
+     (spa:dimng p outd doff sfx))
     (t                                  ; Square
-     (spa:dim90 quad i cen doff (strcat "90%%d" sfx))))
+     (spa:dim90 p outd doff (strcat "90%%d" sfx))))
   (princ))
 
-(defun spa:dimcorners (quad corners cen doff / allsame sfx ilist i)
-  ;; STANDARDS section 2: four identical corners get ONE callout with a
-  ;; Typ. suffix at the reference corner -- all-Square included, which
-  ;; used to get no note at all.  Mixed corners are called out one by
-  ;; one, each Square with its own 90%%d mark and each NotGiven with
-  ;; its own ? mark and Not Given note.
-  (setq allsame (spa:samecorners corners)
-        sfx (if allsame " Typ." "")
-        ilist (if allsame (list 1) (list 0 1 2 3)))   ; 1 = bottom-right
-  (foreach i ilist
-    (spa:dimcorner1 quad corners cen doff i sfx))
+;; Every corner callout for one outline, POOL's rectangle rule
+;; (pool:dimcorners): four identical corners are called out ONCE, at
+;; corner ref, with a Typ. suffix -- all-Square included.  Mixed
+;; corners are called out one by one, no Typ.: each Radius and Cut with
+;; its own dimension, each Square with its own 90%%d mark, each
+;; NotGiven with its own ? mark and Not Given note.
+(defun spa:dimcornersat (quad corners cen doff ref inb / allsame i)
+  (setq allsame (spa:samecorners corners))
+  (foreach i (if allsame (list ref) (list 0 1 2 3))
+    (spa:dimcorner1 quad corners cen doff i (if allsame " Typ." "") inb))
   (princ))
+
+;; The first outline's callouts: the Typ. one at the bottom-right (B),
+;; where POOL puts it, pointing out of the shape.
+(defun spa:dimcorners (quad corners cen doff)
+  (spa:dimcornersat quad corners cen doff 1 nil))
 
 ;; Re-draw the guide rectangle's corners with the chosen treatments so
 ;; the picture matches what will be built.  gq = the guide quad,
@@ -19373,7 +19396,7 @@
 
 ;; Full guided flow for a rectangular spa.
 (defun spa:rectflow ( / oldclay pv gq gsc w l corners anycut quad
-                        a b c d cen doff th allsame i j tmp lbls cc back
+                        a b c d cen doff th i tmp lbls cc back
                         rows lbl mode1 meth ans g w2 l2 c2 org2 q2 cen2
                         xlo xhi ylo yhi out1 sb1 sb2 ip1 ip2 hrows done
                         same gback turn rbox)
@@ -19595,14 +19618,13 @@
   (spa:hingedetails)
 
   ;; -------------------------------------------------- dimensions
-  ;; Laid out the way the order sheet does it.  The COVER's overalls go
-  ;; outside -- across 2 ft above it, up 3 ft to its left.  The WATER'S
-  ;; EDGE's overalls, when both outlines are drawn, go a third of the way
-  ;; INTO the water's edge.  When all four corners match, that plus one
-  ;; Typ. corner callout is the whole drawing; when they do not, each
-  ;; side a cut has shortened also gets its remaining FLAT dimensioned.
-  (setq allsame (spa:samecorners corners)
-        out1 (or (null meth) (= mode1 "Coversize"))
+  ;; Laid out the way POOL lays out a rectangle.  The COVER's overalls
+  ;; go outside -- across 2 ft above it, up 3 ft to its left.  The
+  ;; WATER'S EDGE's overalls, when both outlines are drawn, go a third
+  ;; of the way INTO the water's edge.  The rest is corner callouts:
+  ;; one Typ. when all four corners match, every corner on its own when
+  ;; they do not -- and no flats, which POOL does not draw either.
+  (setq out1 (or (null meth) (= mode1 "Coversize"))
         sb1 (spa:maxsetback corners)
         ip1 (spa:insidepts 0.0 w 0.0 l sb1 sb1))
   (setvar "CLAYER" spa:*lay-dim*)
@@ -19613,21 +19635,15 @@
       (spa:dimoveralls t d c a d xlo yhi)
       (spa:dimoveralls nil (nth 0 ip1) (nth 1 ip1) (nth 2 ip1) (nth 3 ip1)
                        xlo yhi))
-  ;; the flats
-  (if (not allsame)
-      (foreach i (list 0 1 2 3)
-        (setq j (rem (+ i 1) 4))
-        (if (or (spa:cutp (nth i corners))
-                (spa:cutp (nth j corners)))
-            (spa:dimalg (spa:cornerpoint quad corners i 'next)
-                        (spa:cornerpoint quad corners j 'prev)
-                        (spa:outoff (nth i quad) (nth j quad) cen spa:*flatoff*)
-                        nil))))
-  ;; corner callouts (no note -- these are corners, not overalls)
-  (spa:dimcorners quad corners cen doff)
+  ;; corner callouts (no note -- these are corners, not overalls).  The
+  ;; outline that is not the outer one -- the water's edge, drawn first
+  ;; under a cover -- reads its callouts inward, clear of the cover's
+  (spa:dimcornersat quad corners cen doff 1 (not out1))
 
-  ;; the second outline, in ITS dimension style, plus one Typ. corner
-  ;; callout at the top-left when its corners all match
+  ;; the second outline, in ITS dimension style, with its own corner
+  ;; callouts: one Typ. at the top-left when its corners all match (so
+  ;; it cannot land on the first outline's at the bottom-right), every
+  ;; corner on its own when they do not
   (if meth
       (progn
         (spa:setmode (spa:othermode))
@@ -19640,8 +19656,7 @@
                              xlo yhi)
             (spa:dimoveralls t (nth 3 q2) (nth 2 q2) (nth 0 q2) (nth 3 q2)
                              xlo yhi))
-        (if (spa:samecorners c2)
-            (spa:dimcorner1 q2 c2 cen2 doff 3 " Typ."))
+        (spa:dimcornersat q2 c2 cen2 doff 3 out1)
         (spa:setmode mode1)
         ;; and how far the cover laps the water's edge, at the bottom
         (spa:dimstyle spa:*ds-cover* th 1.0)
@@ -20485,12 +20500,12 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "092326 REV16")
+(setq tut:*version* "092326 REV17")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
 ;;;  Standard 4-3.  Chosen because it exercises nearly everything:
-;;;  mixed corners (so flats and a 90 Typ. mark appear), both outlines,
+;;;  mixed corners (so every corner is called out), both outlines,
 ;;;  the overlap dimension, three pieces (so a fold hinge AND a velcro
 ;;;  hinge get drawn), and a hinge run long enough to call for a double
 ;;;  C channel.
@@ -20603,10 +20618,9 @@
     "    That follows from which outline it is, not which you drew first."
     "*   HOW MANY CORNER CALLOUTS.  Four identical corners get ONE, with"
     "    a Typ. suffix, at the bottom-right.  Mixed corners are called"
-    "    out one by one, and the square ones share a single 90 mark."
-    "    Four 90 corners get none at all."
-    "*   WHICH FLATS TO DIMENSION.  Only the sides a cut corner actually"
-    "    shortened, and only when the corners are not all identical."
+    "    out one by one, each square one with its own 90 mark -- POOL's"
+    "    rectangle rule.  The second outline is called out the same way,"
+    "    and the inner one's callouts read inward, clear of the cover's."
     "*   WHICH FOAM SHEET.  A taper can carry more than one -- Standard"
     "    3-2 and 4-2 each come as 48 x 144/96 and as 49-1/2 x 102 -- and"
     "    one can work where the other will not.  Every sheet is solved"
@@ -20787,34 +20801,15 @@
   (if (not stop)
       (setq stop
         (eq 'TUT-STOP
-          (tut:step "STEP 3 -- THE FLATS"
-            (list "The cut at corner C shortened the TOP and the RIGHT, so"
-                  "each gets its remaining straight run dimensioned,"
-                  "inboard of the overalls.  The bottom and left were not"
-                  "shortened, so they get nothing."
+          (tut:step "STEP 3 -- THE CORNER CALLOUTS"
+            (list "The corners are not all the same, so each one is"
+                  "called out on its own, the way POOL does a rectangle."
+                  "The cut face is dimensioned across itself, outside the"
+                  "corner.  Each square corner gets its own mark -- a"
+                  "circled corner point with a 90 leader.  No flats: the"
+                  "overalls and the callouts say it all."
                   ""
-                  "Had all four corners matched, there would be no flats"
-                  "at all -- the overalls and one Typ. callout would be"
-                  "the whole drawing.")
-            '(lambda ()
-               (spa:dimalg (spa:cornerpoint quad corners 1 'next)
-                           (spa:cornerpoint quad corners 2 'prev)
-                           (spa:outoff (nth 1 quad) (nth 2 quad) cen
-                                       spa:*flatoff*) nil)
-               (spa:dimalg (spa:cornerpoint quad corners 2 'next)
-                           (spa:cornerpoint quad corners 3 'prev)
-                           (spa:outoff (nth 2 quad) (nth 3 quad) cen
-                                       spa:*flatoff*) nil))))))
-
-  (if (not stop)
-      (setq stop
-        (eq 'TUT-STOP
-          (tut:step "STEP 4 -- THE CORNER CALLOUTS"
-            (list "The cut face is dimensioned across itself, outside the"
-                  "corner on its 45-degree line.  The three square corners"
-                  "share ONE mark -- a circled corner point with a 90"
-                  "leader, Typ. because there is more than one."
-                  ""
+                  "Had all four matched, ONE callout with Typ. would do."
                   "A radius corner would get R12\" instead, read from"
                   "outside the arc.  Corner callouts never carry the"
                   "Cover Size note -- they are corners, not overalls.")
@@ -20823,7 +20818,7 @@
   (if (not stop)
       (setq stop
         (eq 'TUT-STOP
-          (tut:step "STEP 5 -- THE WATER'S EDGE"
+          (tut:step "STEP 4 -- THE WATER'S EDGE"
             (list "Offset 3\" INWARD, because the cover is always the"
                   "larger of the two.  This is a true parallel offset, so"
                   "the corner moves with it: the 21\" cut face shrinks by"
@@ -20831,7 +20826,9 @@
                   ""
                   "Dashed, on the POOL layer.  Its own overalls go a third"
                   "of the way INTO it, hooked to points on the dimension"
-                  "line so the arrows land on the outline.")
+                  "line so the arrows land on the outline.  Its corners"
+                  "are called out too -- pointing INWARD, so they cannot"
+                  "land on the cover's callouts at the same corner.")
             '(lambda ()
                (setq w2 (- w (* 2.0 gap))
                      l2 (- l (* 2.0 gap))
@@ -20848,12 +20845,13 @@
                (spa:dimstylenow th)
                (spa:dimoveralls nil (nth 0 ip2) (nth 1 ip2)
                                 (nth 2 ip2) (nth 3 ip2) 0.0 l)
+               (spa:dimcornersat q2 c2 cen doff 3 t)
                (spa:setmode "Coversize"))))))
 
   (if (not stop)
       (setq stop
         (eq 'TUT-STOP
-          (tut:step "STEP 6 -- THE OVERLAP"
+          (tut:step "STEP 5 -- THE OVERLAP"
             (list "How far the cover laps the water's edge, at the bottom."
                   "The lap itself is far too small to hold its text, so"
                   "the note is parked under the cover with a leader.")
@@ -20864,7 +20862,7 @@
   (if (not stop)
       (setq stop
         (eq 'TUT-STOP
-          (tut:step "STEP 7 -- THE HINGES"
+          (tut:step "STEP 6 -- THE HINGES"
             (list "Standard 4-3 foam: 48\" wide, 144\" long, 2 to 4 pieces."
                   ""
                   "140\" / 48\" needs 3 pieces, so 2 hinges, evenly spaced."
@@ -20899,7 +20897,7 @@
                  (setq k (1+ k))))))))
 
   (if (not stop)
-      (tut:step "STEP 8 -- THE REPORT"
+      (tut:step "STEP 7 -- THE REPORT"
         (list "Target / actual / delta for everything that was measured,"
               "off to the right.  Problems print under it in RED --"
               "adjusted octagon letters, a hinge over the foam length, a"
@@ -94441,7 +94439,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.19")
+(setq *paddle-version* "v1.20")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -95237,6 +95235,163 @@
       (cal:v+ a (cal:v* u (/ (cal:cross (cal:v- c a) v)
                                        den)))))
 
+;; ------------------- two ends that already cross -------------------
+;; The commonest "gap" is not a gap at all: two walls drawn a little
+;; long, each running on past the other.  Their loose ends are an inch
+;; or two apart, so they pair off like a gap does -- but the perimeter
+;; is already there, at the point where the two cross, and all that is
+;; wrong is the two stubs sticking out past it.  There is nothing to
+;; ask: the only fix is to trim both back to the crossing, which is
+;; what PADDLE does, without the fillet question.
+
+;; How far round arc segment S the point P (on its circle) is: 0 at
+;; the start, 1 at the end, outside 0..1 when P is off the arc.
+(defun paddle--arcu (s p / seg d)
+  (setq seg (paddle--arcdata (car s) (cadr s) (caddr s))
+        d   (- (angle (caddr seg) p) (angle (caddr seg) (car s))))
+  (if (> (car seg) 0.0)
+      (while (< d 0.0) (setq d (+ d pi pi)))
+      (while (> d 0.0) (setq d (- d pi pi))))
+  ;; the start itself, a rounding error the far side of it
+  (if (< (- (+ pi pi) (abs d)) 1e-9) (setq d 0.0))
+  (/ d (car seg)))
+
+;; Where the line through A along D meets the circle CEN/R, as the
+;; parameters T of A + T*D -- none, one or two of them.
+(defun paddle--circ-line (cen r a d / f qa qb qc disc)
+  (setq f    (cal:v- a cen)
+        qa   (cal:dot d d)
+        qb   (* 2.0 (cal:dot f d))
+        qc   (- (cal:dot f f) (* r r))
+        disc (- (* qb qb) (* 4.0 qa qc)))
+  (if (and (> qa 1e-12) (>= disc 0.0))
+      (list (/ (- (- qb) (sqrt disc)) (* 2.0 qa))
+            (/ (+ (- qb) (sqrt disc)) (* 2.0 qa)))))
+
+;; Is U on the segment, 0..1 give or take a rounding error?
+(defun paddle--in01 (u) (and (>= u -1e-9) (<= u (+ 1.0 1e-9))))
+
+;; Every point where segments S1 and S2 cross, straight or arc, as
+;; (u1 u2 point) with U how far along each one it is (paddle--segpt's
+;; measure).  Only crossings on BOTH segments come back.
+(defun paddle--hits (s1 s2 / a u c v den t1 t2 out p c1 c2 r1 r2 d k h
+                        pm nrm pts)
+  (cond
+    ((and (= 0.0 (caddr s1)) (= 0.0 (caddr s2)))
+     (setq a   (car s1)
+           u   (cal:v- (cadr s1) a)
+           c   (car s2)
+           v   (cal:v- (cadr s2) c)
+           den (cal:cross u v))
+     (if (> (abs den) 1e-9)
+         (progn
+           (setq t1 (/ (cal:cross (cal:v- c a) v) den)
+                 t2 (/ (cal:cross (cal:v- c a) u) den))
+           (if (and (paddle--in01 t1) (paddle--in01 t2))
+               (setq out (list (list t1 t2
+                                     (cal:v+ a (cal:v* u t1)))))))))
+    ((= 0.0 (caddr s1))                      ; a line and an arc
+     (setq a (car s1)
+           u (cal:v- (cadr s1) a)
+           d (paddle--arcdata (car s2) (cadr s2) (caddr s2)))
+     (foreach t1 (paddle--circ-line (caddr d) (cadr d) a u)
+       (setq p (cal:v+ a (cal:v* u t1)))
+       (if (and (paddle--in01 t1) (paddle--in01 (setq t2 (paddle--arcu s2 p))))
+           (setq out (cons (list t1 t2 p) out)))))
+    ((= 0.0 (caddr s2))                      ; the same, turned round
+     (foreach h (paddle--hits s2 s1)
+       (setq out (cons (list (cadr h) (car h) (caddr h)) out))))
+    (T                                       ; two arcs
+     (setq c1 (paddle--arcdata (car s1) (cadr s1) (caddr s1))
+           c2 (paddle--arcdata (car s2) (cadr s2) (caddr s2))
+           r1 (cadr c1)
+           r2 (cadr c2)
+           c1 (caddr c1)
+           c2 (caddr c2)
+           d  (distance c1 c2))
+     (if (and (> d 1e-9) (<= d (+ r1 r2)) (>= d (abs (- r1 r2))))
+         (progn
+           (setq k   (/ (+ (- (* r1 r1) (* r2 r2)) (* d d)) (* 2.0 d))
+                 h   (sqrt (max 0.0 (- (* r1 r1) (* k k))))
+                 v   (cal:v* (cal:v- c2 c1) (/ 1.0 d))
+                 pm  (cal:v+ c1 (cal:v* v k))
+                 nrm (list (- (cadr v)) (car v))
+                 pts (list (cal:v+ pm (cal:v* nrm h))
+                           (cal:v- pm (cal:v* nrm h))))
+           (foreach p pts
+             (if (and (paddle--in01 (setq t1 (paddle--arcu s1 p)))
+                      (paddle--in01 (setq t2 (paddle--arcu s2 p))))
+                 (setq out (cons (list t1 t2 p) out))))))))
+  out)
+
+;; Does gap G's pair of ends already cross?  Each end's segment runs
+;; FROM its loose end into its chain (paddle--ends), so a crossing on
+;; both of them is a crossing short of both loose ends: what lies
+;; between it and each end is overshoot.  Returns (point u-a u-b) for
+;; the crossing nearest the two ends, or nil.  Only for two different
+;; entities it can edit (a line, an arc, an open lightweight polyline),
+;; and only when neither stub is longer than *paddle-gapmax*: trimming
+;; more than that away unasked is a decision, not a tidy-up, and it
+;; goes to the fillet question like any other gap.
+(defun paddle--overshoot (g / a b h best)
+  (setq a (car g)
+        b (cadr g))
+  (if (and (not (eq (cadr a) (cadr b)))
+           (wcmatch (cdr (assoc 0 (entget (cadr a)))) "LINE,ARC,LWPOLYLINE")
+           (wcmatch (cdr (assoc 0 (entget (cadr b)))) "LINE,ARC,LWPOLYLINE"))
+      (foreach h (paddle--hits (nth 5 a) (nth 5 b))
+        (if (and (< (car h) (- 1.0 1e-6))
+                 (< (cadr h) (- 1.0 1e-6))
+                 (<= (distance (car a) (caddr h)) *paddle-gapmax*)
+                 (<= (distance (car b) (caddr h)) *paddle-gapmax*)
+                 (or (null best)
+                     (< (+ (car h) (cadr h)) (+ (cadr best) (caddr best)))))
+            (setq best (list (caddr h) (car h) (cadr h))))))
+  best)
+
+;; Trim loose end E back to X, U of the way along its end segment:
+;; the entity's end that sits on the loose end moves to X, and an arc
+;; keeps its centre and radius (an ARC by its angle, a polyline arc
+;; segment by the bulge of what is left of it).  Returns what entmod
+;; did -- nil when the drawing refused the edit (a locked layer).
+(defun paddle--trimend (e x u / p ent ed typ cen k n vi bi ob nb out g)
+  (setq p   (car e)
+        ent (cadr e)
+        ed  (entget ent)
+        typ (cdr (assoc 0 ed)))
+  (cond
+    ((= typ "LINE")
+     (setq k (if (<= (distance p (cal:2d (cdr (assoc 10 ed)))) *paddle-fuzz*)
+                 10 11)
+           g (assoc k ed))
+     (entmod (subst (list k (car x) (cadr x) (cond ((cadddr g)) (0.0))) g ed)))
+    ((= typ "ARC")
+     (setq cen (cal:2d (cdr (assoc 10 ed)))
+           k   (if (<= (distance p (paddle--arcpt cen (cdr (assoc 40 ed))
+                                                  (cdr (assoc 50 ed))))
+                       *paddle-fuzz*)
+                   50 51))
+     (entmod (subst (cons k (angle cen x)) (assoc k ed) ed)))
+    ((= typ "LWPOLYLINE")
+     (setq n (length (cdr (paddle--lwverts ent))))
+     (if (<= (distance p (cal:2d (cdr (assoc 10 ed)))) *paddle-fuzz*)
+         (setq vi 0 bi 0)                     ; the first vertex
+         (setq vi (1- n) bi (- n 2)))         ; the last one
+     ;; what is left of an arc segment sweeps (1 - U) of what it did,
+     ;; and a bulge is the tangent of a quarter of the sweep
+     (setq ob (caddr (nth bi (cdr (paddle--lwverts ent))))
+           nb (* (atan ob) (- 1.0 u))
+           nb (/ (sin nb) (cos nb))
+           k  -1)
+     (foreach g ed
+       (cond
+         ((= (car g) 10)
+          (setq k   (1+ k)
+                out (cons (if (= k vi) (list 10 (car x) (cadr x)) g) out)))
+         ((and (= (car g) 42) (= k bi)) (setq out (cons (cons 42 nb) out)))
+         (T (setq out (cons g out)))))
+     (entmod (reverse out)))))
+
 ;; Is this gap the two ends of ONE open LWPOLYLINE, straight at both of
 ;; them?  That is the polyline somebody drew round the pool and never
 ;; closed, and it is the one gap FILLET must not be asked to close: two
@@ -95494,7 +95649,8 @@
 (defun c:PADDLE (/ *error* doc space mark-open padsize blkname ss res perims
                    opens vts allpads delta ndodge ncorner narc ofrad otrim
                    oecho ring gaps ngap nring nopen marks mk g mid ctr ans
-                   xsc tried nyes nclosed nrefused nleft pad)
+                   xsc tried nyes nclosed nrefused nleft pad ovr trimmed
+                   ntrim nstuck stuck)
   (defun *error* (msg)
     ;; the sysvars the gap pass borrows go back FIRST.  A setvar cannot
     ;; throw and everything below it can, and an error raised inside
@@ -95613,6 +95769,11 @@
           (princ (strcat "\n  gap " (itoa ngap) " of " (itoa (length marks))
                          ": " (paddle--in (caddr g)) " wide, at "
                          (rtos (car mid) 2 2) "," (rtos (cadr mid) 2 2)))
+          ;; Two ends that already CROSS are not a gap: the
+          ;; perimeter is there, at the crossing, with a stub sticking
+          ;; out past it on each side.  Nothing to ask -- the stubs are
+          ;; trimmed back to the crossing, and what that leaves is read
+          ;; back off the drawing below like any fillet.
           ;; Both loose ends on ONE entity is the polyline somebody
           ;; drew round the pool and never closed.  FILLET must not be
           ;; asked for that one -- two picks on one polyline joins
@@ -95623,16 +95784,27 @@
           ;; the fillet would have left.  Anything else on one entity
           ;; (a heavy POLYLINE, an arc at either end, two ends that
           ;; never cross) is marked and named instead.
-          (setq xsc (if (paddle--lwgap-p g)
+          (setq ovr (paddle--overshoot g)
+                xsc (if (and (not ovr) (paddle--lwgap-p g))
                         (paddle--xsect (nth 5 (car g)) (nth 5 (cadr g)))))
-          (if (and (eq (cadr (car g)) (cadr (cadr g))) (not xsc))
+          (cond
+            (ovr
+             (princ "\n  the two ends already cross: PADDLE trims the overshoot back to the crossing.")
+             ;; a stub on a locked layer refuses the edit: that gap
+             ;; keeps its arrow and is named as one PADDLE could not trim
+             (if (and (paddle--trimend (car g) (car ovr) (cadr ovr))
+                      (paddle--trimend (cadr g) (car ovr) (caddr ovr)))
+                 (setq nyes    (1+ nyes)
+                       trimmed (cons (car mk) trimmed))
+                 (setq stuck (cons (car mk) stuck))))
+            ((and (eq (cadr (car g)) (cadr (cadr g))) (not xsc))
               (progn
                 (princ "\n  both ends are on one entity, and PADDLE cannot join it in")
                 (princ "\n  place. A zero fillet there is two picks on one polyline,")
                 (princ "\n  which cuts away everything between them, so it is not")
                 (princ "\n  offered. Close it (PEDIT > Close, or pull the two ends")
-                (princ "\n  together) and run PADDLE again."))
-              (progn
+                (princ "\n  together) and run PADDLE again.")))
+            (T
                 (if xsc
                     (princ "\n  both ends are on one polyline: PADDLE joins them at the crossing itself."))
                 (initget "Yes No")
@@ -95647,10 +95819,10 @@
                           (paddle--dofillet g))
                       (setvar "CMDECHO" oecho)
                       (setq nyes  (1+ nyes)
-                            tried (cons (car mk) tried)))))))  ; asked for, and tried
+                            tried (cons (car mk) tried))))))) ; asked for, and tried
         (setvar "FILLETRAD" ofrad)
         (setvar "TRIMMODE" otrim)
-        (setq nclosed 0 nrefused 0 nleft 0)
+        (setq nclosed 0 nrefused 0 nleft 0 ntrim 0 nstuck 0)
         ;; read the drawing again: a gap that closed is not there to be
         ;; found any more, and what it closed is a perimeter to pad
         (if (> nyes 0)
@@ -95659,11 +95831,22 @@
                   opens  (cadr res)))
         (foreach mk marks
           (if (paddle--still-open-p (cadr mk) opens)
-              (if (member (car mk) tried)
-                  (setq nrefused (1+ nrefused))
-                  (setq nleft (1+ nleft)))
+              (cond ((or (member (car mk) trimmed) (member (car mk) stuck))
+                     (setq nstuck (1+ nstuck)))
+                    ((member (car mk) tried) (setq nrefused (1+ nrefused)))
+                    (T (setq nleft (1+ nleft))))
               (progn (entdel (car mk)) ; the arrow has nothing left to
-                     (setq nclosed (1+ nclosed))))) ; point at
+                     (if (member (car mk) trimmed)          ; point at
+                         (setq ntrim (1+ ntrim))
+                         (setq nclosed (1+ nclosed))))))
+        (if (> ntrim 0)
+            (princ (strcat "\nPADDLE: " (itoa ntrim)
+                           " overshoot(s) trimmed back to where the two"
+                           " ends cross - carrying on with what that leaves.")))
+        (if (> nstuck 0)
+            (princ (strcat "\nPADDLE: could not trim " (itoa nstuck)
+                           " overshoot(s) - the drawing refused the edit"
+                           " (a locked layer?). Their arrow(s) stay.")))
         (if (> nclosed 0)
             (princ (strcat "\nPADDLE: " (itoa nclosed)
                            " gap(s) closed with a zero fillet - carrying on"
@@ -133874,7 +134057,7 @@
      ("spa:*dimvars*" "'(\"DIMLUNIT\" \"DIMFRAC\" \"DIMDEC\" \"DIMZIN\" \"DIMPOST\" \"DIMTAD\" \"DIMTMOVE\" \"DIMTXT\" \"DIMASZ\" \"DIMEXE\" \"DIMEXO\" \"DIMGAP\" \"DIMSCALE\" \"DIMTIX\" \"DIMTOFL\" \"DIMATFIT\")" "The system variables the routine sets for the run and puts back afterwards. A variable this release does no...")
      ("spa:*dimoff*" "36.0" "3 ft: cover outline -> the LEFT overall dim ---- where the dimension lines stand off The COVER's overalls g...")
      ("spa:*topoff*" "24.0" "2 ft: cover outline -> the TOP overall dim ---- where the dimension lines stand off The COVER's overalls go...")
-     ("spa:*flatoff*" "18.0" "outline -> the inboard flat dims ---- where the dimension lines stand off The COVER's overalls go outside t...")
+     ("spa:*flatoff*" "18.0" "outline -> an octagon's inboard flat dims ---- where the dimension lines stand off The COVER's overalls go...")
      ("spa:*insetfrac*" "0.3333" "water's edge dims, a third of the way in ---- where the dimension lines stand off The COVER's overalls go o...")
      ("spa:*lapoff*" "14.0" "how far under the cover the lap note sits ---- where the dimension lines stand off The COVER's overalls go...")
      ("spa:*mark-r*" "0.18" "circle radius on the corner point ---- corner callouts, as multiples of doff A radius corner takes a radius...")

@@ -149,6 +149,15 @@ loose geometry. Arrow(s) drawn on layer "PADDLE-GAP" at the open joint(s).
 Close the gap the arrow points at with a zero fillet? [Yes/No] <Yes>:
 ```
 
+* **Two ends that already cross are not asked about.** When each loose
+  end has run on past the other — a wall drawn long past the curve it
+  meets, two walls overshooting one corner — the perimeter is already
+  there at the crossing. PADDLE trims each stub back to it (a line's
+  end, an arc's end angle, an open polyline's end vertex and bulge),
+  says `the two ends already cross`, and carries on. Only a stub no
+  longer than `*paddle-gapmax*` is trimmed unasked, and only across two
+  different lines, arcs or lightweight polylines. Anything else gets
+  the question below.
 * **Yes** runs `FILLET` at radius 0 on the two entities — so an
   overshoot is trimmed back and a shortfall is run on, exactly as a
   drafter would do it by hand. Each pick lands nine tenths of the way

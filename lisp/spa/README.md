@@ -51,7 +51,7 @@ is kept per lisp — git history is the archive.
   Written to the text window, and optionally placed in the drawing as a
   reference sheet you can plot.
 * **Demo** — draws a worked 140 × 110 cover a step at a time, explaining
-  each step *before* it appears: outline, overalls, flats, corner
+  each step *before* it appears: outline, overalls, corner
   callouts, water's edge, overlap, hinges, report. Nothing is asked for;
   the measurements are canned. Enter advances, `X` stops.
 * **Both** — the checklist, then the demo.
@@ -213,7 +213,7 @@ question and swept on every way out, Esc included.
 `Back` at the gate leaves the corner stage for the overalls; `Back` at
 the round, or at corner A, re‑asks the gate.
 
-Callouts sit outside the corner on its 45° line: a radius dimension on a
+Callouts sit outside the corner, on the line out of it from the centre: a radius dimension on a
 `Radius` corner (`R12"`), an aligned dimension across a `Cut` face
 (`21"`), a circled corner point dimensioned `90°` on a `Square` corner
 — a radius dimension on that little circle, its measurement replaced by
@@ -399,21 +399,24 @@ All dimension text is **centred** on its dimension line as normal.
 ```lisp
 (setq spa:*dimoff*    36.0)   ; 3 ft: cover -> the LEFT overall dim
 (setq spa:*topoff*    24.0)   ; 2 ft: cover -> the TOP overall dim
-(setq spa:*flatoff*   18.0)   ; outline -> the inboard flat dims
+(setq spa:*flatoff*   18.0)   ; outline -> an octagon's inboard flat dims
 (setq spa:*insetfrac* 0.3333) ; water's edge dims, a third of the way in
 (setq spa:*lapoff*    14.0)   ; how far under the cover the lap note sits
 ```
 
-Corner callouts stay near their corner, scaled to the cover. The water's
-edge's flats and corner callouts are still placed relative to its own
-outline, so they can land on top of the cover — nudge those by hand.
+Corner callouts stay near their corner, scaled to the cover. With both
+outlines drawn, the **inner** one — the water's edge — reads its corner
+callouts **inward**, into the spa, so they cannot land on the cover's
+callouts at the same corner.
 
 A round spa is the one exception to the inset rule: its overalls have to
 run through the centre to be diameters, so the water's edge pair sits on
 the centre lines.
 
 The overall **across** goes on the **top** and the overall **up** on the
-**left**, on every shape. What else appears depends on the corners:
+**left**, on every shape — horizontal and vertical ones as true linear
+dimensions, as `POOL` draws them. A rectangle then gets its corner
+callouts the way `POOL`'s rectangle does, and nothing else:
 
 **All four corners identical** — the two overalls plus **one** corner
 callout with a `Typ.` suffix, at the bottom-right. That is the whole
@@ -423,15 +426,18 @@ one `90° Typ.` mark too (it used to get no corner note at all).
 
 **Corners not identical** — every corner is called out on its own (no
 `Typ.`): each cut with its dimension, each `Square` with its own `90°`
-mark, each `NotGiven` with its own `?` mark and note, and every side a
-cut has **shortened** also gets its remaining **flat** dimensioned,
-inboard of the overalls. So a cover with one cut at the top-right reads:
-overall across, overall up, the top flat, the right flat, the cut face,
-and a `90°` mark on each square corner.
+mark, each `NotGiven` with its own `?` mark and note. There are no
+inboard flat dimensions (there used to be; `POOL` never drew them). So a
+cover with one cut at the top-right reads: overall across, overall up,
+the cut face, and a `90°` mark on each square corner.
+
+**The second outline** gets the same treatment on its own corners — one
+`Typ.` at the top-left when they all match, every corner otherwise.
+Mixed corners used to leave it with no corner callouts at all.
 
 The round spa takes one overall; only an out-of-round one gets the
-second. An octagon whose eight sides come out unequal picks up the bottom
-and right flats the same way the rectangle does.
+second. An octagon whose eight sides come out unequal picks up its bottom
+and right flats, inboard of the overalls.
 
 ## Bounded outlines
 
@@ -670,7 +676,7 @@ holds this table and the block together, so neither can drift from the other.
 | `spa:*dim-gap*` | `0.4` | gap round the text |
 | `spa:*dimoff*` | `36.0` | 3 ft: cover outline -> the LEFT overall dim |
 | `spa:*topoff*` | `24.0` | 2 ft: cover outline -> the TOP overall dim |
-| `spa:*flatoff*` | `18.0` | outline -> the inboard flat dims |
+| `spa:*flatoff*` | `18.0` | outline -> an octagon's inboard flat dims |
 | `spa:*insetfrac*` | `0.3333` | water's edge dims, a third of the way in |
 | `spa:*lapoff*` | `14.0` | how far under the cover the lap note sits |
 | `spa:*mark-r*` | `0.18` | circle radius on the corner point |

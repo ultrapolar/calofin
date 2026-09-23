@@ -473,7 +473,7 @@ def spa_raised():
 def tutspa_scenarios():
     print("TUTORIALSPA -- the demo and the reference sheet")
     same_drawing('TUTORIALSPA demo', [SPA, TUTSPA], 'c:TUTORIALSPA',
-                 ['Demo', BASE] + [''] * 9)
+                 ['Demo', BASE] + [''] * 8)
 
     # the reference sheet goes where it is put, whatever the last SPA
     # run left in spa:*base*
