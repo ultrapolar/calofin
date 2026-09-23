@@ -24,7 +24,26 @@ Deliberately AutoLISP-strict where it matters:
     only (two equal integers, never two equal reals or lists), and
     entmod / entdel refuse -- nil, nothing changed -- an entity on a
     LOCKED layer (tests/test_lispvm_values.py).  angtos is NOT in that
-    list: it still ignores DIMZIN, AUNITS and AUPREC.
+    list: it still ignores DIMZIN, AUNITS and AUPREC;
+  * the UCS is what UCSORG / UCSXDIR / UCSYDIR say -- World in a new
+    VM, vm.set_ucs moves it, WORLDUCS follows, and all four are
+    read-only -- and trans honours it: 0 World, 1 the UCS, 2 the
+    display (the UCS here), an ename or an extrusion vector its OCS by
+    the arbitrary axis algorithm (an object DXF keeps in World, such as
+    a LINE, is the World frame whatever its 210).  The points a
+    modelled (command ...) is handed are read in it too, and a linear
+    DIMENSION carries the angle of its dimension line in group 50, as
+    AutoCAD's does.  A scripted click is the UCS numbers getpoint
+    returns.  LISPVM_UCS="1000,500,0:30" re-runs anything under that
+    UCS, and LISPVM_UCS_CLICKS=placed reads each scripted click as the
+    World spot the test meant instead; a test that set its own UCS --
+    vm.set_ucs(), World included -- keeps it (tests/test_lispvm_ucs.py).
+    On World every modelled command draws where it did; what a World
+    run sees that it did not before is trans answering a 3D point of
+    reals, a 2D one given its Z (it handed back whatever it was given),
+    getvar answering the four UCS variables (nil before), setvar on one
+    refused (accepted before), and group 50 on a linear DIMENSION
+    (absent before, and so read as 0 even for a vertical one).
 
 Interaction is scripted: every input -- getpoint, getdist, getint,
 getreal, getkword, getstring, entsel and the rest -- pops its answer
@@ -567,7 +586,25 @@ class VM:
             'DIMPOST': '', 'DIMTAD': 0, 'DIMASZ': 0.18, 'DIMEXE': 0.18,
             'DIMEXO': 0.0625, 'DIMGAP': 0.09, 'DIMTIX': 0, 'DIMTOFL': 0,
             'DIMATFIT': 3, 'DIMLAYER': '.', 'CVPORT': 2, 'TILEMODE': 1,
+            # the UCS, in World numbers as AutoCAD keeps it: World in a
+            # new drawing.  trans reads these three; WORLDUCS is worked
+            # out from them when it is read (getvar), and all four are
+            # read-only (setvar refuses).  vm.set_ucs() moves it.
+            'UCSORG': [0.0, 0.0, 0.0], 'UCSXDIR': [1.0, 0.0, 0.0],
+            'UCSYDIR': [0.0, 1.0, 0.0], 'WORLDUCS': 1,
         }
+        # the UCS sweep (UCS_ENV): parsed once, put on now and again
+        # before every run() -- unless the test puts its own UCS on
+        # (set_ucs), which is then the test's to keep
+        spec = os.environ.get(UCS_ENV)
+        self.ucs_sweep = _parse_ucs_spec(spec) if spec else None
+        self.ucs_clicks = os.environ.get(UCS_CLICKS_ENV) or 'ucs'
+        if self.ucs_clicks not in UCS_CLICK_MODES:
+            raise ValueError(f"{UCS_CLICKS_ENV}={self.ucs_clicks!r}: one of "
+                             f"{UCS_CLICK_MODES}")
+        self.ucs_own = False
+        if self.ucs_sweep is not None:
+            self._put_ucs(*_ucs_axes(*self.ucs_sweep))
         # *error* dispatch is OPT-IN (vm.handle_errors = True): with it
         # on, a LispError raised outside vl-catch-all-apply runs the
         # *error* in force at the failing code -- and then aborts the
@@ -1052,7 +1089,37 @@ class VM:
             r = self.eval(form)
         return r
 
+    # ---------------- the UCS
+    def _put_ucs(self, o, x, y):
+        self.sysvars['UCSORG'] = list(o)
+        self.sysvars['UCSXDIR'] = list(x)
+        self.sysvars['UCSYDIR'] = list(y)
+        self.sysvars['WORLDUCS'] = 0 if _ucs_frame(self) else 1
+
+    def set_ucs(self, origin=(0.0, 0.0, 0.0), angle=0.0, xdir=None,
+                ydir=None):
+        """Put a UCS on: its origin in World numbers, turned ANGLE radians
+        about World Z -- or, given XDIR and YDIR (unit, square), along
+        them.  With no arguments, World.  A test that calls this owns the
+        UCS from then on: the LISPVM_UCS sweep leaves it alone, and its
+        scripted clicks are UCS numbers whatever LISPVM_UCS_CLICKS says."""
+        self._put_ucs(*_ucs_axes(origin, angle, xdir, ydir))
+        self.ucs_own = True
+        return self
+
+    def ucs_to_wcs(self, p, disp=False):
+        """P, in the current UCS, in World numbers (a 3D list)."""
+        f = _ucs_frame(self)
+        return _v3(p) if f is None else f.to_wcs(p, disp)
+
+    def wcs_to_ucs(self, p, disp=False):
+        """P, in World numbers, in the current UCS (a 3D list)."""
+        f = _ucs_frame(self)
+        return _v3(p) if f is None else f.from_wcs(p, disp)
+
     def run(self, name, script):
+        if self.ucs_sweep is not None and not self.ucs_own:
+            self._put_ucs(*_ucs_axes(*self.ucs_sweep))
         self.script = list(script)
         self.prompts = []
         fn = self.get(Sym(name.lower()))
@@ -1800,14 +1867,28 @@ def _prompt(vm, a):
 def _getvar(vm, a):
     """An unknown variable is nil, as in AutoCAD -- not 0, which this
     VM used to invent and which no arithmetic ever complained about."""
-    if a[0].upper() == 'LASTPROMPT':
+    name = a[0].upper()
+    if name == 'LASTPROMPT':
         return vm.lastprompt
-    return vm.sysvars.get(a[0].upper(), NIL)
+    if name == 'WORLDUCS':
+        # follows the UCS, however it was put on (the UCS block)
+        return 0 if _ucs_frame(vm) else 1
+    v = vm.sysvars.get(name, NIL)
+    if name == 'VIEWCTR' and _placing(vm) and isinstance(v, list):
+        # a UCS value in AutoCAD; under the 'placed' sweep the stored one
+        # is the World spot the test put the view on, as its clicks are
+        return _w2u(vm, v)
+    return v
 
 
 @bi('setvar')
 def _setvar(vm, a):
     name = a[0].upper()
+    if name in UCS_READ_ONLY:
+        # "; error: AutoCAD variable setting rejected" -- the four are
+        # documented read-only, and the value stays (test_lispvm_ucs T7)
+        raise LispError(f'AutoCAD variable setting rejected: "{a[0]}" '
+                        f'{a[1]!r} -- {name} is read-only', vm)
     if name == 'CLAYER' and a[1] not in vm.tables['LAYER'] and a[1] != '0':
         raise LispError(f"setvar CLAYER: layer does not exist: {a[1]!r}", vm)
     vm.sysvars[name] = a[1]
@@ -2364,13 +2445,321 @@ for its VLA object, so routines that convert before calling a method
 still line up with the entity the rest of the VM knows."""
 
 
+# ---------------------------------------------------------------- the UCS
+#
+# A click is a UCS point and the drawing is kept in World numbers; trans
+# carries one to the other (tests/test_lispvm_ucs.py pins every rule
+# below, with its source).  The UCS is what AutoCAD says it is:
+# UCSORG, UCSXDIR and UCSYDIR, all three in World numbers, with
+# WORLDUCS following them.  vm.set_ucs() moves it; a new VM is on
+# World, where every conversion below is the identity -- and trans
+# still answers what AutoCAD's does there, a 3D point of reals, a 2D
+# one given its Z (test_lispvm_ucs T1).
+
+#: the four UCS variables, read-only in AutoCAD: setvar is refused
+UCS_READ_ONLY = frozenset({'UCSORG', 'UCSXDIR', 'UCSYDIR', 'WORLDUCS'})
+
+#: the sweep: LISPVM_UCS="x,y,z:degrees" puts that plan UCS on every VM
+#: the process makes, and again before every run() -- except a VM whose
+#: test called VM.set_ucs itself, which keeps the UCS it chose (World
+#: included: that is how a test that means World opts out);
+#: LISPVM_UCS_CLICKS says what a scripted click means while the sweep's
+#: UCS is in force (UCS_CLICK_MODES)
+UCS_ENV = 'LISPVM_UCS'
+UCS_CLICKS_ENV = 'LISPVM_UCS_CLICKS'
+#: 'ucs': a scripted click is the UCS numbers getpoint hands back, as
+#: under a UCS a test sets.  'placed': it is the spot on the drawing the
+#: test meant -- World numbers, the frame its fixture is built in -- and
+#: the routine is handed that spot's UCS numbers (VIEWCTR too), while
+#: vm.commands logs the points a command was handed back in World
+#: numbers; fixture, click and log stay in the test's one frame, and
+#: only a routine that mixes the frames fails
+UCS_CLICK_MODES = ('ucs', 'placed')
+
+_WORLD_AXES = ([0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0])
+
+
+def _v3(p):
+    q = [float(c) for c in p[:3]]
+    return q + [0.0] * (3 - len(q))
+
+
+def _dot(a, b):
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def _cross(a, b):
+    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0]]
+
+
+def _unit(a):
+    n = math.sqrt(_dot(a, a))
+    return [c / n for c in a] if n > 0.0 else None
+
+
+class _Frame:
+    """An orthonormal frame in World numbers: origin O, axes X Y Z.  A
+    point's numbers IN it are its dot products with the axes, measured
+    from O; a displacement ignores O."""
+    __slots__ = ('o', 'x', 'y', 'z')
+
+    def __init__(self, o, x, y, z):
+        self.o, self.x, self.y, self.z = o, x, y, z
+
+    def to_wcs(self, p, disp=False):
+        p = _v3(p)
+        o = (0.0, 0.0, 0.0) if disp else self.o
+        return [o[i] + p[0] * self.x[i] + p[1] * self.y[i] + p[2] * self.z[i]
+                for i in range(3)]
+
+    def from_wcs(self, w, disp=False):
+        w = _v3(w)
+        if not disp:
+            w = [w[i] - self.o[i] for i in range(3)]
+        return [_dot(w, self.x), _dot(w, self.y), _dot(w, self.z)]
+
+
+def _ucs_axes(origin, angle=0.0, xdir=None, ydir=None):
+    """(UCSORG UCSXDIR UCSYDIR) for a UCS at ORIGIN: turned ANGLE radians
+    about World Z, or along XDIR / YDIR when they are given, which must
+    be unit and square to each other (ValueError otherwise)."""
+    o = _v3(origin)
+    if xdir is None and ydir is None:
+        c, s = math.cos(angle), math.sin(angle)
+        return o, [c, s, 0.0], [-s, c, 0.0]
+    x, y = _v3(xdir), _v3(ydir)
+    if (abs(_dot(x, x) - 1.0) > 1e-9 or abs(_dot(y, y) - 1.0) > 1e-9
+            or abs(_dot(x, y)) > 1e-9):
+        raise ValueError(f"set_ucs: UCSXDIR {x} and UCSYDIR {y} are not "
+                         f"unit and square to each other")
+    return o, x, y
+
+
+def _ucs_frame(vm):
+    """The current UCS as a _Frame, None when it is World.  Read off the
+    three variables each time, so a test that writes them straight is
+    honoured as much as one that calls set_ucs."""
+    o, x, y = (vm.sysvars.get(k) for k in ('UCSORG', 'UCSXDIR', 'UCSYDIR'))
+    if o is None and x is None and y is None:
+        return None
+    try:
+        o, x, y = _v3(o), _v3(x), _v3(y)
+    except (TypeError, ValueError):
+        raise NotModelled(f"the UCS is UCSORG {o!r} UCSXDIR {x!r} UCSYDIR "
+                          f"{y!r}: not three points", vm)
+    if (o, x, y) == tuple(_WORLD_AXES):
+        return None
+    if (abs(_dot(x, x) - 1.0) > 1e-9 or abs(_dot(y, y) - 1.0) > 1e-9
+            or abs(_dot(x, y)) > 1e-9):
+        raise NotModelled(f"the UCS axes UCSXDIR {x} UCSYDIR {y} are not "
+                          f"unit and square: no UCS AutoCAD would keep", vm)
+    return _Frame(o, x, y, _cross(x, y))
+
+
+def _ocs_frame(n, vm):
+    """The OCS of extrusion N by the DXF Reference's Arbitrary Axis
+    Algorithm; None when N is World Z (the OCS is then the world)."""
+    n = _unit(_v3(n))
+    if n is None:
+        raise LispError("trans: a zero extrusion vector names no plane", vm)
+    if abs(n[0]) < 1e-12 and abs(n[1]) < 1e-12 and n[2] > 0.0:
+        return None
+    if abs(n[0]) < 1.0 / 64.0 and abs(n[1]) < 1.0 / 64.0:
+        ax = _unit(_cross([0.0, 1.0, 0.0], n))
+    else:
+        ax = _unit(_cross([0.0, 0.0, 1.0], n))
+    ay = _unit(_cross(n, ax))
+    return _Frame((0.0, 0.0, 0.0), ax, ay, n)
+
+
+#: the entities DXF keeps in their OWN plane (DXF Reference, "Object
+#: Coordinate Systems (OCS)"), so (trans p ename 0) takes p through the
+#: plane their 210 names.  A 2D POLYLINE is one; its flag 8/16/64 kinds
+#: (3D polyline, mesh, polyface) are World, like every type not listed:
+#: trans through one of those is the null operation (_world_kind).
+_OCS_TYPES = frozenset({'ARC', 'CIRCLE', 'SOLID', 'TRACE', 'TEXT', 'ATTRIB',
+                        'ATTDEF', 'SHAPE', 'INSERT', 'LWPOLYLINE', 'POLYLINE',
+                        'HATCH', 'DIMENSION'})
+
+
+def _flat(n):
+    return n is None or n is NIL or (
+        isinstance(n, list) and len(n) >= 3
+        and abs(float(n[0])) < 1e-12 and abs(float(n[1])) < 1e-12
+        and float(n[2]) > 0.0)
+
+
+def _world_kind(typ, flags):
+    """True for an entity whose points DXF keeps in World: anything off
+    the _OCS_TYPES list, and a POLYLINE whose 70 makes it a 3D polyline,
+    a mesh or a polyface (bits 8 / 16 / 64)."""
+    return typ not in _OCS_TYPES or (
+        typ == 'POLYLINE' and isinstance(flags, int) and bool(flags & 88))
+
+
+def _ent_frame(vm, e):
+    """ENAME's own coordinate system for trans, None when it is the
+    world's.  Flat -- no 210, or +Z -- it is the world whatever the
+    entity.  Off +Z it is the plane the 210 names for an entity DXF keeps
+    in its own plane, and the world still for one whose points DXF keeps
+    in World (LINE, POINT, MTEXT, ELLIPSE, a 3D polyline ...): 'for these
+    objects, conversion between OCS and WCS is a null operation' (the
+    trans reference; test_lispvm_ucs O5).  A VERTEX carries no 210 --
+    its plane is its polyline's -- and what trans reads a 2D polyline's
+    vertex as, off +Z, is not documented: refused rather than guessed."""
+    typ = _dxf(vm, e, 0)
+    if typ == 'VERTEX':
+        i = vm.entities.index(e) if e in vm.entities else -1
+        while i > 0 and _dxf(vm, vm.entities[i], 0) == 'VERTEX':
+            i -= 1
+        owner = vm.entities[i] if i >= 0 else None
+        if owner is not None and _dxf(vm, owner, 0) == 'POLYLINE' \
+                and not _world_kind('POLYLINE', _dxf(vm, owner, 70)) \
+                and not _flat(_dxf(vm, owner, 210)):
+            raise NotModelled(f"trans through a VERTEX of a 2D polyline "
+                              f"whose plane is not +Z: the VM does not say "
+                              f"what AutoCAD reads a vertex's ECS as", vm)
+        return None
+    n = _dxf(vm, e, 210)
+    if _flat(n) or _world_kind(typ, _dxf(vm, e, 70)):
+        return None
+    return _ocs_frame(n, vm)
+
+
+def _trans_frame(vm, code, which):
+    """The frame a trans FROM or TO argument names, None for World."""
+    if isinstance(code, Ent):
+        return _ent_frame(vm, code)
+    if isinstance(code, bool):
+        raise LispError(f"trans: bad argument type for {which}: {code!r}", vm)
+    if isinstance(code, float):
+        raise NotModelled(f"trans: {which} code {code!r} is a real: whether "
+                          f"AutoCAD takes it for the integer is not "
+                          f"modelled", vm)
+    if isinstance(code, int):
+        if code == 0:
+            return None
+        if code in (1, 2):
+            # 2, the display, is the UCS here: VM POLICY -- the view is
+            # taken to be plan to the UCS (test_lispvm_ucs.py, V1)
+            return _ucs_frame(vm)
+        if code == 3:
+            raise NotModelled("trans: code 3 is paper-space DCS; the VM has "
+                              "no viewports to take a point through", vm)
+        raise LispError(f"trans: bad argument value: {which} code {code}", vm)
+    if isinstance(code, list) and len(code) == 3 \
+            and all(isinstance(c, (int, float)) and not isinstance(c, bool)
+                    for c in code):
+        return _ocs_frame(code, vm)
+    raise LispError(f"trans: bad argument type for {which}: {code!r}", vm)
+
+
 @bi('trans')
 def _trans(vm, a):
-    """(trans pt from to [disp]) -- the VM's world is flat: WCS, UCS and
-    every entity's OCS coincide, so this is the identity.  It still
-    type-checks the point, which is the failure it exists to catch: nil
-    reaching a coordinate transform dies here as it would in AutoCAD."""
-    return list(pt(a[0]))
+    """(trans pt from to [disp]) -- PT from the frame FROM names to the
+    one TO names: 0 World, 1 the current UCS, 2 the display (the UCS
+    here), an ename its own plane, a 3D vector the plane it is the
+    extrusion of.  DISP non-nil: a displacement, turned and not moved.
+    The answer is a 3D point of reals, as the reference's Return Values
+    say, whether or not anything moved -- World to World included; a
+    2D point is given the Z the reference's table fills in: 0.0 for a
+    displacement or from World or an OCS, the current ELEVATION from
+    the UCS (and the display, which is the UCS here).  The old VM
+    handed the point back as given, 2D and integers included, and no
+    test leaned on that (test_lispvm_ucs T1, T10); nil reaching a
+    coordinate transform still dies here as it would in AutoCAD."""
+    p = pt(a[0])
+    if len(a) < 3:
+        raise LispError("trans: too few arguments", vm)
+    frm = _trans_frame(vm, a[1], 'from')
+    to = _trans_frame(vm, a[2], 'to')
+    for c in p[:3]:
+        num(c, 'trans')
+    disp = len(a) > 3 and truthy(a[3])
+    if len(p) == 2:
+        p = list(p) + [_zfill(vm, a[1], disp)]
+    if frm is None and to is None:
+        return [float(c) for c in p[:3]]
+    w = frm.to_wcs(p, disp) if frm is not None else _v3(p)
+    return to.from_wcs(w, disp) if to is not None else w
+
+
+def _zfill(vm, code, disp):
+    """The Z trans gives a 2D point it converts (AutoLISP Reference,
+    trans, 'Converted 2D point Z values'): 0.0 for a displacement, from
+    the WCS or from an OCS; the current elevation from the UCS; from
+    the DCS, the point projected onto the UCS XY plane at the current
+    elevation -- the same number here, where the display is plan to the
+    UCS (V1).  ELEVATION is unseeded (nothing in the tree reads it), so
+    a drawing that never set it is at AutoCAD's default, 0.0."""
+    if disp or not (isinstance(code, int) and not isinstance(code, bool)
+                    and code in (1, 2)):
+        return 0.0
+    e = vm.sysvars.get('ELEVATION', 0.0)
+    return float(e) if isinstance(e, (int, float)) \
+        and not isinstance(e, bool) else 0.0
+
+
+def _u2w(vm, p):
+    """A point a command was handed -- read in the UCS -- in World
+    numbers; P itself, untouched, while the UCS is World."""
+    f = _ucs_frame(vm)
+    return p if f is None else f.to_wcs(p)
+
+
+def _w2u(vm, p):
+    f = _ucs_frame(vm)
+    return p if f is None else f.from_wcs(p)
+
+
+def _plan_ucs(vm, cmd):
+    """The current UCS for a modelled command that draws in plan: None
+    for World, else its _Frame -- refused as unmodelled when its Z is not
+    World Z.  The VM does each such command's arithmetic in the World XY
+    plane (a ROTATE about World Z, a dimension with no 210 of its own), and
+    under a tilted UCS AutoCAD would work in the UCS plane instead."""
+    f = _ucs_frame(vm)
+    if f is not None and (abs(f.z[2] - 1.0) > 1e-9):
+        raise NotModelled(f'{cmd} under a UCS whose Z is not World Z '
+                          f'{f.z!r}: the VM draws it in the World plan', vm)
+    return f
+
+
+def _ucs_angle(f):
+    """The turn of plan UCS F about World Z, in radians: 0 for World."""
+    return 0.0 if f is None else math.atan2(f.x[1], f.x[0])
+
+
+def _placing(vm):
+    """True while the sweep's 'placed' clicks are in force: a scripted
+    click is then a World spot, handed over in UCS numbers."""
+    return (vm.ucs_clicks == 'placed' and vm.ucs_sweep is not None
+            and not vm.ucs_own)
+
+
+def _placed(vm, p):
+    """A scripted click as getpoint hands it back: as given, or -- under
+    the 'placed' sweep -- the UCS numbers of the World spot it names."""
+    if _placing(vm) and isinstance(p, list) and len(p) >= 2 \
+            and all(isinstance(c, (int, float)) and not isinstance(c, bool)
+                    for c in p):
+        return _w2u(vm, p)
+    return p
+
+
+def _parse_ucs_spec(spec):
+    """LISPVM_UCS's value, "x,y,z:degrees", as (origin, radians).
+    ValueError for anything else."""
+    try:
+        where, deg = spec.split(':')
+        xyz = [float(c) for c in where.split(',')]
+        if len(xyz) != 3:
+            raise ValueError
+        return xyz, math.radians(float(deg))
+    except ValueError:
+        raise ValueError(f"{UCS_ENV}={spec!r}: want \"x,y,z:degrees\", "
+                         f"e.g. \"1000,500,0:30\"") from None
 
 
 def _dimrot_angle(a):
@@ -2496,6 +2885,12 @@ def _rotate_ss(vm, a):
             base = [float(v) for v in x[:2]]
     if base is None or ang is None:
         raise LispError('_.ROTATE: no base point or no angle in %r' % (a,), vm)
+    # the base point is typed into the command, so it is a UCS point; the
+    # turn is about the UCS Z, which is World Z for every UCS the VM
+    # models a ROTATE under
+    f = _plan_ucs(vm, '_.ROTATE')
+    if f is not None:
+        base = f.to_wcs(base)[:2]
     rad = math.radians(ang)
     ca, sa = math.cos(rad), math.sin(rad)
     for e in ss[1:]:
@@ -2514,9 +2909,33 @@ def _rotate_ss(vm, a):
 
 
 # command + input
+def _logged(vm, a):
+    """A command's arguments as vm.commands keeps them: as given -- UCS
+    points, the numbers AutoCAD read -- except under the 'placed' sweep,
+    whose test reads everything in World numbers (its fixture, its
+    clicks, VIEWCTR), and so reads the points it handed a command there
+    too.  An angle is left as given either way."""
+    if not _placing(vm):
+        return list(a)
+
+    def pt_(v):
+        return (isinstance(v, list) and 2 <= len(v) <= 3
+                and all(isinstance(c, (int, float))
+                        and not isinstance(c, bool) for c in v))
+    out = []
+    for x in a:
+        if pt_(x):
+            x = _u2w(vm, x)
+        elif isinstance(x, list) and len(x) == 2 and isinstance(x[0], Ent) \
+                and pt_(x[1]):
+            x = [x[0], _u2w(vm, x[1])]
+        out.append(x)
+    return out
+
+
 @bi('command')
 def _command(vm, a):
-    vm.commands.append(list(a))
+    vm.commands.append(_logged(vm, a))
     # One undo group per command (STANDARDS 5), and the VM keeps the
     # count: _Begin with undo off errors out of the command in AutoCAD,
     # and an _End with no group open is the strict reading of the same
@@ -2556,6 +2975,7 @@ def _command(vm, a):
     # current layer and in the current style -- routines that reach for
     # (entlast) afterwards to fix those up need something to find
     if a and a[0] in ('_.DIMALIGNED', '_.DIMLINEAR'):
+        ucs = _plan_ucs(vm, a[0])
         pts = [x for x in a[1:] if isinstance(x, list) and len(x) >= 2]
         # DIMLAYER, when the drawing sets it, overrides CLAYER for
         # dimensions -- the very thing a routine has to undo when it
@@ -2571,13 +2991,25 @@ def _command(vm, a):
         # A routine that asks "is this one of the kinds I place?" reads
         # them, so they have to be here too.
         kind = 1 if a[0] == '_.DIMALIGNED' else 0
+        # the points are typed into the command -- UCS points -- and the
+        # DIMENSION keeps them in World numbers; what it MEASURES is read
+        # in the UCS, whose axes a "_H" or "_V" or an "_R" angle name
         vm.entdata[e] = [Dot(0, 'DIMENSION'), Dot(8, lay), Dot(410, 'Model'),
                          Dot(70, kind),
                          Dot(3, vm.sysvars.get('DIMSTYLE', 'STANDARD'))] + \
-            [[code] + [float(v) for v in p] for code, p in zip((13, 14, 10), pts)]
+            [[code] + [float(v) for v in _u2w(vm, p)]
+             for code, p in zip((13, 14, 10), pts)]
         # 42 is the measurement AutoCAD computed.  Aligned dims measure
         # the distance between the two origins; a linear one measures
-        # its projection onto the dimension line's axis.
+        # its projection onto the dimension line's axis -- and keeps
+        # that axis in group 50 (DXF Reference, DIMENSION: "Angle of
+        # rotated, horizontal, or vertical dimensions"), measured from
+        # World X in its plane: 0 for "_H", pi/2 for "_V", the "_R"
+        # angle, each turned by the UCS it was drawn in.  The checks
+        # re-measure a linear dim by projecting 13-14 onto group 50,
+        # reading a missing one as 0, so a vertical dim without it
+        # read as its horizontal run (test_lispvm_ucs C5).
+        axis = None
         if len(pts) >= 2:
             p1, p2 = pt(pts[0]), pt(pts[1])
             if kind == 1:
@@ -2594,7 +3026,9 @@ def _command(vm, a):
                                                     'HORIZONTAL'}
                 rot = _dimrot_angle(a)
                 if forced:
-                    meas = dy if forced & {'V', 'VERTICAL'} else dx
+                    vert = bool(forced & {'V', 'VERTICAL'})
+                    meas = dy if vert else dx
+                    axis = 0.5 * math.pi if vert else 0.0
                 elif rot is not None:
                     # "_R <angle>" turns the dimension line to that
                     # angle; a rotated dim measures the span PROJECTED
@@ -2602,6 +3036,7 @@ def _command(vm, a):
                     # off the wall still reads the wall's full run
                     meas = abs((p2[0] - p1[0]) * math.cos(rot) +
                                (p2[1] - p1[1]) * math.sin(rot))
+                    axis = rot
                 else:
                     # the dim line stands off along whichever axis
                     # separates it from the points; it measures across
@@ -2609,13 +3044,18 @@ def _command(vm, a):
                     off_y = abs(loc[1] - (p1[1] + p2[1]) / 2.0)
                     off_x = abs(loc[0] - (p1[0] + p2[0]) / 2.0)
                     meas = dx if off_y >= off_x else dy
+                    axis = 0.0 if off_y >= off_x else 0.5 * math.pi
             else:
                 meas = math.dist(p1[:2], p2[:2])
             vm.entdata[e].append(Dot(42, meas))
+            if axis is not None:
+                vm.entdata[e].append(
+                    Dot(50, (axis + _ucs_angle(ucs)) % (2.0 * math.pi)))
             # 11 is the middle of the text, which starts out in the
             # middle of the measured span -- where AutoCAD centres it
             vm.entdata[e].append(
-                [11] + [0.5 * (x + y) for x, y in zip(p1, p2)])
+                [11] + [float(v) for v in _u2w(
+                    vm, [0.5 * (x + y) for x, y in zip(p1, p2)])])
         # "_T <text>" is a text override, and AutoCAD keeps it verbatim
         # in group 1 with "<>" standing in for the measurement
         for i, x in enumerate(a[:-1]):
@@ -2629,11 +3069,13 @@ def _command(vm, a):
     if a and a[0] == '_.DIMTEDIT' and isinstance(a[1], Ent):
         loc = [x for x in a[2:] if isinstance(x, list) and len(x) >= 2]
         if loc:
+            _plan_ucs(vm, a[0])
             data = [g for g in vm.entdata[a[1]]
                     if not (isinstance(g, list) and g and g[0] == 11)]
             data = [Dot(g.a, g.b | 128) if isinstance(g, Dot) and g.a == 70
                     else g for g in data]
-            vm.entdata[a[1]] = data + [[11] + [float(v) for v in loc[0]]]
+            vm.entdata[a[1]] = data + [[11] + [float(v)
+                                               for v in _u2w(vm, loc[0])]]
     # FILLET at a radius leaves the arc it cut behind as the last
     # entity, which is how a routine gets hold of what it just made.
     # The VM does NOT do that fillet's geometry: the two lines are left
@@ -2651,9 +3093,14 @@ def _command(vm, a):
     # that took from one AutoCAD refused, and PADDLE reports the
     # difference, so the lines move here too.
     if a and a[0] == '_.FILLET':
-        picks = [(x[0], pt(x[1])) for x in a[1:]
+        # each pick is (ename point), the point a UCS one as every point
+        # a command reads is; the lines it trims are World
+        picks = [x for x in a[1:]
                  if isinstance(x, list) and len(x) == 2
                  and isinstance(x[0], Ent) and isinstance(x[1], list)]
+        if picks:
+            _plan_ucs(vm, a[0])
+        picks = [(x[0], _u2w(vm, pt(x[1]))) for x in picks]
         rad = float(num(vm.sysvars.get('FILLETRAD', 0)))
         if len(picks) >= 2 and rad == 0.0:
             _fillet_zero(vm, picks[0], picks[1])
@@ -2671,12 +3118,16 @@ def _command(vm, a):
     # it was picked at in 15 -- that pair is how the tools recognize one
     # (ad:raddimpts, AutoDim.lsp:312), so it is what the VM writes.
     if a and a[0] == '_.DIMRADIUS':
+        _plan_ucs(vm, a[0])
         arc = next((x[0] for x in a[1:]
                     if isinstance(x, list) and len(x) == 2
                     and isinstance(x[0], Ent)), None)
         on = next((x[1] for x in a[1:]
                    if isinstance(x, list) and len(x) == 2
                    and isinstance(x[0], Ent)), None)
+        # the pick and the text spot are UCS points; the arc is World
+        if on is not None:
+            on = _u2w(vm, pt(on))
         loc = [x for x in a[2:] if isinstance(x, list) and len(x) >= 2
                and not isinstance(x[0], Ent)]
         if arc is not None and on is not None:
@@ -2710,7 +3161,8 @@ def _command(vm, a):
             if isinstance(gap, (int, float)):
                 vm.entdata[e].append(Dot(147, float(gap)))
             if loc:
-                vm.entdata[e].append([11] + [float(v) for v in loc[0]])
+                vm.entdata[e].append([11] + [float(v)
+                                             for v in _u2w(vm, loc[0])])
             for i, x in enumerate(a[:-1]):
                 if isinstance(x, str) and x.upper() in ('_T', 'T', '_TEXT') \
                         and isinstance(a[i + 1], str):
@@ -2919,7 +3371,7 @@ def _getpoint(vm, a):
             raise LispError(f"getpoint: keyword {v!r} not among "
                             f"{vm.initget_kws!r} at {prompt!r}", vm)
         return kw
-    return list(v)
+    return _placed(vm, list(v))
 
 
 @bi('getcorner')
@@ -2937,7 +3389,7 @@ def _getcorner(vm, a):
             raise LispError(f"getcorner: keyword {v!r} not among "
                             f"{vm.initget_kws!r} at {prompt!r}", vm)
         return kw
-    return list(v)
+    return _placed(vm, list(v))
 
 
 def _getangle(vm, a, kind):
@@ -3011,7 +3463,7 @@ def _pick(vm, a, kind):
     if v is None:
         return NIL
     if isinstance(v, Ent):
-        return [v, [0.0, 0.0, 0.0]]
+        return [v, _placed(vm, [0.0, 0.0, 0.0])]
     if isinstance(v, str):
         # initget keywords work at entsel too, and AutoCAD hands a typed
         # one straight back as a string -- which is what a routine tests
@@ -3023,7 +3475,11 @@ def _pick(vm, a, kind):
             raise LispError(f"{kind}: keyword {v!r} not among "
                             f"{vm.initget_kws!r} at {prompt!r}", vm)
         return kw
-    return list(v)
+    v = list(v)
+    if len(v) >= 2 and isinstance(v[0], Ent):
+        # the pick point is a click like any other
+        v[1] = _placed(vm, v[1])
+    return v
 
 
 @bi('entsel')

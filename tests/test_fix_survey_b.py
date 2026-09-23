@@ -32,10 +32,10 @@ Each of these ran to a clean-looking finish over a wrong answer:
     "Starting ABHD on the N point(s)" and, on the next line, took it
     back.
 
-The VM's world is flat -- its (trans ...) is the identity -- so a UCS
-is modelled HERE for the length of one run: an origin and a turn,
-applied by a trans that moves a point between code 0 (world) and codes
-1 and 2 (the UCS).  Its (command ...) accepts any name, so the refusal
+A UCS is the VM's own: vm.set_ucs puts an origin and a turn on, and
+its trans moves a point between code 0 (world) and codes 1 and 2 (the
+UCS) -- it used to be the identity, and a UCS was modelled here.  The
+VM's (command ...) accepts any name, so the refusal
 AutoCAD gives a c: name sent through it is modelled here too.  And its
 (distof ...) forgives blanks round the text, so a distance reader that
 does not is modelled for the padded-answer check.
@@ -53,7 +53,7 @@ import sys
 from contextlib import contextmanager
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lispvm import VM, LispError, Dot, Sym, BUILTINS, truthy  # noqa: E402
+from lispvm import VM, LispError, Dot, Sym, BUILTINS  # noqa: E402
 
 
 def back_of(tool):
@@ -107,52 +107,11 @@ def attempt(label, fn):
 
 
 # ---- the UCS model ----------------------------------------------------
-
-class Ucs:
-    """ORIGIN is the UCS origin in world coordinates, ANG the turn of
-    its X axis from the world X axis, in radians."""
-
-    def __init__(self, origin=(0.0, 0.0), ang=0.0):
-        self.ox, self.oy = float(origin[0]), float(origin[1])
-        self.c, self.s = math.cos(ang), math.sin(ang)
-
-    def to_world(self, p, disp=False):
-        x, y, z = (list(p) + [0.0])[:3]
-        wx, wy = x * self.c - y * self.s, x * self.s + y * self.c
-        if not disp:
-            wx, wy = wx + self.ox, wy + self.oy
-        return [wx, wy, z]
-
-    def to_ucs(self, p, disp=False):
-        x, y, z = (list(p) + [0.0])[:3]
-        if not disp:
-            x, y = x - self.ox, y - self.oy
-        return [x * self.c + y * self.s, -x * self.s + y * self.c, z]
-
-
-@contextmanager
-def in_ucs(origin=(0.0, 0.0), ang=0.0):
-    u = Ucs(origin, ang)
-    orig = BUILTINS[Sym('trans')]
-
-    def is_ucs(code):
-        return isinstance(code, int) and not isinstance(code, bool) \
-            and code in (1, 2)
-
-    def _trans(vm, a):
-        p = a[0]
-        if not isinstance(p, list) or len(p) < 2:
-            raise LispError(f"bad argument type: point {p!r}", vm)
-        p = [float(p[0]), float(p[1]), float(p[2]) if len(p) > 2 else 0.0]
-        disp = len(a) > 3 and truthy(a[3])
-        w = u.to_world(p, disp) if is_ucs(a[1]) else p
-        return u.to_ucs(w, disp) if is_ucs(a[2]) else w
-
-    BUILTINS[Sym('trans')] = _trans
-    try:
-        yield u
-    finally:
-        BUILTINS[Sym('trans')] = orig
+#
+# The VM's own: vm.set_ucs(origin, angle), the angle the turn of the UCS
+# X axis from the world's in radians, and vm.wcs_to_ucs for where a world
+# spot is in it (tests/test_lispvm_ucs.py).  A Ucs class and an in_ucs
+# that swapped trans for one used to stand here.
 
 
 @contextmanager
@@ -364,10 +323,10 @@ START = [ab_pt(200, 0, 'A'), ab_pt(60, 0, 'B'), ab_pt(0, 60, 'C')]
 
 def start_run(origin):
     vm = ptr_vm([rect()] + START)
-    with in_ucs(origin) as u:
-        # the drafter snaps to the bottom-right corner, world (240, 0)
-        ptr_run(vm, [None, None, u.to_ucs([240.0, 0.0, 0.0]),
-                     'Clockwise', 6.0, 1, 'Yes'])
+    vm.set_ucs(origin)
+    # the drafter snaps to the bottom-right corner, world (240, 0)
+    ptr_run(vm, [None, None, vm.wcs_to_ucs([240.0, 0.0, 0.0]),
+                 'Clockwise', 6.0, 1, 'Yes'])
     g = numbers(vm)
     return [g[(200.0, 0.0)], g[(60.0, 0.0)], g[(0.0, 60.0)]]
 
@@ -435,13 +394,13 @@ def wc_stair(origin, ang, corners):
     drafter would see it under the UCS: its corners in UCS terms."""
     vm = wc_vm()
     ents = wc_band(vm)
-    with in_ucs(origin, ang) as u:
-        a = u.to_ucs(corners[0])
-        b = u.to_ucs(corners[1])
-        lo = [min(a[0], b[0]), min(a[1], b[1]), 0.0]
-        hi = [max(a[0], b[0]), max(a[1], b[1]), 0.0]
-        vm.run('c:WCALST', [None, ents, [ents[0], u.to_ucs(MID)], None,
-                            None, lo, hi, None])
+    vm.set_ucs(origin, ang)
+    a = vm.wcs_to_ucs(corners[0])
+    b = vm.wcs_to_ucs(corners[1])
+    lo = [min(a[0], b[0]), min(a[1], b[1]), 0.0]
+    hi = [max(a[0], b[0]), max(a[1], b[1]), 0.0]
+    vm.run('c:WCALST', [None, ents, [ents[0], vm.wcs_to_ucs(MID)], None,
+                        None, lo, hi, None])
     return ''.join(vm.printed)
 
 
@@ -489,9 +448,9 @@ def wc_loop(origin):
         ents += made(vm, wline(NEAR[i], FAR[i], 'RUNG'))
     pick = [(NEAR[3][0] + NEAR[4][0]) / 2, (NEAR[3][1] + NEAR[4][1]) / 2,
             0.0]
-    with in_ucs(origin) as u:
-        vm.run('c:WCALST', [None, ents, [ents[0], u.to_ucs(pick)], None,
-                            None, None])
+    vm.set_ucs(origin)
+    vm.run('c:WCALST', [None, ents, [ents[0], vm.wcs_to_ucs(pick)], None,
+                        None, None])
     return ''.join(vm.printed)
 
 

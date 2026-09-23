@@ -10,13 +10,12 @@ CDCALLOUT also matched the raw click against survey points, which are
 world data, so the snap missed (BPCALLOUT) or took whichever point sat
 nearest the bare UCS numbers (CDCALLOUT).
 
-The VM's world is flat -- its (trans ...) is the identity -- so a UCS
-is modelled HERE, for the length of one test: an origin and a turn,
-applied by a trans that moves a point between code 0 (world) and codes
-1 and 2 (the UCS; the display is taken to be plan to it).  An ename or
-a vector is an OCS, which for flat drafting is the world.  Everything
-else in the VM is untouched: (command ...) still takes its points as
-given, which is how AutoCAD reads them -- in the UCS.
+Each test puts a UCS on its VM with vm.set_ucs: an origin and a turn,
+which the VM's trans honours between code 0 (world) and codes 1 and 2
+(the UCS; the display is taken to be plan to it), and which a modelled
+(command ...) reads its points in, as AutoCAD does
+(tests/test_lispvm_ucs.py).  The VM's trans used to be the identity,
+and a trans that knew the UCS was swapped in here for it.
 
 Run: python3 tests/test_fix_annot_a_ucs.py
 """
@@ -24,11 +23,9 @@ Run: python3 tests/test_fix_annot_a_ucs.py
 import math
 import os
 import sys
-from contextlib import contextmanager
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lispvm import (VM, LispError, Ent, Dot, Sym, BUILTINS,  # noqa: E402
-                    truthy)
+from lispvm import VM, LispError, Ent, Dot  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.join(HERE, '..')
@@ -50,53 +47,11 @@ CORNER = (1000.0, 500.0)
 
 
 # ---- the UCS model ----------------------------------------------------
-
-class Ucs:
-    """ORIGIN is the UCS origin in world coordinates, ANG the turn of
-    its X axis from the world X axis, in radians."""
-
-    def __init__(self, origin=(0.0, 0.0), ang=0.0):
-        self.ox, self.oy = float(origin[0]), float(origin[1])
-        self.c, self.s = math.cos(ang), math.sin(ang)
-
-    def to_world(self, p, disp):
-        x, y, z = p
-        wx, wy = x * self.c - y * self.s, x * self.s + y * self.c
-        if not disp:
-            wx, wy = wx + self.ox, wy + self.oy
-        return [wx, wy, z]
-
-    def to_ucs(self, p, disp):
-        x, y, z = p
-        if not disp:
-            x, y = x - self.ox, y - self.oy
-        return [x * self.c + y * self.s, -x * self.s + y * self.c, z]
-
-
-def _is_ucs(code):
-    return isinstance(code, int) and not isinstance(code, bool) \
-        and code in (1, 2)
-
-
-@contextmanager
-def in_ucs(origin=(0.0, 0.0), ang=0.0):
-    u = Ucs(origin, ang)
-    orig = BUILTINS[Sym('trans')]
-
-    def _trans(vm, a):
-        p = a[0]
-        if not isinstance(p, list) or len(p) < 2:
-            raise LispError(f"bad argument type: point {p!r}")
-        p = [float(p[0]), float(p[1]), float(p[2]) if len(p) > 2 else 0.0]
-        disp = len(a) > 3 and truthy(a[3])
-        w = u.to_world(p, disp) if _is_ucs(a[1]) else p
-        return u.to_ucs(w, disp) if _is_ucs(a[2]) else w
-
-    BUILTINS[Sym('trans')] = _trans
-    try:
-        yield u
-    finally:
-        BUILTINS[Sym('trans')] = orig
+#
+# The VM's own: vm.set_ucs(origin, angle) -- the origin in world
+# coordinates, the angle the turn of its X axis from the world X axis,
+# in radians (tests/test_lispvm_ucs.py).  A Ucs class and an in_ucs that
+# swapped trans for one used to stand here.
 
 
 # ---- reading the drawing back -----------------------------------------
@@ -150,10 +105,10 @@ def said(vm):
 # ---- DIMSTAMP ---------------------------------------------------------
 
 def test_dimstamp_stamps_where_it_was_clicked():
-    with in_ucs(CORNER):
-        vm = newvm('DIMSTAMP')
-        run(vm, 'c:DIMSTAMP', [(10.0, 20.0), '44', (300.0, 300.0), None],
-            'dimstamp moved ucs')
+    vm = newvm('DIMSTAMP')
+    vm.set_ucs(CORNER)
+    run(vm, 'c:DIMSTAMP', [(10.0, 20.0), '44', (300.0, 300.0), None],
+        'dimstamp moved ucs')
     t = [d for d in live(vm, 'MTEXT', 'TEXT')]
     assert [d[1] for d in t] == ['44"', '44"'], t
     assert near(t[0][10], [1010.0, 520.0]), t[0][10]
@@ -167,9 +122,9 @@ def test_dimstamp_ruler_is_drawn_where_its_rows_are_picked():
     off the screen while its rows still answer clicks nobody can see."""
     flat = newvm('DIMSTAMP')
     ents0, box0, rows0 = flat.loads('(ds:draw-ruler 352 nil)')
-    with in_ucs(CORNER):
-        vm = newvm('DIMSTAMP')
-        ents, box, rows = vm.loads('(ds:draw-ruler 352 nil)')
+    vm = newvm('DIMSTAMP')
+    vm.set_ucs(CORNER)
+    ents, box, rows = vm.loads('(ds:draw-ruler 352 nil)')
     assert box == box0 and rows == rows0, (box, box0)
     assert len(ents) == len(ents0) > 0
     for e, e0 in zip(ents, ents0):
@@ -184,9 +139,9 @@ def test_dimstamp_ruler_is_drawn_where_its_rows_are_picked():
 
 
 def test_dimstamp_turned_ucs_reads_along_it():
-    with in_ucs((0.0, 0.0), math.pi / 2):
-        vm = newvm('DIMSTAMP')
-        run(vm, 'c:DIMSTAMP', [(10.0, 0.0), '44', None], 'dimstamp turned')
+    vm = newvm('DIMSTAMP')
+    vm.set_ucs((0.0, 0.0), math.pi / 2)
+    run(vm, 'c:DIMSTAMP', [(10.0, 0.0), '44', None], 'dimstamp turned')
     t = live(vm, 'MTEXT', 'TEXT')
     assert near(t[0][10], [0.0, 10.0]), t[0][10]
     assert abs(t[0][50] - math.pi / 2) < 1e-9, t[0][50]
@@ -196,14 +151,14 @@ def test_dimstamp_turned_ucs_reads_along_it():
 # ---- DRONOTE ------------------------------------------------------------
 
 def test_dronote_places_the_note_where_it_was_clicked():
-    with in_ucs(CORNER):
-        vm = newvm('DRONOTE')
-        run(vm, 'c:DRONOTE', ['Board', (12.0, 34.0), None], 'dronote')
+    vm = newvm('DRONOTE')
+    vm.set_ucs(CORNER)
+    run(vm, 'c:DRONOTE', ['Board', (12.0, 34.0), None], 'dronote')
     t = live(vm, 'MTEXT')
     assert len(t) == 1 and near(t[0][10], [1012.0, 534.0]), t
-    with in_ucs((0.0, 0.0), math.pi / 2):
-        vm = newvm('DRONOTE')
-        run(vm, 'c:DRONOTE', ['Board', (12.0, 0.0), None], 'dronote turned')
+    vm = newvm('DRONOTE')
+    vm.set_ucs((0.0, 0.0), math.pi / 2)
+    run(vm, 'c:DRONOTE', ['Board', (12.0, 0.0), None], 'dronote turned')
     t = live(vm, 'MTEXT')
     assert near(t[0][10], [0.0, 12.0]), t[0][10]
     assert abs(t[0][50] - math.pi / 2) < 1e-9, t[0][50]
@@ -252,9 +207,9 @@ def _cst_box(vm):
 
 def test_constellation_draws_off_the_base_point_clicked():
     for base, label in [([0.0, 0.0, 0.0], 'clicked 0,0'), (None, 'Enter')]:
-        with in_ucs(CORNER):
-            vm = newvm('CONSTELLATION')
-            run(vm, 'c:CONSTELLATION', _cst_script(base), label)
+        vm = newvm('CONSTELLATION')
+        vm.set_ucs(CORNER)
+        run(vm, 'c:CONSTELLATION', _cst_script(base), label)
         box = _cst_box(vm)
         assert near(box[0], [1000.0, 500.0]), (label, box)
         assert near(box[2], [1360.0, 740.0]), (label, box)
@@ -272,9 +227,9 @@ def test_constellation_draws_off_the_base_point_clicked():
 
 
 def test_constellation_turned_ucs_is_square_to_it():
-    with in_ucs((0.0, 0.0), math.pi / 2):
-        vm = newvm('CONSTELLATION')
-        run(vm, 'c:CONSTELLATION', _cst_script([0.0, 0.0, 0.0]), 'turned')
+    vm = newvm('CONSTELLATION')
+    vm.set_ucs((0.0, 0.0), math.pi / 2)
+    run(vm, 'c:CONSTELLATION', _cst_script([0.0, 0.0, 0.0]), 'turned')
     box = _cst_box(vm)
     want = [[0.0, 0.0], [0.0, 360.0], [-240.0, 360.0], [-240.0, 0.0]]
     assert all(near(b, w) for b, w in zip(box, want)), box
@@ -288,9 +243,9 @@ def test_constellation_preview_is_drawn_off_the_base_point():
     names the pairs from -- drawn round the base point clicked, not
     round its bare UCS numbers.  The letters go through cst:text, which
     is cal:text's body in the grouped build, so its caller translates."""
-    with in_ucs(CORNER):
-        vm = newvm('CONSTELLATION')
-        vm.loads('(cst:preview 4 360.0 240.0 (list 0.0 0.0))')
+    vm = newvm('CONSTELLATION')
+    vm.set_ucs(CORNER)
+    vm.loads('(cst:preview 4 360.0 240.0 (list 0.0 0.0))')
     for kind in ('CIRCLE', 'TEXT'):
         got = live(vm, kind, 'CONSTELLATION-GUIDE')
         assert len(got) == 4, (kind, got)
@@ -316,11 +271,11 @@ def _ab_pt(vm, x, y, number):
 
 
 def test_bpcallout_snaps_and_rings_under_the_click():
-    with in_ucs(CORNER):
-        vm = newvm('BPCALLOUT')
-        _ab_pt(vm, 1010.0, 520.0, 12)
-        run(vm, 'c:BPCALLOUT', [(11.0, 21.0), None, (30.0, 40.0)],
-            'bpcallout')
+    vm = newvm('BPCALLOUT')
+    vm.set_ucs(CORNER)
+    _ab_pt(vm, 1010.0, 520.0, 12)
+    run(vm, 'c:BPCALLOUT', [(11.0, 21.0), None, (30.0, 40.0)],
+        'bpcallout')
     rings = [d for d in live(vm, 'CIRCLE')]
     assert len(rings) == 1 and near(rings[0][10], [1010.0, 520.0]), rings
     assert 'Pt.12 ringed' in said(vm), said(vm)
@@ -329,9 +284,9 @@ def test_bpcallout_snaps_and_rings_under_the_click():
     assert len(txt) == 1 and near(txt[0][10], [1030.0, 540.0]), txt
     assert txt[0][1] == 'Pt.12 is bad', txt
     # a click on nothing is ringed where it was clicked -- in the world
-    with in_ucs(CORNER):
-        vm = newvm('BPCALLOUT')
-        run(vm, 'c:BPCALLOUT', [(50.0, 60.0), None, None], 'bp unsnapped')
+    vm = newvm('BPCALLOUT')
+    vm.set_ucs(CORNER)
+    run(vm, 'c:BPCALLOUT', [(50.0, 60.0), None, None], 'bp unsnapped')
     rings = live(vm, 'CIRCLE')
     assert len(rings) == 1 and near(rings[0][10], [1050.0, 560.0]), rings
     print("ok  BPCALLOUT     -> a moved UCS: the snap finds the point, the"
@@ -345,10 +300,10 @@ def test_bpcallout_enter_tucks_the_text_lower_right_in_the_ucs():
     UCS (10,20), lower-right of it is UCS (20,10), world (-10,20).
     Stepped along the world axes it sat at (-10,0), a diagonal off the
     ring while it read along the UCS."""
-    with in_ucs((0.0, 0.0), math.pi / 2):
-        vm = newvm('BPCALLOUT')
-        _ab_pt(vm, -20.0, 10.0, 12)
-        run(vm, 'c:BPCALLOUT', [(10.0, 20.0), None, None], 'bp turned')
+    vm = newvm('BPCALLOUT')
+    vm.set_ucs((0.0, 0.0), math.pi / 2)
+    _ab_pt(vm, -20.0, 10.0, 12)
+    run(vm, 'c:BPCALLOUT', [(10.0, 20.0), None, None], 'bp turned')
     rings = live(vm, 'CIRCLE')
     assert len(rings) == 1 and near(rings[0][10], [-20.0, 10.0]), rings
     txt = live(vm, 'TEXT')
@@ -356,10 +311,10 @@ def test_bpcallout_enter_tucks_the_text_lower_right_in_the_ucs():
     assert near(txt[0][10], [-10.0, 20.0]), txt[0][10]
     assert abs(txt[0][50] - math.pi / 2) < 1e-9, txt[0][50]
     # and in a UCS only moved, Enter is the plain step it always was
-    with in_ucs(CORNER):
-        vm = newvm('BPCALLOUT')
-        _ab_pt(vm, 1010.0, 520.0, 12)
-        run(vm, 'c:BPCALLOUT', [(10.0, 20.0), None, None], 'bp moved')
+    vm = newvm('BPCALLOUT')
+    vm.set_ucs(CORNER)
+    _ab_pt(vm, 1010.0, 520.0, 12)
+    run(vm, 'c:BPCALLOUT', [(10.0, 20.0), None, None], 'bp moved')
     txt = live(vm, 'TEXT')
     assert len(txt) == 1 and near(txt[0][10], [1020.0, 510.0]), txt
     print("ok  BPCALLOUT     -> Enter tucks the callout lower-right of the"
@@ -372,16 +327,16 @@ def test_cdcallout_a_click_takes_the_point_under_it():
     """Two points carry "7".  The click is on the one at world
     (1010,520); the other sits at (20,30), near the click's bare UCS
     numbers.  The DIMALIGNED is fed UCS points, as AutoCAD reads them."""
-    with in_ucs(CORNER):
-        vm = newvm('CDCALLOUT')
-        vm.tables['DIMSTYLE'].add('CROSS DIMENSIONS')
-        vm.sysvars['CLAYER'] = '0'
-        vm.sysvars['DIMSTYLE'] = 'STANDARD'
-        _ab_pt(vm, 1010.0, 520.0, 7)
-        _ab_pt(vm, 20.0, 30.0, 7)
-        _ab_pt(vm, 1100.0, 520.0, 8)
-        run(vm, 'c:CDCALLOUT', ['7', [11.0, 21.0, 0.0], '8', None],
-            'cdcallout')
+    vm = newvm('CDCALLOUT')
+    vm.set_ucs(CORNER)
+    vm.tables['DIMSTYLE'].add('CROSS DIMENSIONS')
+    vm.sysvars['CLAYER'] = '0'
+    vm.sysvars['DIMSTYLE'] = 'STANDARD'
+    _ab_pt(vm, 1010.0, 520.0, 7)
+    _ab_pt(vm, 20.0, 30.0, 7)
+    _ab_pt(vm, 1100.0, 520.0, 8)
+    run(vm, 'c:CDCALLOUT', ['7', [11.0, 21.0, 0.0], '8', None],
+        'cdcallout')
     calls = [c for c in vm.commands if c and c[0] == '_.DIMALIGNED']
     assert len(calls) == 1, vm.commands
     first = calls[0][2]                         # "_non" <pt> ...
