@@ -67,7 +67,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v2.7")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v2.8")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -978,7 +978,10 @@
                          "\" - click the one you mean.")))
          (t (setq out (car dupes) done T))))
       (t
-       (setq out (lh:cand-nearest v cands snap))
+       ;; The click is in the drafter's UCS and the candidates are
+       ;; World, off the INSERTs themselves: under a moved UCS the raw
+       ;; click measured against them found nothing, or the wrong point.
+       (setq out (lh:cand-nearest (trans v 1 0) cands snap))
        (if out
          (setq done T)
          (princ (strcat "\nNo survey point there - click one, or type"

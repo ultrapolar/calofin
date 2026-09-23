@@ -127,7 +127,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092326 REV42")
+(setq pool:*version* "092326 REV43")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -601,11 +601,53 @@
   (setq d (sqrt (cal:dot p p)))
   (if (> d 1.0e-12) (cal:v* p (/ 1.0 d)) (list 0.0 0.0)))
 
-;; local 2D point -> world 3D point (applies the insertion base)
+;; local 2D point -> a point in the CURRENT UCS (applies the insertion
+;; base, which was picked there).  This is what (command ...) reads --
+;; every dimension, ZOOM and MIRROR takes its points from it.
 (defun pool:wp (p)
   (list (+ (car p) (car pool:*base*))
         (+ (cadr p) (cadr pool:*base*))
         0.0))
+
+;; The same point in WORLD numbers, which is what entmake and entmod
+;; read.  Both used to be handed pool:wp: under a UCS moved to the
+;; site's corner the outline landed at the raw numbers, a UCS-origin
+;; away from its own dimensions, and turned it lay along World X while
+;; the dims ran along the UCS.  Entity data goes through this one.
+(defun pool:ww (p) (trans (pool:wp p) 1 0))
+
+;; How far the current UCS is turned from World X, for the angles an
+;; entity keeps in World terms (an ARC's 50/51, a TEXT's 50) so they
+;; turn with the points.  Read off the components, 0 in World, and
+;; kept in 0..2pi.
+(defun pool:ucsang ( / x a)
+  (setq x (trans '(1.0 0.0 0.0) 1 0 T)
+        a (atan (cadr x) (car x)))
+  (if (< a 0.0) (+ a pi pi) a))
+
+;; T in a PLAN UCS: one whose Z axis is World +Z, so all it does is
+;; move the World plan and turn it -- the only kind the two helpers
+;; above can carry a pool into.  An ARC keeps its angles counter-
+;; clockwise about its 210, which stays World +Z here; in a UCS whose Z
+;; points DOWN (X turned 180, or a 3-point UCS whose Y was picked
+;; clockwise of X) counter-clockwise in the UCS is clockwise in the
+;; World, and every corner arc came out mirrored off its corner while
+;; the lines and dims beside it landed true.  Tilted, the entity data
+;; leaves the plane the dimensions are drawn on altogether.  So POOL,
+;; POOLDEMO and TUTORIALPOOL refuse both rather than draw either.  The
+;; test is on +Z itself and not on its size: (abs z) would let the
+;; upside-down one by.
+(defun pool:ucsplan-p ()
+  (> (caddr (trans '(0.0 0.0 1.0) 1 0 T)) (- 1.0 1.0e-8)))
+
+;; What a refused run says, NAME being the command the drafter typed.
+(defun pool:ucsrefuse (name)
+  (princ (strcat "\n" name ": the current UCS is tilted or upside down"
+                 " (its Z axis is not World +Z),"))
+  (princ "\nso a plan pool cannot be laid out in it.  Set the UCS to World, or to")
+  (princ (strcat "\nany UCS only moved and turned in plan, and run " name
+                 " again."))
+  (princ))
 
 ;;; -------------------- geometry ---------------------------------------
 
@@ -683,8 +725,8 @@
 (defun pool:line (p1 p2 lay)
   (entmake (list '(0 . "LINE")
                  (cons 8 lay)
-                 (cons 10 (pool:wp p1))
-                 (cons 11 (pool:wp p2)))))
+                 (cons 10 (pool:ww p1))
+                 (cons 11 (pool:ww p2)))))
 
 ;; Build a linetype from an explicit pattern (positive = dash length,
 ;; 0 = dot, negative = gap), all in drawing units (inches).  Done with
@@ -725,8 +767,8 @@
 (defun pool:lined (p1 p2)
   (entmake (append (list '(0 . "LINE")
                          (cons 8 pool:*lay-notes*)
-                         (cons 10 (pool:wp p1))
-                         (cons 11 (pool:wp p2)))
+                         (cons 10 (pool:ww p1))
+                         (cons 11 (pool:ww p2)))
                    (if (/= pool:*dashlt* "CONTINUOUS")
                        (list (cons 6 pool:*dashlt*)
                              (cons 48 (pool:ltsc)))))))
@@ -737,8 +779,8 @@
   (entmake (append (list '(0 . "LINE")
                          (cons 8 pool:*lay-notes*)
                          (cons 62 pool:*pvx-col*)
-                         (cons 10 (pool:wp p1))
-                         (cons 11 (pool:wp p2)))
+                         (cons 10 (pool:ww p1))
+                         (cons 11 (pool:ww p2)))
                    (if (/= pool:*dotlt* "CONTINUOUS")
                        (list (cons 6 pool:*dotlt*)
                              (cons 48 (pool:ltsc)))))))
@@ -746,21 +788,23 @@
 (defun pool:text (pt h str lay)
   (entmake (list '(0 . "TEXT")
                  (cons 8 lay)
-                 (cons 10 (pool:wp pt))
+                 (cons 10 (pool:ww pt))
                  (cons 40 h)
+                 (cons 50 (pool:ucsang))  ; level in the UCS
                  (cons 1 str))))
 
 (defun pool:textc (pt h str lay col)
   (entmake (list '(0 . "TEXT")
                  (cons 8 lay)
                  (cons 62 col)
-                 (cons 10 (pool:wp pt))
+                 (cons 10 (pool:ww pt))
                  (cons 40 h)
+                 (cons 50 (pool:ucsang))
                  (cons 1 str))))
 
 ;; Three-point arc through p1 -> p2 -> p3 (falls back to a line when
 ;; the points are collinear).
-(defun pool:arc3p (p1 p2 p3 lay / o r a1 a2 a3 da2 da3 s e)
+(defun pool:arc3p (p1 p2 p3 lay / o r a1 a2 a3 da2 da3 s e rot)
   (setq o (pool:circum p1 p2 p3))
   (if o
       (progn
@@ -773,12 +817,14 @@
         (if (< da2 da3)
             (setq s a1 e a3)
             (setq s a3 e a1))
+        ;; the angles are the pool's; the arc keeps World ones
+        (setq rot (pool:ucsang))
         (entmake (list '(0 . "ARC")
                        (cons 8 lay)
-                       (cons 10 (pool:wp o))
+                       (cons 10 (pool:ww o))
                        (cons 40 r)
-                       (cons 50 s)
-                       (cons 51 e))))
+                       (cons 50 (cal:angnorm (+ s rot)))
+                       (cons 51 (cal:angnorm (+ e rot))))))
       (pool:line p1 p3 lay)))
 
 ;;; Small dimensions read in inches.  Any measurement under 24" is
@@ -1760,8 +1806,10 @@
                  '(100 . "AcDbEntity")
                  (cons 8 pool:*lay-notes*)
                  '(100 . "AcDbEllipse")
-                 (cons 10 (pool:wp cen))
-                 (cons 11 mj)                  ; major semi-axis, relative
+                 (cons 10 (pool:ww cen))
+                 ;; major semi-axis, relative -- a World direction, so
+                 ;; it turns with the UCS the pool is laid out in
+                 (cons 11 (trans mj 1 0 T))
                  (cons 210 '(0.0 0.0 1.0))
                  (cons 40 rt)                  ; minor / major
                  (cons 41 0.0)
@@ -1833,19 +1881,19 @@
 ;; no longer exists (the corner redraw retires the plain sides) is left
 ;; dead; a three-point arc whose kind changed is remade.  Returns the
 ;; entity holding the primitive now.
-(defun pool:pvmod (e pr ink / ed ty o r a1 a2 a3 da2 da3 s en mj rt)
+(defun pool:pvmod (e pr ink / ed ty o r a1 a2 a3 da2 da3 s en mj rt rot)
   (setq ed (if e (entget e)))
   (cond
     ((null ed) e)
     ((member (car pr) '("LINE" "LINED"))
-     (entmod (subst (cons 11 (pool:wp (caddr pr))) (assoc 11 ed)
-                    (subst (cons 10 (pool:wp (cadr pr))) (assoc 10 ed) ed)))
+     (entmod (subst (cons 11 (pool:ww (caddr pr))) (assoc 11 ed)
+                    (subst (cons 10 (pool:ww (cadr pr))) (assoc 10 ed) ed)))
      (entupd e)
      e)
     ((= (car pr) "TEXT")
      (entmod (subst (cons 1 (cadddr pr)) (assoc 1 ed)
                     (subst (cons 40 (caddr pr)) (assoc 40 ed)
-                           (subst (cons 10 (pool:wp (cadr pr)))
+                           (subst (cons 10 (pool:ww (cadr pr)))
                                   (assoc 10 ed) ed))))
      (entupd e)
      e)
@@ -1863,10 +1911,11 @@
            (if (< da2 da3)
                (setq s a1 en a3)
                (setq s a3 en a1))
-           (entmod (subst (cons 51 en) (assoc 51 ed)
-                          (subst (cons 50 s) (assoc 50 ed)
+           (setq rot (pool:ucsang))
+           (entmod (subst (cons 51 (cal:angnorm (+ en rot))) (assoc 51 ed)
+                          (subst (cons 50 (cal:angnorm (+ s rot))) (assoc 50 ed)
                                  (subst (cons 40 r) (assoc 40 ed)
-                                        (subst (cons 10 (pool:wp o))
+                                        (subst (cons 10 (pool:ww o))
                                                (assoc 10 ed) ed)))))
            (entupd e)
            e)
@@ -1880,8 +1929,8 @@
          (setq mj (list 0.0 (* 0.5 (cadddr pr)) 0.0)
                rt (/ (caddr pr) (cadddr pr))))
      (entmod (subst (cons 40 rt) (assoc 40 ed)
-                    (subst (cons 11 mj) (assoc 11 ed)
-                           (subst (cons 10 (pool:wp (cadr pr)))
+                    (subst (cons 11 (trans mj 1 0 T)) (assoc 11 ed)
+                           (subst (cons 10 (pool:ww (cadr pr)))
                                   (assoc 10 ed) ed))))
      (entupd e)
      e)
@@ -4535,7 +4584,7 @@
   (setq r (* pool:*mark-r* doff))
   (entmake (list '(0 . "CIRCLE")
                  (cons 8 pool:*lay-dim*)
-                 (cons 10 (pool:wp p))
+                 (cons 10 (pool:ww p))
                  (cons 40 r)))
   (command "_.DIMRADIUS"
            (list (entlast) (pool:wp (cal:v+ p (cal:v* outd r))))
@@ -7450,14 +7499,15 @@
   (if (< (abs (- a b)) 1.0e-6)
       (entmake (list '(0 . "CIRCLE")
                      (cons 8 lay)
-                     (cons 10 (pool:wp cen))
+                     (cons 10 (pool:ww cen))
                      (cons 40 (* 0.5 b))))
       (entmake (list '(0 . "ELLIPSE")
                      '(100 . "AcDbEntity")
                      (cons 8 lay)
                      '(100 . "AcDbEllipse")
-                     (cons 10 (pool:wp cen))
-                     (cons 11 (list (* 0.5 b) 0.0 0.0))   ; major axis, relative
+                     (cons 10 (pool:ww cen))
+                     ;; major axis, relative: a World direction
+                     (cons 11 (trans (list (* 0.5 b) 0.0 0.0) 1 0 T))
                      (cons 210 '(0.0 0.0 1.0))
                      (cons 40 (/ a b))                    ; minor / major
                      (cons 41 0.0)
@@ -8849,124 +8899,139 @@
     (if lzd:report (lzd:report "POOL" pool:*version* msg))
     (princ))
   (if lzd:begin (lzd:begin "POOL" pool:*version*))
-
-  ;; nothing is open yet: a flag an earlier run left set must not let
-  ;; this run's handler close somebody else's undo group
-  (setq pool:*undo-open* nil)
-
-  ;; AutoCAD 2012+ requires this so *error* may call (command);
-  ;; harmless no-op guard on older releases where it doesn't exist
-  (if *push-error-using-command* (*push-error-using-command*))
-
-  (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER" "AUNITS" "ANGBASE" "ANGDIR"))
-  ;; last run's Given opt-in and marks, if it died before
-  ;; pool:givendone cleared them
-  (pool:givereset)
-  (setq pool:*valnotes* nil
-        pool:*smallwarned* nil
-        ;; a fresh run, so a fresh ruler: the hint is said once a run,
-        ;; and the flag that says it has been said travels in here
-        pool:*ruler* nil
-        pool:*profents* nil
-        pool:*sideon* nil
-        pool:*flooron* nil
-        pool:*dimstyle0* (getvar "DIMSTYLE")
-        ;; report lengths follow the units the DRAWING was in before
-        ;; POOL switches to architectural for its prompts: a crew whose
-        ;; drawing is in feet-inches gets a feet-inches report
-        pool:*ftin* (member (cdr (assoc "LUNITS" cal:*sysold*)) '(3 4))
-        pool:*formrun* (if pool:*form* t nil))
-  (setvar "CMDECHO" 0)
-  (setq pool:*undo-open* (cal:undobegin))
-  ;; architectural units while prompting so every distance can be
-  ;; typed as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
-  (setvar "LUNITS" 4)
-  ;; ...and the angle three at their defaults: pool:dimrot TYPES its
-  ;; rotation into DIMLINEAR, and AutoCAD reads a typed angle through
-  ;; AUNITS, ANGBASE and ANGDIR -- in a surveyor's template (zero north,
-  ;; clockwise) a wall's rotated dimension came out square to the wall,
-  ;; reading the wrong number.  SQUAREUP zeroes the same three for ROTATE.
-  (setvar "AUNITS" 0)
-  (setvar "ANGBASE" 0.0)
-  (setvar "ANGDIR" 0)
-  (princ "\nDistances may be typed as 25'6\", 25'-6-1/2\" or 25'6.5 (plain numbers = inches).")
-
-  ;; The three questions in front of every measurement - in-square,
-  ;; shape, base point - are one chain.  The two after the first offer
-  ;; Back and re-open the one before them, which matters most at the
-  ;; shape: it is the answer the whole run hangs off, and until now the
-  ;; only way to change it was to start again.  A form-supplied answer
-  ;; is spent as it is read (STANDARDS 7.2), so backing into a question
-  ;; the form filled in asks it at the keyboard.
-  ;;
-  ;; In-square pools are built true to the side measurements and need
-  ;; no diagonals; out-of-square pools take the usual cross-dim route.
-  ;; L = true L; LAzyl = lazy L (type LA); ROman = roman (type RO):
-  ;; the six common shapes first, then the rarely-used ones; type RO
-  ;; for a roman, ROU for a round, MU for a mutt (mixed ends).
-  (setq pstep 1)
-  (while (<= pstep 3)
-    (cond
-      ((= pstep 1)
-       (setq pool:*insq*
-             (= "Insquare"
-                (pool:askkwf 'insq "Is the pool in-square or out-of-square"
-                             "Insquare Outofsquare" "Insquare/Outofsquare" nil nil)))
-       (if pool:*insq*
-           (princ "\nIn-square: building true to the side measurements (no cross dims needed)."))
-       (setq pstep 2))
-      ((= pstep 2)
-       (setq ptype (pool:fshape T))
-       (if (eq ptype 'CAL-BACK)
-         (progn (princ "\nStepping back one question.") (setq pstep 1))
-         (setq pstep 3)))
-      ((= pstep 3)
-       ;; the base point is picked with the user's own snaps still live;
-       ;; only afterwards do snaps drop for the command-fed drawing work
-       (if (pool:fhas 'base)
-         (setq base  (pool:ftake 'base)
-               pstep 4)
-         (progn
-           (initget "Back Undo")
-           (setq base (getpoint "\nInsertion base point [Back] <0,0>: "))
-           (if lzd:ask (lzd:ask "\nInsertion base point [Back] <0,0>: " base) base)
-           (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
-             (progn (princ "\nStepping back one question.") (setq pstep 2))
-             (setq pstep 4)))))))
-  (setq pool:*base* (if (and base (listp base))
-                        (list (car base) (cadr base))
-                        (list 0.0 0.0)))
-  (setvar "OSMODE" 0)
-
-  ;; ------------------------------------------------ layers
-  (pool:layer pool:*lay-pool*  pool:*col-pool*)
-  (pool:layer pool:*lay-dim*   pool:*col-dim*)
-  (pool:layer pool:*lay-notes* pool:*col-notes*)
-
-  ;; dashed linetype up front so the guide's cross dims draw dashed
-  ;; patterns are defined in inches and scaled to cancel LTSCALE, so
-  ;; they show the same in any drawing
-  (setq pool:*dashlt* (pool:ltload "DASHED")
-        pool:*dotlt* (pool:ltload "DOT"))
+  ;; the form's answers AND the two run flags a caller sets before it
+  ;; calls c:POOL -- POOLCOVER's no-bottom, LAZFORM's has-bottom -- so
+  ;; a report of a cover run replays as a cover run
+  (if lzd:state (lzd:state '(pool:*form* pool:*nobottom* pool:*hasbottom*)))
 
   (cond
-    ((= ptype "L") (pool:hexflow nil))
-    ((= ptype "LAzyl") (pool:hexflow t))
-    ((= ptype "Grecian") (pool:grecflow nil))
-    ((= ptype "OCtagon") (pool:grecflow t))
-    ((= ptype "ROman") (pool:romanflow))
-    ((= ptype "ROUnd") (pool:roundflow))
-    ((= ptype "MUtt") (pool:muttflow))
-    (t (pool:quadflow ptype)))
+    ;; a plan pool cannot be laid out in a UCS that is tilted or upside
+    ;; down (pool:ucsplan-p): said and stopped here, before anything is
+    ;; asked, borrowed or drawn.  What was handed to this run goes with
+    ;; it -- a form, or POOLCOVER's no-bottom flag, left standing would
+    ;; answer the next POOL typed at the command line
+    ((not (pool:ucsplan-p))
+     (pool:ucsrefuse (if pool:*nobottom* "POOLCOVER" "POOL"))
+     (pool:fclear)
+     (setq pool:*nobottom* nil pool:*hasbottom* nil pool:*formrun* nil))
+    (t
+     ;; nothing is open yet: a flag an earlier run left set must not let
+     ;; this run's handler close somebody else's undo group
+     (setq pool:*undo-open* nil)
 
-  ;; ------------------------------------------------ finish
-  (command "_.ZOOM" "_Extents")
-  (if pool:*undo-open* (setq pool:*undo-open* (cal:undoend)))
-  (cal:sysrestore)
-  (pool:fclear)
-  (pool:rulerkill)
-  (setq pool:*nobottom* nil pool:*hasbottom* nil pool:*formrun* nil)
-  (if *pop-error-mode* (*pop-error-mode*))
+     ;; AutoCAD 2012+ requires this so *error* may call (command);
+     ;; harmless no-op guard on older releases where it doesn't exist
+     (if *push-error-using-command* (*push-error-using-command*))
+
+     (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER" "AUNITS" "ANGBASE" "ANGDIR"))
+     ;; last run's Given opt-in and marks, if it died before
+     ;; pool:givendone cleared them
+     (pool:givereset)
+     (setq pool:*valnotes* nil
+           pool:*smallwarned* nil
+           ;; a fresh run, so a fresh ruler: the hint is said once a run,
+           ;; and the flag that says it has been said travels in here
+           pool:*ruler* nil
+           pool:*profents* nil
+           pool:*sideon* nil
+           pool:*flooron* nil
+           pool:*dimstyle0* (getvar "DIMSTYLE")
+           ;; report lengths follow the units the DRAWING was in before
+           ;; POOL switches to architectural for its prompts: a crew whose
+           ;; drawing is in feet-inches gets a feet-inches report
+           pool:*ftin* (member (cdr (assoc "LUNITS" cal:*sysold*)) '(3 4))
+           pool:*formrun* (if pool:*form* t nil))
+     (setvar "CMDECHO" 0)
+     (setq pool:*undo-open* (cal:undobegin))
+     ;; architectural units while prompting so every distance can be
+     ;; typed as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
+     (setvar "LUNITS" 4)
+     ;; ...and the angle three at their defaults: pool:dimrot TYPES its
+     ;; rotation into DIMLINEAR, and AutoCAD reads a typed angle through
+     ;; AUNITS, ANGBASE and ANGDIR -- in a surveyor's template (zero north,
+     ;; clockwise) a wall's rotated dimension came out square to the wall,
+     ;; reading the wrong number.  SQUAREUP zeroes the same three for ROTATE.
+     (setvar "AUNITS" 0)
+     (setvar "ANGBASE" 0.0)
+     (setvar "ANGDIR" 0)
+     (princ "\nDistances may be typed as 25'6\", 25'-6-1/2\" or 25'6.5 (plain numbers = inches).")
+
+     ;; The three questions in front of every measurement - in-square,
+     ;; shape, base point - are one chain.  The two after the first offer
+     ;; Back and re-open the one before them, which matters most at the
+     ;; shape: it is the answer the whole run hangs off, and until now the
+     ;; only way to change it was to start again.  A form-supplied answer
+     ;; is spent as it is read (STANDARDS 7.2), so backing into a question
+     ;; the form filled in asks it at the keyboard.
+     ;;
+     ;; In-square pools are built true to the side measurements and need
+     ;; no diagonals; out-of-square pools take the usual cross-dim route.
+     ;; L = true L; LAzyl = lazy L (type LA); ROman = roman (type RO):
+     ;; the six common shapes first, then the rarely-used ones; type RO
+     ;; for a roman, ROU for a round, MU for a mutt (mixed ends).
+     (setq pstep 1)
+     (while (<= pstep 3)
+       (cond
+         ((= pstep 1)
+          (setq pool:*insq*
+                (= "Insquare"
+                   (pool:askkwf 'insq "Is the pool in-square or out-of-square"
+                                "Insquare Outofsquare" "Insquare/Outofsquare" nil nil)))
+          (if pool:*insq*
+              (princ "\nIn-square: building true to the side measurements (no cross dims needed)."))
+          (setq pstep 2))
+         ((= pstep 2)
+          (setq ptype (pool:fshape T))
+          (if (eq ptype 'CAL-BACK)
+            (progn (princ "\nStepping back one question.") (setq pstep 1))
+            (setq pstep 3)))
+         ((= pstep 3)
+          ;; the base point is picked with the user's own snaps still live;
+          ;; only afterwards do snaps drop for the command-fed drawing work
+          (if (pool:fhas 'base)
+            (setq base  (pool:ftake 'base)
+                  pstep 4)
+            (progn
+              (initget "Back Undo")
+              (setq base (getpoint "\nInsertion base point [Back] <0,0>: "))
+              (if lzd:ask (lzd:ask "\nInsertion base point [Back] <0,0>: " base) base)
+              (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
+                (progn (princ "\nStepping back one question.") (setq pstep 2))
+                (setq pstep 4)))))))
+     (setq pool:*base* (if (and base (listp base))
+                           (list (car base) (cadr base))
+                           (list 0.0 0.0)))
+     (setvar "OSMODE" 0)
+
+     ;; ------------------------------------------------ layers
+     (pool:layer pool:*lay-pool*  pool:*col-pool*)
+     (pool:layer pool:*lay-dim*   pool:*col-dim*)
+     (pool:layer pool:*lay-notes* pool:*col-notes*)
+
+     ;; dashed linetype up front so the guide's cross dims draw dashed
+     ;; patterns are defined in inches and scaled to cancel LTSCALE, so
+     ;; they show the same in any drawing
+     (setq pool:*dashlt* (pool:ltload "DASHED")
+           pool:*dotlt* (pool:ltload "DOT"))
+
+     (cond
+       ((= ptype "L") (pool:hexflow nil))
+       ((= ptype "LAzyl") (pool:hexflow t))
+       ((= ptype "Grecian") (pool:grecflow nil))
+       ((= ptype "OCtagon") (pool:grecflow t))
+       ((= ptype "ROman") (pool:romanflow))
+       ((= ptype "ROUnd") (pool:roundflow))
+       ((= ptype "MUtt") (pool:muttflow))
+       (t (pool:quadflow ptype)))
+
+     ;; ------------------------------------------------ finish
+     (command "_.ZOOM" "_Extents")
+     (if pool:*undo-open* (setq pool:*undo-open* (cal:undoend)))
+     (cal:sysrestore)
+     (pool:fclear)
+     (pool:rulerkill)
+     (setq pool:*nobottom* nil pool:*hasbottom* nil pool:*formrun* nil)
+     (if *pop-error-mode* (*pop-error-mode*))))
   (if lzd:end (lzd:end "POOL"))
   (princ))
 

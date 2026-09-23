@@ -239,6 +239,14 @@ Two places worth knowing:
   `Back` at the shape re-asks the mode. Thermo-Light settles the mode
   without asking, so on the way back that step is stepped over rather
   than stopped on.
+* The spa is laid out from the base point along the **current UCS**:
+  in a UCS turned to the deck the outlines, the corner marks and the
+  hinge labels all turn with it, and every dimension stays on the
+  geometry it measures. That holds for any UCS that is only moved and
+  turned in plan; one that is tilted, or upside down (its Z pointing
+  down), is refused before the first question -- the radius corners
+  would come out mirrored and the labels backwards. `TUTORIALSPA`
+  refuses it too.
 * The **spillaway loop** commits as it goes, so Back at the top of it
   *removes the spillaway just committed* — and with it the no-go zone
   and the report row it would have made — before re-asking

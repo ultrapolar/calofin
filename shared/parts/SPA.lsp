@@ -236,7 +236,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092326 REV33")
+(setq spa:*version* "092326 REV34")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -694,11 +694,54 @@
   (setq d (sqrt (cal:dot p p)))
   (if (> d 1.0e-12) (cal:v* p (/ 1.0 d)) (list 0.0 0.0)))
 
-;; local 2D point -> world 3D point (applies the insertion base)
+;; local 2D point -> a point in the CURRENT UCS (applies the insertion
+;; base, which was picked there).  This is what (command ...) reads --
+;; every dimension and ZOOM takes its points from it.
 (defun spa:wp (p)
   (list (+ (car p) (car spa:*base*))
         (+ (cadr p) (cadr spa:*base*))
         0.0))
+
+;; The same point in WORLD numbers, which is what entmake and entmod
+;; read.  Both used to be handed spa:wp: under a UCS moved to the
+;; site's corner the outline landed at the raw numbers, a UCS-origin
+;; away from its own dimensions -- a corner mark's dim hung off in
+;; space away from its circle, and SPACHECK then reported faults in a
+;; SPA drawing that nobody had made.  Entity data goes through this.
+(defun spa:ww (p) (trans (spa:wp p) 1 0))
+
+;; How far the current UCS is turned from World X, for the angles an
+;; entity keeps in World terms (an ARC's 50/51, a TEXT's 50) so they
+;; turn with the points.  Read off the components, 0 in World, and
+;; kept in 0..2pi.
+(defun spa:ucsang ( / x a)
+  (setq x (trans '(1.0 0.0 0.0) 1 0 T)
+        a (atan (cadr x) (car x)))
+  (if (< a 0.0) (+ a pi pi) a))
+
+;; T in a PLAN UCS: one whose Z axis is World +Z, so all it does is
+;; move the World plan and turn it -- the only kind the two helpers
+;; above can carry a spa into.  An ARC keeps its angles, and an
+;; LWPOLYLINE its bulges, counter-clockwise about a 210 that stays
+;; World +Z here; in a UCS whose Z points DOWN (X turned 180, or a
+;; 3-point UCS whose Y was picked clockwise of X) counter-clockwise in
+;; the UCS is clockwise in the World, and every radius corner came out
+;; mirrored off its corner, and the labels read backwards, while the
+;; lines and dims beside them landed true.  Tilted, the entity data
+;; leaves the plane the dimensions are drawn on altogether.  So SPA and
+;; TUTORIALSPA refuse both rather than draw either.  The test is on +Z
+;; itself and not on its size: (abs z) would let the upside-down one by.
+(defun spa:ucsplan-p ()
+  (> (caddr (trans '(0.0 0.0 1.0) 1 0 T)) (- 1.0 1.0e-8)))
+
+;; What a refused run says, NAME being the command the drafter typed.
+(defun spa:ucsrefuse (name)
+  (princ (strcat "\n" name ": the current UCS is tilted or upside down"
+                 " (its Z axis is not World +Z),"))
+  (princ "\nso a plan spa cannot be laid out in it.  Set the UCS to World, or to")
+  (princ (strcat "\nany UCS only moved and turned in plan, and run " name
+                 " again."))
+  (princ))
 
 ;;; -------------------- geometry ---------------------------------------
 
@@ -838,13 +881,13 @@
 (defun spa:line (p1 p2 lay extra)
   (entmake (append (list '(0 . "LINE")
                          (cons 8 lay)
-                         (cons 10 (spa:wp p1))
-                         (cons 11 (spa:wp p2)))
+                         (cons 10 (spa:ww p1))
+                         (cons 11 (spa:ww p2)))
                    extra)))
 
 ;; Three-point arc through p1 -> p2 -> p3 (falls back to a line when
 ;; the points are collinear).
-(defun spa:arc3p (p1 p2 p3 lay extra / o r a1 a2 a3 da2 da3 s e)
+(defun spa:arc3p (p1 p2 p3 lay extra / o r a1 a2 a3 da2 da3 s e rot)
   (setq o (spa:circum p1 p2 p3))
   (if o
       (progn
@@ -857,12 +900,14 @@
         (if (< da2 da3)
             (setq s a1 e a3)
             (setq s a3 e a1))
+        ;; the angles are the spa's; the arc keeps World ones
+        (setq rot (spa:ucsang))
         (entmake (append (list '(0 . "ARC")
                                (cons 8 lay)
-                               (cons 10 (spa:wp o))
+                               (cons 10 (spa:ww o))
                                (cons 40 r)
-                               (cons 50 s)
-                               (cons 51 e))
+                               (cons 50 (cal:angnorm (+ s rot)))
+                               (cons 51 (cal:angnorm (+ e rot))))
                          extra)))
       (spa:line p1 p3 lay extra)))
 
@@ -873,7 +918,7 @@
   (if (< (abs (- a b)) 1.0e-6)
       (entmake (append (list '(0 . "CIRCLE")
                              (cons 8 lay)
-                             (cons 10 (spa:wp cen))
+                             (cons 10 (spa:ww cen))
                              (cons 40 (* 0.5 b)))
                        extra))
       (progn
@@ -884,8 +929,9 @@
                                '(100 . "AcDbEntity")
                                (cons 8 lay)
                                '(100 . "AcDbEllipse")
-                               (cons 10 (spa:wp cen))
-                               (cons 11 maj)              ; major axis, relative
+                               (cons 10 (spa:ww cen))
+                               ;; major axis, relative: a World direction
+                               (cons 11 (trans maj 1 0 T))
                                (cons 210 '(0.0 0.0 1.0))
                                (cons 40 rat)              ; minor / major
                                (cons 41 0.0)
@@ -895,16 +941,18 @@
 (defun spa:text (pt h str lay)
   (entmake (list '(0 . "TEXT")
                  (cons 8 lay)
-                 (cons 10 (spa:wp pt))
+                 (cons 10 (spa:ww pt))
                  (cons 40 h)
+                 (cons 50 (spa:ucsang))    ; level in the UCS
                  (cons 1 str))))
 
 (defun spa:textc (pt h str lay col)
   (entmake (list '(0 . "TEXT")
                  (cons 8 lay)
                  (cons 62 col)
-                 (cons 10 (spa:wp pt))
+                 (cons 10 (spa:ww pt))
                  (cons 40 h)
+                 (cons 50 (spa:ucsang))
                  (cons 1 str))))
 
 ;;; -------------------- which outline is being drawn -------------------
@@ -960,16 +1008,21 @@
 ;; AUTOBEAD).  verts is a list of (point . bulge) walked counter-
 ;; clockwise; a bulge of 0 is a straight run to the next vertex.
 ;; Returns the polyline's entity name.
-(defun spa:perpoly (verts / lst v p)
-  (setq lst (append (list '(0 . "LWPOLYLINE")
+(defun spa:perpoly (verts / lst v p z)
+  ;; the vertices are World X and Y (the OCS of a plan outline), and
+  ;; the Z they share -- a UCS origin lifted off the World plane -- is
+  ;; the polyline's elevation, group 38, not a third coordinate
+  (setq z (caddr (spa:ww (list 0.0 0.0)))
+        lst (append (list '(0 . "LWPOLYLINE")
                           '(100 . "AcDbEntity")
                           (cons 8 spa:*perlay*)
                           '(100 . "AcDbPolyline")
                           (cons 90 (length verts))
                           '(70 . 1))          ; closed
+                    (if (> (abs z) 1.0e-9) (list (cons 38 z)))
                     (spa:perdxf)))
   (foreach v verts
-    (setq p (spa:wp (car v))
+    (setq p (spa:ww (car v))
           lst (append lst (list (cons 10 (list (car p) (cadr p)))
                                 (cons 42 (cdr v))))))
   (entmake lst)
@@ -1056,7 +1109,7 @@
            (assoc 11 ed) (assoc 70 ed))
       (progn
         (setq f  (cdr (assoc 70 ed))
-              ed (subst (cons 11 (spa:wp pt)) (assoc 11 ed) ed)
+              ed (subst (cons 11 (spa:ww pt)) (assoc 11 ed) ed)
               ed (subst (cons 70 (logior f 128)) (assoc 70 ed) ed))
         (entmod ed)
         (entupd e)))
@@ -2428,7 +2481,7 @@
                  '(100 . "AcDbEntity")
                  (cons 8 spa:*lay-text*)
                  '(100 . "AcDbMText")
-                 (cons 10 (spa:wp (list (- x (* spa:*hingetxoff* spa:*hingetxth*)) ymid)))
+                 (cons 10 (spa:ww (list (- x (* spa:*hingetxoff* spa:*hingetxth*)) ymid)))
                  (cons 40 spa:*hingetxth*)
                  (cons 41 spa:*hingetxw*)
                  '(71 . 8)              ; bottom centre
@@ -2436,7 +2489,8 @@
                  (cons 1 str)
                  (cons 7 (if (tblsearch "STYLE" spa:*hingestyle*)
                              spa:*hingestyle* "Standard"))
-                 (cons 11 '(0.0 1.0 0.0)))))
+                 ;; reading up the UCS Y axis, as a World direction
+                 (cons 11 (trans '(0.0 1.0 0.0) 1 0 T)))))
 
 ;;; ---------- the guided flow ----------
 
@@ -3043,7 +3097,7 @@
         r (* spa:*mark-r* doff))
   (entmake (list '(0 . "CIRCLE")
                  (cons 8 spa:*lay-dim*)
-                 (cons 10 (spa:wp p))
+                 (cons 10 (spa:ww p))
                  (cons 40 r)))
   (command "_.DIMRADIUS"
            (list (entlast) (spa:wp (cal:v+ p (cal:v* outd r))))
@@ -4215,138 +4269,149 @@
     (if lzd:report (lzd:report "SPA" spa:*version* msg))
     (princ))
   (if lzd:begin (lzd:begin "SPA" spa:*version*))
-
-  ;; before the push: a flag some earlier run left standing must never
-  ;; let this run's handler close an undo group it did not open
-  (setq spa:*undo-open* nil)
-  ;; AutoCAD 2012+ requires this so *error* may call (command);
-  ;; harmless no-op guard on older releases where it doesn't exist
-  (if *push-error-using-command* (*push-error-using-command*))
-
-  (cal:syssave (spa:sysvars))
-  (cal:dimstysave)
-  (setq spa:*valnotes* nil
-        ;; a fresh run, so a fresh ruler: the hint is said once a run,
-        ;; and the flag that says it has been said travels in here
-        spa:*ruler* nil
-        spa:*turned* nil
-        spa:*spillturn* nil
-        spa:*hingeon* nil
-        spa:*spills* nil
-        spa:*hingerows* nil
-        spa:*advice* nil
-        spa:*grade* nil
-        spa:*taper* nil
-        spa:*blockasked* nil)
-  (setvar "CMDECHO" 0)
-  (setq spa:*undo-open* (cal:undobegin))
-  ;; architectural units while prompting so every distance can be typed
-  ;; as 6'10", 6'-10-1/2" or 6'10.5 as well as plain inches
-  (setvar "LUNITS" 4)
-  (princ "\nDistances may be typed as 6'10\", 6'-10-1/2\" or 82.5 (plain numbers = inches).")
-  (princ "\nDimensions are written in standard inches and placed outside the shape.")
-
-  ;; ------------------------------------------------ grade + taper first
-  ;; The Spa Cover Details block is read UP FRONT because its grade can
-  ;; settle the next question outright: a Thermo-Light cover's water's
-  ;; edge and cover size are the same thing, so there is nothing to ask
-  ;; and nothing to add later.  It is also the ONE place it is asked
-  ;; for: here the drafter's own drawing is still on the screen to
-  ;; click, which after the guide goes up it is not.  Skipping is an
-  ;; answer -- the taper is typed in the hinge pass instead, and a
-  ;; Thermo-Light grade is simply never read.
-  (princ "\nThe Spa Cover Details block sets the grade and taper.")
-  (princ "\n(asked once -- skip it and any taper the hinges need is typed later)")
-  (spa:readblock)
-  ;; the form's grade/taper land HERE, before the Thermo-Light branch,
-  ;; so a form grade of THERMOLIGHT behaves exactly like the block's
-  (spa:formdetails)
-  ;; The three questions in front of every measurement - the drawing
-  ;; mode, the shape, the base point - are one chain.  The two after
-  ;; the first offer Back and re-open the one before them, which
-  ;; matters most at the shape: it is the answer the whole run hangs
-  ;; off, and until now the only way to change it was to start again.
-  ;; A form-supplied answer is spent as it is read (STANDARDS 7.2), so
-  ;; backing into a question the form filled in asks it at the
-  ;; keyboard.  Thermo-Light settles the mode without asking, so on the
-  ;; way back that step is stepped over rather than stopped on.
-  (setq sstep 1)
-  (while (<= sstep 3)
-    (cond
-      ((= sstep 1)
-       (if (spa:thermop)
-           (progn
-             (spa:setmode "Coversize")
-             (setq spa:*taper* spa:*thermotaper*)
-             (princ "\nThermo-Light: the water's edge and the cover size are the same.")
-             (spa:advise "THERMO-LIGHT: WATER'S EDGE = COVER SIZE, ONE OUTLINE"))
-           (spa:setmode
-             (spa:askkwf 'mode
-                         "Is this drawing at the water's edge or the cover size"
-                         "Watersedge Coversize" "Watersedge/Coversize" nil nil)))
-       (princ (strcat "\n" spa:*modename* ": outline on layer " spa:*perlay*
-                      (if spa:*perdash* " (dashed)" "")
-                      "; overalls read <measurement> over \"" spa:*sfx* "\"."))
-       (setq sstep 2))
-      ((= sstep 2)
-       (setq stype (spa:fshape T))
-       (if (eq stype 'CAL-BACK)
-         (progn (princ "\nStepping back one question.") (setq sstep 1))
-         (setq sstep 3)))
-      ((= sstep 3)
-       ;; The base point is picked with the user's own snaps still live;
-       ;; only afterwards do snaps drop for the command-fed drawing work.
-       ;; spa:osup is what makes that true and it did not used to be here:
-       ;; spa:readblock runs before the three questions above and ends on
-       ;; spa:osdown like every other ask helper, so snaps were already at
-       ;; 0 by the time this prompt came up -- the one pick that places
-       ;; the whole spa, made with nothing to snap to.  POOL and POOLSIDE
-       ;; hold the drafter's snaps at the identical prompt.
-       (cal:osup)
-       (if (spa:fhas 'base)
-         (setq base  (spa:ftake 'base)
-               sstep 4)
-         (progn
-           (initget "Back Undo")
-           (setq base (getpoint "\nInsertion base point [Back] <0,0>: "))
-           (if lzd:ask (lzd:ask "\nInsertion base point [Back] <0,0>: " base) base)
-           (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
-             (progn (princ "\nStepping back one question.") (setq sstep 2))
-             (setq sstep 4)))))))
-  (setq spa:*base* (if (and base (listp base))
-                       (list (car base) (cadr base))
-                       (list 0.0 0.0)))
-  ;; and down again for the command-fed drawing work below, whichever
-  ;; way the base point arrived -- picked, typed, or handed over by the
-  ;; form, which skips the prompt entirely
-  (setvar "OSMODE" 0)
-
-  ;; ------------------------------------------------ layers
-  (spa:layer spa:*lay-water* spa:*col-water*)
-  (spa:layer spa:*lay-cover* spa:*col-cover*)
-  (spa:layer spa:*lay-dim*   spa:*col-dim*)
-  (spa:layer spa:*lay-notes* spa:*col-notes*)
-  (spa:layer spa:*lay-text*  spa:*col-text*)
-
-  ;; dashed / dotted patterns up front so the guide draws them; the
-  ;; patterns are defined in inches and scaled to cancel LTSCALE, so they
-  ;; show the same in any drawing
-  (setq spa:*dashlt* (spa:ltload "DASHED")
-        spa:*dotlt*  (spa:ltload "DOT"))
+  (if lzd:state (lzd:state '(spa:*form*)))
 
   (cond
-    ((= stype "OCtagon") (spa:octflow))
-    ((= stype "ROUnd")   (spa:roundflow))
-    (t                   (spa:rectflow)))
+    ;; a plan spa cannot be laid out in a UCS that is tilted or upside
+    ;; down (spa:ucsplan-p): said and stopped here, before anything is
+    ;; asked, borrowed or drawn.  A form handed to this run goes with
+    ;; it -- left standing, it would answer the next SPA typed at the
+    ;; command line
+    ((not (spa:ucsplan-p))
+     (spa:ucsrefuse "SPA")
+     (spa:fclear))
+    (t
+     ;; before the push: a flag some earlier run left standing must never
+     ;; let this run's handler close an undo group it did not open
+     (setq spa:*undo-open* nil)
+     ;; AutoCAD 2012+ requires this so *error* may call (command);
+     ;; harmless no-op guard on older releases where it doesn't exist
+     (if *push-error-using-command* (*push-error-using-command*))
 
-  ;; ------------------------------------------------ finish
-  (command "_.ZOOM" "_Extents")
-  (if spa:*undo-open* (setq spa:*undo-open* (cal:undoend)))
-  (cal:sysrestore)
-  (cal:dimstyrestore)
-  (spa:fclear)
-  (spa:rulerkill)
-  (if *pop-error-mode* (*pop-error-mode*))
+     (cal:syssave (spa:sysvars))
+     (cal:dimstysave)
+     (setq spa:*valnotes* nil
+           ;; a fresh run, so a fresh ruler: the hint is said once a run,
+           ;; and the flag that says it has been said travels in here
+           spa:*ruler* nil
+           spa:*turned* nil
+           spa:*spillturn* nil
+           spa:*hingeon* nil
+           spa:*spills* nil
+           spa:*hingerows* nil
+           spa:*advice* nil
+           spa:*grade* nil
+           spa:*taper* nil
+           spa:*blockasked* nil)
+     (setvar "CMDECHO" 0)
+     (setq spa:*undo-open* (cal:undobegin))
+     ;; architectural units while prompting so every distance can be typed
+     ;; as 6'10", 6'-10-1/2" or 6'10.5 as well as plain inches
+     (setvar "LUNITS" 4)
+     (princ "\nDistances may be typed as 6'10\", 6'-10-1/2\" or 82.5 (plain numbers = inches).")
+     (princ "\nDimensions are written in standard inches and placed outside the shape.")
+
+     ;; ------------------------------------------------ grade + taper first
+     ;; The Spa Cover Details block is read UP FRONT because its grade can
+     ;; settle the next question outright: a Thermo-Light cover's water's
+     ;; edge and cover size are the same thing, so there is nothing to ask
+     ;; and nothing to add later.  It is also the ONE place it is asked
+     ;; for: here the drafter's own drawing is still on the screen to
+     ;; click, which after the guide goes up it is not.  Skipping is an
+     ;; answer -- the taper is typed in the hinge pass instead, and a
+     ;; Thermo-Light grade is simply never read.
+     (princ "\nThe Spa Cover Details block sets the grade and taper.")
+     (princ "\n(asked once -- skip it and any taper the hinges need is typed later)")
+     (spa:readblock)
+     ;; the form's grade/taper land HERE, before the Thermo-Light branch,
+     ;; so a form grade of THERMOLIGHT behaves exactly like the block's
+     (spa:formdetails)
+     ;; The three questions in front of every measurement - the drawing
+     ;; mode, the shape, the base point - are one chain.  The two after
+     ;; the first offer Back and re-open the one before them, which
+     ;; matters most at the shape: it is the answer the whole run hangs
+     ;; off, and until now the only way to change it was to start again.
+     ;; A form-supplied answer is spent as it is read (STANDARDS 7.2), so
+     ;; backing into a question the form filled in asks it at the
+     ;; keyboard.  Thermo-Light settles the mode without asking, so on the
+     ;; way back that step is stepped over rather than stopped on.
+     (setq sstep 1)
+     (while (<= sstep 3)
+       (cond
+         ((= sstep 1)
+          (if (spa:thermop)
+              (progn
+                (spa:setmode "Coversize")
+                (setq spa:*taper* spa:*thermotaper*)
+                (princ "\nThermo-Light: the water's edge and the cover size are the same.")
+                (spa:advise "THERMO-LIGHT: WATER'S EDGE = COVER SIZE, ONE OUTLINE"))
+              (spa:setmode
+                (spa:askkwf 'mode
+                            "Is this drawing at the water's edge or the cover size"
+                            "Watersedge Coversize" "Watersedge/Coversize" nil nil)))
+          (princ (strcat "\n" spa:*modename* ": outline on layer " spa:*perlay*
+                         (if spa:*perdash* " (dashed)" "")
+                         "; overalls read <measurement> over \"" spa:*sfx* "\"."))
+          (setq sstep 2))
+         ((= sstep 2)
+          (setq stype (spa:fshape T))
+          (if (eq stype 'CAL-BACK)
+            (progn (princ "\nStepping back one question.") (setq sstep 1))
+            (setq sstep 3)))
+         ((= sstep 3)
+          ;; The base point is picked with the user's own snaps still live;
+          ;; only afterwards do snaps drop for the command-fed drawing work.
+          ;; spa:osup is what makes that true and it did not used to be here:
+          ;; spa:readblock runs before the three questions above and ends on
+          ;; spa:osdown like every other ask helper, so snaps were already at
+          ;; 0 by the time this prompt came up -- the one pick that places
+          ;; the whole spa, made with nothing to snap to.  POOL and POOLSIDE
+          ;; hold the drafter's snaps at the identical prompt.
+          (cal:osup)
+          (if (spa:fhas 'base)
+            (setq base  (spa:ftake 'base)
+                  sstep 4)
+            (progn
+              (initget "Back Undo")
+              (setq base (getpoint "\nInsertion base point [Back] <0,0>: "))
+              (if lzd:ask (lzd:ask "\nInsertion base point [Back] <0,0>: " base) base)
+              (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
+                (progn (princ "\nStepping back one question.") (setq sstep 2))
+                (setq sstep 4)))))))
+     (setq spa:*base* (if (and base (listp base))
+                          (list (car base) (cadr base))
+                          (list 0.0 0.0)))
+     ;; and down again for the command-fed drawing work below, whichever
+     ;; way the base point arrived -- picked, typed, or handed over by the
+     ;; form, which skips the prompt entirely
+     (setvar "OSMODE" 0)
+
+     ;; ------------------------------------------------ layers
+     (spa:layer spa:*lay-water* spa:*col-water*)
+     (spa:layer spa:*lay-cover* spa:*col-cover*)
+     (spa:layer spa:*lay-dim*   spa:*col-dim*)
+     (spa:layer spa:*lay-notes* spa:*col-notes*)
+     (spa:layer spa:*lay-text*  spa:*col-text*)
+
+     ;; dashed / dotted patterns up front so the guide draws them; the
+     ;; patterns are defined in inches and scaled to cancel LTSCALE, so they
+     ;; show the same in any drawing
+     (setq spa:*dashlt* (spa:ltload "DASHED")
+           spa:*dotlt*  (spa:ltload "DOT"))
+
+     (cond
+       ((= stype "OCtagon") (spa:octflow))
+       ((= stype "ROUnd")   (spa:roundflow))
+       (t                   (spa:rectflow)))
+
+     ;; ------------------------------------------------ finish
+     (command "_.ZOOM" "_Extents")
+     (if spa:*undo-open* (setq spa:*undo-open* (cal:undoend)))
+     (cal:sysrestore)
+     (cal:dimstyrestore)
+     (spa:fclear)
+     (spa:rulerkill)
+     (if *pop-error-mode* (*pop-error-mode*))))
   (if lzd:end (lzd:end "SPA"))
   (princ))
 

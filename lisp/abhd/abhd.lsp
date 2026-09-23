@@ -770,7 +770,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "092326 REV26") ; announced on load.  The
+(setq pf:*version*      "092326 REV27") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -1658,7 +1658,10 @@
                          "\" - click the one you mean.")))
          (t (setq out (car dupes) done T))))
       (t
-       (setq out (pf:cand-nearest v cands snap))
+       ;; The click is in the drafter's UCS and the candidates are
+       ;; World, off the INSERTs themselves: under a moved UCS the raw
+       ;; click measured against them found nothing, or the wrong point.
+       (setq out (pf:cand-nearest (trans v 1 0) cands snap))
        (if out
          (setq done T)
          (princ (strcat "\nNo survey point there - click one, or type"

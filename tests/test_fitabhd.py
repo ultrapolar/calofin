@@ -4801,8 +4801,11 @@ def test_constants_match_lisp():
     got = tuple(None if x == "nil" else float(x)
                 for x in m.group(1).split())
     assert got == OAS_NARROW, got
-    assert '"Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL"' \
-        in src, "the Treatment keyword set is no longer canonical"
+    # the visible words and the hidden aliases, spelt as the library's
+    # cal:asktreat spells them (test_cal_parity holds the two texts)
+    assert '(setq kws "Square Radius Cut NotGiven")' in src \
+        and '(strcat kws " NG 90 ROUNDED DIAG DIAGONAL")' in src, \
+        "the Treatment keyword set is no longer canonical"
     print("  constants match FITABHD.lsp")
 
 

@@ -696,6 +696,21 @@ def _i7():
             and 'Enter not allowed' in alone[1]), (got, alone)
 
 
+@pin('I8', "bit 1 alone refuses Enter at getpoint and getcorner too -- "
+     "the VM used to hand back nil there, so a (initget 1) (getpoint) "
+     "loop's nil branch ran in a test and never in AutoCAD",
+     "AutoLISP Reference, initget: bit 1 'Prevents the user from "
+     "responding to the request by entering only Enter', listed for "
+     "getpoint and getcorner alike")
+def _i8():
+    pt = outcome('(progn (initget 1) (getpoint))', [None])
+    co = outcome('(progn (initget 1) (getcorner (list 0.0 0.0)))', [None])
+    bare = outcome('(getpoint)', [None])
+    return (pt[0] == 'LispError' and 'Enter not allowed' in pt[1]
+            and co[0] == 'LispError' and 'Enter not allowed' in co[1]
+            and bare == ('ok', None)), (pt, co, bare)
+
+
 @pin('V2', "VM POLICY -- getstring neither honours initget nor spends "
      "it: a keyword list made before a getstring still answers the "
      "input after it", POLICY_GETSTRING)

@@ -24,7 +24,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "092226 REV15")
+(setq tut:*version* "092326 REV16")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -237,7 +237,11 @@
   (if p
       (progn
         (spa:layer "SPA-NOTES" 3)
-        (setq x (car p) y (cadr p) h 2.5)
+        ;; the pick is the whole placement: spa:text adds spa:*base* on
+        ;; top, and that still held the last SPA run's insertion point,
+        ;; so the sheet landed that far away from where it was put
+        (setq spa:*base* (list 0.0 0.0)
+              x (car p) y (cadr p) h 2.5)
         (spa:textc (list x y) (* 2.0 h)
                    (strcat "SPA " spa:*version* " -- REFERENCE") "SPA-NOTES" 7)
         (setq y (- y (* 4.0 h)))
@@ -493,39 +497,47 @@
     (princ))
   (if lzd:begin (lzd:begin "TUTORIALSPA" tut:*version*))
 
-  ;; before the push, and on both branches: a flag an earlier run left
+  ;; before the push, and on every branch: a flag an earlier run left
   ;; standing must never let this run close a group it did not open
   (setq tut:*undo-open* nil)
-  ;; Both branches fall through to the one lzd:end below the if.  Each
+  ;; Every branch falls through to the one lzd:end below the cond.  Each
   ;; used to end the command in its own (princ), so a clean run never
   ;; closed its LAZDIAG context: the next TUTORIALSPA appended to it,
   ;; and a failure there filed the previous run's answers and drawing
   ;; as its own -- and the clean run was never logged at all.
-  (if (null spa:*version*)
-      (progn
-        (princ "\nLoad SPA.LSP first -- the tutorial drives its own drawing")
-        (princ "\nfunctions, so it cannot run without it."))
-      (progn
-        (if *push-error-using-command* (*push-error-using-command*))
-        (princ (strcat "\nSPA " spa:*version* " -- tutorial " tut:*version*))
-        ;; the tutorial selector of STANDARDS section 3; the old
-        ;; Checklist stays accepted typed in full, hidden
-        (initget "Checks Demo Both CHECKLIST")
-        (setq what (getkword "\nShow me [Checks/Demo/Both] <Both>: "))
-        (if lzd:ask (lzd:ask "\nShow me [Checks/Demo/Both] <Both>: " what) what)
-        (if (= what "CHECKLIST") (setq what "Checks"))
-        (if (null what) (setq what "Both"))
-        (spa:syssave)
-        (setvar "CMDECHO" 0)
-        (setq tut:*undo-open* (spa:undobegin))
-        (setvar "LUNITS" 4)
-        (if (member what '("Checks" "Both"))
-            (progn (tut:checklist) (tut:sheet)))
-        (if (member what '("Demo" "Both"))
-            (tut:demo))
-        (if tut:*undo-open* (setq tut:*undo-open* (spa:undoend)))
-        (spa:sysrestore)
-        (if *pop-error-mode* (*pop-error-mode*))))
+  (cond
+    ((null spa:*version*)
+     (princ "\nLoad SPA.LSP first -- the tutorial drives its own drawing")
+     (princ "\nfunctions, so it cannot run without it."))
+    ;; it draws through SPA's helpers, so only in a UCS they can carry
+    ;; a spa into (spa:ucsplan-p): tilted or upside down, the demo's
+    ;; radius corners came out mirrored and its labels read backwards.
+    ;; Asked before the Checks/Demo question, which would only be
+    ;; answered to be refused.  Guarded, since a SPA.LSP older than
+    ;; this file has no such helper
+    ((and spa:ucsplan-p (not (spa:ucsplan-p)))
+     (spa:ucsrefuse "TUTORIALSPA"))
+    (t
+     (if *push-error-using-command* (*push-error-using-command*))
+     (princ (strcat "\nSPA " spa:*version* " -- tutorial " tut:*version*))
+     ;; the tutorial selector of STANDARDS section 3; the old
+     ;; Checklist stays accepted typed in full, hidden
+     (initget "Checks Demo Both CHECKLIST")
+     (setq what (getkword "\nShow me [Checks/Demo/Both] <Both>: "))
+     (if lzd:ask (lzd:ask "\nShow me [Checks/Demo/Both] <Both>: " what) what)
+     (if (= what "CHECKLIST") (setq what "Checks"))
+     (if (null what) (setq what "Both"))
+     (spa:syssave)
+     (setvar "CMDECHO" 0)
+     (setq tut:*undo-open* (spa:undobegin))
+     (setvar "LUNITS" 4)
+     (if (member what '("Checks" "Both"))
+         (progn (tut:checklist) (tut:sheet)))
+     (if (member what '("Demo" "Both"))
+         (tut:demo))
+     (if tut:*undo-open* (setq tut:*undo-open* (spa:undoend)))
+     (spa:sysrestore)
+     (if *pop-error-mode* (*pop-error-mode*))))
   (if lzd:end (lzd:end "TUTORIALSPA"))
   (princ))
 

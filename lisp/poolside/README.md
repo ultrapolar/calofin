@@ -135,7 +135,9 @@ In the grouped build it arrives with everything else -- APPLOAD
 `shared/LAZPASS.lsp`.
 
 The run, in order: bottom type, insertion base point (the **top left** of
-the section -- the waterline at the left wall), `B`, the run chain, the
+the section -- the waterline at the left wall; the section runs along
+the current UCS from there, and a UCS that is tilted or upside down is
+refused before the first question), `B`, the run chain, the
 depths, then whether the deep end goes on the right. Distances may be
 typed as `8'6"`, `8'-6-1/2"` or `8'6.5` as well as plain inches --
 `POOLSIDE` switches the drawing to architectural units while it asks and

@@ -118,7 +118,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.27")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.28")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -2304,7 +2304,26 @@
                  '(100 . "AcDbLine") (cons 10 p1) (cons 11 p2)))
   (entlast))
 
-(defun dchk:tut-dim (p1 p2 dimpt rot lay / old oldlay res)
+;; DIMLINEAR's Rotated angle that lays a dimension line along the
+;; World direction DIR (a unit vector), as the text the command reads
+;; -- nil when the UCS is not turned, where _H and _V already measure
+;; along World.  They measure along the UCS axes, so under a turned
+;; UCS the practice drawing, built square to World, was dimensioned
+;; on the slant.  The angle is TYPED, so it is spelt the way the
+;; drafter's settings read it back: from ANGBASE, in ANGDIR's sense,
+;; and in grads or radians (angtos adds the suffix) when AUNITS says
+;; so -- a bare number is degrees under every other unit.
+(defun dchk:world-rot (dir / a u)
+  (if (not (equal (trans dir 0 1 T) dir 1e-9))
+    (progn
+      (setq a (angle '(0.0 0.0 0.0) (trans dir 0 1 T))
+            a (if (= 1 (getvar "ANGDIR"))
+                (- (getvar "ANGBASE") a)
+                (- a (getvar "ANGBASE")))
+            u (getvar "AUNITS"))
+      (angtos a (if (member u '(2 3)) u 0) 8))))
+
+(defun dchk:tut-dim (p1 p2 dimpt rot lay / old oldlay res rtxt)
   ;; a linear dimension, made with the command so it is valid in any
   ;; release; osnap is muted so the picks land exactly where told,
   ;; and the command is caught so a failure cannot skip the restore -
@@ -2316,11 +2335,23 @@
         oldlay (getvar "CLAYER"))
   (setvar "OSMODE" 0)
   (setvar "CLAYER" lay)
+  ;; P1, P2 and DIMPT are World, as the practice drawing is, and the
+  ;; command reads UCS: handed over raw, the dimension landed a UCS
+  ;; origin away from the line it was planted on -- so they go through
+  ;; trans, and the line is laid along World whenever the UCS is turned
+  (setq rtxt (dchk:world-rot (if (zerop rot) '(1.0 0.0 0.0) '(0.0 1.0 0.0))))
   (setq res (vl-catch-all-apply
               '(lambda ()
-                 (if (zerop rot)
-                   (command "_.DIMLINEAR" p1 p2 "_H" dimpt)
-                   (command "_.DIMLINEAR" p1 p2 "_V" dimpt)))
+                 (cond
+                   (rtxt
+                    (command "_.DIMLINEAR" (trans p1 0 1) (trans p2 0 1)
+                             "_R" rtxt (trans dimpt 0 1)))
+                   ((zerop rot)
+                    (command "_.DIMLINEAR" (trans p1 0 1) (trans p2 0 1)
+                             "_H" (trans dimpt 0 1)))
+                   (T
+                    (command "_.DIMLINEAR" (trans p1 0 1) (trans p2 0 1)
+                             "_V" (trans dimpt 0 1)))))
               nil))
   (setvar "CLAYER" oldlay)
   (setvar "OSMODE" old)

@@ -237,7 +237,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.28")
+(setq *cchk-version* "v1.29")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -4629,11 +4629,30 @@
   (if (and new (entget new) (= "INSERT" (cdr (assoc 0 (entget new)))))
     (progn (cchk:tag new "TUTORIAL") new)))
 
+;; DIMLINEAR's Rotated angle that lays a dimension line along the
+;; World direction DIR (a unit vector), as the text the command reads
+;; -- nil when the UCS is not turned, where the plain form already
+;; measures along World.  A dimension command measures along the UCS
+;; axes, so under a turned UCS the demo, built square to World, was
+;; dimensioned on the slant.  The angle is TYPED, so it is spelt the
+;; way the drafter's settings read it back: from ANGBASE, in ANGDIR's
+;; sense, and in grads or radians (angtos adds the suffix) when AUNITS
+;; says so -- a bare number is degrees under every other unit.
+(defun cchk:world-rot (dir / a u)
+  (if (not (equal (trans dir 0 1 T) dir 1e-9))
+    (progn
+      (setq a (angle '(0.0 0.0 0.0) (trans dir 0 1 T))
+            a (if (= 1 (getvar "ANGDIR"))
+                (- (getvar "ANGBASE") a)
+                (- a (getvar "ANGBASE")))
+            u (getvar "AUNITS"))
+      (angtos a (if (member u '(2 3)) u 0) 8))))
+
 ;; the whole demo scene, anchored at BP (WCS, z=0). Each piece is
 ;; independent - one failing (e.g. no DASHED linetype available)
 ;; never stops the rest from being built.
 (defun cchk:tut-build (bp / bx by oldfiledia oldosmode pre newdim detpt ins
-                           guard)
+                           guard rot)
   (setq bx (car bp) by (cadr bp))
   (cchk:ensure-layer *cchk-pool-layer* 7)
   (cchk:ensure-layer *cchk-tut-layer* 5)
@@ -4692,18 +4711,30 @@
         (princ "\n  Skipped: could not insert the 'Cover Details' demo block (the drawing refused the entity)."))))
 
   ;; an off-object dimension point: point 1 sits 4" below the pool's
-  ;; true bottom-left corner instead of on it
+  ;; true bottom-left corner instead of on it.  The command reads its
+  ;; points in the UCS and everything else here is World: handed the
+  ;; World numbers raw, the dimension landed a UCS origin away from
+  ;; the pool it was planted on, and under a turned UCS it measured
+  ;; the run on the slant -- so the points go through trans, and the
+  ;; line is laid along World X whenever the UCS is turned
   (setq oldosmode (getvar "OSMODE"))
   (setvar "OSMODE" 0)
-  (setq pre (entlast))
+  (setq pre (entlast)
+        rot (cchk:world-rot '(1.0 0.0 0.0)))
   ;; the args list is required - without it vl-catch-all-apply itself
   ;; errors instead of catching, killing the tutorial at this line
   (vl-catch-all-apply
     '(lambda ()
-       (command "_.DIMLINEAR"
-                (list bx (- by 4.0) 0.0)
-                (list (+ bx 180.0) by 0.0)
-                (list (+ bx 90.0) (- by 40.0) 0.0)))
+       (if rot
+         (command "_.DIMLINEAR"
+                  (trans (list bx (- by 4.0) 0.0) 0 1)
+                  (trans (list (+ bx 180.0) by 0.0) 0 1)
+                  "_R" rot
+                  (trans (list (+ bx 90.0) (- by 40.0) 0.0) 0 1))
+         (command "_.DIMLINEAR"
+                  (trans (list bx (- by 4.0) 0.0) 0 1)
+                  (trans (list (+ bx 180.0) by 0.0) 0 1)
+                  (trans (list (+ bx 90.0) (- by 40.0) 0.0) 0 1))))
     nil)
   (setvar "OSMODE" oldosmode)
   (setq newdim (if pre (entnext pre) (entnext)))
@@ -4763,6 +4794,11 @@
       (setq bp (getpoint "\nPick a base point for the demo, clear of your real geometry <0,0>: "))
       (if lzd:ask (lzd:ask "\nPick a base point for the demo, clear of your real geometry <0,0>: " bp) bp)
       (if (null bp) (setq bp (list 0.0 0.0 0.0)))
+      ;; the click is UCS numbers and the scene is built in World --
+      ;; handed over raw, the demo landed a UCS origin away from the
+      ;; spot the drafter picked, and COVERSCAN placed its pad there.
+      ;; Enter's 0,0 is the UCS origin, the same as typing it.
+      (setq bp (trans bp 1 0))
       (setq oldecho (getvar "CMDECHO") os0 (getvar "OSMODE")
             fil0 (getvar "FILEDIA"))
       (setvar "CMDECHO" 0)

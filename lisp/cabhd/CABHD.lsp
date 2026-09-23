@@ -237,7 +237,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v2.7")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v2.8")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -1582,7 +1582,10 @@
                          "\" - click the one you mean.")))
          (t (setq out (car dupes) done T))))
       (t
-       (setq out (cab:cand-nearest v cands snap))
+       ;; The click is in the drafter's UCS and the candidates are
+       ;; World, off the INSERTs themselves: under a moved UCS the raw
+       ;; click measured against them found nothing, or the wrong point.
+       (setq out (cab:cand-nearest (trans v 1 0) cands snap))
        (if out
          (setq done T)
          (princ (strcat "\nNo survey point there - click one, or type"

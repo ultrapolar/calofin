@@ -101,7 +101,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v2.7")
+(setq cal:*version* "v2.8")
 
 
 ;;  WHAT IS LOADED, AND AT WHICH VERSION.  Every tool reports its own
@@ -1900,7 +1900,10 @@
                          "\" - click the one you mean.")))
          (t (setq out (car dupes) done T))))
       (t
-       (setq out (cal:cand-nearest v cands snap))
+       ;; The click is in the drafter's UCS and the candidates are
+       ;; World, off the INSERTs themselves: under a moved UCS the raw
+       ;; click measured against them found nothing, or the wrong point.
+       (setq out (cal:cand-nearest (trans v 1 0) cands snap))
        (if out
          (setq done T)
          (princ (strcat "\nNo survey point there - click one, or type"
@@ -2037,7 +2040,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.6")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.7")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -2338,6 +2341,11 @@
     ((= (type v) 'REAL) (lzd:real v))
     ((= (type v) 'SYM) (strcat "'" (vl-princ-to-string v)))
     ((= (type v) 'ENAME) "<ent>")
+    ;; a dotted pair -- a form store's (key . value) -- written the way
+    ;; AutoLISP reads one back.  Ahead of the point test: (8 . "0") has
+    ;; a number for its car and no cadr, and foreach over it throws
+    ((and (listp v) (not (listp (cdr v))))
+     (strcat "(" (lzd:enc (car v)) " . " (lzd:enc (cdr v)) ")"))
     ((and (listp v) (numberp (car v)))
      (strcat "(" (lzd:num (car v)) " " (lzd:num (cadr v)) " "
              (lzd:num (if (caddr v) (caddr v) 0.0)) ")"))
@@ -2399,6 +2407,46 @@
 (defun lzd:step (label)
   (setq lzd:*step* (lzd:str label))
   nil)
+
+;; What the run was HANDED before its first prompt.  A form -- LAZFORM,
+;; LAZSPA, LAZSTEP, LAZSIDE, the palette -- answers some or all of a
+;; tool's questions by leaving them in the tool's store (pool:*form*,
+;; spa:*form*, *cs-form* ...) and then calling the command, and the
+;; questions the store answers are never asked.  Those answers are
+;; inputs as much as a typed one is, and a transcript without them
+;; replays a run nobody made: the replay is asked what the form
+;; answered, every recorded answer lands a prompt early, and the probe
+;; chases that divergence instead of the failure.  So a command names
+;; its store at the top, straight after lzd:begin -- check_lazdiag
+;; derives which from its X:run-with-answers and holds it to that --
+;; and this writes one line per symbol that is SET:
+;;
+;;     = pool:*form*   -> (('SHAPE . "L") ('B . 240.0) ('C) ...)
+;;
+;; which tools/probe_report.py puts back before it replays.  Each entry
+;; of an association list is also added to the answers THE INPUTS
+;; section reads, as "form: B", so a zero the sheet handed in is flagged
+;; the way a typed one is.  A symbol that is nil -- a typed run's empty
+;; store -- writes nothing.  Run from inside a run: nothing may throw.
+(defun lzd:state (syms / s v e k)
+  (foreach s syms
+    (setq v (vl-catch-all-apply 'eval (list s)))
+    (if (and v (not (vl-catch-all-error-p v)))
+      (progn
+        (lzd:say (strcat "  = " (strcase (vl-princ-to-string s) t)
+                         "   -> " (lzd:enc v)))
+        (if (listp v)
+          (foreach e v
+            (if (and (listp e) e (not (listp (car e))))
+              (progn
+                (setq k (car e))
+                (setq lzd:*answers*
+                  (cons (cons (strcat "form: "
+                                      (if (= (type k) 'STR) k
+                                          (strcase (vl-princ-to-string k) t)))
+                              (cdr e))
+                        lzd:*answers*)))))))))
+  syms)
 
 ;; Register geometry the tool did not draw but is working ON -- the
 ;; selection it was handed, the entity it was asked to measure.  Takes an
@@ -3824,7 +3872,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092326 REV42")
+(setq pool:*version* "092326 REV43")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -4298,11 +4346,53 @@
   (setq d (sqrt (cal:dot p p)))
   (if (> d 1.0e-12) (cal:v* p (/ 1.0 d)) (list 0.0 0.0)))
 
-;; local 2D point -> world 3D point (applies the insertion base)
+;; local 2D point -> a point in the CURRENT UCS (applies the insertion
+;; base, which was picked there).  This is what (command ...) reads --
+;; every dimension, ZOOM and MIRROR takes its points from it.
 (defun pool:wp (p)
   (list (+ (car p) (car pool:*base*))
         (+ (cadr p) (cadr pool:*base*))
         0.0))
+
+;; The same point in WORLD numbers, which is what entmake and entmod
+;; read.  Both used to be handed pool:wp: under a UCS moved to the
+;; site's corner the outline landed at the raw numbers, a UCS-origin
+;; away from its own dimensions, and turned it lay along World X while
+;; the dims ran along the UCS.  Entity data goes through this one.
+(defun pool:ww (p) (trans (pool:wp p) 1 0))
+
+;; How far the current UCS is turned from World X, for the angles an
+;; entity keeps in World terms (an ARC's 50/51, a TEXT's 50) so they
+;; turn with the points.  Read off the components, 0 in World, and
+;; kept in 0..2pi.
+(defun pool:ucsang ( / x a)
+  (setq x (trans '(1.0 0.0 0.0) 1 0 T)
+        a (atan (cadr x) (car x)))
+  (if (< a 0.0) (+ a pi pi) a))
+
+;; T in a PLAN UCS: one whose Z axis is World +Z, so all it does is
+;; move the World plan and turn it -- the only kind the two helpers
+;; above can carry a pool into.  An ARC keeps its angles counter-
+;; clockwise about its 210, which stays World +Z here; in a UCS whose Z
+;; points DOWN (X turned 180, or a 3-point UCS whose Y was picked
+;; clockwise of X) counter-clockwise in the UCS is clockwise in the
+;; World, and every corner arc came out mirrored off its corner while
+;; the lines and dims beside it landed true.  Tilted, the entity data
+;; leaves the plane the dimensions are drawn on altogether.  So POOL,
+;; POOLDEMO and TUTORIALPOOL refuse both rather than draw either.  The
+;; test is on +Z itself and not on its size: (abs z) would let the
+;; upside-down one by.
+(defun pool:ucsplan-p ()
+  (> (caddr (trans '(0.0 0.0 1.0) 1 0 T)) (- 1.0 1.0e-8)))
+
+;; What a refused run says, NAME being the command the drafter typed.
+(defun pool:ucsrefuse (name)
+  (princ (strcat "\n" name ": the current UCS is tilted or upside down"
+                 " (its Z axis is not World +Z),"))
+  (princ "\nso a plan pool cannot be laid out in it.  Set the UCS to World, or to")
+  (princ (strcat "\nany UCS only moved and turned in plan, and run " name
+                 " again."))
+  (princ))
 
 ;;; -------------------- geometry ---------------------------------------
 
@@ -4380,8 +4470,8 @@
 (defun pool:line (p1 p2 lay)
   (entmake (list '(0 . "LINE")
                  (cons 8 lay)
-                 (cons 10 (pool:wp p1))
-                 (cons 11 (pool:wp p2)))))
+                 (cons 10 (pool:ww p1))
+                 (cons 11 (pool:ww p2)))))
 
 ;; Build a linetype from an explicit pattern (positive = dash length,
 ;; 0 = dot, negative = gap), all in drawing units (inches).  Done with
@@ -4422,8 +4512,8 @@
 (defun pool:lined (p1 p2)
   (entmake (append (list '(0 . "LINE")
                          (cons 8 pool:*lay-notes*)
-                         (cons 10 (pool:wp p1))
-                         (cons 11 (pool:wp p2)))
+                         (cons 10 (pool:ww p1))
+                         (cons 11 (pool:ww p2)))
                    (if (/= pool:*dashlt* "CONTINUOUS")
                        (list (cons 6 pool:*dashlt*)
                              (cons 48 (pool:ltsc)))))))
@@ -4434,8 +4524,8 @@
   (entmake (append (list '(0 . "LINE")
                          (cons 8 pool:*lay-notes*)
                          (cons 62 pool:*pvx-col*)
-                         (cons 10 (pool:wp p1))
-                         (cons 11 (pool:wp p2)))
+                         (cons 10 (pool:ww p1))
+                         (cons 11 (pool:ww p2)))
                    (if (/= pool:*dotlt* "CONTINUOUS")
                        (list (cons 6 pool:*dotlt*)
                              (cons 48 (pool:ltsc)))))))
@@ -4443,21 +4533,23 @@
 (defun pool:text (pt h str lay)
   (entmake (list '(0 . "TEXT")
                  (cons 8 lay)
-                 (cons 10 (pool:wp pt))
+                 (cons 10 (pool:ww pt))
                  (cons 40 h)
+                 (cons 50 (pool:ucsang))  ; level in the UCS
                  (cons 1 str))))
 
 (defun pool:textc (pt h str lay col)
   (entmake (list '(0 . "TEXT")
                  (cons 8 lay)
                  (cons 62 col)
-                 (cons 10 (pool:wp pt))
+                 (cons 10 (pool:ww pt))
                  (cons 40 h)
+                 (cons 50 (pool:ucsang))
                  (cons 1 str))))
 
 ;; Three-point arc through p1 -> p2 -> p3 (falls back to a line when
 ;; the points are collinear).
-(defun pool:arc3p (p1 p2 p3 lay / o r a1 a2 a3 da2 da3 s e)
+(defun pool:arc3p (p1 p2 p3 lay / o r a1 a2 a3 da2 da3 s e rot)
   (setq o (pool:circum p1 p2 p3))
   (if o
       (progn
@@ -4470,12 +4562,14 @@
         (if (< da2 da3)
             (setq s a1 e a3)
             (setq s a3 e a1))
+        ;; the angles are the pool's; the arc keeps World ones
+        (setq rot (pool:ucsang))
         (entmake (list '(0 . "ARC")
                        (cons 8 lay)
-                       (cons 10 (pool:wp o))
+                       (cons 10 (pool:ww o))
                        (cons 40 r)
-                       (cons 50 s)
-                       (cons 51 e))))
+                       (cons 50 (cal:angnorm (+ s rot)))
+                       (cons 51 (cal:angnorm (+ e rot))))))
       (pool:line p1 p3 lay)))
 
 ;;; Small dimensions read in inches.  Any measurement under 24" is
@@ -5457,8 +5551,10 @@
                  '(100 . "AcDbEntity")
                  (cons 8 pool:*lay-notes*)
                  '(100 . "AcDbEllipse")
-                 (cons 10 (pool:wp cen))
-                 (cons 11 mj)                  ; major semi-axis, relative
+                 (cons 10 (pool:ww cen))
+                 ;; major semi-axis, relative -- a World direction, so
+                 ;; it turns with the UCS the pool is laid out in
+                 (cons 11 (trans mj 1 0 T))
                  (cons 210 '(0.0 0.0 1.0))
                  (cons 40 rt)                  ; minor / major
                  (cons 41 0.0)
@@ -5530,19 +5626,19 @@
 ;; no longer exists (the corner redraw retires the plain sides) is left
 ;; dead; a three-point arc whose kind changed is remade.  Returns the
 ;; entity holding the primitive now.
-(defun pool:pvmod (e pr ink / ed ty o r a1 a2 a3 da2 da3 s en mj rt)
+(defun pool:pvmod (e pr ink / ed ty o r a1 a2 a3 da2 da3 s en mj rt rot)
   (setq ed (if e (entget e)))
   (cond
     ((null ed) e)
     ((member (car pr) '("LINE" "LINED"))
-     (entmod (subst (cons 11 (pool:wp (caddr pr))) (assoc 11 ed)
-                    (subst (cons 10 (pool:wp (cadr pr))) (assoc 10 ed) ed)))
+     (entmod (subst (cons 11 (pool:ww (caddr pr))) (assoc 11 ed)
+                    (subst (cons 10 (pool:ww (cadr pr))) (assoc 10 ed) ed)))
      (entupd e)
      e)
     ((= (car pr) "TEXT")
      (entmod (subst (cons 1 (cadddr pr)) (assoc 1 ed)
                     (subst (cons 40 (caddr pr)) (assoc 40 ed)
-                           (subst (cons 10 (pool:wp (cadr pr)))
+                           (subst (cons 10 (pool:ww (cadr pr)))
                                   (assoc 10 ed) ed))))
      (entupd e)
      e)
@@ -5560,10 +5656,11 @@
            (if (< da2 da3)
                (setq s a1 en a3)
                (setq s a3 en a1))
-           (entmod (subst (cons 51 en) (assoc 51 ed)
-                          (subst (cons 50 s) (assoc 50 ed)
+           (setq rot (pool:ucsang))
+           (entmod (subst (cons 51 (cal:angnorm (+ en rot))) (assoc 51 ed)
+                          (subst (cons 50 (cal:angnorm (+ s rot))) (assoc 50 ed)
                                  (subst (cons 40 r) (assoc 40 ed)
-                                        (subst (cons 10 (pool:wp o))
+                                        (subst (cons 10 (pool:ww o))
                                                (assoc 10 ed) ed)))))
            (entupd e)
            e)
@@ -5577,8 +5674,8 @@
          (setq mj (list 0.0 (* 0.5 (cadddr pr)) 0.0)
                rt (/ (caddr pr) (cadddr pr))))
      (entmod (subst (cons 40 rt) (assoc 40 ed)
-                    (subst (cons 11 mj) (assoc 11 ed)
-                           (subst (cons 10 (pool:wp (cadr pr)))
+                    (subst (cons 11 (trans mj 1 0 T)) (assoc 11 ed)
+                           (subst (cons 10 (pool:ww (cadr pr)))
                                   (assoc 10 ed) ed))))
      (entupd e)
      e)
@@ -8232,7 +8329,7 @@
   (setq r (* pool:*mark-r* doff))
   (entmake (list '(0 . "CIRCLE")
                  (cons 8 pool:*lay-dim*)
-                 (cons 10 (pool:wp p))
+                 (cons 10 (pool:ww p))
                  (cons 40 r)))
   (command "_.DIMRADIUS"
            (list (entlast) (pool:wp (cal:v+ p (cal:v* outd r))))
@@ -11147,14 +11244,15 @@
   (if (< (abs (- a b)) 1.0e-6)
       (entmake (list '(0 . "CIRCLE")
                      (cons 8 lay)
-                     (cons 10 (pool:wp cen))
+                     (cons 10 (pool:ww cen))
                      (cons 40 (* 0.5 b))))
       (entmake (list '(0 . "ELLIPSE")
                      '(100 . "AcDbEntity")
                      (cons 8 lay)
                      '(100 . "AcDbEllipse")
-                     (cons 10 (pool:wp cen))
-                     (cons 11 (list (* 0.5 b) 0.0 0.0))   ; major axis, relative
+                     (cons 10 (pool:ww cen))
+                     ;; major axis, relative: a World direction
+                     (cons 11 (trans (list (* 0.5 b) 0.0 0.0) 1 0 T))
                      (cons 210 '(0.0 0.0 1.0))
                      (cons 40 (/ a b))                    ; minor / major
                      (cons 41 0.0)
@@ -12546,124 +12644,139 @@
     (if lzd:report (lzd:report "POOL" pool:*version* msg))
     (princ))
   (if lzd:begin (lzd:begin "POOL" pool:*version*))
-
-  ;; nothing is open yet: a flag an earlier run left set must not let
-  ;; this run's handler close somebody else's undo group
-  (setq pool:*undo-open* nil)
-
-  ;; AutoCAD 2012+ requires this so *error* may call (command);
-  ;; harmless no-op guard on older releases where it doesn't exist
-  (if *push-error-using-command* (*push-error-using-command*))
-
-  (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER" "AUNITS" "ANGBASE" "ANGDIR"))
-  ;; last run's Given opt-in and marks, if it died before
-  ;; pool:givendone cleared them
-  (pool:givereset)
-  (setq pool:*valnotes* nil
-        pool:*smallwarned* nil
-        ;; a fresh run, so a fresh ruler: the hint is said once a run,
-        ;; and the flag that says it has been said travels in here
-        pool:*ruler* nil
-        pool:*profents* nil
-        pool:*sideon* nil
-        pool:*flooron* nil
-        pool:*dimstyle0* (getvar "DIMSTYLE")
-        ;; report lengths follow the units the DRAWING was in before
-        ;; POOL switches to architectural for its prompts: a crew whose
-        ;; drawing is in feet-inches gets a feet-inches report
-        pool:*ftin* (member (cdr (assoc "LUNITS" cal:*sysold*)) '(3 4))
-        pool:*formrun* (if pool:*form* t nil))
-  (setvar "CMDECHO" 0)
-  (setq pool:*undo-open* (cal:undobegin))
-  ;; architectural units while prompting so every distance can be
-  ;; typed as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
-  (setvar "LUNITS" 4)
-  ;; ...and the angle three at their defaults: pool:dimrot TYPES its
-  ;; rotation into DIMLINEAR, and AutoCAD reads a typed angle through
-  ;; AUNITS, ANGBASE and ANGDIR -- in a surveyor's template (zero north,
-  ;; clockwise) a wall's rotated dimension came out square to the wall,
-  ;; reading the wrong number.  SQUAREUP zeroes the same three for ROTATE.
-  (setvar "AUNITS" 0)
-  (setvar "ANGBASE" 0.0)
-  (setvar "ANGDIR" 0)
-  (princ "\nDistances may be typed as 25'6\", 25'-6-1/2\" or 25'6.5 (plain numbers = inches).")
-
-  ;; The three questions in front of every measurement - in-square,
-  ;; shape, base point - are one chain.  The two after the first offer
-  ;; Back and re-open the one before them, which matters most at the
-  ;; shape: it is the answer the whole run hangs off, and until now the
-  ;; only way to change it was to start again.  A form-supplied answer
-  ;; is spent as it is read (STANDARDS 7.2), so backing into a question
-  ;; the form filled in asks it at the keyboard.
-  ;;
-  ;; In-square pools are built true to the side measurements and need
-  ;; no diagonals; out-of-square pools take the usual cross-dim route.
-  ;; L = true L; LAzyl = lazy L (type LA); ROman = roman (type RO):
-  ;; the six common shapes first, then the rarely-used ones; type RO
-  ;; for a roman, ROU for a round, MU for a mutt (mixed ends).
-  (setq pstep 1)
-  (while (<= pstep 3)
-    (cond
-      ((= pstep 1)
-       (setq pool:*insq*
-             (= "Insquare"
-                (pool:askkwf 'insq "Is the pool in-square or out-of-square"
-                             "Insquare Outofsquare" "Insquare/Outofsquare" nil nil)))
-       (if pool:*insq*
-           (princ "\nIn-square: building true to the side measurements (no cross dims needed)."))
-       (setq pstep 2))
-      ((= pstep 2)
-       (setq ptype (pool:fshape T))
-       (if (eq ptype 'CAL-BACK)
-         (progn (princ "\nStepping back one question.") (setq pstep 1))
-         (setq pstep 3)))
-      ((= pstep 3)
-       ;; the base point is picked with the user's own snaps still live;
-       ;; only afterwards do snaps drop for the command-fed drawing work
-       (if (pool:fhas 'base)
-         (setq base  (pool:ftake 'base)
-               pstep 4)
-         (progn
-           (initget "Back Undo")
-           (setq base (getpoint "\nInsertion base point [Back] <0,0>: "))
-           (if lzd:ask (lzd:ask "\nInsertion base point [Back] <0,0>: " base) base)
-           (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
-             (progn (princ "\nStepping back one question.") (setq pstep 2))
-             (setq pstep 4)))))))
-  (setq pool:*base* (if (and base (listp base))
-                        (list (car base) (cadr base))
-                        (list 0.0 0.0)))
-  (setvar "OSMODE" 0)
-
-  ;; ------------------------------------------------ layers
-  (pool:layer pool:*lay-pool*  pool:*col-pool*)
-  (pool:layer pool:*lay-dim*   pool:*col-dim*)
-  (pool:layer pool:*lay-notes* pool:*col-notes*)
-
-  ;; dashed linetype up front so the guide's cross dims draw dashed
-  ;; patterns are defined in inches and scaled to cancel LTSCALE, so
-  ;; they show the same in any drawing
-  (setq pool:*dashlt* (pool:ltload "DASHED")
-        pool:*dotlt* (pool:ltload "DOT"))
+  ;; the form's answers AND the two run flags a caller sets before it
+  ;; calls c:POOL -- POOLCOVER's no-bottom, LAZFORM's has-bottom -- so
+  ;; a report of a cover run replays as a cover run
+  (if lzd:state (lzd:state '(pool:*form* pool:*nobottom* pool:*hasbottom*)))
 
   (cond
-    ((= ptype "L") (pool:hexflow nil))
-    ((= ptype "LAzyl") (pool:hexflow t))
-    ((= ptype "Grecian") (pool:grecflow nil))
-    ((= ptype "OCtagon") (pool:grecflow t))
-    ((= ptype "ROman") (pool:romanflow))
-    ((= ptype "ROUnd") (pool:roundflow))
-    ((= ptype "MUtt") (pool:muttflow))
-    (t (pool:quadflow ptype)))
+    ;; a plan pool cannot be laid out in a UCS that is tilted or upside
+    ;; down (pool:ucsplan-p): said and stopped here, before anything is
+    ;; asked, borrowed or drawn.  What was handed to this run goes with
+    ;; it -- a form, or POOLCOVER's no-bottom flag, left standing would
+    ;; answer the next POOL typed at the command line
+    ((not (pool:ucsplan-p))
+     (pool:ucsrefuse (if pool:*nobottom* "POOLCOVER" "POOL"))
+     (pool:fclear)
+     (setq pool:*nobottom* nil pool:*hasbottom* nil pool:*formrun* nil))
+    (t
+     ;; nothing is open yet: a flag an earlier run left set must not let
+     ;; this run's handler close somebody else's undo group
+     (setq pool:*undo-open* nil)
 
-  ;; ------------------------------------------------ finish
-  (command "_.ZOOM" "_Extents")
-  (if pool:*undo-open* (setq pool:*undo-open* (cal:undoend)))
-  (cal:sysrestore)
-  (pool:fclear)
-  (pool:rulerkill)
-  (setq pool:*nobottom* nil pool:*hasbottom* nil pool:*formrun* nil)
-  (if *pop-error-mode* (*pop-error-mode*))
+     ;; AutoCAD 2012+ requires this so *error* may call (command);
+     ;; harmless no-op guard on older releases where it doesn't exist
+     (if *push-error-using-command* (*push-error-using-command*))
+
+     (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER" "AUNITS" "ANGBASE" "ANGDIR"))
+     ;; last run's Given opt-in and marks, if it died before
+     ;; pool:givendone cleared them
+     (pool:givereset)
+     (setq pool:*valnotes* nil
+           pool:*smallwarned* nil
+           ;; a fresh run, so a fresh ruler: the hint is said once a run,
+           ;; and the flag that says it has been said travels in here
+           pool:*ruler* nil
+           pool:*profents* nil
+           pool:*sideon* nil
+           pool:*flooron* nil
+           pool:*dimstyle0* (getvar "DIMSTYLE")
+           ;; report lengths follow the units the DRAWING was in before
+           ;; POOL switches to architectural for its prompts: a crew whose
+           ;; drawing is in feet-inches gets a feet-inches report
+           pool:*ftin* (member (cdr (assoc "LUNITS" cal:*sysold*)) '(3 4))
+           pool:*formrun* (if pool:*form* t nil))
+     (setvar "CMDECHO" 0)
+     (setq pool:*undo-open* (cal:undobegin))
+     ;; architectural units while prompting so every distance can be
+     ;; typed as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
+     (setvar "LUNITS" 4)
+     ;; ...and the angle three at their defaults: pool:dimrot TYPES its
+     ;; rotation into DIMLINEAR, and AutoCAD reads a typed angle through
+     ;; AUNITS, ANGBASE and ANGDIR -- in a surveyor's template (zero north,
+     ;; clockwise) a wall's rotated dimension came out square to the wall,
+     ;; reading the wrong number.  SQUAREUP zeroes the same three for ROTATE.
+     (setvar "AUNITS" 0)
+     (setvar "ANGBASE" 0.0)
+     (setvar "ANGDIR" 0)
+     (princ "\nDistances may be typed as 25'6\", 25'-6-1/2\" or 25'6.5 (plain numbers = inches).")
+
+     ;; The three questions in front of every measurement - in-square,
+     ;; shape, base point - are one chain.  The two after the first offer
+     ;; Back and re-open the one before them, which matters most at the
+     ;; shape: it is the answer the whole run hangs off, and until now the
+     ;; only way to change it was to start again.  A form-supplied answer
+     ;; is spent as it is read (STANDARDS 7.2), so backing into a question
+     ;; the form filled in asks it at the keyboard.
+     ;;
+     ;; In-square pools are built true to the side measurements and need
+     ;; no diagonals; out-of-square pools take the usual cross-dim route.
+     ;; L = true L; LAzyl = lazy L (type LA); ROman = roman (type RO):
+     ;; the six common shapes first, then the rarely-used ones; type RO
+     ;; for a roman, ROU for a round, MU for a mutt (mixed ends).
+     (setq pstep 1)
+     (while (<= pstep 3)
+       (cond
+         ((= pstep 1)
+          (setq pool:*insq*
+                (= "Insquare"
+                   (pool:askkwf 'insq "Is the pool in-square or out-of-square"
+                                "Insquare Outofsquare" "Insquare/Outofsquare" nil nil)))
+          (if pool:*insq*
+              (princ "\nIn-square: building true to the side measurements (no cross dims needed)."))
+          (setq pstep 2))
+         ((= pstep 2)
+          (setq ptype (pool:fshape T))
+          (if (eq ptype 'CAL-BACK)
+            (progn (princ "\nStepping back one question.") (setq pstep 1))
+            (setq pstep 3)))
+         ((= pstep 3)
+          ;; the base point is picked with the user's own snaps still live;
+          ;; only afterwards do snaps drop for the command-fed drawing work
+          (if (pool:fhas 'base)
+            (setq base  (pool:ftake 'base)
+                  pstep 4)
+            (progn
+              (initget "Back Undo")
+              (setq base (getpoint "\nInsertion base point [Back] <0,0>: "))
+              (if lzd:ask (lzd:ask "\nInsertion base point [Back] <0,0>: " base) base)
+              (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
+                (progn (princ "\nStepping back one question.") (setq pstep 2))
+                (setq pstep 4)))))))
+     (setq pool:*base* (if (and base (listp base))
+                           (list (car base) (cadr base))
+                           (list 0.0 0.0)))
+     (setvar "OSMODE" 0)
+
+     ;; ------------------------------------------------ layers
+     (pool:layer pool:*lay-pool*  pool:*col-pool*)
+     (pool:layer pool:*lay-dim*   pool:*col-dim*)
+     (pool:layer pool:*lay-notes* pool:*col-notes*)
+
+     ;; dashed linetype up front so the guide's cross dims draw dashed
+     ;; patterns are defined in inches and scaled to cancel LTSCALE, so
+     ;; they show the same in any drawing
+     (setq pool:*dashlt* (pool:ltload "DASHED")
+           pool:*dotlt* (pool:ltload "DOT"))
+
+     (cond
+       ((= ptype "L") (pool:hexflow nil))
+       ((= ptype "LAzyl") (pool:hexflow t))
+       ((= ptype "Grecian") (pool:grecflow nil))
+       ((= ptype "OCtagon") (pool:grecflow t))
+       ((= ptype "ROman") (pool:romanflow))
+       ((= ptype "ROUnd") (pool:roundflow))
+       ((= ptype "MUtt") (pool:muttflow))
+       (t (pool:quadflow ptype)))
+
+     ;; ------------------------------------------------ finish
+     (command "_.ZOOM" "_Extents")
+     (if pool:*undo-open* (setq pool:*undo-open* (cal:undoend)))
+     (cal:sysrestore)
+     (pool:fclear)
+     (pool:rulerkill)
+     (setq pool:*nobottom* nil pool:*hasbottom* nil pool:*formrun* nil)
+     (if *pop-error-mode* (*pop-error-mode*))))
   (if lzd:end (lzd:end "POOL"))
   (princ))
 
@@ -12745,7 +12858,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq pooldemo:*version* "092226 REV10")
+(setq pooldemo:*version* "092326 REV11")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -13061,9 +13174,17 @@
     (princ))
   (if lzd:begin (lzd:begin "POOLDEMO" pooldemo:*version*))
 
-  (if (not (member 'pool:hopcalc (atoms-family 0)))
-      (princ "\nPOOL.LSP is not loaded -- APPLOAD it first, then run POOLDEMO.")
-      (pooldemo:run))
+  (cond
+    ((not (member 'pool:hopcalc (atoms-family 0)))
+     (princ "\nPOOL.LSP is not loaded -- APPLOAD it first, then run POOLDEMO."))
+    ;; every cell draws through POOL's helpers, so only in a UCS they
+    ;; can carry a pool into (pool:ucsplan-p): tilted or upside down,
+    ;; the ovals', Romans' and radius corners' arcs came out mirrored
+    ;; off their corners.  Guarded, since a POOL.LSP older than this
+    ;; file has no such helper
+    ((and pool:ucsplan-p (not (pool:ucsplan-p)))
+     (pool:ucsrefuse "POOLDEMO"))
+    (t (pooldemo:run)))
   (if lzd:end (lzd:end "POOLDEMO"))
   (princ))
 
@@ -13193,7 +13314,7 @@
 ;;;      TUTORIALPOOL_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
 
-(setq tutorial:*version* "092226 REV10")
+(setq tutorial:*version* "092326 REV11")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -13240,16 +13361,24 @@
 
 ;;; -------------------- topic 2: guided input ----------------------------
 
-(defun tutorial:c2 ( / a b c d)
+(defun tutorial:c2 ( / a b c d grey)
   (tutorial:cap "2  THE GUIDED INPUT")
   (setq a (list 0.0 0.0) b (list 300.0 0.0)
-        c (list 300.0 180.0) d (list 0.0 180.0))
+        c (list 300.0 180.0) d (list 0.0 180.0)
+        ;; a plain ACI grey, the one POOL's guide shipped as.  Its own
+        ;; knob is 'auto, a ROLE and not a colour: handed to setcol as
+        ;; it stands it went into the entmod as (62 . AUTO), which
+        ;; AutoCAD refuses -- and resolved, it is the grey for THIS
+        ;; drafter's screen, which is right for a guide POOL erases
+        ;; and wrong for sample lines that stay on the sheet for
+        ;; whoever opens the drawing next
+        grey 8)
   (pool:line a b "POOL-NOTES")
-  (pool:setcol (entlast) pool:*pv-col*)
+  (pool:setcol (entlast) grey)
   (pool:line b c "POOL-NOTES")
-  (pool:setcol (entlast) pool:*pv-col*)
+  (pool:setcol (entlast) grey)
   (pool:line c d "POOL-NOTES")
-  (pool:setcol (entlast) pool:*pv-col*)
+  (pool:setcol (entlast) grey)
   ;; the side currently "being asked about" -- drawn RED, same colour
   ;; and convention the real guide uses while prompting
   (pool:line d a "POOL-NOTES")
@@ -13513,12 +13642,18 @@
     (princ))
   (if lzd:begin (lzd:begin "TUTORIALPOOL" tutorial:*version*))
 
-  (if (null pool:*version*)
-      (progn
-        (princ "\nLoad POOL.LSP first -- the tutorial draws with its geometry")
-        (princ "\nhelpers, so it cannot run without it.")
-        (princ))
-      (tutorial:run))
+  (cond
+    ((null pool:*version*)
+     (princ "\nLoad POOL.LSP first -- the tutorial draws with its geometry")
+     (princ "\nhelpers, so it cannot run without it.")
+     (princ))
+    ;; it draws through POOL's helpers, so only in a UCS they can carry
+    ;; a pool into (pool:ucsplan-p): tilted or upside down, its sample
+    ;; arcs came out mirrored off their corners.  Guarded, since a
+    ;; POOL.LSP older than this file has no such helper
+    ((and pool:ucsplan-p (not (pool:ucsplan-p)))
+     (pool:ucsrefuse "TUTORIALPOOL"))
+    (t (tutorial:run)))
   (if lzd:end (lzd:end "TUTORIALPOOL"))
   (princ))
 
@@ -13680,7 +13815,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.14")
+(setq *poolside-version* "v1.15")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -13781,33 +13916,73 @@
 ;;; Copies of the CALOFIN-LIB originals (STANDARDS.md section 4); the
 ;;; grouped twin calls cal: instead.
 
-;; local 2D point -> world 3D point (applies the insertion base)
+;; local 2D point -> a point in the CURRENT UCS (applies the insertion
+;; base, which was picked there).  This is what (command ...) reads --
+;; the _H and _V dimensions and the ZOOMs take their points from it.
 (defun psd:wp (p)
   (list (+ (car p) (car psd:*base*))
         (+ (cadr p) (cadr psd:*base*))
         0.0))
+
+;; The same point in WORLD numbers, which is what entmake reads.  Both
+;; used to be handed psd:wp: under a UCS moved to the site the section
+;; landed at the raw numbers, a UCS-origin away from its own depth and
+;; run dimensions, and turned it lay along World X while _H and _V
+;; measured along the UCS.  Entity data goes through this one.
+(defun psd:ww (p) (trans (psd:wp p) 1 0))
+
+;; How far the current UCS is turned from World X, for a TEXT's 50 so
+;; the labels read level in the UCS the section is drawn along.  Read
+;; off the components, 0 in World, and kept in 0..2pi.
+(defun psd:ucsang ( / x a)
+  (setq x (trans '(1.0 0.0 0.0) 1 0 T)
+        a (atan (cadr x) (car x)))
+  (if (< a 0.0) (+ a pi pi) a))
+
+;; T in a PLAN UCS: one whose Z axis is World +Z, so all it does is
+;; move the World plan and turn it -- the only kind the two helpers
+;; above can carry a section into.  A TEXT is written face up about a
+;; 210 that stays World +Z here: in a UCS whose Z points DOWN (X turned
+;; 180, or a 3-point UCS whose Y was picked clockwise of X) every label
+;; read backwards beside a section and dims that landed true, and in a
+;; tilted one the labels lay flat in the World plan, off the plane the
+;; section and its dims are drawn on.  So POOLSIDE refuses both rather
+;; than draw either.  The test is on +Z itself and not on its size:
+;; (abs z) would let the upside-down one by.
+(defun psd:ucsplan-p ()
+  (> (caddr (trans '(0.0 0.0 1.0) 1 0 T)) (- 1.0 1.0e-8)))
+
+;; What a refused run says.
+(defun psd:ucsrefuse ()
+  (princ (strcat "\nPOOLSIDE: the current UCS is tilted or upside down"
+                 " (its Z axis is not World +Z),"))
+  (princ "\nso a section cannot be laid out in it.  Set the UCS to World, or to")
+  (princ "\nany UCS only moved and turned in plan, and run POOLSIDE again.")
+  (princ))
 
 ;;; -------------------- layers and entities ----------------------------
 
 (defun psd:line (p1 p2 lay)
   (entmake (list '(0 . "LINE")
                  (cons 8 lay)
-                 (cons 10 (psd:wp p1))
-                 (cons 11 (psd:wp p2)))))
+                 (cons 10 (psd:ww p1))
+                 (cons 11 (psd:ww p2)))))
 
 (defun psd:text (pt h str lay)
   (entmake (list '(0 . "TEXT")
                  (cons 8 lay)
-                 (cons 10 (psd:wp pt))
+                 (cons 10 (psd:ww pt))
                  (cons 40 h)
+                 (cons 50 (psd:ucsang))      ; level in the UCS
                  (cons 1 str))))
 
 (defun psd:textc (pt h str lay col)
   (entmake (list '(0 . "TEXT")
                  (cons 8 lay)
                  (cons 62 col)
-                 (cons 10 (psd:wp pt))
+                 (cons 10 (psd:ww pt))
                  (cons 40 h)
+                 (cons 50 (psd:ucsang))
                  (cons 1 str))))
 
 ;; Override (or set) the color of an entity, refresh it, return it.
@@ -14477,189 +14652,200 @@
     (if lzd:report (lzd:report "POOLSIDE" *poolside-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "POOLSIDE" *poolside-version*))
+  (if lzd:state (lzd:state '(psd:*form*)))
 
-  ;; nothing is open yet: a flag an earlier run left set must not let
-  ;; this run's handler close somebody else's undo group
-  (setq psd:*undo-open* nil)
+  (cond
+    ;; a section cannot be laid out in a UCS that is tilted or upside
+    ;; down (psd:ucsplan-p): said and stopped here, before anything is
+    ;; asked, borrowed or drawn.  A form handed to this run goes with
+    ;; it -- left standing, it would answer the next POOLSIDE typed at
+    ;; the command line
+    ((not (psd:ucsplan-p))
+     (psd:ucsrefuse)
+     (psd:fclear))
+    (t
+     ;; nothing is open yet: a flag an earlier run left set must not let
+     ;; this run's handler close somebody else's undo group
+     (setq psd:*undo-open* nil)
 
-  ;; AutoCAD 2012+ requires this so *error* may call (command);
-  ;; harmless no-op guard on older releases where it doesn't exist
-  (if *push-error-using-command* (*push-error-using-command*))
+     ;; AutoCAD 2012+ requires this so *error* may call (command);
+     ;; harmless no-op guard on older releases where it doesn't exist
+     (if *push-error-using-command* (*push-error-using-command*))
 
-  (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
-  ;; a fresh run, so a fresh ruler: the hint is said once a run, and the
-  ;; flag that says it has been said travels in here
-  (setq psd:*valnotes* nil
-        psd:*ruler* nil)
-  (setvar "CMDECHO" 0)
-  (setq psd:*undo-open* (cal:undobegin))
-  ;; architectural units while prompting so every distance can be typed
-  ;; as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
-  (setvar "LUNITS" 4)
-  (princ "\nSide view only -- the floor dimensions, no plan.")
-  (princ "\nDistances may be typed as 8'6\", 8'-6-1/2\" or 8'6.5 (plain numbers = inches).")
+     (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
+     ;; a fresh run, so a fresh ruler: the hint is said once a run, and the
+     ;; flag that says it has been said travels in here
+     (setq psd:*valnotes* nil
+           psd:*ruler* nil)
+     (setvar "CMDECHO" 0)
+     (setq psd:*undo-open* (cal:undobegin))
+     ;; architectural units while prompting so every distance can be typed
+     ;; as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
+     (setvar "LUNITS" 4)
+     (princ "\nSide view only -- the floor dimensions, no plan.")
+     (princ "\nDistances may be typed as 8'6\", 8'-6-1/2\" or 8'6.5 (plain numbers = inches).")
 
-  ;; the bottom type and the base point are the two questions in front
-  ;; of every measurement, so they are asked as a chain: Back at the
-  ;; base point re-asks the type, which is the answer the rest of the
-  ;; run is shaped by
-  ;;
-  ;; what Enter answers the bottom-type question with, read through
-  ;; psd:kwknob so a knob the prompt would refuse leaves the shipped
-  ;; "Normal" standing rather than reaching the chain table unspelled
-  (setq bdflt (cond ((psd:kwknob psd:*btype-default* psd:*btypes*)) ("Normal")))
-  (setq base 'RETRY)
-  (while (eq base 'RETRY)
-    ;; the form can name the bottom; anything psd:*btypes* does not
-    ;; list falls through to the prompt rather than being forced in
-    (if (null (setq style (psd:fkw 'style psd:*btypes* "Normal")))
-      (setq style (cal:askkw "Bottom type" psd:*btypes* psd:*btshown*
-                             bdflt nil)))
-    ;; the base point is picked with the user's own snaps still live;
-    ;; only afterwards do snaps drop for the command-fed drawing work.
-    ;; It is the top LEFT of the section -- the waterline at the left
-    ;; wall -- so the section hangs off a known corner.
-    (initget "Back Undo")
-    (setq base (getpoint "\nInsertion base point (top left of the section) [Back] <0,0>: "))
-    (if lzd:ask (lzd:ask "\nInsertion base point (top left of the section) [Back] <0,0>: " base) base)
-    (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
-      (progn (princ "\nStepping back one question.")
-             (setq base 'RETRY))))
-  (setq psd:*base* (if (and base (listp base))
-                       (list (car base) (cadr base))
-                       (list 0.0 0.0)))
-  (setvar "OSMODE" 0)
+     ;; the bottom type and the base point are the two questions in front
+     ;; of every measurement, so they are asked as a chain: Back at the
+     ;; base point re-asks the type, which is the answer the rest of the
+     ;; run is shaped by
+     ;;
+     ;; what Enter answers the bottom-type question with, read through
+     ;; psd:kwknob so a knob the prompt would refuse leaves the shipped
+     ;; "Normal" standing rather than reaching the chain table unspelled
+     (setq bdflt (cond ((psd:kwknob psd:*btype-default* psd:*btypes*)) ("Normal")))
+     (setq base 'RETRY)
+     (while (eq base 'RETRY)
+       ;; the form can name the bottom; anything psd:*btypes* does not
+       ;; list falls through to the prompt rather than being forced in
+       (if (null (setq style (psd:fkw 'style psd:*btypes* "Normal")))
+         (setq style (cal:askkw "Bottom type" psd:*btypes* psd:*btshown*
+                                bdflt nil)))
+       ;; the base point is picked with the user's own snaps still live;
+       ;; only afterwards do snaps drop for the command-fed drawing work.
+       ;; It is the top LEFT of the section -- the waterline at the left
+       ;; wall -- so the section hangs off a known corner.
+       (initget "Back Undo")
+       (setq base (getpoint "\nInsertion base point (top left of the section) [Back] <0,0>: "))
+       (if lzd:ask (lzd:ask "\nInsertion base point (top left of the section) [Back] <0,0>: " base) base)
+       (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
+         (progn (princ "\nStepping back one question.")
+                (setq base 'RETRY))))
+     (setq psd:*base* (if (and base (listp base))
+                          (list (car base) (cadr base))
+                          (list 0.0 0.0)))
+     (setvar "OSMODE" 0)
 
-  (cal:ensure-layer "POOL" 4)
-  (cal:ensure-layer "DIMENSION" 2)
-  (cal:ensure-layer "POOL-NOTES" 3)
+     (cal:ensure-layer "POOL" 4)
+     (cal:ensure-layer "DIMENSION" 2)
+     (cal:ensure-layer "POOL-NOTES" 3)
 
-  (setq total (if (setq fv (psd:fnum 'b))
-                  fv
-                  (psd:ask "B - overall length, wall to wall" nil))
-        doff  (max 12.0 (/ total 18.0))
-        th    (max 3.0 (/ total 70.0))
-        chain (psd:chain style)
-        pv    (psd:guide style total doff th))
-  (command "_.ZOOM" "_Window"
-           (psd:wp (list (- doff) (- (* 0.20 total) (* 3.0 doff))))
-           (psd:wp (list (+ total (* 2.0 doff)) (* 2.0 doff))))
-  (princ "\nFloor dimensions -- the RED tie is the one being asked for.")
-  (princ "\n(after the first answer, Back re-asks the previous one)")
+     (setq total (if (setq fv (psd:fnum 'b))
+                     fv
+                     (psd:ask "B - overall length, wall to wall" nil))
+           doff  (max 12.0 (/ total 18.0))
+           th    (max 3.0 (/ total 70.0))
+           chain (psd:chain style)
+           pv    (psd:guide style total doff th))
+     (command "_.ZOOM" "_Window"
+              (psd:wp (list (- doff) (- (* 0.20 total) (* 3.0 doff))))
+              (psd:wp (list (+ total (* 2.0 doff)) (* 2.0 doff))))
+     (princ "\nFloor dimensions -- the RED tie is the one being asked for.")
+     (princ "\n(after the first answer, Back re-asks the previous one)")
 
-  (setq ans (psd:askseq (psd:items style chain pv))
-        wh  (psd:sq ans 'c)
-        dp  (psd:sq ans 'd)
-        c2  (if (= style "SHallow") (psd:sq ans 'c2) wh))
-  ;; the two range checks POOL makes: a deep end that is not deeper
-  ;; than the wall is not a deep end, and the break sits between them
-  (while (<= dp wh)
-    (princ (strcat "\nD must be deeper than the wall height C ("
-                   (rtos wh) ") -- re-enter."))
-    (setq dp (psd:ask "D - deep end depth" psd:*deepdepth-ladder*)))
-  (while (or (< c2 wh) (> c2 dp))
-    (princ (strcat "\nC2 must be between C ("
-                   (rtos (cal:ceil-shown wh)) ") and D ("
-                   (rtos (cal:floor-shown dp)) ") -- re-enter."))
-    (setq c2 (psd:ask "C2 - depth where the shallow floor meets the break"
-                      psd:*breakdepth-ladder*)))
-  (psd:pvkill)
+     (setq ans (psd:askseq (psd:items style chain pv))
+           wh  (psd:sq ans 'c)
+           dp  (psd:sq ans 'd)
+           c2  (if (= style "SHallow") (psd:sq ans 'c2) wh))
+     ;; the two range checks POOL makes: a deep end that is not deeper
+     ;; than the wall is not a deep end, and the break sits between them
+     (while (<= dp wh)
+       (princ (strcat "\nD must be deeper than the wall height C ("
+                      (rtos wh) ") -- re-enter."))
+       (setq dp (psd:ask "D - deep end depth" psd:*deepdepth-ladder*)))
+     (while (or (< c2 wh) (> c2 dp))
+       (princ (strcat "\nC2 must be between C ("
+                      (rtos (cal:ceil-shown wh)) ") and D ("
+                      (rtos (cal:floor-shown dp)) ") -- re-enter."))
+       (setq c2 (psd:ask "C2 - depth where the shallow floor meets the break"
+                         psd:*breakdepth-ladder*)))
+     (psd:pvkill)
 
-  ;; resolve the runs against B: NA takes the remainder (split when
-  ;; several), the slack member absorbs any leftover, and nothing is
-  ;; allowed to come out negative
-  (setq runs  (psd:chainfix (mapcar '(lambda (c) (psd:sq ans (psd:key (car c))))
-                                    chain)
-                            total (psd:slack chain))
-        cv    (psd:chainval runs total)
-        runs  (car cv)
-        fixed (cadr cv))
-  (if fixed
-      (psd:valnote (strcat "FLOOR RUNS FAILED - "
-                           (psd:fixnames fixed (mapcar 'car chain))
-                           " ADJUSTED, VERIFY")))
+     ;; resolve the runs against B: NA takes the remainder (split when
+     ;; several), the slack member absorbs any leftover, and nothing is
+     ;; allowed to come out negative
+     (setq runs  (psd:chainfix (mapcar '(lambda (c) (psd:sq ans (psd:key (car c))))
+                                       chain)
+                               total (psd:slack chain))
+           cv    (psd:chainval runs total)
+           runs  (car cv)
+           fixed (cadr cv))
+     (if fixed
+         (psd:valnote (strcat "FLOOR RUNS FAILED - "
+                              (psd:fixnames fixed (mapcar 'car chain))
+                              " ADJUSTED, VERIFY")))
 
-  ;; the deep end is drawn on the left, the way the letters are
-  ;; measured; mirroring swaps the section end for end and the run
-  ;; dimensions with it, so the letters keep meaning what they meant
-  ;; the form can answer it too, as the same Yes or No a click on the
-  ;; bracket would send; anything else falls through to the prompt,
-  ;; where psd:*mirror-default* is what Enter means -- read through
-  ;; psd:kwknob on the same terms, so a knob that is not one of the two
-  ;; words leaves "No" standing
-  (setq mdflt (cond ((psd:kwknob psd:*mirror-default* "Yes No")) ("No"))
-        fv  (psd:fkw 'mirror "Yes No" "No")
-        mir (if fv
-                (= fv "Yes")
-                (cal:askyn "Put the deep end on the RIGHT?" mdflt nil))
-        sgn (if mir -1.0 1.0)
-        sta (psd:stations style runs wh dp c2)
-        segs (psd:segs chain fixed))
-  (if mir
-      (setq sta (reverse (mapcar '(lambda (s) (cons (- total (car s)) (cdr s)))
-                                 sta))
-            segs (reverse segs)))
+     ;; the deep end is drawn on the left, the way the letters are
+     ;; measured; mirroring swaps the section end for end and the run
+     ;; dimensions with it, so the letters keep meaning what they meant
+     ;; the form can answer it too, as the same Yes or No a click on the
+     ;; bracket would send; anything else falls through to the prompt,
+     ;; where psd:*mirror-default* is what Enter means -- read through
+     ;; psd:kwknob on the same terms, so a knob that is not one of the two
+     ;; words leaves "No" standing
+     (setq mdflt (cond ((psd:kwknob psd:*mirror-default* "Yes No")) ("No"))
+           fv  (psd:fkw 'mirror "Yes No" "No")
+           mir (if fv
+                   (= fv "Yes")
+                   (cal:askyn "Put the deep end on the RIGHT?" mdflt nil))
+           sgn (if mir -1.0 1.0)
+           sta (psd:stations style runs wh dp c2)
+           segs (psd:segs chain fixed))
+     (if mir
+         (setq sta (reverse (mapcar '(lambda (s) (cons (- total (car s)) (cdr s)))
+                                    sta))
+               segs (reverse segs)))
 
-  (psd:secdraw total sta "POOL" nil)
+     (psd:secdraw total sta "POOL" nil)
 
-  (setq odl (getvar "CLAYER"))
-  (setvar "CLAYER" "DIMENSION")
-  (setq maxd (apply 'max (mapcar 'cdr sta))
-        ydim (- (+ maxd (* 1.4 doff))))
-  ;; the overall above the waterline, the run chain on one baseline
-  ;; below the floor
-  (psd:dimh (list 0.0 0.0) (list total 0.0)
-            (list (* 0.5 total) (* 1.0 doff)))
-  (setq i 0)
-  (foreach s segs
-    (setq p (nth i sta) q (nth (1+ i) sta))
-    (if (> (abs (- (car q) (car p))) 1.0e-6)
-        (progn
-          (psd:dimh (list (car p) (- (cdr p))) (list (car q) (- (cdr q)))
-                    (list (* 0.5 (+ (car p) (car q))) ydim))
-          ;; a run the validator had to move is drawn red, so the sheet
-          ;; shows which number was not the crew's
-          (if (cdr s) (psd:dimred))))
-    (setq i (1+ i)))
-  ;; the depths: C off the shallow wall, D at the deep end, C2 at the
-  ;; break when the style has one
-  (setq xc (if mir 0.0 total)
-        xd (psd:xcode style sta "d" mir)
-        xb (psd:xcode style sta "c2" mir))
-  (psd:dimv (list xc 0.0) (list xc (- wh))
-            (list (+ xc (* sgn 0.8 doff)) (* -0.5 wh)))
-  (psd:dimv (list xd 0.0) (list xd (- dp))
-            (list (- xd (* sgn 0.5 doff)) (* -0.5 dp)))
-  (if xb
-      (psd:dimv (list xb 0.0) (list xb (- c2))
-                (list (+ xb (* sgn 0.3 doff)) (* -0.5 c2))))
-  (setvar "CLAYER" odl)
+     (setq odl (getvar "CLAYER"))
+     (setvar "CLAYER" "DIMENSION")
+     (setq maxd (apply 'max (mapcar 'cdr sta))
+           ydim (- (+ maxd (* 1.4 doff))))
+     ;; the overall above the waterline, the run chain on one baseline
+     ;; below the floor
+     (psd:dimh (list 0.0 0.0) (list total 0.0)
+               (list (* 0.5 total) (* 1.0 doff)))
+     (setq i 0)
+     (foreach s segs
+       (setq p (nth i sta) q (nth (1+ i) sta))
+       (if (> (abs (- (car q) (car p))) 1.0e-6)
+           (progn
+             (psd:dimh (list (car p) (- (cdr p))) (list (car q) (- (cdr q)))
+                       (list (* 0.5 (+ (car p) (car q))) ydim))
+             ;; a run the validator had to move is drawn red, so the sheet
+             ;; shows which number was not the crew's
+             (if (cdr s) (psd:dimred))))
+       (setq i (1+ i)))
+     ;; the depths: C off the shallow wall, D at the deep end, C2 at the
+     ;; break when the style has one
+     (setq xc (if mir 0.0 total)
+           xd (psd:xcode style sta "d" mir)
+           xb (psd:xcode style sta "c2" mir))
+     (psd:dimv (list xc 0.0) (list xc (- wh))
+               (list (+ xc (* sgn 0.8 doff)) (* -0.5 wh)))
+     (psd:dimv (list xd 0.0) (list xd (- dp))
+               (list (- xd (* sgn 0.5 doff)) (* -0.5 dp)))
+     (if xb
+         (psd:dimv (list xb 0.0) (list xb (- c2))
+                   (list (+ xb (* sgn 0.3 doff)) (* -0.5 c2))))
+     (setvar "CLAYER" odl)
 
-  ;; whatever had to be adjusted, in red under the section
-  (setq y (- ydim (* 1.8 doff)))
-  (foreach m psd:*valnotes*
-    (psd:textc (list 0.0 y) (* 1.2 th) m "POOL-NOTES" 1)
-    (setq y (- y (* 2.0 th))))
+     ;; whatever had to be adjusted, in red under the section
+     (setq y (- ydim (* 1.8 doff)))
+     (foreach m psd:*valnotes*
+       (psd:textc (list 0.0 y) (* 1.2 th) m "POOL-NOTES" 1)
+       (setq y (- y (* 2.0 th))))
 
-  (command "_.ZOOM" "_Window"
-           (psd:wp (list (- (* 2.0 doff)) (- y (* 2.0 doff))))
-           (psd:wp (list (+ total (* 3.0 doff)) (* 3.0 doff))))
+     (command "_.ZOOM" "_Window"
+              (psd:wp (list (- (* 2.0 doff)) (- y (* 2.0 doff))))
+              (psd:wp (list (+ total (* 3.0 doff)) (* 3.0 doff))))
 
-  ;; the resolved chain, so what was read back off B is on the screen
-  ;; as a number and not only as a dimension
-  (princ (strcat "\n" style " side view -- B " (rtos total)))
-  (setq i 0)
-  (foreach s chain
-    (princ (strcat "  " (car s) " " (rtos (nth i runs))))
-    (setq i (1+ i)))
-  (princ (strcat "  C " (rtos wh) "  D " (rtos dp)))
-  (if (= style "SHallow") (princ (strcat "  C2 " (rtos c2))))
+     ;; the resolved chain, so what was read back off B is on the screen
+     ;; as a number and not only as a dimension
+     (princ (strcat "\n" style " side view -- B " (rtos total)))
+     (setq i 0)
+     (foreach s chain
+       (princ (strcat "  " (car s) " " (rtos (nth i runs))))
+       (setq i (1+ i)))
+     (princ (strcat "  C " (rtos wh) "  D " (rtos dp)))
+     (if (= style "SHallow") (princ (strcat "  C2 " (rtos c2))))
 
-  (if psd:*undo-open* (setq psd:*undo-open* (cal:undoend)))
-  (cal:sysrestore)
-  (psd:rulerkill)
-  (if *pop-error-mode* (*pop-error-mode*))
-  (psd:fclear)                          ; both exits clear the form store
+     (if psd:*undo-open* (setq psd:*undo-open* (cal:undoend)))
+     (cal:sysrestore)
+     (psd:rulerkill)
+     (if *pop-error-mode* (*pop-error-mode*))
+     (psd:fclear)))                        ; both exits clear the form store
   (if lzd:end (lzd:end "POOLSIDE"))
   (princ))
 
@@ -16065,7 +16251,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092326 REV33")
+(setq spa:*version* "092326 REV34")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -16523,11 +16709,54 @@
   (setq d (sqrt (cal:dot p p)))
   (if (> d 1.0e-12) (cal:v* p (/ 1.0 d)) (list 0.0 0.0)))
 
-;; local 2D point -> world 3D point (applies the insertion base)
+;; local 2D point -> a point in the CURRENT UCS (applies the insertion
+;; base, which was picked there).  This is what (command ...) reads --
+;; every dimension and ZOOM takes its points from it.
 (defun spa:wp (p)
   (list (+ (car p) (car spa:*base*))
         (+ (cadr p) (cadr spa:*base*))
         0.0))
+
+;; The same point in WORLD numbers, which is what entmake and entmod
+;; read.  Both used to be handed spa:wp: under a UCS moved to the
+;; site's corner the outline landed at the raw numbers, a UCS-origin
+;; away from its own dimensions -- a corner mark's dim hung off in
+;; space away from its circle, and SPACHECK then reported faults in a
+;; SPA drawing that nobody had made.  Entity data goes through this.
+(defun spa:ww (p) (trans (spa:wp p) 1 0))
+
+;; How far the current UCS is turned from World X, for the angles an
+;; entity keeps in World terms (an ARC's 50/51, a TEXT's 50) so they
+;; turn with the points.  Read off the components, 0 in World, and
+;; kept in 0..2pi.
+(defun spa:ucsang ( / x a)
+  (setq x (trans '(1.0 0.0 0.0) 1 0 T)
+        a (atan (cadr x) (car x)))
+  (if (< a 0.0) (+ a pi pi) a))
+
+;; T in a PLAN UCS: one whose Z axis is World +Z, so all it does is
+;; move the World plan and turn it -- the only kind the two helpers
+;; above can carry a spa into.  An ARC keeps its angles, and an
+;; LWPOLYLINE its bulges, counter-clockwise about a 210 that stays
+;; World +Z here; in a UCS whose Z points DOWN (X turned 180, or a
+;; 3-point UCS whose Y was picked clockwise of X) counter-clockwise in
+;; the UCS is clockwise in the World, and every radius corner came out
+;; mirrored off its corner, and the labels read backwards, while the
+;; lines and dims beside them landed true.  Tilted, the entity data
+;; leaves the plane the dimensions are drawn on altogether.  So SPA and
+;; TUTORIALSPA refuse both rather than draw either.  The test is on +Z
+;; itself and not on its size: (abs z) would let the upside-down one by.
+(defun spa:ucsplan-p ()
+  (> (caddr (trans '(0.0 0.0 1.0) 1 0 T)) (- 1.0 1.0e-8)))
+
+;; What a refused run says, NAME being the command the drafter typed.
+(defun spa:ucsrefuse (name)
+  (princ (strcat "\n" name ": the current UCS is tilted or upside down"
+                 " (its Z axis is not World +Z),"))
+  (princ "\nso a plan spa cannot be laid out in it.  Set the UCS to World, or to")
+  (princ (strcat "\nany UCS only moved and turned in plan, and run " name
+                 " again."))
+  (princ))
 
 ;;; -------------------- geometry ---------------------------------------
 
@@ -16667,13 +16896,13 @@
 (defun spa:line (p1 p2 lay extra)
   (entmake (append (list '(0 . "LINE")
                          (cons 8 lay)
-                         (cons 10 (spa:wp p1))
-                         (cons 11 (spa:wp p2)))
+                         (cons 10 (spa:ww p1))
+                         (cons 11 (spa:ww p2)))
                    extra)))
 
 ;; Three-point arc through p1 -> p2 -> p3 (falls back to a line when
 ;; the points are collinear).
-(defun spa:arc3p (p1 p2 p3 lay extra / o r a1 a2 a3 da2 da3 s e)
+(defun spa:arc3p (p1 p2 p3 lay extra / o r a1 a2 a3 da2 da3 s e rot)
   (setq o (spa:circum p1 p2 p3))
   (if o
       (progn
@@ -16686,12 +16915,14 @@
         (if (< da2 da3)
             (setq s a1 e a3)
             (setq s a3 e a1))
+        ;; the angles are the spa's; the arc keeps World ones
+        (setq rot (spa:ucsang))
         (entmake (append (list '(0 . "ARC")
                                (cons 8 lay)
-                               (cons 10 (spa:wp o))
+                               (cons 10 (spa:ww o))
                                (cons 40 r)
-                               (cons 50 s)
-                               (cons 51 e))
+                               (cons 50 (cal:angnorm (+ s rot)))
+                               (cons 51 (cal:angnorm (+ e rot))))
                          extra)))
       (spa:line p1 p3 lay extra)))
 
@@ -16702,7 +16933,7 @@
   (if (< (abs (- a b)) 1.0e-6)
       (entmake (append (list '(0 . "CIRCLE")
                              (cons 8 lay)
-                             (cons 10 (spa:wp cen))
+                             (cons 10 (spa:ww cen))
                              (cons 40 (* 0.5 b)))
                        extra))
       (progn
@@ -16713,8 +16944,9 @@
                                '(100 . "AcDbEntity")
                                (cons 8 lay)
                                '(100 . "AcDbEllipse")
-                               (cons 10 (spa:wp cen))
-                               (cons 11 maj)              ; major axis, relative
+                               (cons 10 (spa:ww cen))
+                               ;; major axis, relative: a World direction
+                               (cons 11 (trans maj 1 0 T))
                                (cons 210 '(0.0 0.0 1.0))
                                (cons 40 rat)              ; minor / major
                                (cons 41 0.0)
@@ -16724,16 +16956,18 @@
 (defun spa:text (pt h str lay)
   (entmake (list '(0 . "TEXT")
                  (cons 8 lay)
-                 (cons 10 (spa:wp pt))
+                 (cons 10 (spa:ww pt))
                  (cons 40 h)
+                 (cons 50 (spa:ucsang))    ; level in the UCS
                  (cons 1 str))))
 
 (defun spa:textc (pt h str lay col)
   (entmake (list '(0 . "TEXT")
                  (cons 8 lay)
                  (cons 62 col)
-                 (cons 10 (spa:wp pt))
+                 (cons 10 (spa:ww pt))
                  (cons 40 h)
+                 (cons 50 (spa:ucsang))
                  (cons 1 str))))
 
 ;;; -------------------- which outline is being drawn -------------------
@@ -16789,16 +17023,21 @@
 ;; AUTOBEAD).  verts is a list of (point . bulge) walked counter-
 ;; clockwise; a bulge of 0 is a straight run to the next vertex.
 ;; Returns the polyline's entity name.
-(defun spa:perpoly (verts / lst v p)
-  (setq lst (append (list '(0 . "LWPOLYLINE")
+(defun spa:perpoly (verts / lst v p z)
+  ;; the vertices are World X and Y (the OCS of a plan outline), and
+  ;; the Z they share -- a UCS origin lifted off the World plane -- is
+  ;; the polyline's elevation, group 38, not a third coordinate
+  (setq z (caddr (spa:ww (list 0.0 0.0)))
+        lst (append (list '(0 . "LWPOLYLINE")
                           '(100 . "AcDbEntity")
                           (cons 8 spa:*perlay*)
                           '(100 . "AcDbPolyline")
                           (cons 90 (length verts))
                           '(70 . 1))          ; closed
+                    (if (> (abs z) 1.0e-9) (list (cons 38 z)))
                     (spa:perdxf)))
   (foreach v verts
-    (setq p (spa:wp (car v))
+    (setq p (spa:ww (car v))
           lst (append lst (list (cons 10 (list (car p) (cadr p)))
                                 (cons 42 (cdr v))))))
   (entmake lst)
@@ -16885,7 +17124,7 @@
            (assoc 11 ed) (assoc 70 ed))
       (progn
         (setq f  (cdr (assoc 70 ed))
-              ed (subst (cons 11 (spa:wp pt)) (assoc 11 ed) ed)
+              ed (subst (cons 11 (spa:ww pt)) (assoc 11 ed) ed)
               ed (subst (cons 70 (logior f 128)) (assoc 70 ed) ed))
         (entmod ed)
         (entupd e)))
@@ -18257,7 +18496,7 @@
                  '(100 . "AcDbEntity")
                  (cons 8 spa:*lay-text*)
                  '(100 . "AcDbMText")
-                 (cons 10 (spa:wp (list (- x (* spa:*hingetxoff* spa:*hingetxth*)) ymid)))
+                 (cons 10 (spa:ww (list (- x (* spa:*hingetxoff* spa:*hingetxth*)) ymid)))
                  (cons 40 spa:*hingetxth*)
                  (cons 41 spa:*hingetxw*)
                  '(71 . 8)              ; bottom centre
@@ -18265,7 +18504,8 @@
                  (cons 1 str)
                  (cons 7 (if (tblsearch "STYLE" spa:*hingestyle*)
                              spa:*hingestyle* "Standard"))
-                 (cons 11 '(0.0 1.0 0.0)))))
+                 ;; reading up the UCS Y axis, as a World direction
+                 (cons 11 (trans '(0.0 1.0 0.0) 1 0 T)))))
 
 ;;; ---------- the guided flow ----------
 
@@ -18872,7 +19112,7 @@
         r (* spa:*mark-r* doff))
   (entmake (list '(0 . "CIRCLE")
                  (cons 8 spa:*lay-dim*)
-                 (cons 10 (spa:wp p))
+                 (cons 10 (spa:ww p))
                  (cons 40 r)))
   (command "_.DIMRADIUS"
            (list (entlast) (spa:wp (cal:v+ p (cal:v* outd r))))
@@ -20044,138 +20284,149 @@
     (if lzd:report (lzd:report "SPA" spa:*version* msg))
     (princ))
   (if lzd:begin (lzd:begin "SPA" spa:*version*))
-
-  ;; before the push: a flag some earlier run left standing must never
-  ;; let this run's handler close an undo group it did not open
-  (setq spa:*undo-open* nil)
-  ;; AutoCAD 2012+ requires this so *error* may call (command);
-  ;; harmless no-op guard on older releases where it doesn't exist
-  (if *push-error-using-command* (*push-error-using-command*))
-
-  (cal:syssave (spa:sysvars))
-  (cal:dimstysave)
-  (setq spa:*valnotes* nil
-        ;; a fresh run, so a fresh ruler: the hint is said once a run,
-        ;; and the flag that says it has been said travels in here
-        spa:*ruler* nil
-        spa:*turned* nil
-        spa:*spillturn* nil
-        spa:*hingeon* nil
-        spa:*spills* nil
-        spa:*hingerows* nil
-        spa:*advice* nil
-        spa:*grade* nil
-        spa:*taper* nil
-        spa:*blockasked* nil)
-  (setvar "CMDECHO" 0)
-  (setq spa:*undo-open* (cal:undobegin))
-  ;; architectural units while prompting so every distance can be typed
-  ;; as 6'10", 6'-10-1/2" or 6'10.5 as well as plain inches
-  (setvar "LUNITS" 4)
-  (princ "\nDistances may be typed as 6'10\", 6'-10-1/2\" or 82.5 (plain numbers = inches).")
-  (princ "\nDimensions are written in standard inches and placed outside the shape.")
-
-  ;; ------------------------------------------------ grade + taper first
-  ;; The Spa Cover Details block is read UP FRONT because its grade can
-  ;; settle the next question outright: a Thermo-Light cover's water's
-  ;; edge and cover size are the same thing, so there is nothing to ask
-  ;; and nothing to add later.  It is also the ONE place it is asked
-  ;; for: here the drafter's own drawing is still on the screen to
-  ;; click, which after the guide goes up it is not.  Skipping is an
-  ;; answer -- the taper is typed in the hinge pass instead, and a
-  ;; Thermo-Light grade is simply never read.
-  (princ "\nThe Spa Cover Details block sets the grade and taper.")
-  (princ "\n(asked once -- skip it and any taper the hinges need is typed later)")
-  (spa:readblock)
-  ;; the form's grade/taper land HERE, before the Thermo-Light branch,
-  ;; so a form grade of THERMOLIGHT behaves exactly like the block's
-  (spa:formdetails)
-  ;; The three questions in front of every measurement - the drawing
-  ;; mode, the shape, the base point - are one chain.  The two after
-  ;; the first offer Back and re-open the one before them, which
-  ;; matters most at the shape: it is the answer the whole run hangs
-  ;; off, and until now the only way to change it was to start again.
-  ;; A form-supplied answer is spent as it is read (STANDARDS 7.2), so
-  ;; backing into a question the form filled in asks it at the
-  ;; keyboard.  Thermo-Light settles the mode without asking, so on the
-  ;; way back that step is stepped over rather than stopped on.
-  (setq sstep 1)
-  (while (<= sstep 3)
-    (cond
-      ((= sstep 1)
-       (if (spa:thermop)
-           (progn
-             (spa:setmode "Coversize")
-             (setq spa:*taper* spa:*thermotaper*)
-             (princ "\nThermo-Light: the water's edge and the cover size are the same.")
-             (spa:advise "THERMO-LIGHT: WATER'S EDGE = COVER SIZE, ONE OUTLINE"))
-           (spa:setmode
-             (spa:askkwf 'mode
-                         "Is this drawing at the water's edge or the cover size"
-                         "Watersedge Coversize" "Watersedge/Coversize" nil nil)))
-       (princ (strcat "\n" spa:*modename* ": outline on layer " spa:*perlay*
-                      (if spa:*perdash* " (dashed)" "")
-                      "; overalls read <measurement> over \"" spa:*sfx* "\"."))
-       (setq sstep 2))
-      ((= sstep 2)
-       (setq stype (spa:fshape T))
-       (if (eq stype 'CAL-BACK)
-         (progn (princ "\nStepping back one question.") (setq sstep 1))
-         (setq sstep 3)))
-      ((= sstep 3)
-       ;; The base point is picked with the user's own snaps still live;
-       ;; only afterwards do snaps drop for the command-fed drawing work.
-       ;; spa:osup is what makes that true and it did not used to be here:
-       ;; spa:readblock runs before the three questions above and ends on
-       ;; spa:osdown like every other ask helper, so snaps were already at
-       ;; 0 by the time this prompt came up -- the one pick that places
-       ;; the whole spa, made with nothing to snap to.  POOL and POOLSIDE
-       ;; hold the drafter's snaps at the identical prompt.
-       (cal:osup)
-       (if (spa:fhas 'base)
-         (setq base  (spa:ftake 'base)
-               sstep 4)
-         (progn
-           (initget "Back Undo")
-           (setq base (getpoint "\nInsertion base point [Back] <0,0>: "))
-           (if lzd:ask (lzd:ask "\nInsertion base point [Back] <0,0>: " base) base)
-           (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
-             (progn (princ "\nStepping back one question.") (setq sstep 2))
-             (setq sstep 4)))))))
-  (setq spa:*base* (if (and base (listp base))
-                       (list (car base) (cadr base))
-                       (list 0.0 0.0)))
-  ;; and down again for the command-fed drawing work below, whichever
-  ;; way the base point arrived -- picked, typed, or handed over by the
-  ;; form, which skips the prompt entirely
-  (setvar "OSMODE" 0)
-
-  ;; ------------------------------------------------ layers
-  (spa:layer spa:*lay-water* spa:*col-water*)
-  (spa:layer spa:*lay-cover* spa:*col-cover*)
-  (spa:layer spa:*lay-dim*   spa:*col-dim*)
-  (spa:layer spa:*lay-notes* spa:*col-notes*)
-  (spa:layer spa:*lay-text*  spa:*col-text*)
-
-  ;; dashed / dotted patterns up front so the guide draws them; the
-  ;; patterns are defined in inches and scaled to cancel LTSCALE, so they
-  ;; show the same in any drawing
-  (setq spa:*dashlt* (spa:ltload "DASHED")
-        spa:*dotlt*  (spa:ltload "DOT"))
+  (if lzd:state (lzd:state '(spa:*form*)))
 
   (cond
-    ((= stype "OCtagon") (spa:octflow))
-    ((= stype "ROUnd")   (spa:roundflow))
-    (t                   (spa:rectflow)))
+    ;; a plan spa cannot be laid out in a UCS that is tilted or upside
+    ;; down (spa:ucsplan-p): said and stopped here, before anything is
+    ;; asked, borrowed or drawn.  A form handed to this run goes with
+    ;; it -- left standing, it would answer the next SPA typed at the
+    ;; command line
+    ((not (spa:ucsplan-p))
+     (spa:ucsrefuse "SPA")
+     (spa:fclear))
+    (t
+     ;; before the push: a flag some earlier run left standing must never
+     ;; let this run's handler close an undo group it did not open
+     (setq spa:*undo-open* nil)
+     ;; AutoCAD 2012+ requires this so *error* may call (command);
+     ;; harmless no-op guard on older releases where it doesn't exist
+     (if *push-error-using-command* (*push-error-using-command*))
 
-  ;; ------------------------------------------------ finish
-  (command "_.ZOOM" "_Extents")
-  (if spa:*undo-open* (setq spa:*undo-open* (cal:undoend)))
-  (cal:sysrestore)
-  (cal:dimstyrestore)
-  (spa:fclear)
-  (spa:rulerkill)
-  (if *pop-error-mode* (*pop-error-mode*))
+     (cal:syssave (spa:sysvars))
+     (cal:dimstysave)
+     (setq spa:*valnotes* nil
+           ;; a fresh run, so a fresh ruler: the hint is said once a run,
+           ;; and the flag that says it has been said travels in here
+           spa:*ruler* nil
+           spa:*turned* nil
+           spa:*spillturn* nil
+           spa:*hingeon* nil
+           spa:*spills* nil
+           spa:*hingerows* nil
+           spa:*advice* nil
+           spa:*grade* nil
+           spa:*taper* nil
+           spa:*blockasked* nil)
+     (setvar "CMDECHO" 0)
+     (setq spa:*undo-open* (cal:undobegin))
+     ;; architectural units while prompting so every distance can be typed
+     ;; as 6'10", 6'-10-1/2" or 6'10.5 as well as plain inches
+     (setvar "LUNITS" 4)
+     (princ "\nDistances may be typed as 6'10\", 6'-10-1/2\" or 82.5 (plain numbers = inches).")
+     (princ "\nDimensions are written in standard inches and placed outside the shape.")
+
+     ;; ------------------------------------------------ grade + taper first
+     ;; The Spa Cover Details block is read UP FRONT because its grade can
+     ;; settle the next question outright: a Thermo-Light cover's water's
+     ;; edge and cover size are the same thing, so there is nothing to ask
+     ;; and nothing to add later.  It is also the ONE place it is asked
+     ;; for: here the drafter's own drawing is still on the screen to
+     ;; click, which after the guide goes up it is not.  Skipping is an
+     ;; answer -- the taper is typed in the hinge pass instead, and a
+     ;; Thermo-Light grade is simply never read.
+     (princ "\nThe Spa Cover Details block sets the grade and taper.")
+     (princ "\n(asked once -- skip it and any taper the hinges need is typed later)")
+     (spa:readblock)
+     ;; the form's grade/taper land HERE, before the Thermo-Light branch,
+     ;; so a form grade of THERMOLIGHT behaves exactly like the block's
+     (spa:formdetails)
+     ;; The three questions in front of every measurement - the drawing
+     ;; mode, the shape, the base point - are one chain.  The two after
+     ;; the first offer Back and re-open the one before them, which
+     ;; matters most at the shape: it is the answer the whole run hangs
+     ;; off, and until now the only way to change it was to start again.
+     ;; A form-supplied answer is spent as it is read (STANDARDS 7.2), so
+     ;; backing into a question the form filled in asks it at the
+     ;; keyboard.  Thermo-Light settles the mode without asking, so on the
+     ;; way back that step is stepped over rather than stopped on.
+     (setq sstep 1)
+     (while (<= sstep 3)
+       (cond
+         ((= sstep 1)
+          (if (spa:thermop)
+              (progn
+                (spa:setmode "Coversize")
+                (setq spa:*taper* spa:*thermotaper*)
+                (princ "\nThermo-Light: the water's edge and the cover size are the same.")
+                (spa:advise "THERMO-LIGHT: WATER'S EDGE = COVER SIZE, ONE OUTLINE"))
+              (spa:setmode
+                (spa:askkwf 'mode
+                            "Is this drawing at the water's edge or the cover size"
+                            "Watersedge Coversize" "Watersedge/Coversize" nil nil)))
+          (princ (strcat "\n" spa:*modename* ": outline on layer " spa:*perlay*
+                         (if spa:*perdash* " (dashed)" "")
+                         "; overalls read <measurement> over \"" spa:*sfx* "\"."))
+          (setq sstep 2))
+         ((= sstep 2)
+          (setq stype (spa:fshape T))
+          (if (eq stype 'CAL-BACK)
+            (progn (princ "\nStepping back one question.") (setq sstep 1))
+            (setq sstep 3)))
+         ((= sstep 3)
+          ;; The base point is picked with the user's own snaps still live;
+          ;; only afterwards do snaps drop for the command-fed drawing work.
+          ;; spa:osup is what makes that true and it did not used to be here:
+          ;; spa:readblock runs before the three questions above and ends on
+          ;; spa:osdown like every other ask helper, so snaps were already at
+          ;; 0 by the time this prompt came up -- the one pick that places
+          ;; the whole spa, made with nothing to snap to.  POOL and POOLSIDE
+          ;; hold the drafter's snaps at the identical prompt.
+          (cal:osup)
+          (if (spa:fhas 'base)
+            (setq base  (spa:ftake 'base)
+                  sstep 4)
+            (progn
+              (initget "Back Undo")
+              (setq base (getpoint "\nInsertion base point [Back] <0,0>: "))
+              (if lzd:ask (lzd:ask "\nInsertion base point [Back] <0,0>: " base) base)
+              (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
+                (progn (princ "\nStepping back one question.") (setq sstep 2))
+                (setq sstep 4)))))))
+     (setq spa:*base* (if (and base (listp base))
+                          (list (car base) (cadr base))
+                          (list 0.0 0.0)))
+     ;; and down again for the command-fed drawing work below, whichever
+     ;; way the base point arrived -- picked, typed, or handed over by the
+     ;; form, which skips the prompt entirely
+     (setvar "OSMODE" 0)
+
+     ;; ------------------------------------------------ layers
+     (spa:layer spa:*lay-water* spa:*col-water*)
+     (spa:layer spa:*lay-cover* spa:*col-cover*)
+     (spa:layer spa:*lay-dim*   spa:*col-dim*)
+     (spa:layer spa:*lay-notes* spa:*col-notes*)
+     (spa:layer spa:*lay-text*  spa:*col-text*)
+
+     ;; dashed / dotted patterns up front so the guide draws them; the
+     ;; patterns are defined in inches and scaled to cancel LTSCALE, so they
+     ;; show the same in any drawing
+     (setq spa:*dashlt* (spa:ltload "DASHED")
+           spa:*dotlt*  (spa:ltload "DOT"))
+
+     (cond
+       ((= stype "OCtagon") (spa:octflow))
+       ((= stype "ROUnd")   (spa:roundflow))
+       (t                   (spa:rectflow)))
+
+     ;; ------------------------------------------------ finish
+     (command "_.ZOOM" "_Extents")
+     (if spa:*undo-open* (setq spa:*undo-open* (cal:undoend)))
+     (cal:sysrestore)
+     (cal:dimstyrestore)
+     (spa:fclear)
+     (spa:rulerkill)
+     (if *pop-error-mode* (*pop-error-mode*))))
   (if lzd:end (lzd:end "SPA"))
   (princ))
 
@@ -20234,7 +20485,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "092226 REV15")
+(setq tut:*version* "092326 REV16")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -20447,7 +20698,11 @@
   (if p
       (progn
         (spa:layer "SPA-NOTES" 3)
-        (setq x (car p) y (cadr p) h 2.5)
+        ;; the pick is the whole placement: spa:text adds spa:*base* on
+        ;; top, and that still held the last SPA run's insertion point,
+        ;; so the sheet landed that far away from where it was put
+        (setq spa:*base* (list 0.0 0.0)
+              x (car p) y (cadr p) h 2.5)
         (spa:textc (list x y) (* 2.0 h)
                    (strcat "SPA " spa:*version* " -- REFERENCE") "SPA-NOTES" 7)
         (setq y (- y (* 4.0 h)))
@@ -20704,41 +20959,49 @@
     (princ))
   (if lzd:begin (lzd:begin "TUTORIALSPA" tut:*version*))
 
-  ;; before the push, and on both branches: a flag an earlier run left
+  ;; before the push, and on every branch: a flag an earlier run left
   ;; standing must never let this run close a group it did not open
   (setq tut:*undo-open* nil)
-  ;; Both branches fall through to the one lzd:end below the if.  Each
+  ;; Every branch falls through to the one lzd:end below the cond.  Each
   ;; used to end the command in its own (princ), so a clean run never
   ;; closed its LAZDIAG context: the next TUTORIALSPA appended to it,
   ;; and a failure there filed the previous run's answers and drawing
   ;; as its own -- and the clean run was never logged at all.
-  (if (null spa:*version*)
-      (progn
-        (princ "\nLoad SPA.LSP first -- the tutorial drives its own drawing")
-        (princ "\nfunctions, so it cannot run without it."))
-      (progn
-        (if *push-error-using-command* (*push-error-using-command*))
-        (princ (strcat "\nSPA " spa:*version* " -- tutorial " tut:*version*))
-        ;; the tutorial selector of STANDARDS section 3; the old
-        ;; Checklist stays accepted typed in full, hidden
-        (initget "Checks Demo Both CHECKLIST")
-        (setq what (getkword "\nShow me [Checks/Demo/Both] <Both>: "))
-        (if lzd:ask (lzd:ask "\nShow me [Checks/Demo/Both] <Both>: " what) what)
-        (if (= what "CHECKLIST") (setq what "Checks"))
-        (if (null what) (setq what "Both"))
-        (cal:syssave (spa:sysvars))
-        (cal:dimstysave)
-        (setvar "CMDECHO" 0)
-        (setq tut:*undo-open* (cal:undobegin))
-        (setvar "LUNITS" 4)
-        (if (member what '("Checks" "Both"))
-            (progn (tut:checklist) (tut:sheet)))
-        (if (member what '("Demo" "Both"))
-            (tut:demo))
-        (if tut:*undo-open* (setq tut:*undo-open* (cal:undoend)))
-        (cal:sysrestore)
-        (cal:dimstyrestore)
-        (if *pop-error-mode* (*pop-error-mode*))))
+  (cond
+    ((null spa:*version*)
+     (princ "\nLoad SPA.LSP first -- the tutorial drives its own drawing")
+     (princ "\nfunctions, so it cannot run without it."))
+    ;; it draws through SPA's helpers, so only in a UCS they can carry
+    ;; a spa into (spa:ucsplan-p): tilted or upside down, the demo's
+    ;; radius corners came out mirrored and its labels read backwards.
+    ;; Asked before the Checks/Demo question, which would only be
+    ;; answered to be refused.  Guarded, since a SPA.LSP older than
+    ;; this file has no such helper
+    ((and spa:ucsplan-p (not (spa:ucsplan-p)))
+     (spa:ucsrefuse "TUTORIALSPA"))
+    (t
+     (if *push-error-using-command* (*push-error-using-command*))
+     (princ (strcat "\nSPA " spa:*version* " -- tutorial " tut:*version*))
+     ;; the tutorial selector of STANDARDS section 3; the old
+     ;; Checklist stays accepted typed in full, hidden
+     (initget "Checks Demo Both CHECKLIST")
+     (setq what (getkword "\nShow me [Checks/Demo/Both] <Both>: "))
+     (if lzd:ask (lzd:ask "\nShow me [Checks/Demo/Both] <Both>: " what) what)
+     (if (= what "CHECKLIST") (setq what "Checks"))
+     (if (null what) (setq what "Both"))
+     (cal:syssave (spa:sysvars))
+     (cal:dimstysave)
+     (setvar "CMDECHO" 0)
+     (setq tut:*undo-open* (cal:undobegin))
+     (setvar "LUNITS" 4)
+     (if (member what '("Checks" "Both"))
+         (progn (tut:checklist) (tut:sheet)))
+     (if (member what '("Demo" "Both"))
+         (tut:demo))
+     (if tut:*undo-open* (setq tut:*undo-open* (cal:undoend)))
+     (cal:sysrestore)
+     (cal:dimstyrestore)
+     (if *pop-error-mode* (*pop-error-mode*))))
   (if lzd:end (lzd:end "TUTORIALSPA"))
   (princ))
 
@@ -20990,7 +21253,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v9.5")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v9.6")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -22381,11 +22644,16 @@
 ;;; arc would need an extrusion of its own -- so c:OASIS refuses to run
 ;;; in one rather than draw something wrong.
 
-;; T when the current UCS lies flat in the world plan, i.e. its Z axis is
-;; parallel to the world Z.  Every plan-drafting UCS is.
+;; T when the current UCS lies flat in the world plan AND faces up: its Z
+;; axis is the world +Z.  Every plan-drafting UCS is.  Parallel is not
+;; enough -- a UCS turned upside down (UCS X 180, or three points picked
+;; with Y clockwise of X) has Z = -1, and there an arc's angles, carried
+;; across by adding the UCS turn, run the other way round in the World
+;; and every corner arc is drawn as its mirror image.  POOL, SPA and
+;; POOLSIDE refuse the same UCS for the same reason.
 (defun oasis:ucs-flat-p ( / z)
   (setq z (trans '(0.0 0.0 1.0) 1 0 T))
-  (< (abs (- (abs (caddr z)) 1.0)) oasis:*ucsfuzz*))
+  (< (abs (- (caddr z) 1.0)) oasis:*ucsfuzz*))
 
 ;; How far the current UCS is turned from the world X axis.  Read off the
 ;; components rather than with (angle ...), which projects onto the UCS
@@ -24292,6 +24560,7 @@
     (if lzd:report (lzd:report "OASIS" *oasis-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "OASIS" *oasis-version*))
+  (if lzd:state (lzd:state '(oasis:*form*)))
 
   ;; before the push: what an earlier run left in these must never be
   ;; taken for this run's -- an undo group it did not open, a preview
@@ -24315,7 +24584,7 @@
     ;;    could not follow it there anyway
     ((not (oasis:ucs-flat-p))
      (princ (strcat "\nOASIS: the current UCS is tilted out of the world"
-                    " plan, so a flat plan pool"))
+                    " plan, or upside down, so a flat plan pool"))
      (princ (strcat "\n       cannot be laid out in it.  Set the UCS back"
                     " to World (or to any"))
      (princ "\n       plan UCS) and run OASIS again.")
@@ -27016,7 +27285,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.21")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.22")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -27341,7 +27610,12 @@
       (cond
         ((and back (= (type pk) 'STR) (member pk '("Back" "Undo"))) 'CAL-BACK)
         (pk
-         (setq hit (abf:nearest pk cands))
+         ;; the click is in the drafter's UCS; the survey points it is
+         ;; measured against, and the stake the ties are entmade from,
+         ;; are World -- so under a moved UCS it found no point, or
+         ;; used a spot that far away from where they clicked
+         (setq pk  (trans pk 1 0)
+               hit (abf:nearest pk cands))
          (if hit
            (progn
              (princ (strcat "\n  Taken from Pt." (abf:cd-nm hit) "."))
@@ -28497,7 +28771,9 @@
        'CAL-BACK
        (progn (princ "\n  Nothing to step back to.") 'ABF-AGAIN)))
     ((listp ans)
-     (setq best nil bd nil)
+     ;; the spots are World and the click is UCS: under a moved UCS a
+     ;; click on one line's tie measured nearer another's, and took it
+     (setq best nil bd nil ans (trans ans 1 0))
      (foreach s spots
        (setq d (abf:tag-dist ans s))
        (if (or (null bd) (< d bd)) (setq best (car s) bd d)))
@@ -28986,7 +29262,8 @@
                  ;; typed number can reach the question below.
                  (setq hit nil dupes nil)
                  (if (listp ans)
-                   (setq hit (abf:nearest ans cands))
+                   ;; UCS click, World candidates -- see abf:stake
+                   (setq hit (abf:nearest (trans ans 1 0) cands))
                    (progn
                      (setq dupes (abf:matches ans cands)
                            lsel  (if (and curln (> (length dupes) 1))
@@ -29361,7 +29638,8 @@
                                    " tags - type one from the table,"
                                    " or click a marker or its tag.")))))
                 (t
-                 (setq hits (abf:under-click ans sugs spots))
+                 ;; the markers and tags are World; the click is UCS
+                 (setq hits (abf:under-click (trans ans 1 0) sugs spots))
                  (cond
                    ((null hits)
                     (princ (strcat "\n  No marker within "
@@ -29567,7 +29845,10 @@
                                     " again."))
                      (setq stage 7))
                     ((not (listp ans)) (setq stage 7))
-                    ((setq near (abf:click-side pa pb ans))
+                    ;; the stakes are World: the side is read off the
+                    ;; click in World too, or a moved UCS names the wrong
+                    ;; one
+                    ((setq near (abf:click-side pa pb (trans ans 1 0)))
                      (setq stage 9))
                     (t
                      (princ (strcat "\n  That is on the " abf:*a-name*
@@ -29782,7 +30063,11 @@
                   ;; nil is Enter and a string is the Auto keyword;
                   ;; only a real list is a spot the user clicked
                   (if (or (null np) (not (listp np)))
-                    (setq np (abf:note-spot pp)))
+                    (setq np (abf:note-spot pp))
+                    ;; the note is entmade, and entmake reads World: the
+                    ;; UCS click went in as it came and the note landed
+                    ;; the UCS origin's offset away from the spot picked
+                    (setq np (trans np 1 0)))
                   ;; the suggestions have done their job
                   (abf:drop temps)
                   (setq temps nil
@@ -31949,7 +32234,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "092326 REV26") ; announced on load.  The
+(setq pf:*version*      "092326 REV27") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -42285,7 +42570,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v2.7")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v2.8")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -48224,7 +48509,7 @@
 ;;  this block, and nowhere else in the file.  Edit one and APPLOAD the
 ;;  file again; to try a value for one session, type the setq at the
 ;;  command line, because every knob is read when the command runs.
-(setq *ablobf-version*   "v1.6")     ; announced on load; release_lisp.py
+(setq *ablobf-version*   "v1.7")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *ABL-POOL-LAYER*   "POOL")     ; layer the kept run ends up on -
@@ -58614,9 +58899,10 @@
 ;;;
 ;;; THE SIDE PROFILE
 ;;;   The flight is drawn as an alternating drop/tread silhouette in
-;;;   world X/Y, always descending to the LEFT of the picked top of the
-;;;   first tread and ending on the last depth - so the steps rise to
-;;;   the right, the way the shop's own elevations read.
+;;;   the current UCS, always descending to the LEFT of the picked top
+;;;   of the first tread and ending on the last depth - so the steps
+;;;   rise to the right, the way the shop's own elevations read, and
+;;;   stand upright in a turned UCS, where the dims measure the drops.
 ;;;   The dims climb with them, up and to the right, on the high side:
 ;;;     * every depth is a dim of its own, standing the same distance
 ;;;       right of the corner its drop lands on, so they step out with
@@ -58843,7 +59129,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.15") ; printed on load and at command start so a
+(setq *cs-version* "v4.16") ; printed on load and at command start so a
                             ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -59214,6 +59500,13 @@
                  (cons 10 (list (car a) (cadr a) 0.0))
                  (cons 11 (list (car b) (cadr b) 0.0)))))
 
+;; A LINE between two points given in the current UCS.  entmake keeps
+;; World, so each end goes through trans on the way in.  The side
+;; profile is laid out in the drafter's UCS, where its forced "_V" dims
+;; measure - built in World under a turned UCS, every depth read short.
+(defun cs-uline (a b)
+  (cs-mkline (trans a 1 0) (trans b 1 0)))
+
 ;; make dimension style NAME current, but only if it exists and is not
 ;; already current.  Uses ActiveX so style names containing spaces are
 ;; handled correctly (the -DIMSTYLE command would read a space as ENTER).
@@ -59250,16 +59543,17 @@
 ;; measures the DROP between them while its extension lines still hook
 ;; the corners themselves.  Cleaner than dimensioning the riser line,
 ;; which leaves the dim marooned beside the step instead of reading
-;; across to it.  Points are WCS.
+;; across to it.  Points are UCS, as (command) reads them: "_V" is
+;; the UCS Y, so the profile they come from is built in the UCS too.
 (defun cs-dimv (style a b thru / oldl)
   (cs-setstyle style)
   (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
     (progn (setq oldl (getvar "CLAYER"))
            (setvar "CLAYER" *cs-dim-layer*)))
-  (command "_.DIMLINEAR" "_non" (trans a 0 1)
-                         "_non" (trans b 0 1)
+  (command "_.DIMLINEAR" "_non" a
+                         "_non" b
                          "_V"
-                         "_non" (trans thru 0 1))
+                         "_non" thru)
   (if oldl (setvar "CLAYER" oldl)))
 
 ;; Draw the side (riser) line A-B unless it is degenerate or both points
@@ -59532,7 +59826,7 @@
                        bsides btreads bnums bside bdir bss pr be
                        bnw bno bnk bnsd bnrm bnf bnpe bact bu1 bu2
                        bns bnfar bnff bnl
-                       tlist tvals tds drops pd ix ppt pw
+                       tlist tvals tds drops pd ix ppt
                        px py totr totd cnrs ca cb pfo pgap fsteps fkey
                        qstep qdir bstep bmiss lastwid rl rr dflt)
 
@@ -59551,6 +59845,7 @@
     (if lzd:report (lzd:report "CORNERSTP" *cs-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "CORNERSTP" *cs-version*))
+  (if lzd:state (lzd:state '(*cs-form*)))
   (cs-fprune)
 
   ;; remove the most recently drawn step and roll the state back
@@ -60468,29 +60763,33 @@
               (if (null ppt)
                 (princ "\nNo point picked - side profile skipped.")
                 (progn
-                  ;; The alternating drop/tread silhouette in world
-                  ;; X/Y, keeping the corner down its high side at
-                  ;; every level: the pick, then the foot of each
-                  ;; drop.  Those corners are what the dims bind to.
+                  ;; The alternating drop/tread silhouette in the
+                  ;; drafter's UCS, keeping the corner down its high
+                  ;; side at every level: the pick, then the foot of
+                  ;; each drop.  Those corners are what the dims bind
+                  ;; to.  UCS numbers throughout, and World only as a
+                  ;; line is made: "down and to the left" is the
+                  ;; drafter's, and the "_V" dims measure the drop.
+                  ;; Laid out in World under a UCS turned 30 degrees,
+                  ;; a 7.5 drop was dimensioned 6.495.
                   (setq totd (apply '+ drops)
                         totr (apply '+ tds)
-                        pw   (trans ppt 1 0)
-                        px   (car pw)
-                        py   (cadr pw)
+                        px   (car ppt)
+                        py   (cadr ppt)
                         ix   0
                         cnrs (list (list px py 0.0)))
                   (foreach s tds
                     (setq pd (nth ix drops))
-                    (cs-mkline (list px py 0.0) (list px (- py pd) 0.0))
+                    (cs-uline (list px py 0.0) (list px (- py pd) 0.0))
                     (setq py   (- py pd)
                           cnrs (cons (list px py 0.0) cnrs))
                     ;; the tread runs left, and carries no dim of its
                     ;; own - the depths and the overall depth say it all
-                    (cs-mkline (list px py 0.0) (list (- px s) py 0.0))
+                    (cs-uline (list px py 0.0) (list (- px s) py 0.0))
                     (setq px (- px s) ix (1+ ix)))
                   ;; the last depth: the drop after the last tread
                   (setq pd (nth ix drops))
-                  (cs-mkline (list px py 0.0) (list px (- py pd) 0.0))
+                  (cs-uline (list px py 0.0) (list px (- py pd) 0.0))
                   (setq py   (- py pd)
                         cnrs (reverse (cons (list px py 0.0) cnrs)))
                   (if dimflag
@@ -60518,8 +60817,8 @@
                       ;; whole diagonal, top corner to bottom corner
                       (cs-dimv *cs-depth-dimstyle*
                                (car cnrs) (last cnrs)
-                               (list (+ (car pw) pfo pgap)
-                                     (- (cadr pw) (* 0.5 totd)) 0.0))))
+                               (list (+ (car ppt) pfo pgap)
+                                     (- (cadr ppt) (* 0.5 totd)) 0.0))))
                   (princ (strcat "\nSide profile drawn: "
                                  (itoa (length tds))
                                  " step(s), " (itoa (length drops))
@@ -61033,15 +61332,17 @@
 ;;;
 ;;; THE SIDE PROFILE
 ;;;   The flight is drawn as an alternating drop/tread silhouette in
-;;;   world X/Y, always descending to the LEFT of the picked top of the
-;;;   WALL and ending on the last depth - so the steps rise to the
-;;;   right, the way the shop's own elevations read.  It starts where
-;;;   the run starts: the pick is the top of the wall, the first drop
-;;;   is the drop at the wall, and the first tread is the flat between
-;;;   the wall and the first chord.  Every tread after that is the gap
-;;;   between two chords, so the flight covers the same distances the
-;;;   plan's tread chain does, in the same order.  (In the curve modes
-;;;   the run starts at the curve instead, and the flight says so.)
+;;;   the current UCS, always descending to the LEFT of the picked top
+;;;   of the WALL and ending on the last depth - so the steps rise to
+;;;   the right, the way the shop's own elevations read, and stand
+;;;   upright in a turned UCS, where the dims measure the drops.  It
+;;;   starts where the run starts: the pick is the top of the wall, the
+;;;   first drop is the drop at the wall, and the first tread is the
+;;;   flat between the wall and the first chord.  Every tread after
+;;;   that is the gap between two chords, so the flight covers the same
+;;;   distances the plan's tread chain does, in the same order.  (In
+;;;   the curve modes the run starts at the curve instead, and the
+;;;   flight says so.)
 ;;;   The dims climb with them, up and to the right, on the high side:
 ;;;     * every depth is a dim of its own, standing the same distance
 ;;;       right of the corner its drop lands on, so they step out with
@@ -61237,7 +61538,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.25") ; printed on load and at command start so a
+(setq *hs-version* "v3.26") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -61766,6 +62067,13 @@
                  (cons 10 (list (car a) (cadr a) 0.0))
                  (cons 11 (list (car b) (cadr b) 0.0)))))
 
+;; A LINE between two points given in the current UCS.  entmake keeps
+;; World, so each end goes through trans on the way in.  The side
+;; profile is laid out in the drafter's UCS, where its forced "_V" dims
+;; measure - built in World under a turned UCS, every depth read short.
+(defun hs-uline (a b)
+  (hs-mkline (trans a 1 0) (trans b 1 0)))
+
 ;; make dimension style NAME current, but only if it exists and is not
 ;; already current.  Uses ActiveX so style names containing spaces are
 ;; handled correctly (the -DIMSTYLE command would read a space as ENTER).
@@ -61802,16 +62110,17 @@
 ;; measures the DROP between them while its extension lines still hook
 ;; the corners themselves.  Cleaner than dimensioning the riser line,
 ;; which leaves the dim marooned beside the step instead of reading
-;; across to it.  Points are WCS.
+;; across to it.  Points are UCS, as (command) reads them: "_V" is
+;; the UCS Y, so the profile they come from is built in the UCS too.
 (defun hs-dimv (style a b thru / oldl)
   (hs-setstyle style)
   (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
     (progn (setq oldl (getvar "CLAYER"))
            (setvar "CLAYER" *cs-dim-layer*)))
-  (command "_.DIMLINEAR" "_non" (trans a 0 1)
-                         "_non" (trans b 0 1)
+  (command "_.DIMLINEAR" "_non" a
+                         "_non" b
                          "_V"
-                         "_non" (trans thru 0 1))
+                         "_non" thru)
   (if oldl (setvar "CLAYER" oldl)))
 
 ;; entities created since MARK (nil = since the drawing was empty)
@@ -62050,6 +62359,7 @@
     (if lzd:report (lzd:report "HEMISTEP" *hs-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "HEMISTEP" *hs-version*))
+  (if lzd:state (lzd:state '(*hs-form*)))
   (hs-fprune)
 
   ;; remove the most recently drawn step and roll the state back
@@ -62574,10 +62884,10 @@
 
   ;; ---- 6. side profile -------------------------------------------------
   ;; The plan run seen from the side: alternating vertical drops (the
-  ;; step depths) and horizontal step treads, drawn in world X/Y from a
-  ;; picked top-of-wall point.  Still inside the command's UNDO group,
-  ;; and before the entry dim style is restored - the profile dims use
-  ;; *cs-depth-dimstyle* too.
+  ;; step depths) and horizontal step treads, drawn in the drafter's
+  ;; UCS from a picked top-of-wall point.  Still inside the command's
+  ;; UNDO group, and before the entry dim style is restored - the
+  ;; profile dims use *cs-depth-dimstyle* too.
   (if (> drawn 0)
     (progn
       ;; what the run starts at, and so what the flight starts at: the
@@ -62678,28 +62988,31 @@
               (setq totdrop 0.0 totrun 0.0)
               (foreach dd drops (setq totdrop (+ totdrop dd)))
               (foreach td treads (setq totrun (+ totrun td)))
-              ;; The alternating drop/tread silhouette in world X/Y,
-              ;; keeping the corner down its high side at every level:
-              ;; the pick, then the foot of each drop.  Those corners
-              ;; are what the dims bind to.
-              (setq ptop (trans ptop 1 0)
-                    px   (car ptop)
+              ;; The alternating drop/tread silhouette in the
+              ;; drafter's UCS, keeping the corner down its high side
+              ;; at every level: the pick, then the foot of each drop.
+              ;; Those corners are what the dims bind to.  UCS numbers
+              ;; throughout, and World only as a line is made: "down
+              ;; and to the left" is the drafter's, and the "_V" dims
+              ;; measure the drop.  Laid out in World under a UCS
+              ;; turned 30 degrees, a 7.5 drop was dimensioned 6.495.
+              (setq px   (car ptop)
                     py   (cadr ptop)
                     jx   0
                     cnrs (list (list px py 0.0)))
               (foreach td treads
                 (setq dd (nth jx drops))
-                (hs-mkline (list px py 0.0) (list px (- py dd) 0.0))
+                (hs-uline (list px py 0.0) (list px (- py dd) 0.0))
                 (setq py   (- py dd)
                       cnrs (cons (list px py 0.0) cnrs))
                 ;; the tread runs left, and carries no dim of its own -
                 ;; the depths and the overall depth say it all
-                (hs-mkline (list px py 0.0) (list (- px td) py 0.0))
+                (hs-uline (list px py 0.0) (list (- px td) py 0.0))
                 (setq px (- px td)
                       jx (1+ jx)))
               ;; the last depth: the drop after the last tread
               (setq dd (nth jx drops))
-              (hs-mkline (list px py 0.0) (list px (- py dd) 0.0))
+              (hs-uline (list px py 0.0) (list px (- py dd) 0.0))
               (setq py   (- py dd)
                     cnrs (reverse (cons (list px py 0.0) cnrs)))
               (if dimflag
@@ -63239,9 +63552,10 @@
 ;;;
 ;;; THE SIDE PROFILE
 ;;;   The flight is drawn as an alternating drop/tread silhouette in
-;;;   world X/Y, always descending to the LEFT of the picked top of the
-;;;   first tread and ending on the last depth - so the steps rise to
-;;;   the right, the way the shop's own elevations read.
+;;;   the current UCS, always descending to the LEFT of the picked top
+;;;   of the first tread and ending on the last depth - so the steps
+;;;   rise to the right, the way the shop's own elevations read, and
+;;;   stand upright in a turned UCS, where the dims measure the drops.
 ;;;   The dims climb with them, up and to the right, on the high side:
 ;;;     * every depth is a dim of its own, standing the same distance
 ;;;       right of the corner its drop lands on, so they step out with
@@ -63481,7 +63795,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.20") ; printed on load and at command start so a
+(setq *ns-version* "v3.21") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -63953,6 +64267,13 @@
                  (cons 10 (list (car a) (cadr a) 0.0))
                  (cons 11 (list (car b) (cadr b) 0.0)))))
 
+;; A LINE between two points given in the current UCS.  entmake keeps
+;; World, so each end goes through trans on the way in.  The side
+;; profile is laid out in the drafter's UCS, where its forced "_V" dims
+;; measure - built in World under a turned UCS, every depth read short.
+(defun ns-uline (a b)
+  (ns-mkline (trans a 1 0) (trans b 1 0)))
+
 ;; Fillet arc of radius R about centre O between tangent points T1 and
 ;; T2.  The minor arc is taken, so a quarter-round comes out as one.
 (defun ns-mkfillet (o r t1 t2 / a1 a2 sw)
@@ -64053,16 +64374,17 @@
 ;; measures the DROP between them while its extension lines still hook
 ;; the corners themselves.  Cleaner than dimensioning the riser line,
 ;; which leaves the dim marooned beside the step instead of reading
-;; across to it.  Points are WCS.
+;; across to it.  Points are UCS, as (command) reads them: "_V" is
+;; the UCS Y, so the profile they come from is built in the UCS too.
 (defun ns-dimv (style a b thru / oldl)
   (ns-setstyle style)
   (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
     (progn (setq oldl (getvar "CLAYER"))
            (setvar "CLAYER" *cs-dim-layer*)))
-  (command "_.DIMLINEAR" "_non" (trans a 0 1)
-                         "_non" (trans b 0 1)
+  (command "_.DIMLINEAR" "_non" a
+                         "_non" b
                          "_V"
-                         "_non" (trans thru 0 1))
+                         "_non" thru)
   (if oldl (setvar "CLAYER" oldl)))
 
 ;;; ---- the corner mark of STANDARDS.md section 2 ------------------------
@@ -64449,6 +64771,7 @@
     (if lzd:report (lzd:report "NORMIESTEP" *ns-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "NORMIESTEP" *ns-version*))
+  (if lzd:state (lzd:state '(*ns-form*)))
   (ns-fprune)
 
   ;; remove the most recently drawn step and roll the state back
@@ -65153,8 +65476,8 @@
   ;; ---- 6b. side profile ------------------------------------------------
   ;; The plan run gave each step's STEP TREAD; here each step's STEP
   ;; DEPTH - its vertical drop - is asked, top step first, and the
-  ;; staircase silhouette is drawn in world X/Y off a picked wall-top
-  ;; point.  Still inside the command's undo group, and its dims use
+  ;; staircase silhouette is drawn in the drafter's UCS off a picked
+  ;; wall-top point.  Still inside the command's undo group, and its dims use
   ;; the depth dim style like the tread chain.
   (if (> drawn 0)
     (progn
@@ -65243,11 +65566,17 @@
           (if (null wpu)
             (princ "\nNo point picked - no side profile drawn.")
             (progn
-              ;; The alternating drop/tread silhouette in world X/Y,
-              ;; keeping the corner down its high side at every level:
-              ;; the pick, then the foot of each drop.  Those corners
-              ;; are what the dims bind to.
-              (setq wpt     (ns-flat (trans wpu 1 0))
+              ;; The alternating drop/tread silhouette in the
+              ;; drafter's UCS, keeping the corner down its high side
+              ;; at every level: the pick, then the foot of each drop.
+              ;; Those corners are what the dims bind to.  UCS numbers
+              ;; throughout, and World only as a line is made: "down
+              ;; and to the left" is the drafter's, and the "_V" dims
+              ;; measure the drop.  Laid out in World under a UCS
+              ;; turned 30 degrees, a 7.5 drop was dimensioned 6.495.
+              ;; WPT is WPU flattened - still UCS numbers, not the
+              ;; World copy it once was.
+              (setq wpt     (ns-flat wpu)
                     totrun  (apply '+ treads)
                     totdrop (apply '+ drops)
                     px0     (car wpt)
@@ -65258,17 +65587,17 @@
               (foreach tt treads
                 (setq dv (nth k drops))
                 ;; the drop, straight down ...
-                (ns-mkline (list cx cy 0.0) (list cx (- cy dv) 0.0))
+                (ns-uline (list cx cy 0.0) (list cx (- cy dv) 0.0))
                 (setq cy   (- cy dv)
                       cnrs (cons (list cx cy 0.0) cnrs))
                 ;; ... then the tread, running left - no dim of its
                 ;; own: the depths and the overall depth say it all
-                (ns-mkline (list cx cy 0.0) (list (- cx tt) cy 0.0))
+                (ns-uline (list cx cy 0.0) (list (- cx tt) cy 0.0))
                 (setq cx (- cx tt)
                       k  (1+ k)))
               ;; the last depth: the drop after the last tread
               (setq dv (nth k drops))
-              (ns-mkline (list cx cy 0.0) (list cx (- cy dv) 0.0))
+              (ns-uline (list cx cy 0.0) (list cx (- cy dv) 0.0))
               (setq cy   (- cy dv)
                     cnrs (reverse (cons (list cx cy 0.0) cnrs)))
               (if dimflag
@@ -67723,7 +68052,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.28")
+(setq *cchk-version* "v1.29")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -71834,11 +72163,30 @@
   (if (and new (entget new) (= "INSERT" (cdr (assoc 0 (entget new)))))
     (progn (cchk:tag new "TUTORIAL") new)))
 
+;; DIMLINEAR's Rotated angle that lays a dimension line along the
+;; World direction DIR (a unit vector), as the text the command reads
+;; -- nil when the UCS is not turned, where the plain form already
+;; measures along World.  A dimension command measures along the UCS
+;; axes, so under a turned UCS the demo, built square to World, was
+;; dimensioned on the slant.  The angle is TYPED, so it is spelt the
+;; way the drafter's settings read it back: from ANGBASE, in ANGDIR's
+;; sense, and in grads or radians (angtos adds the suffix) when AUNITS
+;; says so -- a bare number is degrees under every other unit.
+(defun cchk:world-rot (dir / a u)
+  (if (not (equal (trans dir 0 1 T) dir 1e-9))
+    (progn
+      (setq a (angle '(0.0 0.0 0.0) (trans dir 0 1 T))
+            a (if (= 1 (getvar "ANGDIR"))
+                (- (getvar "ANGBASE") a)
+                (- a (getvar "ANGBASE")))
+            u (getvar "AUNITS"))
+      (angtos a (if (member u '(2 3)) u 0) 8))))
+
 ;; the whole demo scene, anchored at BP (WCS, z=0). Each piece is
 ;; independent - one failing (e.g. no DASHED linetype available)
 ;; never stops the rest from being built.
 (defun cchk:tut-build (bp / bx by oldfiledia oldosmode pre newdim detpt ins
-                           guard)
+                           guard rot)
   (setq bx (car bp) by (cadr bp))
   (cal:ensure-layer *cchk-pool-layer* 7)
   (cal:ensure-layer *cchk-tut-layer* 5)
@@ -71897,18 +72245,30 @@
         (princ "\n  Skipped: could not insert the 'Cover Details' demo block (the drawing refused the entity)."))))
 
   ;; an off-object dimension point: point 1 sits 4" below the pool's
-  ;; true bottom-left corner instead of on it
+  ;; true bottom-left corner instead of on it.  The command reads its
+  ;; points in the UCS and everything else here is World: handed the
+  ;; World numbers raw, the dimension landed a UCS origin away from
+  ;; the pool it was planted on, and under a turned UCS it measured
+  ;; the run on the slant -- so the points go through trans, and the
+  ;; line is laid along World X whenever the UCS is turned
   (setq oldosmode (getvar "OSMODE"))
   (setvar "OSMODE" 0)
-  (setq pre (entlast))
+  (setq pre (entlast)
+        rot (cchk:world-rot '(1.0 0.0 0.0)))
   ;; the args list is required - without it vl-catch-all-apply itself
   ;; errors instead of catching, killing the tutorial at this line
   (vl-catch-all-apply
     '(lambda ()
-       (command "_.DIMLINEAR"
-                (list bx (- by 4.0) 0.0)
-                (list (+ bx 180.0) by 0.0)
-                (list (+ bx 90.0) (- by 40.0) 0.0)))
+       (if rot
+         (command "_.DIMLINEAR"
+                  (trans (list bx (- by 4.0) 0.0) 0 1)
+                  (trans (list (+ bx 180.0) by 0.0) 0 1)
+                  "_R" rot
+                  (trans (list (+ bx 90.0) (- by 40.0) 0.0) 0 1))
+         (command "_.DIMLINEAR"
+                  (trans (list bx (- by 4.0) 0.0) 0 1)
+                  (trans (list (+ bx 180.0) by 0.0) 0 1)
+                  (trans (list (+ bx 90.0) (- by 40.0) 0.0) 0 1))))
     nil)
   (setvar "OSMODE" oldosmode)
   (setq newdim (if pre (entnext pre) (entnext)))
@@ -71968,6 +72328,11 @@
       (setq bp (getpoint "\nPick a base point for the demo, clear of your real geometry <0,0>: "))
       (if lzd:ask (lzd:ask "\nPick a base point for the demo, clear of your real geometry <0,0>: " bp) bp)
       (if (null bp) (setq bp (list 0.0 0.0 0.0)))
+      ;; the click is UCS numbers and the scene is built in World --
+      ;; handed over raw, the demo landed a UCS origin away from the
+      ;; spot the drafter picked, and COVERSCAN placed its pad there.
+      ;; Enter's 0,0 is the UCS origin, the same as typing it.
+      (setq bp (trans bp 1 0))
       (setq oldecho (getvar "CMDECHO") os0 (getvar "OSMODE")
             fil0 (getvar "FILEDIA"))
       (setvar "CMDECHO" 0)
@@ -75009,7 +75374,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.27")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.28")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -77195,7 +77560,26 @@
                  '(100 . "AcDbLine") (cons 10 p1) (cons 11 p2)))
   (entlast))
 
-(defun dchk:tut-dim (p1 p2 dimpt rot lay / old oldlay res)
+;; DIMLINEAR's Rotated angle that lays a dimension line along the
+;; World direction DIR (a unit vector), as the text the command reads
+;; -- nil when the UCS is not turned, where _H and _V already measure
+;; along World.  They measure along the UCS axes, so under a turned
+;; UCS the practice drawing, built square to World, was dimensioned
+;; on the slant.  The angle is TYPED, so it is spelt the way the
+;; drafter's settings read it back: from ANGBASE, in ANGDIR's sense,
+;; and in grads or radians (angtos adds the suffix) when AUNITS says
+;; so -- a bare number is degrees under every other unit.
+(defun dchk:world-rot (dir / a u)
+  (if (not (equal (trans dir 0 1 T) dir 1e-9))
+    (progn
+      (setq a (angle '(0.0 0.0 0.0) (trans dir 0 1 T))
+            a (if (= 1 (getvar "ANGDIR"))
+                (- (getvar "ANGBASE") a)
+                (- a (getvar "ANGBASE")))
+            u (getvar "AUNITS"))
+      (angtos a (if (member u '(2 3)) u 0) 8))))
+
+(defun dchk:tut-dim (p1 p2 dimpt rot lay / old oldlay res rtxt)
   ;; a linear dimension, made with the command so it is valid in any
   ;; release; osnap is muted so the picks land exactly where told,
   ;; and the command is caught so a failure cannot skip the restore -
@@ -77207,11 +77591,23 @@
         oldlay (getvar "CLAYER"))
   (setvar "OSMODE" 0)
   (setvar "CLAYER" lay)
+  ;; P1, P2 and DIMPT are World, as the practice drawing is, and the
+  ;; command reads UCS: handed over raw, the dimension landed a UCS
+  ;; origin away from the line it was planted on -- so they go through
+  ;; trans, and the line is laid along World whenever the UCS is turned
+  (setq rtxt (dchk:world-rot (if (zerop rot) '(1.0 0.0 0.0) '(0.0 1.0 0.0))))
   (setq res (vl-catch-all-apply
               '(lambda ()
-                 (if (zerop rot)
-                   (command "_.DIMLINEAR" p1 p2 "_H" dimpt)
-                   (command "_.DIMLINEAR" p1 p2 "_V" dimpt)))
+                 (cond
+                   (rtxt
+                    (command "_.DIMLINEAR" (trans p1 0 1) (trans p2 0 1)
+                             "_R" rtxt (trans dimpt 0 1)))
+                   ((zerop rot)
+                    (command "_.DIMLINEAR" (trans p1 0 1) (trans p2 0 1)
+                             "_H" (trans dimpt 0 1)))
+                   (T
+                    (command "_.DIMLINEAR" (trans p1 0 1) (trans p2 0 1)
+                             "_V" (trans dimpt 0 1)))))
               nil))
   (setvar "CLAYER" oldlay)
   (setvar "OSMODE" old)
@@ -79860,7 +80256,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v3.7")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.8")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -85212,7 +85608,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v2.7")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v2.8")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -89088,7 +89484,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.24")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.25")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -93446,7 +93842,26 @@
                  '(100 . "AcDbLine") (cons 10 p1) (cons 11 p2)))
   (entlast))
 
-(defun lfc:tut-dim (p1 p2 dimpt rot lay / old oldlay res)
+;; DIMLINEAR's Rotated angle that lays a dimension line along the
+;; World direction DIR (a unit vector), as the text the command reads
+;; -- nil when the UCS is not turned, where _H and _V already measure
+;; along World.  They measure along the UCS axes, so under a turned
+;; UCS the practice drawing, built square to World, was dimensioned
+;; on the slant.  The angle is TYPED, so it is spelt the way the
+;; drafter's settings read it back: from ANGBASE, in ANGDIR's sense,
+;; and in grads or radians (angtos adds the suffix) when AUNITS says
+;; so -- a bare number is degrees under every other unit.
+(defun lfc:world-rot (dir / a u)
+  (if (not (equal (trans dir 0 1 T) dir 1e-9))
+    (progn
+      (setq a (angle '(0.0 0.0 0.0) (trans dir 0 1 T))
+            a (if (= 1 (getvar "ANGDIR"))
+                (- (getvar "ANGBASE") a)
+                (- a (getvar "ANGBASE")))
+            u (getvar "AUNITS"))
+      (angtos a (if (member u '(2 3)) u 0) 8))))
+
+(defun lfc:tut-dim (p1 p2 dimpt rot lay / old oldlay res rtxt)
   ;; a linear dimension, made with the command so it is valid in any
   ;; release; osnap is muted so the picks land exactly where told,
   ;; and the command is caught so a failure cannot skip the restore -
@@ -93458,11 +93873,23 @@
         oldlay (getvar "CLAYER"))
   (setvar "OSMODE" 0)
   (setvar "CLAYER" lay)
+  ;; P1, P2 and DIMPT are World, as the practice drawing is, and the
+  ;; command reads UCS: handed over raw, the dimension landed a UCS
+  ;; origin away from the line it was planted on -- so they go through
+  ;; trans, and the line is laid along World whenever the UCS is turned
+  (setq rtxt (lfc:world-rot (if (zerop rot) '(1.0 0.0 0.0) '(0.0 1.0 0.0))))
   (setq res (vl-catch-all-apply
               '(lambda ()
-                 (if (zerop rot)
-                   (command "_.DIMLINEAR" p1 p2 "_H" dimpt)
-                   (command "_.DIMLINEAR" p1 p2 "_V" dimpt)))
+                 (cond
+                   (rtxt
+                    (command "_.DIMLINEAR" (trans p1 0 1) (trans p2 0 1)
+                             "_R" rtxt (trans dimpt 0 1)))
+                   ((zerop rot)
+                    (command "_.DIMLINEAR" (trans p1 0 1) (trans p2 0 1)
+                             "_H" (trans dimpt 0 1)))
+                   (T
+                    (command "_.DIMLINEAR" (trans p1 0 1) (trans p2 0 1)
+                             "_V" (trans dimpt 0 1)))))
               nil))
   (setvar "CLAYER" oldlay)
   (setvar "OSMODE" old)
@@ -94014,7 +94441,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.18")
+(setq *paddle-version* "v1.19")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -95314,6 +95741,19 @@
                             absv))))
   (entlast))
 
+;; ZOOM Window onto the World box LO-HI.  ZOOM reads its two corners
+;; in the UCS and frames the SCREEN, so under a turned UCS the box's
+;; own two corners, handed over as they stand, frame a box turned
+;; against it and cut the demo's corners off.  All four corners go to
+;; the display, are boxed there, and come back as the UCS numbers
+;; ZOOM reads.
+(defun paddle--zoom-box (lo hi / c q dlo dhi)
+  (foreach c (list lo (list (car hi) (cadr lo)) hi (list (car lo) (cadr hi)))
+    (setq q   (trans (list (car c) (cadr c) 0.0) 0 2)
+          dlo (if dlo (mapcar 'min dlo q) q)
+          dhi (if dhi (mapcar 'max dhi q) q)))
+  (command "_.ZOOM" "_W" (trans dlo 2 1) (trans dhi 2 1)))
+
 (defun paddle--demo-text (base lay pt str)
   (entmake (list '(0 . "TEXT") (cons 8 lay)
                  (list 10 (+ (car base) (car pt)) (+ (cadr base) (cadr pt)) 0.0)
@@ -95396,11 +95836,15 @@
         (setq base (getpoint "\nPick a clear spot for the demo <0,0>: "))
         (if lzd:ask (lzd:ask "\nPick a clear spot for the demo <0,0>: " base) base)
         (if (not base) (setq base '(0.0 0.0 0.0)))
+        ;; The pick - and Enter's 0,0 - are the drafter's UCS, and the
+        ;; demo is entmade, which keeps World: taken raw, a moved UCS
+        ;; built the sample somewhere else while the ZOOM framed the
+        ;; empty spot that was picked.  From here on BASE is World.
+        (setq base (trans base 1 0))
         (setq pl   (paddle--demo-pline base lay)
               ents (list pl))
-        (command "_.ZOOM" "_W"
-                 (list (- (car base) 40.0) (- (cadr base) 40.0))
-                 (list (+ (car base) 340.0) (+ (cadr base) 210.0)))
+        (paddle--zoom-box (list (- (car base) 40.0) (- (cadr base) 40.0))
+                          (list (+ (car base) 340.0) (+ (cadr base) 210.0)))
         (princ "\nThis sample perimeter (green) has one of everything. Labelling it...")
         (paddle--pause)
         (setq ents (cons (paddle--demo-text base lay '(96 14)
@@ -108261,6 +108705,13 @@
 ;;;      for drawings DIMCHECK already went over.  Problems in RED at
 ;;;      full size, advice in CYAN, all-clear in green at 75%.
 ;;;
+;;;  Every size and standoff above is measured along the COVER'S OWN
+;;;  axes, read off the drawing (spachk:cover-frame): SPA draws along
+;;;  the current UCS, so a spa drawn in a turned UCS is turned in World,
+;;;  and the reviewer's UCS plays no part.  The title-block border is
+;;;  measured in its own frame the same way.  A cover or border square
+;;;  to World is measured exactly as it always was.
+;;;
 ;;;  SPACHECK walks whatever it flagged one item at a time -- greying
 ;;;  the rest out, zooming to each, and colouring the ones you confirm
 ;;;  are wrong -- while SPACHECKSCAN runs the identical audits and
@@ -108272,7 +108723,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.22")
+(setq *spacheck-version* "v1.23")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -108817,6 +109268,489 @@
     (if (spachk:has (spachk:dim-text e) note) (setq out (cons e out))))
   (reverse out))
 
+;; The hinges: the LINEs on the cover layer (the outline itself is a
+;; polyline, a circle or an ellipse, so the two never confuse).
+(defun spachk:hinge-lines (ss)
+  (vl-remove-if-not '(lambda (e) (= (spachk:etype e) "LINE"))
+                    (spachk:loose-ents ss spachk:*lay-cover*)))
+
+;;; -------------------- the cover's own frame ----------------------------
+;;;  SPA draws along the CURRENT UCS, so a spa drawn in a turned UCS has
+;;;  a cover whose edges run at that UCS's angle in World.  Every size
+;;;  and standoff the audit reads is one of SPA's -- "across", "up",
+;;;  "2 ft above", "3 ft to the left" -- and those are the COVER'S axes.
+;;;  Measured along World's instead, an 84 x 60 cover turned 30 degrees
+;;;  is 102.7 x 94.0 and both its overalls "disagree" with it.  Nor may
+;;;  the reviewer's UCS decide anything: one sheet has to get one verdict
+;;;  whoever opens it, in whatever UCS.  So the frame is read off the
+;;;  drawing, and off the drawing alone.
+;;;
+;;;  A FRAME is nil for World -- every helper then does exactly what it
+;;;  did before there were frames -- or (cos sin) of the angle its X
+;;;  axis makes in World.  A point's numbers in it are spachk:fr-pt's.
+;;;
+;;;  THE ANGLE, to a quarter turn.  The Cover Size overalls say it first
+;;;  -- each measures along one of the cover's axes -- and failing them
+;;;  the hinges, which run up it; the outline's straight edges then give
+;;;  it exactly (the edge direction within 5 degrees of what they said,
+;;;  so overalls drawn a hair off the outline cannot tilt the frame).
+;;;  With neither, the outline's LONGEST straight edge decides.  Never
+;;;  the heaviest edge direction: an octagon's or a cut corner's
+;;;  diagonals can outweigh the square sides, and a 95 octagon with 40
+;;;  faces measured 94.35 x 94.35 on its diagonals.
+;;;
+;;;  THE QUARTER that is up is NOT guessed from where the overalls
+;;;  stand -- where they stand is exactly what the audit is there to
+;;;  judge, and a pair with SPA's two standoffs swapped read as a spa
+;;;  turned a quarter, with both failures gone.  It is taken from what
+;;;  the drawing RECORDS: a DIMENSION keeps the UCS it was made in, as
+;;;  group 51 (the negative of the angle from its OCS X axis to that
+;;;  UCS's X axis), and dragging it does not change it; a dimension made
+;;;  in World carries none (spachk:dim-turn).  The Cover Size overalls
+;;;  vote; the other dimensions break a tie, or vote alone when there
+;;;  are no overalls; a tie still standing goes to the turned UCS
+;;;  (spachk:turn-vote).  Nothing to vote -- no dimension at all --
+;;;  means World.  With hinges drawn the quarter must have them running
+;;;  up it, as SPA's always do, and the turn chooses between the two
+;;;  quarters that do; without, the quarter nearest the turn wins.  So
+;;;  every drawing SPA made in World, whatever was dragged, erased or
+;;;  swapped since, comes out World, and runs exactly the code it always
+;;;  did.  The words "above" and "left" are the cover's own: what SPA
+;;;  calls above in the UCS it drew in, whoever views the report and
+;;;  however.
+
+;; P, a World point or displacement, in frame FR -- P itself for World.
+(defun spachk:fr-pt (fr p)
+  (if fr
+    (list (+ (* (car p) (car fr)) (* (cadr p) (cadr fr)))
+          (- (* (cadr p) (car fr)) (* (car p) (cadr fr))))
+    p))
+
+;; An angle folded to the quarter turn nearest World's: (-45, 45] deg.
+;; AutoLISP's rem keeps the dividend's sign, so a negative is lifted.
+(defun spachk:fr-fold (a / q)
+  (setq q (* 0.5 pi)
+        a (rem a q))
+  (if (< a 0.0) (setq a (+ a q)))
+  (if (> a (* 0.5 q)) (setq a (- a q)))
+  a)
+
+;; How far apart two folded angles are, a quarter turn being no turn.
+(defun spachk:fr-adiff (a b / d)
+  (setq d (abs (- a b)))
+  (if (> d (* 0.25 pi)) (- (* 0.5 pi) d) d))
+
+;; PAIRS -- (angle . weight) -- gathered into directions a quarter turn
+;; apart: ((folded-angle . total-weight) ...).
+(defun spachk:fr-fams (pairs / p f fams fam hit out)
+  (foreach p pairs
+    (setq f (spachk:fr-fold (car p)) hit nil out nil)
+    (foreach fam fams
+      (if (and (not hit) (< (spachk:fr-adiff (car fam) f) 1.0e-6))
+        (setq hit T
+              out (cons (cons (car fam) (+ (cdr fam) (cdr p))) out))
+        (setq out (cons fam out))))
+    (setq fams (if hit out (cons (cons f (cdr p)) out))))
+  fams)
+
+;; The direction most of PAIRS run in, folded -- nil when there are none
+;; or two directions weigh the same, which is no answer at all.  For
+;; the overalls and the hinges, which all run along the cover's axes.
+(defun spachk:fr-mode (pairs / fam best next)
+  (foreach fam (spachk:fr-fams pairs)
+    (cond ((or (null best) (> (cdr fam) (cdr best)))
+           (setq next best best fam))
+          ((or (null next) (> (cdr fam) (cdr next)))
+           (setq next fam))))
+  (if (and best (> (cdr best) 0.0)
+           (or (null next)
+               (> (- (cdr best) (cdr next)) (* 1.0e-6 (cdr best)))))
+    (car best)))
+
+;; The direction of the longest of PAIRS, folded -- nil when another
+;; direction has one as long (a regular octagon), which says nothing.
+(defun spachk:fr-long (pairs / p best f tie)
+  (foreach p pairs
+    (if (or (null best) (> (cdr p) (cdr best))) (setq best p)))
+  (if best
+    (progn
+      (setq f (spachk:fr-fold (car best)))
+      (foreach p pairs
+        (if (and (>= (cdr p) (* (- 1.0 1.0e-6) (cdr best)))
+                 (>= (spachk:fr-adiff (spachk:fr-fold (car p)) f) 1.0e-6))
+          (setq tie T)))
+      (if (not tie) f))))
+
+;; Angle A made exact: the direction in FAMS within 5 degrees of it, or
+;; A itself when none is.
+(defun spachk:fr-snap (a fams / fam d bd best)
+  (foreach fam fams
+    (setq d (spachk:fr-adiff (car fam) a))
+    (if (or (null bd) (< d bd)) (setq bd d best (car fam))))
+  (if (and best (<= bd (/ pi 36.0))) best a))
+
+;; P -- a LWPOLYLINE's, CIRCLE's or ARC's group 10, an old POLYLINE's
+;; vertex -- is in ENT's OBJECT coordinates.  An entity in the World
+;; plan (no 210, or 0,0,1) is its own OCS; any other goes through its
+;; 210 -- a mirrored one, 0,0,-1, runs X backwards.  In World, 2D.
+(defun spachk:ocs-pt (p ent / n w)
+  (setq n (spachk:dxf 210 ent))
+  (if (or (null n) (equal n '(0.0 0.0 1.0) 1.0e-12))
+    (list (car p) (cadr p))
+    (progn
+      (setq w (trans (list (car p) (cadr p) (if (caddr p) (caddr p) 0.0))
+                     ent 0))
+      (list (car w) (cadr w)))))
+
+;; -1.0 when ENT's OCS runs the other way round from World's (its 210
+;; points down), so a bulge or an arc's sweep reads backwards; else 1.0.
+(defun spachk:ocs-sense (ent / n)
+  (setq n (spachk:dxf 210 ent))
+  (if (and n (< (caddr n) 0.0)) -1.0 1.0))
+
+;; A polyline's segments, in World, each as (p q bulge) with p and q 2D;
+;; the closing one included when the polyline is closed.  Reads both
+;; the LWPOLYLINE SPA draws and an old-style POLYLINE's VERTEX chain,
+;; leaving out a spline's frame points (vertex flag 16), which the
+;; curve does not pass through.
+(defun spachk:pl-segs (ent / ed ty sn z p vs e v f n i a b out)
+  (setq ed (entget ent)
+        ty (cdr (assoc 0 ed))
+        sn (spachk:ocs-sense ent))
+  (cond
+    ((= ty "LWPOLYLINE")
+     (setq z (if (numberp (cdr (assoc 38 ed))) (cdr (assoc 38 ed)) 0.0))
+     (foreach p ed
+       (cond ((= (car p) 10)
+              (setq vs (cons (list (spachk:ocs-pt (list (cadr p) (caddr p) z)
+                                                  ent)
+                                   0.0)
+                             vs)))
+             ((and (= (car p) 42) vs)
+              (setq vs (cons (list (caar vs) (* sn (cdr p))) (cdr vs)))))))
+    ((= ty "POLYLINE")
+     (setq e (entnext ent))
+     (while (and e (= (spachk:etype e) "VERTEX"))
+       (setq v (entget e)
+             f (if (numberp (cdr (assoc 70 v))) (cdr (assoc 70 v)) 0))
+       (if (/= 16 (logand 16 f))
+         (setq vs (cons (list (spachk:ocs-pt (cdr (assoc 10 v)) ent)
+                              (* sn (if (assoc 42 v) (cdr (assoc 42 v)) 0.0)))
+                        vs)))
+       (setq e (entnext e)))))
+  (setq vs (reverse vs) n (length vs) i 0)
+  (repeat (if (= 1 (logand 1 (if (numberp (cdr (assoc 70 ed)))
+                                 (cdr (assoc 70 ed)) 0)))
+              n
+              (max 0 (1- n)))
+    (setq a   (nth i vs)
+          b   (nth (rem (1+ i) n) vs)
+          out (cons (list (car a) (car b) (cadr a)) out)
+          i   (1+ i)))
+  (reverse out))
+
+;; The quadrant points of the arc a bulged segment P->Q sweeps (P and Q
+;; already in the frame): a radius corner reaches as far as its arc,
+;; not its chord.  nil for a straight segment.
+(defun spachk:arc-quads (p q b / l h mx my cx cy r a0 sw k a out)
+  (setq l (distance p q))
+  (if (and (> l 0.0) (> (abs b) 1.0e-12))
+    (progn
+      ;; the centre sits h along the left normal of P->Q from the
+      ;; chord's middle; a positive bulge sweeps anticlockwise P to Q
+      (setq h  (/ (* l (- 1.0 (* b b))) (* 4.0 b))
+            mx (* 0.5 (+ (car p) (car q)))
+            my (* 0.5 (+ (cadr p) (cadr q)))
+            cx (- mx (* h (/ (- (cadr q) (cadr p)) l)))
+            cy (+ my (* h (/ (- (car q) (car p)) l)))
+            r  (distance (list cx cy) p)
+            sw (abs (* 4.0 (atan b)))
+            a0 (if (> b 0.0)
+                   (atan (- (cadr p) cy) (- (car p) cx))
+                   (atan (- (cadr q) cy) (- (car q) cx)))
+            k  0)
+      (repeat 4
+        (setq a (* k 0.5 pi))
+        (if (<= (rem (+ (- a a0) (* 4.0 pi)) (* 2.0 pi)) sw)
+          (setq out (cons (list (+ cx (* r (cos a))) (+ cy (* r (sin a))))
+                          out)))
+        (setq k (1+ k)))))
+  out)
+
+;; ENT's extents in frame FR, shaped as spachk:bbox's: ((lo) (hi)).
+;; With FR nil it IS spachk:bbox -- the World box, as before.  Turned,
+;; they are worked from the geometry: a polyline's vertices and its
+;; arcs' quadrant points, a circle's centre and radius, an ellipse's two
+;; axes (a whole one: an outline is closed), a line's ends, an arc's
+;; ends and quadrant points; anything else falls back to the corners of
+;; its World box, which holds it, if loosely.
+(defun spachk:fr-box (ent fr / ty s p q c r a b ex ey a1 sw bb pts lo hi)
+  (if (null fr)
+    (cal:bbox-ent ent)
+    (progn
+      (setq ty (spachk:etype ent))
+      (cond
+        ((member ty '("LWPOLYLINE" "POLYLINE"))
+         (foreach s (spachk:pl-segs ent)
+           (setq p   (spachk:fr-pt fr (car s))
+                 q   (spachk:fr-pt fr (cadr s))
+                 pts (cons p (append (spachk:arc-quads p q (caddr s))
+                                     pts)))))
+        ((= ty "CIRCLE")
+         (setq c   (spachk:fr-pt fr (spachk:ocs-pt (spachk:dxf 10 ent) ent))
+               r   (spachk:dxf 40 ent)
+               pts (list (list (- (car c) r) (- (cadr c) r))
+                         (list (+ (car c) r) (+ (cadr c) r)))))
+        ((= ty "ELLIPSE")
+         ;; an ellipse keeps its centre and major axis in World
+         (setq c   (spachk:fr-pt fr (spachk:dxf 10 ent))
+               a   (spachk:fr-pt fr (spachk:dxf 11 ent))
+               r   (spachk:dxf 40 ent)
+               b   (list (- (* r (cadr a))) (* r (car a)))
+               ex  (sqrt (+ (* (car a) (car a)) (* (car b) (car b))))
+               ey  (sqrt (+ (* (cadr a) (cadr a)) (* (cadr b) (cadr b))))
+               pts (list (list (- (car c) ex) (- (cadr c) ey))
+                         (list (+ (car c) ex) (+ (cadr c) ey)))))
+        ((= ty "LINE")
+         (setq pts (list (spachk:fr-pt fr (spachk:dxf 10 ent))
+                         (spachk:fr-pt fr (spachk:dxf 11 ent)))))
+        ((= ty "ARC")
+         (setq c  (spachk:dxf 10 ent)
+               r  (spachk:dxf 40 ent)
+               a1 (spachk:dxf 50 ent)
+               sw (rem (- (spachk:dxf 51 ent) a1) (* 2.0 pi)))
+         (if (<= sw 0.0) (setq sw (+ sw (* 2.0 pi))))
+         (setq p   (spachk:fr-pt fr (spachk:ocs-pt
+                                      (list (+ (car c) (* r (cos a1)))
+                                            (+ (cadr c) (* r (sin a1)))
+                                            (if (caddr c) (caddr c) 0.0))
+                                      ent))
+               q   (spachk:fr-pt fr (spachk:ocs-pt
+                                      (list (+ (car c) (* r (cos (+ a1 sw))))
+                                            (+ (cadr c) (* r (sin (+ a1 sw))))
+                                            (if (caddr c) (caddr c) 0.0))
+                                      ent))
+               pts (cons p (cons q (spachk:arc-quads
+                                     p q (* (spachk:ocs-sense ent)
+                                            (/ (sin (* 0.25 sw))
+                                               (cos (* 0.25 sw)))))))))
+        ((setq bb (cal:bbox-ent ent))
+         (setq pts (list (spachk:fr-pt fr (car bb))
+                         (spachk:fr-pt fr (cadr bb))
+                         (spachk:fr-pt fr (list (caar bb) (cadadr bb)))
+                         (spachk:fr-pt fr (list (caadr bb) (cadar bb)))))))
+      (foreach p pts
+        (setq lo (if lo (list (min (car lo) (car p)) (min (cadr lo) (cadr p)))
+                        (list (car p) (cadr p)))
+              hi (if hi (list (max (car hi) (car p)) (max (cadr hi) (cadr p)))
+                        (list (car p) (cadr p)))))
+      (if (and lo hi) (list lo hi)))))
+
+;; The extents of every one of ENTS in frame FR, together.
+(defun spachk:fr-box-of (ents fr / e bb out)
+  (foreach e ents
+    (if (setq bb (spachk:fr-box e fr))
+      (setq out (if out (spachk:bbunion out bb) bb))))
+  out)
+
+;; Which way an outline's straight edges run, as (angle . length) --
+;; an ellipse gives its major axis; a circle, or a polyline all arcs,
+;; gives nothing.
+(defun spachk:edge-dirs (ent / ty s p q a out)
+  (setq ty (spachk:etype ent))
+  (cond
+    ((member ty '("LWPOLYLINE" "POLYLINE"))
+     (foreach s (spachk:pl-segs ent)
+       (setq p (car s) q (cadr s))
+       (if (and (< (abs (caddr s)) 1.0e-9)
+                (> (distance p q) spachk:*tiny*))
+         (setq out (cons (cons (atan (- (cadr q) (cadr p))
+                                     (- (car q) (car p)))
+                               (distance p q))
+                         out)))))
+    ((= ty "ELLIPSE")
+     (setq a (spachk:dxf 11 ent))
+     (if (and a (> (+ (abs (car a)) (abs (cadr a))) spachk:*tiny*))
+       (setq out (list (cons (atan (cadr a) (car a)) 1.0))))))
+  out)
+
+;; Which way one linear dimension measures, as a World angle: a rotated
+;; dimension's own group 50, an aligned one's line through its points.
+;; nil for any other kind.
+(defun spachk:dim-dir (e / f p q)
+  (setq f (spachk:dxf 70 e))
+  (if (and f (numberp f))
+    (cond
+      ((= (logand 7 f) 0)
+       (if (spachk:dxf 50 e) (spachk:dxf 50 e) 0.0))
+      ((= (logand 7 f) 1)
+       (setq p (spachk:dxf 13 e) q (spachk:dxf 14 e))
+       (if (and p q
+                (> (+ (abs (- (car q) (car p))) (abs (- (cadr q) (cadr p))))
+                   spachk:*tiny*))
+         (atan (- (cadr q) (cadr p)) (- (car q) (car p))))))))
+
+;; Which way the linear overalls measure, as (angle . 1).
+(defun spachk:dim-dirs (dims / e a out)
+  (foreach e dims
+    (if (setq a (spachk:dim-dir e))
+      (setq out (cons (cons a 1.0) out))))
+  out)
+
+;; Which way LINEs run -- the hinges, a border's rules -- as
+;; (angle . length).
+(defun spachk:line-dirs (lines / e p q out)
+  (foreach e lines
+    (setq p (spachk:dxf 10 e) q (spachk:dxf 11 e))
+    (if (and p q
+             (> (distance (list (car p) (cadr p)) (list (car q) (cadr q)))
+                spachk:*tiny*))
+      (setq out (cons (cons (atan (- (cadr q) (cadr p)) (- (car q) (car p)))
+                            (distance (list (car p) (cadr p))
+                                      (list (car q) (cadr q))))
+                      out))))
+  out)
+
+;; Where overall E stands against the cover box COVBB, both in frame FR:
+;; ("above" . distance), ("left" . distance), or nil when it is on
+;; neither side SPA uses.  Above is asked first: SPA's across dim is the
+;; top one.
+(defun spachk:standing (e covbb fr / loc dx dy)
+  (if (setq loc (spachk:dim-loc e))
+    (progn
+      (setq loc (spachk:fr-pt fr loc)
+            dy  (- (cadr loc) (cadadr covbb))    ; above the top
+            dx  (- (caar covbb) (car loc)))      ; left of the left edge
+      (cond ((> dy 0.0) (cons "above" dy))
+            ((> dx 0.0) (cons "left" dx))))))
+
+;; The turn of the UCS dimension E was made in, radians: the negative
+;; of its group 51, or 0.0 -- World -- when it carries none.
+(defun spachk:dim-turn (e / h)
+  (setq h (spachk:dxf 51 e))
+  (if (numberp h) (- h) 0.0))
+
+;; Are two turns, each in [0, 2pi), the same one?
+(defun spachk:turn-same (a b / d)
+  (setq d (abs (- a b)))
+  (or (< d 1.0e-6) (< (- (* 2.0 pi) d) 1.0e-6)))
+
+;; DIMS' turns (spachk:dim-turn) tallied: ((turn . count) ...), each turn
+;; in [0, 2pi).
+(defun spachk:turn-tally (dims / e t0 votes v hit out)
+  (foreach e dims
+    (setq t0 (rem (spachk:dim-turn e) (* 2.0 pi)) hit nil out nil)
+    (if (< t0 0.0) (setq t0 (+ t0 (* 2.0 pi))))
+    (foreach v votes
+      (if (and (not hit) (spachk:turn-same (car v) t0))
+        (setq hit T out (cons (cons (car v) (1+ (cdr v))) out))
+        (setq out (cons v out))))
+    (setq votes (if hit out (cons (cons t0 1) out))))
+  votes)
+
+;; Of the turns CANDS, those TALLY gives the most votes (none: 0).
+(defun spachk:turn-most (cands tally / c v n best out)
+  (foreach c cands
+    (setq n 0)
+    (foreach v tally (if (spachk:turn-same (car v) c) (setq n (cdr v))))
+    (cond ((or (null best) (> n best)) (setq best n out (list c)))
+          ((= n best) (setq out (cons c out)))))
+  out)
+
+;; The UCS turn the drawing was made in, or nil with no dimension at
+;; all.  The overalls COVN vote.  A tie among them goes to the turn the
+;; OTHER dimensions -- Water's Edge, Overlap, corner marks, which SPA
+;; made in the same UCS -- were made in most; a tie still standing to a
+;; turned UCS over World (a dimension re-made by hand in World is the
+;; edit, not the original), then to the turn nearest World.  With no
+;; overalls the other dimensions vote alone, ties broken the same way.
+(defun spachk:turn-vote (covn others / tally cands c turned d bd best)
+  (setq tally (spachk:turn-tally others))
+  (if covn
+    (setq cands (spachk:turn-most
+                  (mapcar 'car (spachk:turn-tally covn))
+                  (spachk:turn-tally covn))
+          cands (if (cdr cands) (spachk:turn-most cands tally) cands))
+    (setq cands (spachk:turn-most (mapcar 'car tally) tally)))
+  (foreach c cands
+    (if (not (spachk:turn-same c 0.0)) (setq turned (cons c turned))))
+  (if (and turned (cdr cands)) (setq cands turned))
+  (foreach c cands
+    (setq d (min c (- (* 2.0 pi) c)))
+    (if (or (null bd) (< d bd)) (setq bd d best c)))
+  best)
+
+;; The cover's frame: nil for World, else (cos sin).  COV is the cover
+;; outline (nil when there is not exactly one), COVN its overalls, DIMS
+;; every dimension in the selection, HNGS the hinge lines.  See the
+;; head of this section for the rule.
+;;
+;; The recorded turn is the UCS the dimensions were MADE in.  A drawing
+;; ROTATEd after it was made keeps its dimensions' group 51 (whether
+;; ROTATE rewrites it is unconfirmed), so the quarter is taken nearest a
+;; turn it no longer has: right for a rotation under 45 degrees, a
+;; quarter off past it -- no worse than reading everything in World.
+(defun spachk:cover-frame (cov covn dims hngs / fams hint a tn k th d bd best
+                                                cs up e p q most)
+  (setq fams (if cov (spachk:fr-fams (spachk:edge-dirs cov)))
+        hint (cond ((spachk:fr-mode (spachk:dim-dirs covn)))
+                   ((spachk:fr-mode (spachk:line-dirs hngs))))
+        a    (cond (hint (spachk:fr-snap hint fams))
+                   ((if cov (spachk:fr-long (spachk:edge-dirs cov))))
+                   (t 0.0))
+        a    (spachk:fr-fold a)
+        ;; the UCS the drawing was made in, else World
+        tn   (cond ((spachk:turn-vote
+                      covn (vl-remove-if '(lambda (e) (member e covn)) dims)))
+                   (t 0.0))
+        k    0)
+  ;; the quarter turns of A the hinges run UP in -- SPA's hinges always
+  ;; run up the cover, and the audit reads their runs along Y -- or all
+  ;; four with no hinges; the recorded turn only chooses among those
+  (repeat 4
+    (setq th (+ a (* k 0.5 pi)) up 0)
+    (foreach e hngs
+      (setq p (spachk:fr-pt (list (cos th) (sin th)) (spachk:dxf 10 e))
+            q (spachk:fr-pt (list (cos th) (sin th)) (spachk:dxf 11 e)))
+      (if (> (abs (- (cadr q) (cadr p))) (abs (- (car q) (car p))))
+        (setq up (1+ up))))
+    (cond ((or (null most) (> up most)) (setq most up cs (list th)))
+          ((= up most) (setq cs (cons th cs))))
+    (setq k (1+ k)))
+  ;; of those, the one nearest the recorded turn
+  (foreach th (reverse cs)
+    (setq d (rem (abs (- th tn)) (* 2.0 pi)))
+    (if (> d pi) (setq d (- (* 2.0 pi) d)))
+    (if (or (null bd) (< d bd)) (setq bd d best th)))
+  ;; square to World is World: nil, and the code there always was
+  (if (and (< (abs (sin best)) 1.0e-9) (> (cos best) 0.0))
+    nil
+    (list (cos best) (sin best))))
+
+;; A border's own frame, from the entities of one sheet's frame: nil for
+;; World (a border square to World measures as it always did), else the
+;; direction of its longest straight edge, turned to the quarter in
+;; which it is wider than tall -- a title block lies landscape.
+(defun spachk:border-frame (ents / e pairs a c s k fr bb best)
+  (foreach e ents
+    (setq pairs (append (if (= (spachk:etype e) "LINE")
+                            (spachk:line-dirs (list e))
+                            (spachk:edge-dirs e))
+                        pairs)))
+  (setq a (spachk:fr-long pairs))
+  (if (and a (> (abs a) 1.0e-9))
+    (progn
+      (setq c (cos a) s (sin a) k 0)
+      (repeat 4
+        (setq fr (nth k (list (list c s) (list (- s) c)
+                              (list (- c) (- s)) (list s (- c))))
+              bb (spachk:fr-box-of ents fr))
+        (if (and (null best) bb
+                 (>= (spachk:bw bb) (- (spachk:bh bb) spachk:*tiny*)))
+          (setq best fr))
+        (setq k (1+ k)))
+      (if best best (list c s)))))
+
 ;;; -------------------- the hinge arrangement chart ----------------------
 ;;;  Copied from SPA (spa:hingetypes) so the audit measures against the
 ;;;  same rule the drawing was built to: fold hinges on even positions
@@ -108906,7 +109840,7 @@
 ;; correct sheets side by side read STRETCHED.  So the frames are told
 ;; apart (spachk:clusters) and the one around, or nearest, the spa is
 ;; measured.  Returns (box . number-of-frames), nil with no border.
-(defun spachk:border-box (ss / ents ss2 i e bb bbs cl f best bestd d)
+(defun spachk:border-box (ss / ents ss2 i e bb bbs cl f best bestd d mine fr)
   (setq ents nil i 0)
   (if ss
     (repeat (sslength ss)
@@ -108945,6 +109879,18 @@
       (setq best (car cl))
       (foreach bb (cdr cl) (setq best (spachk:bbunion best bb)))
       (setq cl (list best))))
+  ;; the frame measured in its own axes: a sheet drawn in a turned UCS
+  ;; is turned in World, and its World box read a correct 0.6x title
+  ;; block as STRETCHED.  Square to World the frame is nil and the box
+  ;; stands as found.
+  (if best
+    (progn
+      (foreach e ents
+        (if (and (setq bb (cal:bbox-ent e))
+                 (spachk:inside-p bb best spachk:*tiny*))
+          (setq mine (cons e mine))))
+      (if (setq fr (spachk:border-frame mine))
+        (setq best (spachk:fr-box-of mine fr)))))
   (if best (cons best (length cl))))
 
 ;;; ======================================================================
@@ -109158,8 +110104,10 @@
 
 ;; The roster: are the dimensions a finished spa sheet needs present,
 ;; and do the overalls read the outline's true size?
-(defun spachk:audit-roster (dims cov wat covbb watbb / rows ents covn watn
-                                           lapn m want e)
+;; FR is the cover's frame (spachk:cover-frame), which COVBB and WATBB
+;; are measured in.
+(defun spachk:audit-roster (dims cov wat covbb watbb fr / rows ents covn
+                                           watn lapn m want e a d)
   (setq rows nil ents nil
         covn (spachk:dims-noted dims spachk:*sfx-cover*)
         watn (spachk:dims-noted dims spachk:*sfx-water*)
@@ -109222,10 +110170,19 @@
                                   "' dimension")
                           1))))
       (progn
-        (setq m (spachk:dim-meas (car lapn))
+        ;; the lap along the way the dimension MEASURES, in the cover's
+        ;; frame: SPA dimensions the lap at the bottom, up the cover, so
+        ;; a water's edge lapped 3 across and 2 up reads 2 -- and read
+        ;; against the across lap, SPA's own drawing failed
+        (setq m    (spachk:dim-meas (car lapn))
+              a    (spachk:dim-dir (car lapn))
+              d    (if a (spachk:fr-pt fr (list (cos a) (sin a))))
               want (if (and covbb watbb)
-                       (* 0.5 (- (spachk:bw covbb)
-                                 (spachk:bw watbb)))
+                       (if (and d (> (abs (cadr d)) (abs (car d))))
+                           (* 0.5 (- (spachk:bh covbb)
+                                     (spachk:bh watbb)))
+                           (* 0.5 (- (spachk:bw covbb)
+                                     (spachk:bw watbb))))
                        nil))
         (if (and m want (> (abs (- m want)) spachk:*meas-tol*))
           (setq rows (append rows
@@ -109242,37 +110199,40 @@
   (spachk:res rows (reverse ents)))
 
 ;; The overalls' standoffs -- SPA puts the across dim 2 ft above the
-;; cover and the up dim 3 ft to its left.
-(defun spachk:audit-standoff (covn covbb / rows e loc dx dy)
+;; cover and the up dim 3 ft to its left.  Above and left are the
+;; cover's own (spachk:cover-frame): this form measures along World's,
+;; and is what the audit ran before there were frames.
+(defun spachk:audit-standoff (covn covbb)
+  (spachk:audit-standoff-in covn covbb nil))
+
+;; The same in frame FR, which COVBB is already measured in.  Above and
+;; left are the cover's own -- SPA's, in the UCS it drew in.
+(defun spachk:audit-standoff-in (covn covbb fr / rows e st)
   (setq rows nil)
   (if (and covbb covn)
     (foreach e covn
-      (setq loc (spachk:dim-loc e))
-      (if loc
-        (progn
-          (setq dy (- (cadr loc) (cadadr covbb))  ; above the top
-                dx (- (caar covbb) (car loc)))    ; left of the left edge
-          (cond
-            ;; above the cover: the across dim
-            ((> dy 0.0)
-             (if (> (abs (- dy spachk:*topoff*)) spachk:*off-tol*)
-               (setq rows (append rows
-                           (list (spachk:row
-                                   (strcat "Overall " (spachk:dxf 5 e)
-                                           ": stands " (spachk:dist dy)
-                                           " above the cover, SPA puts it "
-                                           (spachk:dist spachk:*topoff*))
-                                   1))))))
-            ;; left of the cover: the up dim
-            ((> dx 0.0)
-             (if (> (abs (- dx spachk:*dimoff*)) spachk:*off-tol*)
-               (setq rows (append rows
-                           (list (spachk:row
-                                   (strcat "Overall " (spachk:dxf 5 e)
-                                           ": stands " (spachk:dist dx)
-                                           " left of the cover, SPA puts it "
-                                           (spachk:dist spachk:*dimoff*))
-                                   1)))))))))))
+      (setq st (spachk:standing e covbb fr))
+      (cond
+        ;; above the cover: the across dim
+        ((and st (= (car st) "above"))
+         (if (> (abs (- (cdr st) spachk:*topoff*)) spachk:*off-tol*)
+           (setq rows (append rows
+                       (list (spachk:row
+                               (strcat "Overall " (spachk:dxf 5 e)
+                                       ": stands " (spachk:dist (cdr st))
+                                       " above the cover, SPA puts it "
+                                       (spachk:dist spachk:*topoff*))
+                               1))))))
+        ;; left of the cover: the up dim
+        ((and st (= (car st) "left"))
+         (if (> (abs (- (cdr st) spachk:*dimoff*)) spachk:*off-tol*)
+           (setq rows (append rows
+                       (list (spachk:row
+                               (strcat "Overall " (spachk:dxf 5 e)
+                                       ": stands " (spachk:dist (cdr st))
+                                       " left of the cover, SPA puts it "
+                                       (spachk:dist spachk:*dimoff*))
+                               1)))))))))
   (spachk:res rows nil))
 
 ;;; --- 5. the hinges ------------------------------------------------------
@@ -109329,15 +110289,15 @@
               (setq best opt)))
         best)))
 
-(defun spachk:audit-hinges (ss covbb grade taper / rows ents hngs labels n xs
-                                                 row opts allowed fw fl
+;; HNGS are the hinge lines (spachk:hinge-lines), found once by the
+;; audit.  FR is the cover's frame (spachk:cover-frame), which COVBB is
+;; measured in: a hinge runs along its Y and the pieces lie along its X.
+(defun spachk:audit-hinges (ss hngs covbb grade taper fr / rows ents labels
+                                                 n xs row opts allowed fw fl
                                                  sorted e want got
                                                  maxrun maxpiece prev
                                                  allvel hw h r k nm vd lvl)
   (setq rows nil ents nil
-        hngs (vl-remove-if-not
-               '(lambda (e) (= (spachk:etype e) "LINE"))
-               (spachk:loose-ents ss spachk:*lay-cover*))
         labels (vl-remove-if-not
                  '(lambda (e) (spachk:on-layer-p e spachk:*lay-text*))
                  (spachk:ents-of-type ss "MTEXT")))
@@ -109345,10 +110305,11 @@
     (spachk:res
       (list (spachk:row "Hinges: none drawn on layer COVER" 1)) nil)
     (progn
-      ;; west to east
+      ;; west to east, along the cover
       (setq sorted (vl-sort hngs
                      '(lambda (a b)
-                        (< (car (spachk:dxf 10 a)) (car (spachk:dxf 10 b))))))
+                        (< (car (spachk:fr-pt fr (spachk:dxf 10 a)))
+                           (car (spachk:fr-pt fr (spachk:dxf 10 b)))))))
       (setq n (1+ (length sorted))
             allvel (= grade "THERMOLIGHT"))
       ;; --- the piece count against the taper
@@ -109384,8 +110345,8 @@
       (setq maxrun 0.0)
       (foreach e sorted
         (setq maxrun (max maxrun
-                          (abs (- (cadr (spachk:dxf 11 e))
-                                  (cadr (spachk:dxf 10 e)))))))
+                          (abs (- (cadr (spachk:fr-pt fr (spachk:dxf 11 e)))
+                                  (cadr (spachk:fr-pt fr (spachk:dxf 10 e))))))))
       ;; the widest piece, measured before either check so the sheet can
       ;; be chosen from the drawing rather than from the row's order
       (if covbb
@@ -109393,8 +110354,9 @@
             (setq maxpiece 0.0 prev (caar covbb))
             (foreach e sorted
               (setq maxpiece (max maxpiece
-                                  (- (car (spachk:dxf 10 e)) prev))
-                    prev (car (spachk:dxf 10 e))))
+                                  (- (car (spachk:fr-pt fr (spachk:dxf 10 e)))
+                                     prev))
+                    prev (car (spachk:fr-pt fr (spachk:dxf 10 e)))))
             (setq maxpiece (max maxpiece (- (caadr covbb) prev)))))
       (setq row (spachk:foampick opts maxpiece maxrun)
             fw  (car row)
@@ -109851,7 +110813,7 @@
 ;; report's second column - and a lite run skips it altogether.
 ;; Returns (main-rows dim-rows flagged-entities).
 (defun spachk:audit (ss lite dofix / rows drows ents blk att g tp cov wat covo
-                                 wato dims covn r covbb watbb)
+                                 wato dims covn hngs r covbb watbb fr)
   (setq rows nil drows nil ents nil)
 
   ;; 1 -- the block
@@ -109876,9 +110838,16 @@
         ents (append ents (spachk:res-ents r))
         covo (spachk:outline-ents ss spachk:*lay-cover*)
         cov  (if (= 1 (length covo)) (car covo) nil))
-  ;; the cover's bounding box, resolved ONCE here and threaded down to
+  ;; the cover's own frame -- its edges' direction, turned to the
+  ;; quarter of the UCS its dimensions were made in (group 51,
+  ;; spachk:cover-frame): nil, World, for a cover SPA drew in World --
+  ;; and its box in that frame, resolved ONCE here and threaded down to
   ;; every sibling below instead of each re-resolving it off cov itself
-  (setq covbb (if cov (cal:bbox-ent cov)))
+  (setq dims  (spachk:dims ss)
+        covn  (spachk:dims-noted dims spachk:*sfx-cover*)
+        hngs  (spachk:hinge-lines ss)
+        fr    (spachk:cover-frame cov covn dims hngs)
+        covbb (if cov (spachk:fr-box cov fr)))
 
   ;; 3 -- the water's edge outline
   (setq r (spachk:audit-outline ss spachk:*lay-water* "Water's edge" nil)
@@ -109886,7 +110855,7 @@
         ents (append ents (spachk:res-ents r))
         wato (spachk:outline-ents ss spachk:*lay-water*)
         wat  (if (= 1 (length wato)) (car wato) nil))
-  (setq watbb (if wat (cal:bbox-ent wat)))
+  (setq watbb (if wat (spachk:fr-box wat fr)))
 
   (setq r (spachk:audit-nesting covbb watbb)
         rows (append rows (spachk:res-rows r)))
@@ -109895,7 +110864,6 @@
   ;; column; the roster and standoffs are SPA's own rules and stay on
   ;; the main sheet.
   (setq rows (append rows (list (spachk:row "THE OVERALLS" 3))))
-  (setq dims (spachk:dims ss))
   ;; the dimension-layer verdict runs in every mode, lite included
   (setq r (spachk:audit-dimlayer dims)
         rows (append rows (spachk:res-rows r)))
@@ -109903,18 +110871,17 @@
     (setq r     (spachk:audit-dims dims cov wat)
           drows (spachk:res-rows r)
           ents  (append ents (spachk:res-ents r))))
-  (setq r (spachk:audit-roster dims cov wat covbb watbb)
+  (setq r (spachk:audit-roster dims cov wat covbb watbb fr)
         rows (append rows (spachk:res-rows r))
         ents (append ents (spachk:res-ents r)))
-  (setq covn (spachk:dims-noted dims spachk:*sfx-cover*)
-        r    (spachk:audit-standoff covn covbb)
+  (setq r    (spachk:audit-standoff-in covn covbb fr)
         rows (append rows (spachk:res-rows r)))
 
   ;; 5 -- the hinges (only meaningful with a taper)
   (setq rows (append rows (list (spachk:row "THE HINGES" 3))))
   (if tp
     (progn
-      (setq r (spachk:audit-hinges ss covbb g tp)
+      (setq r (spachk:audit-hinges ss hngs covbb g tp fr)
             rows (append rows (spachk:res-rows r))
             ents (append ents (spachk:res-ents r))))
     (setq rows (append rows

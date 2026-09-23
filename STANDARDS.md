@@ -886,13 +886,14 @@ failure in it produces a file somebody can diagnose from.  That is the
 whole of the rule, and it applies to the tool written next year exactly
 as it applies to the seventy in the tree today.
 
-Five call sites, all of them maintained by
+Six call sites, all of them maintained by
 `tools/check_lazdiag.py --fix`, and `make check` runs the same check so
 a command that is missing any of them cannot ship:
 
 | Where | The line | What it buys the report |
 | --- | --- | --- |
 | top of the command | `(if lzd:begin (lzd:begin "TOOL" *tool-version*))` | which tool, which version, and where the drawing stood before it ran |
+| straight after it, in a command a form runs through its `X:run-with-answers` | `(if lzd:state (lzd:state '(tool:*form*)))` | what the form ANSWERED -- the questions it took off the drafter are never asked, so without this a report of a form-driven run cannot be replayed |
 | in the `*error*` handler | `(if lzd:report (lzd:report "TOOL" *tool-version* msg))` | the report itself: the DXF, and the words telling the drafter to send it |
 | before the command's `(princ)` | `(if lzd:end (lzd:end "TOOL"))` | the run LOG's "ok" line: a clean run, counted |
 | after a selection | `(if lzd:watch (lzd:watch ss) ss)` | the geometry the run was HANDED, not just what it drew |

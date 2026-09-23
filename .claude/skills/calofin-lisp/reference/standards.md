@@ -313,10 +313,11 @@ for the document, not the command.
 
 ### Every command reports its failures
 
-Five call sites, all maintained by `tools/check_lazdiag.py --fix`:
+Six call sites, all maintained by `tools/check_lazdiag.py --fix`:
 
 ```lisp
 (if lzd:begin  (lzd:begin  "TOOLNAME" *toolname-version*))      ; top
+(if lzd:state  (lzd:state '(tool:*form*)))                      ; after it, if a form runs the command
 (if lzd:report (lzd:report "TOOLNAME" *toolname-version* msg))  ; in *error*
 (if lzd:end    (lzd:end "TOOLNAME"))                            ; before (princ)
 (if lzd:watch  (lzd:watch ss) ss)                               ; after a selection
@@ -324,6 +325,12 @@ Five call sites, all maintained by `tools/check_lazdiag.py --fix`:
 ((lambda (v) (if lzd:ask (lzd:ask "prompt" v) v))               ; input read IN PLACE
   (getpoint "prompt"))
 ```
+
+**A form's answers are inputs.** A command a form runs through its
+`X:run-with-answers` writes the store it was handed (`lzd:state`), or
+a report from a form-driven run cannot be replayed: the questions the
+form answered are never asked. `--fix` derives the store; add a run
+flag the form also sets (POOL's `pool:*hasbottom*`) to the list by hand.
 
 **The else branch on `watch` and `ask` is load-bearing**: it makes the
 form evaluate to the variable whether LAZDIAG is loaded or not, so the

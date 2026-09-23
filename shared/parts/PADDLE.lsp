@@ -81,7 +81,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.18")
+(setq *paddle-version* "v1.19")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -1381,6 +1381,19 @@
                             absv))))
   (entlast))
 
+;; ZOOM Window onto the World box LO-HI.  ZOOM reads its two corners
+;; in the UCS and frames the SCREEN, so under a turned UCS the box's
+;; own two corners, handed over as they stand, frame a box turned
+;; against it and cut the demo's corners off.  All four corners go to
+;; the display, are boxed there, and come back as the UCS numbers
+;; ZOOM reads.
+(defun paddle--zoom-box (lo hi / c q dlo dhi)
+  (foreach c (list lo (list (car hi) (cadr lo)) hi (list (car lo) (cadr hi)))
+    (setq q   (trans (list (car c) (cadr c) 0.0) 0 2)
+          dlo (if dlo (mapcar 'min dlo q) q)
+          dhi (if dhi (mapcar 'max dhi q) q)))
+  (command "_.ZOOM" "_W" (trans dlo 2 1) (trans dhi 2 1)))
+
 (defun paddle--demo-text (base lay pt str)
   (entmake (list '(0 . "TEXT") (cons 8 lay)
                  (list 10 (+ (car base) (car pt)) (+ (cadr base) (cadr pt)) 0.0)
@@ -1463,11 +1476,15 @@
         (setq base (getpoint "\nPick a clear spot for the demo <0,0>: "))
         (if lzd:ask (lzd:ask "\nPick a clear spot for the demo <0,0>: " base) base)
         (if (not base) (setq base '(0.0 0.0 0.0)))
+        ;; The pick - and Enter's 0,0 - are the drafter's UCS, and the
+        ;; demo is entmade, which keeps World: taken raw, a moved UCS
+        ;; built the sample somewhere else while the ZOOM framed the
+        ;; empty spot that was picked.  From here on BASE is World.
+        (setq base (trans base 1 0))
         (setq pl   (paddle--demo-pline base lay)
               ents (list pl))
-        (command "_.ZOOM" "_W"
-                 (list (- (car base) 40.0) (- (cadr base) 40.0))
-                 (list (+ (car base) 340.0) (+ (cadr base) 210.0)))
+        (paddle--zoom-box (list (- (car base) 40.0) (- (cadr base) 40.0))
+                          (list (+ (car base) 340.0) (+ (cadr base) 210.0)))
         (princ "\nThis sample perimeter (green) has one of everything. Labelling it...")
         (paddle--pause)
         (setq ents (cons (paddle--demo-text base lay '(96 14)

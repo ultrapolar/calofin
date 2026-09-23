@@ -25,7 +25,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v2.7")
+(setq cal:*version* "v2.8")
 
 
 ;;  WHAT IS LOADED, AND AT WHICH VERSION.  Every tool reports its own
@@ -1824,7 +1824,10 @@
                          "\" - click the one you mean.")))
          (t (setq out (car dupes) done T))))
       (t
-       (setq out (cal:cand-nearest v cands snap))
+       ;; The click is in the drafter's UCS and the candidates are
+       ;; World, off the INSERTs themselves: under a moved UCS the raw
+       ;; click measured against them found nothing, or the wrong point.
+       (setq out (cal:cand-nearest (trans v 1 0) cands snap))
        (if out
          (setq done T)
          (princ (strcat "\nNo survey point there - click one, or type"

@@ -97,7 +97,8 @@ meant to be copied out.
    | `LISPLABVER` | Print the version |
 
 The demo asks for a clear spot (about 1000 x 500 drawing units at the
-default size) and a size unit, and offers to erase everything it drew on
+default size; a point in the current UCS, Enter its origin) and a size
+unit, and offers to erase everything it drew on
 the way out. The whole run is one undo group either way, and `OSMODE`,
 `CMDECHO` and `CLAYER` are restored whether the run finishes, errors, or
 is cancelled with Esc.

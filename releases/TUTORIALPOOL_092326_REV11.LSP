@@ -24,7 +24,7 @@
 ;;;      TUTORIALPOOL_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
 
-(setq tutorial:*version* "092226 REV10")
+(setq tutorial:*version* "092326 REV11")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -71,16 +71,24 @@
 
 ;;; -------------------- topic 2: guided input ----------------------------
 
-(defun tutorial:c2 ( / a b c d)
+(defun tutorial:c2 ( / a b c d grey)
   (tutorial:cap "2  THE GUIDED INPUT")
   (setq a (list 0.0 0.0) b (list 300.0 0.0)
-        c (list 300.0 180.0) d (list 0.0 180.0))
+        c (list 300.0 180.0) d (list 0.0 180.0)
+        ;; a plain ACI grey, the one POOL's guide shipped as.  Its own
+        ;; knob is 'auto, a ROLE and not a colour: handed to setcol as
+        ;; it stands it went into the entmod as (62 . AUTO), which
+        ;; AutoCAD refuses -- and resolved, it is the grey for THIS
+        ;; drafter's screen, which is right for a guide POOL erases
+        ;; and wrong for sample lines that stay on the sheet for
+        ;; whoever opens the drawing next
+        grey 8)
   (pool:line a b "POOL-NOTES")
-  (pool:setcol (entlast) pool:*pv-col*)
+  (pool:setcol (entlast) grey)
   (pool:line b c "POOL-NOTES")
-  (pool:setcol (entlast) pool:*pv-col*)
+  (pool:setcol (entlast) grey)
   (pool:line c d "POOL-NOTES")
-  (pool:setcol (entlast) pool:*pv-col*)
+  (pool:setcol (entlast) grey)
   ;; the side currently "being asked about" -- drawn RED, same colour
   ;; and convention the real guide uses while prompting
   (pool:line d a "POOL-NOTES")
@@ -344,12 +352,18 @@
     (princ))
   (if lzd:begin (lzd:begin "TUTORIALPOOL" tutorial:*version*))
 
-  (if (null pool:*version*)
-      (progn
-        (princ "\nLoad POOL.LSP first -- the tutorial draws with its geometry")
-        (princ "\nhelpers, so it cannot run without it.")
-        (princ))
-      (tutorial:run))
+  (cond
+    ((null pool:*version*)
+     (princ "\nLoad POOL.LSP first -- the tutorial draws with its geometry")
+     (princ "\nhelpers, so it cannot run without it.")
+     (princ))
+    ;; it draws through POOL's helpers, so only in a UCS they can carry
+    ;; a pool into (pool:ucsplan-p): tilted or upside down, its sample
+    ;; arcs came out mirrored off their corners.  Guarded, since a
+    ;; POOL.LSP older than this file has no such helper
+    ((and pool:ucsplan-p (not (pool:ucsplan-p)))
+     (pool:ucsrefuse "TUTORIALPOOL"))
+    (t (tutorial:run)))
   (if lzd:end (lzd:end "TUTORIALPOOL"))
   (princ))
 

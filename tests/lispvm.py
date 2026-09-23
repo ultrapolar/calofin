@@ -416,6 +416,8 @@ def parse(tokens, k=0):
                     raise LispError("bad dotted pair")
                 if isinstance(tail, list):
                     return items + tail, k + 1
+                if tail is NIL:
+                    return items, k + 1
                 if len(items) == 1:
                     return Dot(items[0], tail), k + 1
                 return items[:-1] + [Dot(items[-1], tail)], k + 1
@@ -1015,13 +1017,21 @@ class VM:
     def sf_foreach(self, a):
         var, lst = a[0], self.eval(a[1])
         r = NIL
-        for item in (lst or []):
+        # AutoCAD walks a LIST: a string, a number or a selection set is
+        # refused before the body runs (Python would walk a string's
+        # characters and a set's '<ss>' marker), and a dotted pair's car
+        # is visited before its atom cdr is refused
+        if lst is not NIL and not isinstance(lst, (list, Dot)) or _is_ss(lst):
+            raise LispError(f"bad argument type: listp {lst!r}", self)
+        for item in ([lst.a] if isinstance(lst, Dot) else (lst or [])):
             self.stack.append({var: item})
             try:
                 for f in a[2:]:
                     r = self.eval(f)
             finally:
                 self.stack.pop()
+        if isinstance(lst, Dot):
+            raise LispError(f"bad list: {lst!r}", self)
         return r
 
     def sf_defun(self, a):
@@ -1318,8 +1328,22 @@ BUILTINS[Sym('null')] = lambda vm, a: T if not truthy(a[0]) else NIL
 BUILTINS[Sym('not')] = lambda vm, a: T if not truthy(a[0]) else NIL
 BUILTINS[Sym('numberp')] = lambda vm, a: (T if isinstance(a[0], (int, float))
                                           else NIL)
-BUILTINS[Sym('listp')] = lambda vm, a: (T if (a[0] is NIL or
-                                              isinstance(a[0], list)) else NIL)
+def _consp(v):
+    """A cons cell as AutoLISP has them: a non-empty list or a dotted
+    pair.  A selection set is a list in disguise here and an atom in
+    AutoCAD, so it is not one."""
+    return isinstance(v, Dot) or (isinstance(v, list) and bool(v)
+                                  and not _is_ss(v))
+
+
+# (listp '(8 . "0")) is T in AutoCAD: a dotted pair is a list.  Answered
+# nil, a tool's (if (listp x) ...) took the atom branch for every DXF
+# group pair it was handed, and LAZDIAG's encoder wrote a form store's
+# (key . value) as a Python repr.  (listp ss) is nil: a set is an atom.
+BUILTINS[Sym('listp')] = lambda vm, a: (T if (a[0] is NIL or a[0] == []
+                                              or _consp(a[0])) else NIL)
+BUILTINS[Sym('vl-consp')] = lambda vm, a: T if _consp(a[0]) else NIL
+BUILTINS[Sym('atom')] = lambda vm, a: NIL if _consp(a[0]) else T
 BUILTINS[Sym('zerop')] = lambda vm, a: T if num(a[0]) == 0 else NIL
 BUILTINS[Sym('minusp')] = lambda vm, a: T if num(a[0]) < 0 else NIL
 BUILTINS[Sym('boundp')] = lambda vm, a: (T if vm.get(a[0]) is not NIL
@@ -1341,6 +1365,8 @@ def _type(vm, a):
         return Sym('real')
     if isinstance(v, Ent):
         return Sym('ename')
+    if isinstance(v, Dot):
+        return Sym('list')
     if isinstance(v, list):
         # A selection set is a list in disguise here, but it is not one
         # in AutoCAD and code that asks is entitled to the real answer:
@@ -2731,6 +2757,21 @@ def _ucs_angle(f):
     return 0.0 if f is None else math.atan2(f.x[1], f.x[0])
 
 
+def _dim_hdir(f):
+    """A DIMENSION's group 51 for one drawn in plan UCS F, or [] in World.
+    DXF Reference, DIMENSION: "All dimension types have an optional 51
+    group code, which indicates the horizontal direction for the
+    dimension entity ... the negative of the angle between the OCS X axis
+    and the UCS X axis."  It is what a dimension remembers of the UCS it
+    was made in -- dragging it later does not change it -- so a reader
+    can tell a spa drawn in a turned UCS from one drawn square to World
+    by its dimensions alone.  World writes none, as AutoCAD omits it."""
+    t = _ucs_angle(f)
+    if abs(t) < 1e-12:
+        return []
+    return [Dot(51, (-t) % (2.0 * math.pi))]
+
+
 def _placing(vm):
     """True while the sweep's 'placed' clicks are in force: a scripted
     click is then a World spot, handed over in UCS numbers."""
@@ -3048,6 +3089,7 @@ def _command(vm, a):
             else:
                 meas = math.dist(p1[:2], p2[:2])
             vm.entdata[e].append(Dot(42, meas))
+            vm.entdata[e].extend(_dim_hdir(ucs))
             if axis is not None:
                 vm.entdata[e].append(
                     Dot(50, (axis + _ucs_angle(ucs)) % (2.0 * math.pi)))
@@ -3118,7 +3160,7 @@ def _command(vm, a):
     # it was picked at in 15 -- that pair is how the tools recognize one
     # (ad:raddimpts, AutoDim.lsp:312), so it is what the VM writes.
     if a and a[0] == '_.DIMRADIUS':
-        _plan_ucs(vm, a[0])
+        rucs = _plan_ucs(vm, a[0])
         arc = next((x[0] for x in a[1:]
                     if isinstance(x, list) and len(x) == 2
                     and isinstance(x[0], Ent)), None)
@@ -3151,7 +3193,8 @@ def _command(vm, a):
                              Dot(3, vm.sysvars.get('DIMSTYLE', 'STANDARD')),
                              [10] + [float(v) for v in ctr[:2]] + [0.0],
                              [15] + [float(v) for v in pt(on)[:2]] + [0.0],
-                             Dot(40, float(rad)), Dot(42, float(rad))]
+                             Dot(40, float(rad)), Dot(42, float(rad))] + \
+                _dim_hdir(rucs)
             # AutoCAD stores a per-dimension DIMGAP override in xdata,
             # and a NEGATIVE gap is how it draws the text in a BOX --
             # which is what a corner mark's "?" is drawn with.  The VM
@@ -3204,13 +3247,13 @@ def _enter(vm, kind, prompt):
     0 are set and the user presses Enter, a null string is returned'
     (AutoLISP Reference, initget) -- so (initget 129) or (initget (+ 7
     128)) hands back "" for Enter, which UPADOVER and SPA rely on.
-    Without bit 1 Enter is nil.  getpoint and getcorner do not refuse
-    under bit 1 alone here -- not modelled yet -- but do return "" under
-    1 + 128."""
+    Without bit 1 Enter is nil.  getpoint and getcorner are no
+    different: the reference lists bit 1 for both, and a (initget 1)
+    (getpoint) asks again in AutoCAD where the VM used to hand back nil."""
     bits = vm.initget_bits or 0
     if bits & 1 and bits & 128:
         return ""
-    if bits & 1 and kind not in ('getpoint', 'getcorner'):
+    if bits & 1:
         raise LispError(f"{kind}: Enter not allowed at {prompt!r}", vm)
     return NIL
 

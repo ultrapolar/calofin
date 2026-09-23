@@ -238,10 +238,11 @@ regenerated and your edit will vanish.
 **Every command in this tree reports its failures, and a new one is not
 finished until it does.** A failure is not over when the handler prints
 a line: it is over when the drafter has a file they can send in. That
-is `lisp/lazdiag/LAZDIAG.lsp`, and five guarded call sites reach it:
+is `lisp/lazdiag/LAZDIAG.lsp`, and six guarded call sites reach it:
 
 ```lisp
 (if lzd:begin  (lzd:begin  "TOOLNAME" *toolname-version*))      ; top of the command
+(if lzd:state  (lzd:state '(tool:*form*)))                      ; after it, in a command a FORM can run
 (if lzd:report (lzd:report "TOOLNAME" *toolname-version* msg))  ; in *error*
 (if lzd:end    (lzd:end "TOOLNAME"))                            ; before the command's (princ)
 (if lzd:watch  (lzd:watch ss) ss)                               ; after a selection
@@ -257,6 +258,19 @@ LAZDIAG is loaded or not, so dropping one after a
 `cond` clause returns. `check_lazdiag` fails an injected call that lands
 where it would change a meaning -- last in a body, as an `(if ...)` else
 branch, or as a term of an `(and ...)`.
+
+**A form's answers are inputs too.** LAZFORM, LAZSPA, LAZSTEP,
+LAZSIDE and the palette fill a tool's store (`pool:*form*`,
+`*cs-form*` ...) and call the command through its
+`X:run-with-answers`, and the questions the store answers are never
+asked -- so a transcript of the prompts alone replays a run nobody
+made. `lzd:state` writes the store as the run was handed it, one
+`= pool:*form* -> (('SHAPE . "L") ...)` line, and the probe puts it
+back before it replays and varies each entry like a typed answer.
+Which store is not a judgement -- `run-with-answers` sets one symbol
+and calls one command -- so `check_lazdiag --fix` wires it; a run
+flag a form also sets (POOL's `pool:*hasbottom*`) is added to the
+list by hand.
 
 **Every answer the drafter gives is in the transcript**, not only the
 ask helpers'. A `(setq v (getX ...))` that is a body statement takes

@@ -160,8 +160,11 @@ def report_lines(ents):
 
 HEADER_KEYS = ("tool", "build", "lazdiag", "message", "last step",
                "entities", "selected", "picked points", "run started",
-               "failed at")
+               "failed at", "UCSORG", "UCSXDIR")
 ASK = re.compile(r"^\s*\? (.*?)\s{2,}-> (.*)$")
+#: what the run was handed before its first prompt -- a form's store,
+#: a run flag -- as lzd:state writes it: "  = pool:*form*   -> (...)"
+STATE = re.compile(r"^\s*= (\S+)\s{2,}-> (.*)$")
 SELECTED = re.compile(r"(\d+) entities handed to the run = the first (\d+) ")
 #: "POOL v2.7", "POOL 082726 REV17" (the older dated banner) or
 #: "POOL (no version banner)"
@@ -182,6 +185,48 @@ def rev_of(version):
     return version.rsplit("REV", 1)[-1]
 
 
+class FormInput:
+    """One entry of a store the run was handed (lzd:state): the form's
+    answer to KEY, which the tool took instead of asking.  It varies
+    like a typed answer -- the sheet's 0 is as likely a culprit as a
+    typed one -- by rebuilding the store with this one entry changed."""
+
+    selection = False
+
+    def __init__(self, name, j, key, value):
+        self.name, self.j, self.key, self.value = name, j, key, value
+        self.label = "form: %s" % key
+
+    def vary(self, state, w):
+        out = []
+        for name, v in state:
+            if name == self.name:
+                v = list(v)
+                v[self.j] = Dot(v[self.j].a, w) if w is not None else [v[self.j].a]
+            out.append((name, v))
+        return out
+
+
+def form_inputs(state):
+    """Every (key . value) of every store in STATE, as FormInputs.  An
+    entry written (KEY) -- the form's NA -- is an input too, but has no
+    value to vary."""
+    out = []
+    for name, v in state:
+        if not isinstance(v, list):
+            continue
+        for j, e in enumerate(v):
+            if isinstance(e, Dot):
+                out.append(FormInput(name, j, fmt_key(e.a), e.b))
+            elif isinstance(e, list) and len(e) == 1:
+                out.append(FormInput(name, j, fmt_key(e[0]), None))
+    return out
+
+
+def fmt_key(k):
+    return str.__str__(k) if isinstance(k, str) else fmt(k)
+
+
 class Answer:
     """One transcript line: what was asked, and what came back."""
 
@@ -199,6 +244,7 @@ def parse_report(lines):
     """The header pairs and the transcript, out of the report's text."""
     head = {}
     answers = []
+    state = []
     in_run = False
     for l in lines:
         if not in_run:
@@ -217,6 +263,9 @@ def parse_report(lines):
         m = ASK.match(l) if in_run else None
         if m:
             answers.append(Answer(m.group(1).strip(), m.group(2)))
+        m = STATE.match(l) if in_run else None
+        if m and m.group(1).lower() not in (n for n, _ in state):
+            state.append((m.group(1).lower(), m.group(2)))
     tool, version = None, None
     m = TOOL.match(head.get("tool", ""))
     if m:
@@ -228,13 +277,14 @@ def parse_report(lines):
         nsel, nselp = int(m.group(1)), int(m.group(2))
     return {"tool": tool, "version": version, "head": head,
             "message": head.get("message", ""), "answers": answers,
+            "state": [(n, decode(e, raw=True)) for n, e in state],
             "nsel": nsel, "nselp": nselp,
             "selected_known": "selected" in head}
 
 
 # ------------------------------------------- the transcript's encoding
 # lzd:enc, read back: nil, T, 12, 12.5, "text" (quotes escaped \"),
-# (x y z), <ent>, (<ent> (x y z)), 'SYM, (a b c).
+# (x y z), <ent>, (<ent> (x y z)), 'SYM, (a b c), (a . b).
 
 class EntPick:
     """An entsel answer: the entity nearest the recorded click, chosen
@@ -262,6 +312,7 @@ class EntPick:
 
 
 ENT = object()
+DOT = object()
 
 
 def tokenize(s):
@@ -301,7 +352,10 @@ def number(t):
     return None
 
 
-def decode(enc):
+def decode(enc, raw=False):
+    """An answer as the VM takes it.  RAW is for a value that is set
+    rather than answered -- a form's store: its lists stay lists, since
+    nothing prompts for them, and a (key . value) is a dotted pair."""
     toks = tokenize(enc)
     pos = [0]
 
@@ -315,6 +369,10 @@ def decode(enc):
             while pos[0] < len(toks) and toks[pos[0]] != ")":
                 items.append(parse())
             pos[0] += 1
+            if len(items) == 3 and items[1] is DOT:
+                return Dot(items[0], items[2])
+            if raw:
+                return items
             if items and items[0] is ENT:
                 pt = items[1] if len(items) > 1 and isinstance(items[1], tuple) else None
                 return EntPick(pt)
@@ -327,6 +385,8 @@ def decode(enc):
             return None
         if t == "nil":
             return None
+        if t == ".":
+            return DOT
         if t == "<miss>":
             # a click on nothing (LAZDIAG writes it for a nil with
             # ERRNO 7): replayed as one, so the tool's miss branch --
@@ -339,7 +399,10 @@ def decode(enc):
         if t.startswith('"'):
             return re.sub(r"\\(.)", r"\1", t[1:-1])
         if t.startswith("'"):
-            return Sym(t[1:])
+            # lzd:enc writes a symbol as princ does, upper case; the VM
+            # reads source lower-cased, and 'POOL-BACK must be the same
+            # symbol as the one the tool compares against
+            return Sym(t[1:].lower())
         v = number(t)
         return t if v is None else v
 
@@ -516,10 +579,41 @@ def norm(msg):
     return re.sub(r"\s+", " ", (msg or "").strip().lower())
 
 
-def build_vm(tool_path, layers, ents, nselp, with_output):
+def ucs_of(head):
+    """The UCS the report's run was drawn in, as (origin, angle) for
+    VM.set_ucs -- or None when it was World or the report does not say
+    (an older one) -- and a note when it cannot be replayed.  The
+    transcript's clicks are UCS numbers, as getpoint answered them; the
+    copied geometry is World.  Replayed in World, every click of a run
+    made under a UCS on the pool's corner lands that far off it, and
+    the control run fails to reproduce for a reason that is not the
+    tool's.  Only a PLAN UCS can be rebuilt from UCSORG and UCSXDIR: a
+    tilted one needs UCSYDIR too, which the report does not carry."""
+    org = decode(head.get("UCSORG", "")) if head.get("UCSORG") else None
+    xdir = decode(head.get("UCSXDIR", "")) if head.get("UCSXDIR") else None
+    if not (isinstance(org, tuple) and isinstance(xdir, tuple)):
+        return None, ""
+    if abs(xdir[2]) > 1e-9:
+        return None, ("the run's UCS is tilted and the report carries no "
+                      "UCSYDIR, so it replays in World")
+    ang = math.atan2(xdir[1], xdir[0])
+    if max(abs(c) for c in org) < 1e-9 and abs(ang) < 1e-12:
+        return None, ""
+    return (list(org), ang), ""
+
+
+def build_vm(tool_path, layers, ents, nselp, with_output, ucs=None,
+             state=()):
     vm = ReplayVM()
+    if ucs:
+        vm.set_ucs(ucs[0], ucs[1])
     vm.loads(STUBS)
     vm.load(str(tool_path))
+    # what the run was handed, put back AFTER the load -- the file sets
+    # its own store to nil as it loads -- exactly as a form's
+    # X:run-with-answers leaves it before it calls the command
+    for name, v in state:
+        vm.globals[Sym(name)] = copy_value(v)
     vm.tables["LAYER"].update(l for l in layers if l)
     vm.tables["LAYER"].update(e["layer"] for e in ents)
     n = 0
@@ -547,8 +641,19 @@ def build_vm(tool_path, layers, ents, nselp, with_output):
     return vm
 
 
-def run_once(tool_path, command, layers, ents, nselp, answers, with_output):
-    vm = build_vm(tool_path, layers, ents, nselp, with_output)
+def copy_value(v):
+    """A fresh copy of a store: the tool takes its answers OUT as it
+    reads them, so each run needs one of its own."""
+    if isinstance(v, list):
+        return [copy_value(x) for x in v]
+    if isinstance(v, Dot):
+        return Dot(copy_value(v.a), copy_value(v.b))
+    return v
+
+
+def run_once(tool_path, command, layers, ents, nselp, answers, with_output,
+             ucs=None, state=()):
+    vm = build_vm(tool_path, layers, ents, nselp, with_output, ucs, state)
     script = [a.value for a in answers if not a.selection]
     try:
         vm.run("c:" + command, script)
@@ -701,7 +806,16 @@ def probe(report_path, tool_path=None, cap=DEFAULT_MAX, with_output=False,
                          % report_path)
     command, version = rep["tool"], rep["version"]
     path, note = find_tool(command, version, tool_path)
+    ucs, ucs_note = ucs_of(rep["head"])
+    if ucs_note:
+        note += "; " + ucs_note
+    elif ucs:
+        note += ("; replayed in the run's UCS (origin %s, turned %.4g deg)"
+                 % (tuple(round(c, 4) for c in ucs[0]),
+                    math.degrees(ucs[1])))
     answers = rep["answers"]
+    state = rep["state"]
+    forms = form_inputs(state)
     nselp = rep["nselp"]
     if not rep["selected_known"]:
         # a report from before the count was written: every copied
@@ -712,6 +826,8 @@ def probe(report_path, tool_path=None, cap=DEFAULT_MAX, with_output=False,
                     source=str(path), note=note, message=rep["message"],
                     answers=[{"label": a.label, "value": a.enc}
                              for a in answers if not a.selection],
+                    form=[{"store": f.name, "key": f.key, "value": fmt(f.value)}
+                          for f in forms],
                     selection_entities=nselp)
 
     res.say("PROBE  %s" % report_path.name)
@@ -720,14 +836,26 @@ def probe(report_path, tool_path=None, cap=DEFAULT_MAX, with_output=False,
             else "  from      %s" % path)
     res.say("  note      %s" % note)
     res.say("  failure   %s" % rep["message"])
-    res.say("  handed    %d input entities%s, %d answers%s"
+    res.say("  handed    %d input entities%s, %d answers%s%s"
             % (nselp, " (+ the run's output)" if with_output else "",
                sum(1 for a in answers if not a.selection),
                (" and %d selection(s)" % sum(1 for a in answers if a.selection))
-               if any(a.selection for a in answers) else ""))
+               if any(a.selection for a in answers) else "",
+               (", and %d from a form (%s)"
+                % (len(forms), ", ".join(n for n, _ in state)))
+               if state else ""))
     res.say()
     res.say("THE ANSWERS, AS RECORDED")
     k = 0
+    for f in forms:
+        # first, because the tool took them first: a form's answers are
+        # in the store before the command's first line runs
+        k += 1
+        res.say("  %3d  %-40s %s" % (k, f.label[:40],
+                                     "NA" if f.value is None else fmt(f.value)))
+    for n, v in state:
+        if not isinstance(v, list):
+            res.say("       %-40s %s" % ("(set) " + n, fmt(v)))
     for a in answers:
         if a.selection:
             res.say("       %-40s %s" % ("(selection)", a.enc))
@@ -737,7 +865,7 @@ def probe(report_path, tool_path=None, cap=DEFAULT_MAX, with_output=False,
     res.say()
 
     common = (path, command, layers, ents, nselp)
-    control = run_once(*common, answers, with_output)
+    control = run_once(*common, answers, with_output, ucs, state)
     res.data["control"] = {"kind": control.kind, "message": control.message,
                            "asked": control.asked}
     res.say("THE CONTROL RUN (the answers exactly as recorded)")
@@ -771,36 +899,43 @@ def probe(report_path, tool_path=None, cap=DEFAULT_MAX, with_output=False,
         res.data["probes"] = []
         return res
 
-    todo = plan([a for a in answers if not a.selection], cap)
     plain = [a for a in answers if not a.selection]
+    # the form's entries first, numbered as THE ANSWERS lists them
+    inputs = forms + plain
+    todo = plan(inputs, cap)
     rows = {}
     res.say("THE PROBES (one answer changed at a time, %d runs)" % len(todo))
     probes = []
     for i, w in todo:
-        varied = list(plain)
-        varied[i] = Answer(plain[i].label, plain[i].enc)
-        varied[i].value = w
-        # the selection markers keep their places for the replay's sake
-        replay, j = [], 0
-        for a in answers:
-            if a.selection:
-                replay.append(a)
-            else:
-                replay.append(varied[j])
-                j += 1
-        out = run_once(*common, replay, with_output)
+        if i < len(forms):
+            st, replay = forms[i].vary(state, w), answers
+        else:
+            p_i = i - len(forms)
+            varied = list(plain)
+            varied[p_i] = Answer(plain[p_i].label, plain[p_i].enc)
+            varied[p_i].value = w
+            # the selection markers keep their places for the replay's sake
+            replay, j = [], 0
+            for a in answers:
+                if a.selection:
+                    replay.append(a)
+                else:
+                    replay.append(varied[j])
+                    j += 1
+            st = state
+        out = run_once(*common, replay, with_output, ucs, st)
         rows.setdefault(i, []).append((w, out))
-        probes.append({"answer": i + 1, "label": plain[i].label,
+        probes.append({"answer": i + 1, "label": inputs[i].label,
                        "value": fmt(w), "kind": out.kind,
                        "message": out.message})
         res.say("  %3d  %-30s = %-14s %s"
-                % (i + 1, plain[i].label[:30], fmt(w),
+                % (i + 1, inputs[i].label[:30], fmt(w),
                    ("same failure" if out.same_as(control) else str(out))[:70]))
     res.data["probes"] = probes
     res.say()
     res.say("WHAT THAT SAYS")
     verdicts = []
-    for i, a in enumerate(plain):
+    for i, a in enumerate(inputs):
         if i not in rows:
             continue
         v = verdict(control, rows[i])

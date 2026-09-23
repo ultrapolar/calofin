@@ -125,9 +125,10 @@
 ;;;
 ;;; THE SIDE PROFILE
 ;;;   The flight is drawn as an alternating drop/tread silhouette in
-;;;   world X/Y, always descending to the LEFT of the picked top of the
-;;;   first tread and ending on the last depth - so the steps rise to
-;;;   the right, the way the shop's own elevations read.
+;;;   the current UCS, always descending to the LEFT of the picked top
+;;;   of the first tread and ending on the last depth - so the steps
+;;;   rise to the right, the way the shop's own elevations read, and
+;;;   stand upright in a turned UCS, where the dims measure the drops.
 ;;;   The dims climb with them, up and to the right, on the high side:
 ;;;     * every depth is a dim of its own, standing the same distance
 ;;;       right of the corner its drop lands on, so they step out with
@@ -363,7 +364,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.20") ; printed on load and at command start so a
+(setq *ns-version* "v3.21") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -874,6 +875,13 @@
                  (cons 10 (list (car a) (cadr a) 0.0))
                  (cons 11 (list (car b) (cadr b) 0.0)))))
 
+;; A LINE between two points given in the current UCS.  entmake keeps
+;; World, so each end goes through trans on the way in.  The side
+;; profile is laid out in the drafter's UCS, where its forced "_V" dims
+;; measure - built in World under a turned UCS, every depth read short.
+(defun ns-uline (a b)
+  (ns-mkline (trans a 1 0) (trans b 1 0)))
+
 ;; Fillet arc of radius R about centre O between tangent points T1 and
 ;; T2.  The minor arc is taken, so a quarter-round comes out as one.
 (defun ns-mkfillet (o r t1 t2 / a1 a2 sw)
@@ -984,16 +992,17 @@
 ;; measures the DROP between them while its extension lines still hook
 ;; the corners themselves.  Cleaner than dimensioning the riser line,
 ;; which leaves the dim marooned beside the step instead of reading
-;; across to it.  Points are WCS.
+;; across to it.  Points are UCS, as (command) reads them: "_V" is
+;; the UCS Y, so the profile they come from is built in the UCS too.
 (defun ns-dimv (style a b thru / oldl)
   (ns-setstyle style)
   (if (and *cs-dim-layer* (ns-layerok *cs-dim-layer*))
     (progn (setq oldl (getvar "CLAYER"))
            (setvar "CLAYER" *cs-dim-layer*)))
-  (command "_.DIMLINEAR" "_non" (trans a 0 1)
-                         "_non" (trans b 0 1)
+  (command "_.DIMLINEAR" "_non" a
+                         "_non" b
                          "_V"
-                         "_non" (trans thru 0 1))
+                         "_non" thru)
   (if oldl (setvar "CLAYER" oldl)))
 
 ;;; ---- the corner mark of STANDARDS.md section 2 ------------------------
@@ -1863,6 +1872,7 @@
     (if lzd:report (lzd:report "NORMIESTEP" *ns-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "NORMIESTEP" *ns-version*))
+  (if lzd:state (lzd:state '(*ns-form*)))
   (ns-fprune)
 
   ;; remove the most recently drawn step and roll the state back
@@ -2567,8 +2577,8 @@
   ;; ---- 6b. side profile ------------------------------------------------
   ;; The plan run gave each step's STEP TREAD; here each step's STEP
   ;; DEPTH - its vertical drop - is asked, top step first, and the
-  ;; staircase silhouette is drawn in world X/Y off a picked wall-top
-  ;; point.  Still inside the command's undo group, and its dims use
+  ;; staircase silhouette is drawn in the drafter's UCS off a picked
+  ;; wall-top point.  Still inside the command's undo group, and its dims use
   ;; the depth dim style like the tread chain.
   (if (> drawn 0)
     (progn
@@ -2657,11 +2667,17 @@
           (if (null wpu)
             (princ "\nNo point picked - no side profile drawn.")
             (progn
-              ;; The alternating drop/tread silhouette in world X/Y,
-              ;; keeping the corner down its high side at every level:
-              ;; the pick, then the foot of each drop.  Those corners
-              ;; are what the dims bind to.
-              (setq wpt     (ns-flat (trans wpu 1 0))
+              ;; The alternating drop/tread silhouette in the
+              ;; drafter's UCS, keeping the corner down its high side
+              ;; at every level: the pick, then the foot of each drop.
+              ;; Those corners are what the dims bind to.  UCS numbers
+              ;; throughout, and World only as a line is made: "down
+              ;; and to the left" is the drafter's, and the "_V" dims
+              ;; measure the drop.  Laid out in World under a UCS
+              ;; turned 30 degrees, a 7.5 drop was dimensioned 6.495.
+              ;; WPT is WPU flattened - still UCS numbers, not the
+              ;; World copy it once was.
+              (setq wpt     (ns-flat wpu)
                     totrun  (apply '+ treads)
                     totdrop (apply '+ drops)
                     px0     (car wpt)
@@ -2672,17 +2688,17 @@
               (foreach tt treads
                 (setq dv (nth k drops))
                 ;; the drop, straight down ...
-                (ns-mkline (list cx cy 0.0) (list cx (- cy dv) 0.0))
+                (ns-uline (list cx cy 0.0) (list cx (- cy dv) 0.0))
                 (setq cy   (- cy dv)
                       cnrs (cons (list cx cy 0.0) cnrs))
                 ;; ... then the tread, running left - no dim of its
                 ;; own: the depths and the overall depth say it all
-                (ns-mkline (list cx cy 0.0) (list (- cx tt) cy 0.0))
+                (ns-uline (list cx cy 0.0) (list (- cx tt) cy 0.0))
                 (setq cx (- cx tt)
                       k  (1+ k)))
               ;; the last depth: the drop after the last tread
               (setq dv (nth k drops))
-              (ns-mkline (list cx cy 0.0) (list cx (- cy dv) 0.0))
+              (ns-uline (list cx cy 0.0) (list cx (- cy dv) 0.0))
               (setq cy   (- cy dv)
                     cnrs (reverse (cons (list cx cy 0.0) cnrs)))
               (if dimflag

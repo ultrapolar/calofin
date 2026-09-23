@@ -570,6 +570,38 @@ def _c1():
     return ok, got
 
 
+@pin('C1b', "a dimension remembers the UCS it was made in: group 51 "
+     "is the negative of the UCS's turn, on DIMLINEAR and DIMRADIUS alike, "
+     "and a dimension made in World carries none",
+     "DXF Reference, DIMENSION: 'All dimension types have an optional 51 "
+     "group code, which indicates the horizontal direction for the "
+     "dimension entity ... the negative of the angle between the OCS X "
+     "axis and the UCS X axis'")
+def _c1b():
+    vm = moved()
+    vm.globals[Sym('t:a')] = [0.0, 0.0, 0.0]
+    vm.globals[Sym('t:b')] = [100.0, 40.0, 0.0]
+    vm.globals[Sym('t:l')] = [50.0, -20.0, 0.0]
+    ev(vm, '(command "_.DIMLINEAR" t:a t:b "_H" t:l)')
+    lin = grp(vm, vm.entities[-1], 51)
+    arc = ent(vm, '(entmake (list \'(0 . "ARC") \'(8 . "0") '
+              '(list 10 1000.0 500.0 0.0) \'(40 . 10.0) \'(50 . 0.0) '
+              '(cons 51 pi)))')
+    vm.globals[Sym('t:c')] = arc
+    ev(vm, '(command "_.DIMRADIUS" (list t:c \'(0.0 10.0 0.0)) '
+           '\'(0.0 30.0 0.0))')
+    rad = grp(vm, vm.entities[-1], 51)
+    world = VM()
+    ev(world, '(command "_.DIMLINEAR" \'(0.0 0.0 0.0) \'(100.0 0.0 0.0) '
+              '"_H" \'(50.0 -20.0 0.0))')
+    w51 = grp(world, world.entities[-1], 51)
+    want = (-math.radians(DEG)) % (2.0 * math.pi)
+    got = (lin, rad, w51)
+    return (lin is not None and abs(lin - want) < 1e-9
+            and rad is not None and abs(rad - want) < 1e-9
+            and w51 is None), got
+
+
 @pin('C2', "ROTATE's base point is read in the UCS: a LINE turned 90 "
      "degrees about UCS (0 0) turns about UCSORG in the world",
      COMMAND_DOC)

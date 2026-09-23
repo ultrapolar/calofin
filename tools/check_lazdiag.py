@@ -279,6 +279,7 @@ def handlers(src, mask, path):
                 begin_at = end
         out.append({
             "name": tool_name(body, owner, path),
+            "owner": owner,
             "param": em.group(1),            # msg / m
             "cmd_lo": lo, "cmd_hi": hi,
             "err_lo": err_lo, "err_hi": err_hi,
@@ -636,7 +637,7 @@ def select_sites(src, mask):
 # an else branch so the whole form evaluates to the variable either way.
 # begin and report are not, so they are checked here.
 
-INJECTED = re.compile(r"\(if lzd:(watch|ask|report|begin|end) ")
+INJECTED = re.compile(r"\(if lzd:(watch|ask|report|begin|end|state) ")
 
 #: an atom or a form: a body's last item is often a bare symbol (the
 #: `ss` that LINGUTTER's lg:highlight returns), and a scan that counted
@@ -777,6 +778,50 @@ def report_slot(src, mask, c):
     return c["err_hi"] - 1
 
 
+# ------------------------------------------------------- what a form hands in
+# A form -- LAZFORM, LAZSPA, LAZSTEP, LAZSIDE, the palette -- answers a
+# tool's questions by filling the tool's store and calling the command
+# through its X:run-with-answers, and the questions it answered are
+# never asked.  Those answers are the run's inputs as much as the typed
+# ones, so the command writes its store into the transcript at the top
+# (lzd:state), or a report from a form-driven run replays a run nobody
+# made.  Which store is not a judgement: run-with-answers sets exactly
+# one symbol and calls exactly one command, and that is read here.
+# More symbols in the list -- POOL's pool:*nobottom* and pool:*hasbottom*
+# run flags, which a form also sets -- are the tool's to add by hand.
+
+RUN_WITH = re.compile(
+    r"\(defun\s+[^\s()]*run-with-answers\s*\(\s*([\w-]+)\s*\)\s*"
+    r"\(setq\s+([^\s()]+)\s+\1\s*\)\s*\((c:[\w-]+)\s*\)", re.I)
+STATE_CALL = re.compile(r"\(if lzd:state \(lzd:state '\(([^()]*)\)\)\)")
+BEGIN_CALL = re.compile(r"\(if lzd:begin ")
+
+
+def form_stores(src, mask):
+    """{command defun, lower-cased: the store its form entry fills}."""
+    return {m.group(3).lower(): m.group(2)
+            for m in RUN_WITH.finditer(src) if mask[m.start()]}
+
+
+def state_edit(src, mask, c, store):
+    """None when the command already hands STORE to lzd:state, else the
+    edit that makes it: add the store to an lzd:state list the command
+    has, or put a new call straight after its lzd:begin."""
+    lo, hi = c["begin_at"], c["cmd_hi"]
+    m = STATE_CALL.search(src, lo, hi)
+    if m:
+        names = m.group(1).split()
+        if store.lower() in (n.lower() for n in names):
+            return None
+        return (m.start(1), " ".join(names + [store]), m.end(1))
+    b = BEGIN_CALL.search(src, lo, hi)
+    if not b:
+        return ()          # the begin is missing too: wired with it
+    end = form_end(src, mask, b.start())
+    return (end, "\n%s(if lzd:state (lzd:state '(%s)))"
+            % (indent_of(src, b.start()), store))
+
+
 # ------------------------------------------------------------------ fixing
 
 def wire(path, src, do_fix):
@@ -784,6 +829,7 @@ def wire(path, src, do_fix):
     mask = code_mask(src)
     ver = version_global(src)
     cmds = handlers(src, mask, path)
+    stores = form_stores(src, mask)
     missing, edits = [], []
     for c in cmds:
         has_report = "lzd:report" in c["body"]
@@ -810,8 +856,24 @@ def wire(path, src, do_fix):
         if not has_begin:
             at = c["begin_at"]
             pad = indent_of(src, c["err_lo"])
-            edits.append((at, '\n%s(if lzd:begin (lzd:begin "%s" %s))'
-                          % (pad, c["name"], ver)))
+            store = stores.get(c["owner"].lower())
+            edits.append((at, '\n%s(if lzd:begin (lzd:begin "%s" %s))%s'
+                          % (pad, c["name"], ver,
+                             ("\n%s(if lzd:state (lzd:state '(%s)))"
+                              % (pad, store)) if store else "")))
+    for c in cmds:
+        # the form's answers, written at the top of the run: see
+        # form_stores.  A command whose begin was just wired got its
+        # state call with it, above.
+        store = stores.get(c["owner"].lower())
+        if not store:
+            continue
+        e = state_edit(src, mask, c, store)
+        if e is None or e == ():
+            continue
+        missing.append("%s <- %s (form answers)" % (c["name"], store))
+        if do_fix:
+            edits.append(e)
     for w in select_sites(src, mask):
         # already wired if the watch call is the next thing after the
         # selection -- which is exactly where this puts it, so a second

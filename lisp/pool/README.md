@@ -82,7 +82,13 @@ A ---------- B        cross:  A-C and B-D
    first, then the rarely-used ones (type `L` for a true L, `LA` for
    a lazy L, `RO` for a Roman, `OC` for an octagon, `ROU` for a
    round, `MU` for a mutt).
-3. Insertion base point.
+3. Insertion base point. The pool is laid out from it along the
+   current UCS: in a UCS turned to the lot the pool is square to the
+   lot, and its outline and its dimensions stay together. That holds
+   for any UCS that is only moved and turned in plan; one that is
+   tilted, or upside down (its Z pointing down), is refused before
+   the first question -- its corner arcs would come out mirrored.
+   `POOLDEMO` and `TUTORIALPOOL` refuse it too.
 4. **Every perimeter measurement first** — side lengths, end lengths,
    and the shape's own perimeter letters (an oval's total length and
    end radii, a Grecian's end diagonals and widths, a Roman's `S`/`S1`

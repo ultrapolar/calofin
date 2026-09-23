@@ -62,6 +62,7 @@ SLOW = {
     "test_dialog_actions.py": 80, "test_lazform.py": 75,
     "test_lazpanel.py": 60, "test_constellation.py": 55,
     "test_oasis.py": 45, "test_cabhd.py": 45,
+    "test_ucsfix_poolspa.py": 30,
     "test_abhd_runtime.py": 25, "test_ablobf.py": 20,
 }
 

@@ -705,6 +705,20 @@ def test_tilted_ucs_is_refused():
     print("ok  tilted UCS  -> refused before a single question is asked")
 
 
+def test_upside_down_ucs_is_refused():
+    """A plan UCS turned upside down -- Z = -1, Y clockwise of X -- lies
+    flat but mirrors every arc carried across by adding the UCS turn, so
+    it is refused like a tilted one.  The old test took |Z| = 1 as flat
+    and let it through."""
+    vm = newvm()
+    vm.set_ucs((0.0, 0.0, 0.0), xdir=(1.0, 0.0, 0.0), ydir=(0.0, -1.0, 0.0))
+    vm.run('c:OASIS', [])
+    assert vm.prompts == [], vm.prompts
+    assert made(vm, 'ARC') == []
+    assert any('upside down' in p for p in vm.printed), vm.printed[-3:]
+    print("ok  upside-down UCS -> refused, and says why")
+
+
 
 def test_radius_dim_text_lands_outside_the_water():
     """The leader is dragged away from the centre on a bulge and towards
@@ -3172,6 +3186,7 @@ if __name__ == '__main__':
     test_overrun_names_the_arc_that_is_out()
     test_arcs_follow_a_rotated_ucs()
     test_tilted_ucs_is_refused()
+    test_upside_down_ucs_is_refused()
     test_radius_dim_text_lands_outside_the_water()
     test_overall_dims_hook_the_touch_points_at_the_right_standoff()
     test_every_measurement_rejects_zero_and_negative()

@@ -114,15 +114,17 @@
 ;;;
 ;;; THE SIDE PROFILE
 ;;;   The flight is drawn as an alternating drop/tread silhouette in
-;;;   world X/Y, always descending to the LEFT of the picked top of the
-;;;   WALL and ending on the last depth - so the steps rise to the
-;;;   right, the way the shop's own elevations read.  It starts where
-;;;   the run starts: the pick is the top of the wall, the first drop
-;;;   is the drop at the wall, and the first tread is the flat between
-;;;   the wall and the first chord.  Every tread after that is the gap
-;;;   between two chords, so the flight covers the same distances the
-;;;   plan's tread chain does, in the same order.  (In the curve modes
-;;;   the run starts at the curve instead, and the flight says so.)
+;;;   the current UCS, always descending to the LEFT of the picked top
+;;;   of the WALL and ending on the last depth - so the steps rise to
+;;;   the right, the way the shop's own elevations read, and stand
+;;;   upright in a turned UCS, where the dims measure the drops.  It
+;;;   starts where the run starts: the pick is the top of the wall, the
+;;;   first drop is the drop at the wall, and the first tread is the
+;;;   flat between the wall and the first chord.  Every tread after
+;;;   that is the gap between two chords, so the flight covers the same
+;;;   distances the plan's tread chain does, in the same order.  (In
+;;;   the curve modes the run starts at the curve instead, and the
+;;;   flight says so.)
 ;;;   The dims climb with them, up and to the right, on the high side:
 ;;;     * every depth is a dim of its own, standing the same distance
 ;;;       right of the corner its drop lands on, so they step out with
@@ -318,7 +320,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.25") ; printed on load and at command start so a
+(setq *hs-version* "v3.26") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -847,6 +849,13 @@
                  (cons 10 (list (car a) (cadr a) 0.0))
                  (cons 11 (list (car b) (cadr b) 0.0)))))
 
+;; A LINE between two points given in the current UCS.  entmake keeps
+;; World, so each end goes through trans on the way in.  The side
+;; profile is laid out in the drafter's UCS, where its forced "_V" dims
+;; measure - built in World under a turned UCS, every depth read short.
+(defun hs-uline (a b)
+  (hs-mkline (trans a 1 0) (trans b 1 0)))
+
 ;; make dimension style NAME current, but only if it exists and is not
 ;; already current.  Uses ActiveX so style names containing spaces are
 ;; handled correctly (the -DIMSTYLE command would read a space as ENTER).
@@ -883,16 +892,17 @@
 ;; measures the DROP between them while its extension lines still hook
 ;; the corners themselves.  Cleaner than dimensioning the riser line,
 ;; which leaves the dim marooned beside the step instead of reading
-;; across to it.  Points are WCS.
+;; across to it.  Points are UCS, as (command) reads them: "_V" is
+;; the UCS Y, so the profile they come from is built in the UCS too.
 (defun hs-dimv (style a b thru / oldl)
   (hs-setstyle style)
   (if (and *cs-dim-layer* (cal:layer-usable-p *cs-dim-layer*))
     (progn (setq oldl (getvar "CLAYER"))
            (setvar "CLAYER" *cs-dim-layer*)))
-  (command "_.DIMLINEAR" "_non" (trans a 0 1)
-                         "_non" (trans b 0 1)
+  (command "_.DIMLINEAR" "_non" a
+                         "_non" b
                          "_V"
-                         "_non" (trans thru 0 1))
+                         "_non" thru)
   (if oldl (setvar "CLAYER" oldl)))
 
 ;; entities created since MARK (nil = since the drawing was empty)
@@ -1131,6 +1141,7 @@
     (if lzd:report (lzd:report "HEMISTEP" *hs-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "HEMISTEP" *hs-version*))
+  (if lzd:state (lzd:state '(*hs-form*)))
   (hs-fprune)
 
   ;; remove the most recently drawn step and roll the state back
@@ -1655,10 +1666,10 @@
 
   ;; ---- 6. side profile -------------------------------------------------
   ;; The plan run seen from the side: alternating vertical drops (the
-  ;; step depths) and horizontal step treads, drawn in world X/Y from a
-  ;; picked top-of-wall point.  Still inside the command's UNDO group,
-  ;; and before the entry dim style is restored - the profile dims use
-  ;; *cs-depth-dimstyle* too.
+  ;; step depths) and horizontal step treads, drawn in the drafter's
+  ;; UCS from a picked top-of-wall point.  Still inside the command's
+  ;; UNDO group, and before the entry dim style is restored - the
+  ;; profile dims use *cs-depth-dimstyle* too.
   (if (> drawn 0)
     (progn
       ;; what the run starts at, and so what the flight starts at: the
@@ -1759,28 +1770,31 @@
               (setq totdrop 0.0 totrun 0.0)
               (foreach dd drops (setq totdrop (+ totdrop dd)))
               (foreach td treads (setq totrun (+ totrun td)))
-              ;; The alternating drop/tread silhouette in world X/Y,
-              ;; keeping the corner down its high side at every level:
-              ;; the pick, then the foot of each drop.  Those corners
-              ;; are what the dims bind to.
-              (setq ptop (trans ptop 1 0)
-                    px   (car ptop)
+              ;; The alternating drop/tread silhouette in the
+              ;; drafter's UCS, keeping the corner down its high side
+              ;; at every level: the pick, then the foot of each drop.
+              ;; Those corners are what the dims bind to.  UCS numbers
+              ;; throughout, and World only as a line is made: "down
+              ;; and to the left" is the drafter's, and the "_V" dims
+              ;; measure the drop.  Laid out in World under a UCS
+              ;; turned 30 degrees, a 7.5 drop was dimensioned 6.495.
+              (setq px   (car ptop)
                     py   (cadr ptop)
                     jx   0
                     cnrs (list (list px py 0.0)))
               (foreach td treads
                 (setq dd (nth jx drops))
-                (hs-mkline (list px py 0.0) (list px (- py dd) 0.0))
+                (hs-uline (list px py 0.0) (list px (- py dd) 0.0))
                 (setq py   (- py dd)
                       cnrs (cons (list px py 0.0) cnrs))
                 ;; the tread runs left, and carries no dim of its own -
                 ;; the depths and the overall depth say it all
-                (hs-mkline (list px py 0.0) (list (- px td) py 0.0))
+                (hs-uline (list px py 0.0) (list (- px td) py 0.0))
                 (setq px (- px td)
                       jx (1+ jx)))
               ;; the last depth: the drop after the last tread
               (setq dd (nth jx drops))
-              (hs-mkline (list px py 0.0) (list px (- py dd) 0.0))
+              (hs-uline (list px py 0.0) (list px (- py dd) 0.0))
               (setq py   (- py dd)
                     cnrs (reverse (cons (list px py 0.0) cnrs)))
               (if dimflag

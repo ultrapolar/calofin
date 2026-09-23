@@ -31,7 +31,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq pooldemo:*version* "092226 REV10")
+(setq pooldemo:*version* "092326 REV11")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -347,9 +347,17 @@
     (princ))
   (if lzd:begin (lzd:begin "POOLDEMO" pooldemo:*version*))
 
-  (if (not (member 'pool:hopcalc (atoms-family 0)))
-      (princ "\nPOOL.LSP is not loaded -- APPLOAD it first, then run POOLDEMO.")
-      (pooldemo:run))
+  (cond
+    ((not (member 'pool:hopcalc (atoms-family 0)))
+     (princ "\nPOOL.LSP is not loaded -- APPLOAD it first, then run POOLDEMO."))
+    ;; every cell draws through POOL's helpers, so only in a UCS they
+    ;; can carry a pool into (pool:ucsplan-p): tilted or upside down,
+    ;; the ovals', Romans' and radius corners' arcs came out mirrored
+    ;; off their corners.  Guarded, since a POOL.LSP older than this
+    ;; file has no such helper
+    ((and pool:ucsplan-p (not (pool:ucsplan-p)))
+     (pool:ucsrefuse "POOLDEMO"))
+    (t (pooldemo:run)))
   (if lzd:end (lzd:end "POOLDEMO"))
   (princ))
 

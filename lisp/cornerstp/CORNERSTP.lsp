@@ -124,9 +124,10 @@
 ;;;
 ;;; THE SIDE PROFILE
 ;;;   The flight is drawn as an alternating drop/tread silhouette in
-;;;   world X/Y, always descending to the LEFT of the picked top of the
-;;;   first tread and ending on the last depth - so the steps rise to
-;;;   the right, the way the shop's own elevations read.
+;;;   the current UCS, always descending to the LEFT of the picked top
+;;;   of the first tread and ending on the last depth - so the steps
+;;;   rise to the right, the way the shop's own elevations read, and
+;;;   stand upright in a turned UCS, where the dims measure the drops.
 ;;;   The dims climb with them, up and to the right, on the high side:
 ;;;     * every depth is a dim of its own, standing the same distance
 ;;;       right of the corner its drop lands on, so they step out with
@@ -349,7 +350,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.15") ; printed on load and at command start so a
+(setq *cs-version* "v4.16") ; printed on load and at command start so a
                             ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -722,6 +723,13 @@
                  (cons 10 (list (car a) (cadr a) 0.0))
                  (cons 11 (list (car b) (cadr b) 0.0)))))
 
+;; A LINE between two points given in the current UCS.  entmake keeps
+;; World, so each end goes through trans on the way in.  The side
+;; profile is laid out in the drafter's UCS, where its forced "_V" dims
+;; measure - built in World under a turned UCS, every depth read short.
+(defun cs-uline (a b)
+  (cs-mkline (trans a 1 0) (trans b 1 0)))
+
 ;; make dimension style NAME current, but only if it exists and is not
 ;; already current.  Uses ActiveX so style names containing spaces are
 ;; handled correctly (the -DIMSTYLE command would read a space as ENTER).
@@ -768,16 +776,17 @@
 ;; measures the DROP between them while its extension lines still hook
 ;; the corners themselves.  Cleaner than dimensioning the riser line,
 ;; which leaves the dim marooned beside the step instead of reading
-;; across to it.  Points are WCS.
+;; across to it.  Points are UCS, as (command) reads them: "_V" is
+;; the UCS Y, so the profile they come from is built in the UCS too.
 (defun cs-dimv (style a b thru / oldl)
   (cs-setstyle style)
   (if (and *cs-dim-layer* (cs-layerok *cs-dim-layer*))
     (progn (setq oldl (getvar "CLAYER"))
            (setvar "CLAYER" *cs-dim-layer*)))
-  (command "_.DIMLINEAR" "_non" (trans a 0 1)
-                         "_non" (trans b 0 1)
+  (command "_.DIMLINEAR" "_non" a
+                         "_non" b
                          "_V"
-                         "_non" (trans thru 0 1))
+                         "_non" thru)
   (if oldl (setvar "CLAYER" oldl)))
 
 ;; Draw the side (riser) line A-B unless it is degenerate or both points
@@ -1533,7 +1542,7 @@
                        bsides btreads bnums bside bdir bss pr be
                        bnw bno bnk bnsd bnrm bnf bnpe bact bu1 bu2
                        bns bnfar bnff bnl
-                       tlist tvals tds drops pd ix ppt pw
+                       tlist tvals tds drops pd ix ppt
                        px py totr totd cnrs ca cb pfo pgap fsteps fkey
                        qstep qdir bstep bmiss lastwid rl rr dflt)
 
@@ -1552,6 +1561,7 @@
     (if lzd:report (lzd:report "CORNERSTP" *cs-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "CORNERSTP" *cs-version*))
+  (if lzd:state (lzd:state '(*cs-form*)))
   (cs-fprune)
 
   ;; remove the most recently drawn step and roll the state back
@@ -2469,29 +2479,33 @@
               (if (null ppt)
                 (princ "\nNo point picked - side profile skipped.")
                 (progn
-                  ;; The alternating drop/tread silhouette in world
-                  ;; X/Y, keeping the corner down its high side at
-                  ;; every level: the pick, then the foot of each
-                  ;; drop.  Those corners are what the dims bind to.
+                  ;; The alternating drop/tread silhouette in the
+                  ;; drafter's UCS, keeping the corner down its high
+                  ;; side at every level: the pick, then the foot of
+                  ;; each drop.  Those corners are what the dims bind
+                  ;; to.  UCS numbers throughout, and World only as a
+                  ;; line is made: "down and to the left" is the
+                  ;; drafter's, and the "_V" dims measure the drop.
+                  ;; Laid out in World under a UCS turned 30 degrees,
+                  ;; a 7.5 drop was dimensioned 6.495.
                   (setq totd (apply '+ drops)
                         totr (apply '+ tds)
-                        pw   (trans ppt 1 0)
-                        px   (car pw)
-                        py   (cadr pw)
+                        px   (car ppt)
+                        py   (cadr ppt)
                         ix   0
                         cnrs (list (list px py 0.0)))
                   (foreach s tds
                     (setq pd (nth ix drops))
-                    (cs-mkline (list px py 0.0) (list px (- py pd) 0.0))
+                    (cs-uline (list px py 0.0) (list px (- py pd) 0.0))
                     (setq py   (- py pd)
                           cnrs (cons (list px py 0.0) cnrs))
                     ;; the tread runs left, and carries no dim of its
                     ;; own - the depths and the overall depth say it all
-                    (cs-mkline (list px py 0.0) (list (- px s) py 0.0))
+                    (cs-uline (list px py 0.0) (list (- px s) py 0.0))
                     (setq px (- px s) ix (1+ ix)))
                   ;; the last depth: the drop after the last tread
                   (setq pd (nth ix drops))
-                  (cs-mkline (list px py 0.0) (list px (- py pd) 0.0))
+                  (cs-uline (list px py 0.0) (list px (- py pd) 0.0))
                   (setq py   (- py pd)
                         cnrs (reverse (cons (list px py 0.0) cnrs)))
                   (if dimflag
@@ -2519,8 +2533,8 @@
                       ;; whole diagonal, top corner to bottom corner
                       (cs-dimv *cs-depth-dimstyle*
                                (car cnrs) (last cnrs)
-                               (list (+ (car pw) pfo pgap)
-                                     (- (cadr pw) (* 0.5 totd)) 0.0))))
+                               (list (+ (car ppt) pfo pgap)
+                                     (- (cadr ppt) (* 0.5 totd)) 0.0))))
                   (princ (strcat "\nSide profile drawn: "
                                  (itoa (length tds))
                                  " step(s), " (itoa (length drops))

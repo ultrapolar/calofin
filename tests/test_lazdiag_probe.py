@@ -65,10 +65,13 @@ def fixture(name, src):
     return path
 
 
-def report_of(tool_path, cmd, script, ents=()):
+def report_of(tool_path, cmd, script, ents=(), ucs=None):
     """Run CMD beside LAZDIAG with SCRIPT and hand back the path of the
-    report it wrote, copied out of the VM's Downloads onto disk."""
+    report it wrote, copied out of the VM's Downloads onto disk.  UCS,
+    as (origin, angle), puts the run under one."""
     vm = VM()
+    if ucs:
+        vm.set_ucs(*ucs)
     vm.load(LAZDIAG)
     vm.load(tool_path)
     vm.loads(pr.STUBS)
@@ -160,6 +163,47 @@ DEMOM = fixture("DEMOM", r"""(setq *demom-version* "v1.0")
     (cond ((and (null sel) (= 7 (getvar "ERRNO"))) (setq n (1+ n)))
           (T (setq done T))))
   (if (> n 0) (car 1))
+  (princ))
+""")
+
+#: fails only when the click lands past x 500 in WORLD numbers
+DEMOU = fixture("DEMOU", r"""(setq *demou-version* "v1.0")
+(defun c:DEMOU ( / *error* base)
+  (defun *error* (msg)
+    (princ (strcat "\nDEMOU error: " msg))
+    (princ))
+  (setq base (getpoint "\nCorner: "))
+  (if (> (car (trans base 1 0)) 500.0) (car 1))
+  (princ))
+""")
+
+#: fails only when the FORM's width is 0 -- a question the form answers
+#: is never asked, so without the store in the transcript the replay is
+#: asked for a width the drafter never typed
+DEMOF = fixture("DEMOF", r"""(setq *demof-version* "v1.0")
+(setq demof:*form* nil)
+(defun demof:take (key / p)
+  (setq p (assoc key demof:*form*))
+  (setq demof:*form* (vl-remove p demof:*form*))
+  (cdr p))
+(defun demof:run-with-answers (answers)
+  (setq demof:*form* answers)
+  (c:DEMOF)
+  (setq demof:*form* nil)
+  (princ))
+(defun c:DEMOF ( / *error* w d)
+  (defun *error* (msg)
+    (princ (strcat "\nDEMOF error: " msg))
+    (princ))
+  (if (assoc 'w demof:*form*)
+    (setq w (demof:take 'w))
+    (setq w (getdist "\nWidth: ")))
+  (setq d (getdist "\nDepth: "))
+  (setq d (/ d w))
+  (princ))
+;; the form: a dialog that fills the store and runs the tool
+(defun c:DEMOFORM ()
+  (demof:run-with-answers (list (cons 'w 0.0) (cons 'x 5) (list 'y)))
   (princ))
 """)
 
@@ -309,6 +353,59 @@ check("...and <miss> reads back as lispvm.MISS",
 res = pr.probe(path, tool_path=DEMOM)
 check("the replay reproduces the failure the miss led to",
       res.data["reproduced"], res.data["control"])
+
+print("\na report made under a UCS replays under it")
+# The transcript's clicks are UCS numbers.  Replayed in World, a click
+# 10 units along a UCS on the pool's corner at x 1000 lands at x 10, the
+# failure it led to never comes back, and the probe blames nothing.
+path = report_of(DEMOU, "DEMOU", [[10.0, 0.0, 0.0]],
+                 ucs=((1000.0, 0.0, 0.0), 0.0))
+head = pr.parse_report(pr.report_lines(pr.read_dxf(path)[1]))["head"]
+check("the report records the UCS the run was in",
+      pr.ucs_of(head)[0] == ([1000.0, 0.0, 0.0], 0.0), head.get("UCSORG"))
+res = pr.probe(path, tool_path=DEMOU)
+check("the replay puts it back, so the failure reproduces",
+      res.data["reproduced"], res.data["control"])
+check("...and the note says it was replayed in the run's UCS",
+      "replayed in the run's UCS" in res.data["note"], res.data["note"])
+
+print("\na run a form started replays with the form's answers")
+# LAZFORM fills pool:*form* and calls c:POOL; the questions the sheet
+# answered are never asked, so a transcript of the prompts alone is a
+# run nobody made: replayed, the tool asks for the width, is handed the
+# depth, and the probe reports a divergence instead of the failure.
+check("check_lazdiag wires the store into the command it runs",
+      "(if lzd:state (lzd:state '(demof:*form*)))" in open(DEMOF).read())
+path = report_of(DEMOF, "DEMOFORM", [12.0])
+lines = pr.report_lines(pr.read_dxf(path)[1])
+parsed = pr.parse_report(lines)
+check("the report is filed under the tool the form ran",
+      parsed["tool"] == "DEMOF", parsed["tool"])
+check("the transcript carries the store, as the run was handed it",
+      any(l.strip().startswith("= demof:*form*") and "('W . 0.0" in l
+          for l in lines), [l for l in lines if "demof" in l])
+st = dict(parsed["state"]).get("demof:*form*")
+check("...and it reads back as the VM holds it: pairs, and the NA as (Y)",
+      st == [pr.Dot(pr.Sym("w"), 0.0), pr.Dot(pr.Sym("x"), 5), [pr.Sym("y")]],
+      st)
+check("THE INPUTS flags the zero the form handed in",
+      any("form: w" in l and "zero" in l for l in lines),
+      [l for l in lines if "ODD" in l])
+res = pr.probe(path, tool_path=DEMOF)
+check("the replay puts the store back, so the failure reproduces",
+      res.data["reproduced"], res.data["control"])
+v = {x["label"]: x["verdict"] for x in res.data["verdicts"]}
+check("the form's width is varied like a typed answer, and named",
+      v.get("form: w", "").startswith("THIS value"), v)
+check("...and the typed depth is cleared",
+      v.get("Depth:", "").startswith("NOT this"), v)
+typed = pr.report_lines(pr.read_dxf(report_of(DEMOF, "DEMOF", [0.0, 12.0]))[1])
+check("a typed run -- an empty store -- writes no such line",
+      not any(l.strip().startswith("= ") for l in typed),
+      [l for l in typed if l.strip().startswith("= ")])
+bare = pr.run_once(DEMOF, "DEMOF", [], [], 0, parsed["answers"], False)
+check("without the store the same answers do not replay the run",
+      bare.kind == pr.Outcome.DIVERGED, (bare.kind, bare.message))
 
 print("\na replayed answer the VM refuses is a divergence, not a crash")
 # The VM refuses an answer no drafter can type where the replay has got

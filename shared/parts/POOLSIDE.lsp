@@ -64,7 +64,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.14")
+(setq *poolside-version* "v1.15")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -165,33 +165,73 @@
 ;;; Copies of the CALOFIN-LIB originals (STANDARDS.md section 4); the
 ;;; grouped twin calls cal: instead.
 
-;; local 2D point -> world 3D point (applies the insertion base)
+;; local 2D point -> a point in the CURRENT UCS (applies the insertion
+;; base, which was picked there).  This is what (command ...) reads --
+;; the _H and _V dimensions and the ZOOMs take their points from it.
 (defun psd:wp (p)
   (list (+ (car p) (car psd:*base*))
         (+ (cadr p) (cadr psd:*base*))
         0.0))
+
+;; The same point in WORLD numbers, which is what entmake reads.  Both
+;; used to be handed psd:wp: under a UCS moved to the site the section
+;; landed at the raw numbers, a UCS-origin away from its own depth and
+;; run dimensions, and turned it lay along World X while _H and _V
+;; measured along the UCS.  Entity data goes through this one.
+(defun psd:ww (p) (trans (psd:wp p) 1 0))
+
+;; How far the current UCS is turned from World X, for a TEXT's 50 so
+;; the labels read level in the UCS the section is drawn along.  Read
+;; off the components, 0 in World, and kept in 0..2pi.
+(defun psd:ucsang ( / x a)
+  (setq x (trans '(1.0 0.0 0.0) 1 0 T)
+        a (atan (cadr x) (car x)))
+  (if (< a 0.0) (+ a pi pi) a))
+
+;; T in a PLAN UCS: one whose Z axis is World +Z, so all it does is
+;; move the World plan and turn it -- the only kind the two helpers
+;; above can carry a section into.  A TEXT is written face up about a
+;; 210 that stays World +Z here: in a UCS whose Z points DOWN (X turned
+;; 180, or a 3-point UCS whose Y was picked clockwise of X) every label
+;; read backwards beside a section and dims that landed true, and in a
+;; tilted one the labels lay flat in the World plan, off the plane the
+;; section and its dims are drawn on.  So POOLSIDE refuses both rather
+;; than draw either.  The test is on +Z itself and not on its size:
+;; (abs z) would let the upside-down one by.
+(defun psd:ucsplan-p ()
+  (> (caddr (trans '(0.0 0.0 1.0) 1 0 T)) (- 1.0 1.0e-8)))
+
+;; What a refused run says.
+(defun psd:ucsrefuse ()
+  (princ (strcat "\nPOOLSIDE: the current UCS is tilted or upside down"
+                 " (its Z axis is not World +Z),"))
+  (princ "\nso a section cannot be laid out in it.  Set the UCS to World, or to")
+  (princ "\nany UCS only moved and turned in plan, and run POOLSIDE again.")
+  (princ))
 
 ;;; -------------------- layers and entities ----------------------------
 
 (defun psd:line (p1 p2 lay)
   (entmake (list '(0 . "LINE")
                  (cons 8 lay)
-                 (cons 10 (psd:wp p1))
-                 (cons 11 (psd:wp p2)))))
+                 (cons 10 (psd:ww p1))
+                 (cons 11 (psd:ww p2)))))
 
 (defun psd:text (pt h str lay)
   (entmake (list '(0 . "TEXT")
                  (cons 8 lay)
-                 (cons 10 (psd:wp pt))
+                 (cons 10 (psd:ww pt))
                  (cons 40 h)
+                 (cons 50 (psd:ucsang))      ; level in the UCS
                  (cons 1 str))))
 
 (defun psd:textc (pt h str lay col)
   (entmake (list '(0 . "TEXT")
                  (cons 8 lay)
                  (cons 62 col)
-                 (cons 10 (psd:wp pt))
+                 (cons 10 (psd:ww pt))
                  (cons 40 h)
+                 (cons 50 (psd:ucsang))
                  (cons 1 str))))
 
 ;; Override (or set) the color of an entity, refresh it, return it.
@@ -861,189 +901,200 @@
     (if lzd:report (lzd:report "POOLSIDE" *poolside-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "POOLSIDE" *poolside-version*))
+  (if lzd:state (lzd:state '(psd:*form*)))
 
-  ;; nothing is open yet: a flag an earlier run left set must not let
-  ;; this run's handler close somebody else's undo group
-  (setq psd:*undo-open* nil)
+  (cond
+    ;; a section cannot be laid out in a UCS that is tilted or upside
+    ;; down (psd:ucsplan-p): said and stopped here, before anything is
+    ;; asked, borrowed or drawn.  A form handed to this run goes with
+    ;; it -- left standing, it would answer the next POOLSIDE typed at
+    ;; the command line
+    ((not (psd:ucsplan-p))
+     (psd:ucsrefuse)
+     (psd:fclear))
+    (t
+     ;; nothing is open yet: a flag an earlier run left set must not let
+     ;; this run's handler close somebody else's undo group
+     (setq psd:*undo-open* nil)
 
-  ;; AutoCAD 2012+ requires this so *error* may call (command);
-  ;; harmless no-op guard on older releases where it doesn't exist
-  (if *push-error-using-command* (*push-error-using-command*))
+     ;; AutoCAD 2012+ requires this so *error* may call (command);
+     ;; harmless no-op guard on older releases where it doesn't exist
+     (if *push-error-using-command* (*push-error-using-command*))
 
-  (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
-  ;; a fresh run, so a fresh ruler: the hint is said once a run, and the
-  ;; flag that says it has been said travels in here
-  (setq psd:*valnotes* nil
-        psd:*ruler* nil)
-  (setvar "CMDECHO" 0)
-  (setq psd:*undo-open* (cal:undobegin))
-  ;; architectural units while prompting so every distance can be typed
-  ;; as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
-  (setvar "LUNITS" 4)
-  (princ "\nSide view only -- the floor dimensions, no plan.")
-  (princ "\nDistances may be typed as 8'6\", 8'-6-1/2\" or 8'6.5 (plain numbers = inches).")
+     (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER"))
+     ;; a fresh run, so a fresh ruler: the hint is said once a run, and the
+     ;; flag that says it has been said travels in here
+     (setq psd:*valnotes* nil
+           psd:*ruler* nil)
+     (setvar "CMDECHO" 0)
+     (setq psd:*undo-open* (cal:undobegin))
+     ;; architectural units while prompting so every distance can be typed
+     ;; as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
+     (setvar "LUNITS" 4)
+     (princ "\nSide view only -- the floor dimensions, no plan.")
+     (princ "\nDistances may be typed as 8'6\", 8'-6-1/2\" or 8'6.5 (plain numbers = inches).")
 
-  ;; the bottom type and the base point are the two questions in front
-  ;; of every measurement, so they are asked as a chain: Back at the
-  ;; base point re-asks the type, which is the answer the rest of the
-  ;; run is shaped by
-  ;;
-  ;; what Enter answers the bottom-type question with, read through
-  ;; psd:kwknob so a knob the prompt would refuse leaves the shipped
-  ;; "Normal" standing rather than reaching the chain table unspelled
-  (setq bdflt (cond ((psd:kwknob psd:*btype-default* psd:*btypes*)) ("Normal")))
-  (setq base 'RETRY)
-  (while (eq base 'RETRY)
-    ;; the form can name the bottom; anything psd:*btypes* does not
-    ;; list falls through to the prompt rather than being forced in
-    (if (null (setq style (psd:fkw 'style psd:*btypes* "Normal")))
-      (setq style (cal:askkw "Bottom type" psd:*btypes* psd:*btshown*
-                             bdflt nil)))
-    ;; the base point is picked with the user's own snaps still live;
-    ;; only afterwards do snaps drop for the command-fed drawing work.
-    ;; It is the top LEFT of the section -- the waterline at the left
-    ;; wall -- so the section hangs off a known corner.
-    (initget "Back Undo")
-    (setq base (getpoint "\nInsertion base point (top left of the section) [Back] <0,0>: "))
-    (if lzd:ask (lzd:ask "\nInsertion base point (top left of the section) [Back] <0,0>: " base) base)
-    (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
-      (progn (princ "\nStepping back one question.")
-             (setq base 'RETRY))))
-  (setq psd:*base* (if (and base (listp base))
-                       (list (car base) (cadr base))
-                       (list 0.0 0.0)))
-  (setvar "OSMODE" 0)
+     ;; the bottom type and the base point are the two questions in front
+     ;; of every measurement, so they are asked as a chain: Back at the
+     ;; base point re-asks the type, which is the answer the rest of the
+     ;; run is shaped by
+     ;;
+     ;; what Enter answers the bottom-type question with, read through
+     ;; psd:kwknob so a knob the prompt would refuse leaves the shipped
+     ;; "Normal" standing rather than reaching the chain table unspelled
+     (setq bdflt (cond ((psd:kwknob psd:*btype-default* psd:*btypes*)) ("Normal")))
+     (setq base 'RETRY)
+     (while (eq base 'RETRY)
+       ;; the form can name the bottom; anything psd:*btypes* does not
+       ;; list falls through to the prompt rather than being forced in
+       (if (null (setq style (psd:fkw 'style psd:*btypes* "Normal")))
+         (setq style (cal:askkw "Bottom type" psd:*btypes* psd:*btshown*
+                                bdflt nil)))
+       ;; the base point is picked with the user's own snaps still live;
+       ;; only afterwards do snaps drop for the command-fed drawing work.
+       ;; It is the top LEFT of the section -- the waterline at the left
+       ;; wall -- so the section hangs off a known corner.
+       (initget "Back Undo")
+       (setq base (getpoint "\nInsertion base point (top left of the section) [Back] <0,0>: "))
+       (if lzd:ask (lzd:ask "\nInsertion base point (top left of the section) [Back] <0,0>: " base) base)
+       (if (and (= (type base) 'STR) (member base '("Back" "Undo")))
+         (progn (princ "\nStepping back one question.")
+                (setq base 'RETRY))))
+     (setq psd:*base* (if (and base (listp base))
+                          (list (car base) (cadr base))
+                          (list 0.0 0.0)))
+     (setvar "OSMODE" 0)
 
-  (cal:ensure-layer "POOL" 4)
-  (cal:ensure-layer "DIMENSION" 2)
-  (cal:ensure-layer "POOL-NOTES" 3)
+     (cal:ensure-layer "POOL" 4)
+     (cal:ensure-layer "DIMENSION" 2)
+     (cal:ensure-layer "POOL-NOTES" 3)
 
-  (setq total (if (setq fv (psd:fnum 'b))
-                  fv
-                  (psd:ask "B - overall length, wall to wall" nil))
-        doff  (max 12.0 (/ total 18.0))
-        th    (max 3.0 (/ total 70.0))
-        chain (psd:chain style)
-        pv    (psd:guide style total doff th))
-  (command "_.ZOOM" "_Window"
-           (psd:wp (list (- doff) (- (* 0.20 total) (* 3.0 doff))))
-           (psd:wp (list (+ total (* 2.0 doff)) (* 2.0 doff))))
-  (princ "\nFloor dimensions -- the RED tie is the one being asked for.")
-  (princ "\n(after the first answer, Back re-asks the previous one)")
+     (setq total (if (setq fv (psd:fnum 'b))
+                     fv
+                     (psd:ask "B - overall length, wall to wall" nil))
+           doff  (max 12.0 (/ total 18.0))
+           th    (max 3.0 (/ total 70.0))
+           chain (psd:chain style)
+           pv    (psd:guide style total doff th))
+     (command "_.ZOOM" "_Window"
+              (psd:wp (list (- doff) (- (* 0.20 total) (* 3.0 doff))))
+              (psd:wp (list (+ total (* 2.0 doff)) (* 2.0 doff))))
+     (princ "\nFloor dimensions -- the RED tie is the one being asked for.")
+     (princ "\n(after the first answer, Back re-asks the previous one)")
 
-  (setq ans (psd:askseq (psd:items style chain pv))
-        wh  (psd:sq ans 'c)
-        dp  (psd:sq ans 'd)
-        c2  (if (= style "SHallow") (psd:sq ans 'c2) wh))
-  ;; the two range checks POOL makes: a deep end that is not deeper
-  ;; than the wall is not a deep end, and the break sits between them
-  (while (<= dp wh)
-    (princ (strcat "\nD must be deeper than the wall height C ("
-                   (rtos wh) ") -- re-enter."))
-    (setq dp (psd:ask "D - deep end depth" psd:*deepdepth-ladder*)))
-  (while (or (< c2 wh) (> c2 dp))
-    (princ (strcat "\nC2 must be between C ("
-                   (rtos (cal:ceil-shown wh)) ") and D ("
-                   (rtos (cal:floor-shown dp)) ") -- re-enter."))
-    (setq c2 (psd:ask "C2 - depth where the shallow floor meets the break"
-                      psd:*breakdepth-ladder*)))
-  (psd:pvkill)
+     (setq ans (psd:askseq (psd:items style chain pv))
+           wh  (psd:sq ans 'c)
+           dp  (psd:sq ans 'd)
+           c2  (if (= style "SHallow") (psd:sq ans 'c2) wh))
+     ;; the two range checks POOL makes: a deep end that is not deeper
+     ;; than the wall is not a deep end, and the break sits between them
+     (while (<= dp wh)
+       (princ (strcat "\nD must be deeper than the wall height C ("
+                      (rtos wh) ") -- re-enter."))
+       (setq dp (psd:ask "D - deep end depth" psd:*deepdepth-ladder*)))
+     (while (or (< c2 wh) (> c2 dp))
+       (princ (strcat "\nC2 must be between C ("
+                      (rtos (cal:ceil-shown wh)) ") and D ("
+                      (rtos (cal:floor-shown dp)) ") -- re-enter."))
+       (setq c2 (psd:ask "C2 - depth where the shallow floor meets the break"
+                         psd:*breakdepth-ladder*)))
+     (psd:pvkill)
 
-  ;; resolve the runs against B: NA takes the remainder (split when
-  ;; several), the slack member absorbs any leftover, and nothing is
-  ;; allowed to come out negative
-  (setq runs  (psd:chainfix (mapcar '(lambda (c) (psd:sq ans (psd:key (car c))))
-                                    chain)
-                            total (psd:slack chain))
-        cv    (psd:chainval runs total)
-        runs  (car cv)
-        fixed (cadr cv))
-  (if fixed
-      (psd:valnote (strcat "FLOOR RUNS FAILED - "
-                           (psd:fixnames fixed (mapcar 'car chain))
-                           " ADJUSTED, VERIFY")))
+     ;; resolve the runs against B: NA takes the remainder (split when
+     ;; several), the slack member absorbs any leftover, and nothing is
+     ;; allowed to come out negative
+     (setq runs  (psd:chainfix (mapcar '(lambda (c) (psd:sq ans (psd:key (car c))))
+                                       chain)
+                               total (psd:slack chain))
+           cv    (psd:chainval runs total)
+           runs  (car cv)
+           fixed (cadr cv))
+     (if fixed
+         (psd:valnote (strcat "FLOOR RUNS FAILED - "
+                              (psd:fixnames fixed (mapcar 'car chain))
+                              " ADJUSTED, VERIFY")))
 
-  ;; the deep end is drawn on the left, the way the letters are
-  ;; measured; mirroring swaps the section end for end and the run
-  ;; dimensions with it, so the letters keep meaning what they meant
-  ;; the form can answer it too, as the same Yes or No a click on the
-  ;; bracket would send; anything else falls through to the prompt,
-  ;; where psd:*mirror-default* is what Enter means -- read through
-  ;; psd:kwknob on the same terms, so a knob that is not one of the two
-  ;; words leaves "No" standing
-  (setq mdflt (cond ((psd:kwknob psd:*mirror-default* "Yes No")) ("No"))
-        fv  (psd:fkw 'mirror "Yes No" "No")
-        mir (if fv
-                (= fv "Yes")
-                (cal:askyn "Put the deep end on the RIGHT?" mdflt nil))
-        sgn (if mir -1.0 1.0)
-        sta (psd:stations style runs wh dp c2)
-        segs (psd:segs chain fixed))
-  (if mir
-      (setq sta (reverse (mapcar '(lambda (s) (cons (- total (car s)) (cdr s)))
-                                 sta))
-            segs (reverse segs)))
+     ;; the deep end is drawn on the left, the way the letters are
+     ;; measured; mirroring swaps the section end for end and the run
+     ;; dimensions with it, so the letters keep meaning what they meant
+     ;; the form can answer it too, as the same Yes or No a click on the
+     ;; bracket would send; anything else falls through to the prompt,
+     ;; where psd:*mirror-default* is what Enter means -- read through
+     ;; psd:kwknob on the same terms, so a knob that is not one of the two
+     ;; words leaves "No" standing
+     (setq mdflt (cond ((psd:kwknob psd:*mirror-default* "Yes No")) ("No"))
+           fv  (psd:fkw 'mirror "Yes No" "No")
+           mir (if fv
+                   (= fv "Yes")
+                   (cal:askyn "Put the deep end on the RIGHT?" mdflt nil))
+           sgn (if mir -1.0 1.0)
+           sta (psd:stations style runs wh dp c2)
+           segs (psd:segs chain fixed))
+     (if mir
+         (setq sta (reverse (mapcar '(lambda (s) (cons (- total (car s)) (cdr s)))
+                                    sta))
+               segs (reverse segs)))
 
-  (psd:secdraw total sta "POOL" nil)
+     (psd:secdraw total sta "POOL" nil)
 
-  (setq odl (getvar "CLAYER"))
-  (setvar "CLAYER" "DIMENSION")
-  (setq maxd (apply 'max (mapcar 'cdr sta))
-        ydim (- (+ maxd (* 1.4 doff))))
-  ;; the overall above the waterline, the run chain on one baseline
-  ;; below the floor
-  (psd:dimh (list 0.0 0.0) (list total 0.0)
-            (list (* 0.5 total) (* 1.0 doff)))
-  (setq i 0)
-  (foreach s segs
-    (setq p (nth i sta) q (nth (1+ i) sta))
-    (if (> (abs (- (car q) (car p))) 1.0e-6)
-        (progn
-          (psd:dimh (list (car p) (- (cdr p))) (list (car q) (- (cdr q)))
-                    (list (* 0.5 (+ (car p) (car q))) ydim))
-          ;; a run the validator had to move is drawn red, so the sheet
-          ;; shows which number was not the crew's
-          (if (cdr s) (psd:dimred))))
-    (setq i (1+ i)))
-  ;; the depths: C off the shallow wall, D at the deep end, C2 at the
-  ;; break when the style has one
-  (setq xc (if mir 0.0 total)
-        xd (psd:xcode style sta "d" mir)
-        xb (psd:xcode style sta "c2" mir))
-  (psd:dimv (list xc 0.0) (list xc (- wh))
-            (list (+ xc (* sgn 0.8 doff)) (* -0.5 wh)))
-  (psd:dimv (list xd 0.0) (list xd (- dp))
-            (list (- xd (* sgn 0.5 doff)) (* -0.5 dp)))
-  (if xb
-      (psd:dimv (list xb 0.0) (list xb (- c2))
-                (list (+ xb (* sgn 0.3 doff)) (* -0.5 c2))))
-  (setvar "CLAYER" odl)
+     (setq odl (getvar "CLAYER"))
+     (setvar "CLAYER" "DIMENSION")
+     (setq maxd (apply 'max (mapcar 'cdr sta))
+           ydim (- (+ maxd (* 1.4 doff))))
+     ;; the overall above the waterline, the run chain on one baseline
+     ;; below the floor
+     (psd:dimh (list 0.0 0.0) (list total 0.0)
+               (list (* 0.5 total) (* 1.0 doff)))
+     (setq i 0)
+     (foreach s segs
+       (setq p (nth i sta) q (nth (1+ i) sta))
+       (if (> (abs (- (car q) (car p))) 1.0e-6)
+           (progn
+             (psd:dimh (list (car p) (- (cdr p))) (list (car q) (- (cdr q)))
+                       (list (* 0.5 (+ (car p) (car q))) ydim))
+             ;; a run the validator had to move is drawn red, so the sheet
+             ;; shows which number was not the crew's
+             (if (cdr s) (psd:dimred))))
+       (setq i (1+ i)))
+     ;; the depths: C off the shallow wall, D at the deep end, C2 at the
+     ;; break when the style has one
+     (setq xc (if mir 0.0 total)
+           xd (psd:xcode style sta "d" mir)
+           xb (psd:xcode style sta "c2" mir))
+     (psd:dimv (list xc 0.0) (list xc (- wh))
+               (list (+ xc (* sgn 0.8 doff)) (* -0.5 wh)))
+     (psd:dimv (list xd 0.0) (list xd (- dp))
+               (list (- xd (* sgn 0.5 doff)) (* -0.5 dp)))
+     (if xb
+         (psd:dimv (list xb 0.0) (list xb (- c2))
+                   (list (+ xb (* sgn 0.3 doff)) (* -0.5 c2))))
+     (setvar "CLAYER" odl)
 
-  ;; whatever had to be adjusted, in red under the section
-  (setq y (- ydim (* 1.8 doff)))
-  (foreach m psd:*valnotes*
-    (psd:textc (list 0.0 y) (* 1.2 th) m "POOL-NOTES" 1)
-    (setq y (- y (* 2.0 th))))
+     ;; whatever had to be adjusted, in red under the section
+     (setq y (- ydim (* 1.8 doff)))
+     (foreach m psd:*valnotes*
+       (psd:textc (list 0.0 y) (* 1.2 th) m "POOL-NOTES" 1)
+       (setq y (- y (* 2.0 th))))
 
-  (command "_.ZOOM" "_Window"
-           (psd:wp (list (- (* 2.0 doff)) (- y (* 2.0 doff))))
-           (psd:wp (list (+ total (* 3.0 doff)) (* 3.0 doff))))
+     (command "_.ZOOM" "_Window"
+              (psd:wp (list (- (* 2.0 doff)) (- y (* 2.0 doff))))
+              (psd:wp (list (+ total (* 3.0 doff)) (* 3.0 doff))))
 
-  ;; the resolved chain, so what was read back off B is on the screen
-  ;; as a number and not only as a dimension
-  (princ (strcat "\n" style " side view -- B " (rtos total)))
-  (setq i 0)
-  (foreach s chain
-    (princ (strcat "  " (car s) " " (rtos (nth i runs))))
-    (setq i (1+ i)))
-  (princ (strcat "  C " (rtos wh) "  D " (rtos dp)))
-  (if (= style "SHallow") (princ (strcat "  C2 " (rtos c2))))
+     ;; the resolved chain, so what was read back off B is on the screen
+     ;; as a number and not only as a dimension
+     (princ (strcat "\n" style " side view -- B " (rtos total)))
+     (setq i 0)
+     (foreach s chain
+       (princ (strcat "  " (car s) " " (rtos (nth i runs))))
+       (setq i (1+ i)))
+     (princ (strcat "  C " (rtos wh) "  D " (rtos dp)))
+     (if (= style "SHallow") (princ (strcat "  C2 " (rtos c2))))
 
-  (if psd:*undo-open* (setq psd:*undo-open* (cal:undoend)))
-  (cal:sysrestore)
-  (psd:rulerkill)
-  (if *pop-error-mode* (*pop-error-mode*))
-  (psd:fclear)                          ; both exits clear the form store
+     (if psd:*undo-open* (setq psd:*undo-open* (cal:undoend)))
+     (cal:sysrestore)
+     (psd:rulerkill)
+     (if *pop-error-mode* (*pop-error-mode*))
+     (psd:fclear)))                        ; both exits clear the form store
   (if lzd:end (lzd:end "POOLSIDE"))
   (princ))
 

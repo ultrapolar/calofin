@@ -395,7 +395,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.21")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.22")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -720,7 +720,12 @@
       (cond
         ((and back (= (type pk) 'STR) (member pk '("Back" "Undo"))) 'CAL-BACK)
         (pk
-         (setq hit (abf:nearest pk cands))
+         ;; the click is in the drafter's UCS; the survey points it is
+         ;; measured against, and the stake the ties are entmade from,
+         ;; are World -- so under a moved UCS it found no point, or
+         ;; used a spot that far away from where they clicked
+         (setq pk  (trans pk 1 0)
+               hit (abf:nearest pk cands))
          (if hit
            (progn
              (princ (strcat "\n  Taken from Pt." (abf:cd-nm hit) "."))
@@ -1876,7 +1881,9 @@
        'CAL-BACK
        (progn (princ "\n  Nothing to step back to.") 'ABF-AGAIN)))
     ((listp ans)
-     (setq best nil bd nil)
+     ;; the spots are World and the click is UCS: under a moved UCS a
+     ;; click on one line's tie measured nearer another's, and took it
+     (setq best nil bd nil ans (trans ans 1 0))
      (foreach s spots
        (setq d (abf:tag-dist ans s))
        (if (or (null bd) (< d bd)) (setq best (car s) bd d)))
@@ -2365,7 +2372,8 @@
                  ;; typed number can reach the question below.
                  (setq hit nil dupes nil)
                  (if (listp ans)
-                   (setq hit (abf:nearest ans cands))
+                   ;; UCS click, World candidates -- see abf:stake
+                   (setq hit (abf:nearest (trans ans 1 0) cands))
                    (progn
                      (setq dupes (abf:matches ans cands)
                            lsel  (if (and curln (> (length dupes) 1))
@@ -2740,7 +2748,8 @@
                                    " tags - type one from the table,"
                                    " or click a marker or its tag.")))))
                 (t
-                 (setq hits (abf:under-click ans sugs spots))
+                 ;; the markers and tags are World; the click is UCS
+                 (setq hits (abf:under-click (trans ans 1 0) sugs spots))
                  (cond
                    ((null hits)
                     (princ (strcat "\n  No marker within "
@@ -2946,7 +2955,10 @@
                                     " again."))
                      (setq stage 7))
                     ((not (listp ans)) (setq stage 7))
-                    ((setq near (abf:click-side pa pb ans))
+                    ;; the stakes are World: the side is read off the
+                    ;; click in World too, or a moved UCS names the wrong
+                    ;; one
+                    ((setq near (abf:click-side pa pb (trans ans 1 0)))
                      (setq stage 9))
                     (t
                      (princ (strcat "\n  That is on the " abf:*a-name*
@@ -3161,7 +3173,11 @@
                   ;; nil is Enter and a string is the Auto keyword;
                   ;; only a real list is a spot the user clicked
                   (if (or (null np) (not (listp np)))
-                    (setq np (abf:note-spot pp)))
+                    (setq np (abf:note-spot pp))
+                    ;; the note is entmade, and entmake reads World: the
+                    ;; UCS click went in as it came and the note landed
+                    ;; the UCS origin's offset away from the spot picked
+                    (setq np (trans np 1 0)))
                   ;; the suggestions have done their job
                   (abf:drop temps)
                   (setq temps nil

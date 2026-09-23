@@ -111,6 +111,7 @@ missing declaration.
 | Message | Meaning | Fix |
 | --- | --- | --- |
 | `... does not report failures to LAZDIAG` | a missing `lzd:` call site | `python3 tools/check_lazdiag.py --fix` |
+| `<CMD> <- <store> (form answers) does not report ...` | a command a form runs (its `X:run-with-answers` sets `<store>`) does not write that store into the transcript, so a form-driven report cannot be replayed | `--fix` adds `(if lzd:state (lzd:state '(<store>)))` after the `lzd:begin`; add any run flag the form also sets by hand |
 | `<CMD> has no *error* handler to report from` | **`--fix` will not write this** | write the handler yourself, then re-run `--fix` |
 | `the lzd:<kind> call <why>` | an injected call landed where it would change a meaning | move it so it is not the last form of a body, not a term of an `(and ...)`, and not a branch of an `(if ...)` |
 

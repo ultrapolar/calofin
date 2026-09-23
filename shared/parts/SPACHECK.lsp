@@ -110,6 +110,13 @@
 ;;;      for drawings DIMCHECK already went over.  Problems in RED at
 ;;;      full size, advice in CYAN, all-clear in green at 75%.
 ;;;
+;;;  Every size and standoff above is measured along the COVER'S OWN
+;;;  axes, read off the drawing (spachk:cover-frame): SPA draws along
+;;;  the current UCS, so a spa drawn in a turned UCS is turned in World,
+;;;  and the reviewer's UCS plays no part.  The title-block border is
+;;;  measured in its own frame the same way.  A cover or border square
+;;;  to World is measured exactly as it always was.
+;;;
 ;;;  SPACHECK walks whatever it flagged one item at a time -- greying
 ;;;  the rest out, zooming to each, and colouring the ones you confirm
 ;;;  are wrong -- while SPACHECKSCAN runs the identical audits and
@@ -121,7 +128,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.22")
+(setq *spacheck-version* "v1.23")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -666,6 +673,489 @@
     (if (spachk:has (spachk:dim-text e) note) (setq out (cons e out))))
   (reverse out))
 
+;; The hinges: the LINEs on the cover layer (the outline itself is a
+;; polyline, a circle or an ellipse, so the two never confuse).
+(defun spachk:hinge-lines (ss)
+  (vl-remove-if-not '(lambda (e) (= (spachk:etype e) "LINE"))
+                    (spachk:loose-ents ss spachk:*lay-cover*)))
+
+;;; -------------------- the cover's own frame ----------------------------
+;;;  SPA draws along the CURRENT UCS, so a spa drawn in a turned UCS has
+;;;  a cover whose edges run at that UCS's angle in World.  Every size
+;;;  and standoff the audit reads is one of SPA's -- "across", "up",
+;;;  "2 ft above", "3 ft to the left" -- and those are the COVER'S axes.
+;;;  Measured along World's instead, an 84 x 60 cover turned 30 degrees
+;;;  is 102.7 x 94.0 and both its overalls "disagree" with it.  Nor may
+;;;  the reviewer's UCS decide anything: one sheet has to get one verdict
+;;;  whoever opens it, in whatever UCS.  So the frame is read off the
+;;;  drawing, and off the drawing alone.
+;;;
+;;;  A FRAME is nil for World -- every helper then does exactly what it
+;;;  did before there were frames -- or (cos sin) of the angle its X
+;;;  axis makes in World.  A point's numbers in it are spachk:fr-pt's.
+;;;
+;;;  THE ANGLE, to a quarter turn.  The Cover Size overalls say it first
+;;;  -- each measures along one of the cover's axes -- and failing them
+;;;  the hinges, which run up it; the outline's straight edges then give
+;;;  it exactly (the edge direction within 5 degrees of what they said,
+;;;  so overalls drawn a hair off the outline cannot tilt the frame).
+;;;  With neither, the outline's LONGEST straight edge decides.  Never
+;;;  the heaviest edge direction: an octagon's or a cut corner's
+;;;  diagonals can outweigh the square sides, and a 95 octagon with 40
+;;;  faces measured 94.35 x 94.35 on its diagonals.
+;;;
+;;;  THE QUARTER that is up is NOT guessed from where the overalls
+;;;  stand -- where they stand is exactly what the audit is there to
+;;;  judge, and a pair with SPA's two standoffs swapped read as a spa
+;;;  turned a quarter, with both failures gone.  It is taken from what
+;;;  the drawing RECORDS: a DIMENSION keeps the UCS it was made in, as
+;;;  group 51 (the negative of the angle from its OCS X axis to that
+;;;  UCS's X axis), and dragging it does not change it; a dimension made
+;;;  in World carries none (spachk:dim-turn).  The Cover Size overalls
+;;;  vote; the other dimensions break a tie, or vote alone when there
+;;;  are no overalls; a tie still standing goes to the turned UCS
+;;;  (spachk:turn-vote).  Nothing to vote -- no dimension at all --
+;;;  means World.  With hinges drawn the quarter must have them running
+;;;  up it, as SPA's always do, and the turn chooses between the two
+;;;  quarters that do; without, the quarter nearest the turn wins.  So
+;;;  every drawing SPA made in World, whatever was dragged, erased or
+;;;  swapped since, comes out World, and runs exactly the code it always
+;;;  did.  The words "above" and "left" are the cover's own: what SPA
+;;;  calls above in the UCS it drew in, whoever views the report and
+;;;  however.
+
+;; P, a World point or displacement, in frame FR -- P itself for World.
+(defun spachk:fr-pt (fr p)
+  (if fr
+    (list (+ (* (car p) (car fr)) (* (cadr p) (cadr fr)))
+          (- (* (cadr p) (car fr)) (* (car p) (cadr fr))))
+    p))
+
+;; An angle folded to the quarter turn nearest World's: (-45, 45] deg.
+;; AutoLISP's rem keeps the dividend's sign, so a negative is lifted.
+(defun spachk:fr-fold (a / q)
+  (setq q (* 0.5 pi)
+        a (rem a q))
+  (if (< a 0.0) (setq a (+ a q)))
+  (if (> a (* 0.5 q)) (setq a (- a q)))
+  a)
+
+;; How far apart two folded angles are, a quarter turn being no turn.
+(defun spachk:fr-adiff (a b / d)
+  (setq d (abs (- a b)))
+  (if (> d (* 0.25 pi)) (- (* 0.5 pi) d) d))
+
+;; PAIRS -- (angle . weight) -- gathered into directions a quarter turn
+;; apart: ((folded-angle . total-weight) ...).
+(defun spachk:fr-fams (pairs / p f fams fam hit out)
+  (foreach p pairs
+    (setq f (spachk:fr-fold (car p)) hit nil out nil)
+    (foreach fam fams
+      (if (and (not hit) (< (spachk:fr-adiff (car fam) f) 1.0e-6))
+        (setq hit T
+              out (cons (cons (car fam) (+ (cdr fam) (cdr p))) out))
+        (setq out (cons fam out))))
+    (setq fams (if hit out (cons (cons f (cdr p)) out))))
+  fams)
+
+;; The direction most of PAIRS run in, folded -- nil when there are none
+;; or two directions weigh the same, which is no answer at all.  For
+;; the overalls and the hinges, which all run along the cover's axes.
+(defun spachk:fr-mode (pairs / fam best next)
+  (foreach fam (spachk:fr-fams pairs)
+    (cond ((or (null best) (> (cdr fam) (cdr best)))
+           (setq next best best fam))
+          ((or (null next) (> (cdr fam) (cdr next)))
+           (setq next fam))))
+  (if (and best (> (cdr best) 0.0)
+           (or (null next)
+               (> (- (cdr best) (cdr next)) (* 1.0e-6 (cdr best)))))
+    (car best)))
+
+;; The direction of the longest of PAIRS, folded -- nil when another
+;; direction has one as long (a regular octagon), which says nothing.
+(defun spachk:fr-long (pairs / p best f tie)
+  (foreach p pairs
+    (if (or (null best) (> (cdr p) (cdr best))) (setq best p)))
+  (if best
+    (progn
+      (setq f (spachk:fr-fold (car best)))
+      (foreach p pairs
+        (if (and (>= (cdr p) (* (- 1.0 1.0e-6) (cdr best)))
+                 (>= (spachk:fr-adiff (spachk:fr-fold (car p)) f) 1.0e-6))
+          (setq tie T)))
+      (if (not tie) f))))
+
+;; Angle A made exact: the direction in FAMS within 5 degrees of it, or
+;; A itself when none is.
+(defun spachk:fr-snap (a fams / fam d bd best)
+  (foreach fam fams
+    (setq d (spachk:fr-adiff (car fam) a))
+    (if (or (null bd) (< d bd)) (setq bd d best (car fam))))
+  (if (and best (<= bd (/ pi 36.0))) best a))
+
+;; P -- a LWPOLYLINE's, CIRCLE's or ARC's group 10, an old POLYLINE's
+;; vertex -- is in ENT's OBJECT coordinates.  An entity in the World
+;; plan (no 210, or 0,0,1) is its own OCS; any other goes through its
+;; 210 -- a mirrored one, 0,0,-1, runs X backwards.  In World, 2D.
+(defun spachk:ocs-pt (p ent / n w)
+  (setq n (spachk:dxf 210 ent))
+  (if (or (null n) (equal n '(0.0 0.0 1.0) 1.0e-12))
+    (list (car p) (cadr p))
+    (progn
+      (setq w (trans (list (car p) (cadr p) (if (caddr p) (caddr p) 0.0))
+                     ent 0))
+      (list (car w) (cadr w)))))
+
+;; -1.0 when ENT's OCS runs the other way round from World's (its 210
+;; points down), so a bulge or an arc's sweep reads backwards; else 1.0.
+(defun spachk:ocs-sense (ent / n)
+  (setq n (spachk:dxf 210 ent))
+  (if (and n (< (caddr n) 0.0)) -1.0 1.0))
+
+;; A polyline's segments, in World, each as (p q bulge) with p and q 2D;
+;; the closing one included when the polyline is closed.  Reads both
+;; the LWPOLYLINE SPA draws and an old-style POLYLINE's VERTEX chain,
+;; leaving out a spline's frame points (vertex flag 16), which the
+;; curve does not pass through.
+(defun spachk:pl-segs (ent / ed ty sn z p vs e v f n i a b out)
+  (setq ed (entget ent)
+        ty (cdr (assoc 0 ed))
+        sn (spachk:ocs-sense ent))
+  (cond
+    ((= ty "LWPOLYLINE")
+     (setq z (if (numberp (cdr (assoc 38 ed))) (cdr (assoc 38 ed)) 0.0))
+     (foreach p ed
+       (cond ((= (car p) 10)
+              (setq vs (cons (list (spachk:ocs-pt (list (cadr p) (caddr p) z)
+                                                  ent)
+                                   0.0)
+                             vs)))
+             ((and (= (car p) 42) vs)
+              (setq vs (cons (list (caar vs) (* sn (cdr p))) (cdr vs)))))))
+    ((= ty "POLYLINE")
+     (setq e (entnext ent))
+     (while (and e (= (spachk:etype e) "VERTEX"))
+       (setq v (entget e)
+             f (if (numberp (cdr (assoc 70 v))) (cdr (assoc 70 v)) 0))
+       (if (/= 16 (logand 16 f))
+         (setq vs (cons (list (spachk:ocs-pt (cdr (assoc 10 v)) ent)
+                              (* sn (if (assoc 42 v) (cdr (assoc 42 v)) 0.0)))
+                        vs)))
+       (setq e (entnext e)))))
+  (setq vs (reverse vs) n (length vs) i 0)
+  (repeat (if (= 1 (logand 1 (if (numberp (cdr (assoc 70 ed)))
+                                 (cdr (assoc 70 ed)) 0)))
+              n
+              (max 0 (1- n)))
+    (setq a   (nth i vs)
+          b   (nth (rem (1+ i) n) vs)
+          out (cons (list (car a) (car b) (cadr a)) out)
+          i   (1+ i)))
+  (reverse out))
+
+;; The quadrant points of the arc a bulged segment P->Q sweeps (P and Q
+;; already in the frame): a radius corner reaches as far as its arc,
+;; not its chord.  nil for a straight segment.
+(defun spachk:arc-quads (p q b / l h mx my cx cy r a0 sw k a out)
+  (setq l (distance p q))
+  (if (and (> l 0.0) (> (abs b) 1.0e-12))
+    (progn
+      ;; the centre sits h along the left normal of P->Q from the
+      ;; chord's middle; a positive bulge sweeps anticlockwise P to Q
+      (setq h  (/ (* l (- 1.0 (* b b))) (* 4.0 b))
+            mx (* 0.5 (+ (car p) (car q)))
+            my (* 0.5 (+ (cadr p) (cadr q)))
+            cx (- mx (* h (/ (- (cadr q) (cadr p)) l)))
+            cy (+ my (* h (/ (- (car q) (car p)) l)))
+            r  (distance (list cx cy) p)
+            sw (abs (* 4.0 (atan b)))
+            a0 (if (> b 0.0)
+                   (atan (- (cadr p) cy) (- (car p) cx))
+                   (atan (- (cadr q) cy) (- (car q) cx)))
+            k  0)
+      (repeat 4
+        (setq a (* k 0.5 pi))
+        (if (<= (rem (+ (- a a0) (* 4.0 pi)) (* 2.0 pi)) sw)
+          (setq out (cons (list (+ cx (* r (cos a))) (+ cy (* r (sin a))))
+                          out)))
+        (setq k (1+ k)))))
+  out)
+
+;; ENT's extents in frame FR, shaped as spachk:bbox's: ((lo) (hi)).
+;; With FR nil it IS spachk:bbox -- the World box, as before.  Turned,
+;; they are worked from the geometry: a polyline's vertices and its
+;; arcs' quadrant points, a circle's centre and radius, an ellipse's two
+;; axes (a whole one: an outline is closed), a line's ends, an arc's
+;; ends and quadrant points; anything else falls back to the corners of
+;; its World box, which holds it, if loosely.
+(defun spachk:fr-box (ent fr / ty s p q c r a b ex ey a1 sw bb pts lo hi)
+  (if (null fr)
+    (cal:bbox-ent ent)
+    (progn
+      (setq ty (spachk:etype ent))
+      (cond
+        ((member ty '("LWPOLYLINE" "POLYLINE"))
+         (foreach s (spachk:pl-segs ent)
+           (setq p   (spachk:fr-pt fr (car s))
+                 q   (spachk:fr-pt fr (cadr s))
+                 pts (cons p (append (spachk:arc-quads p q (caddr s))
+                                     pts)))))
+        ((= ty "CIRCLE")
+         (setq c   (spachk:fr-pt fr (spachk:ocs-pt (spachk:dxf 10 ent) ent))
+               r   (spachk:dxf 40 ent)
+               pts (list (list (- (car c) r) (- (cadr c) r))
+                         (list (+ (car c) r) (+ (cadr c) r)))))
+        ((= ty "ELLIPSE")
+         ;; an ellipse keeps its centre and major axis in World
+         (setq c   (spachk:fr-pt fr (spachk:dxf 10 ent))
+               a   (spachk:fr-pt fr (spachk:dxf 11 ent))
+               r   (spachk:dxf 40 ent)
+               b   (list (- (* r (cadr a))) (* r (car a)))
+               ex  (sqrt (+ (* (car a) (car a)) (* (car b) (car b))))
+               ey  (sqrt (+ (* (cadr a) (cadr a)) (* (cadr b) (cadr b))))
+               pts (list (list (- (car c) ex) (- (cadr c) ey))
+                         (list (+ (car c) ex) (+ (cadr c) ey)))))
+        ((= ty "LINE")
+         (setq pts (list (spachk:fr-pt fr (spachk:dxf 10 ent))
+                         (spachk:fr-pt fr (spachk:dxf 11 ent)))))
+        ((= ty "ARC")
+         (setq c  (spachk:dxf 10 ent)
+               r  (spachk:dxf 40 ent)
+               a1 (spachk:dxf 50 ent)
+               sw (rem (- (spachk:dxf 51 ent) a1) (* 2.0 pi)))
+         (if (<= sw 0.0) (setq sw (+ sw (* 2.0 pi))))
+         (setq p   (spachk:fr-pt fr (spachk:ocs-pt
+                                      (list (+ (car c) (* r (cos a1)))
+                                            (+ (cadr c) (* r (sin a1)))
+                                            (if (caddr c) (caddr c) 0.0))
+                                      ent))
+               q   (spachk:fr-pt fr (spachk:ocs-pt
+                                      (list (+ (car c) (* r (cos (+ a1 sw))))
+                                            (+ (cadr c) (* r (sin (+ a1 sw))))
+                                            (if (caddr c) (caddr c) 0.0))
+                                      ent))
+               pts (cons p (cons q (spachk:arc-quads
+                                     p q (* (spachk:ocs-sense ent)
+                                            (/ (sin (* 0.25 sw))
+                                               (cos (* 0.25 sw)))))))))
+        ((setq bb (cal:bbox-ent ent))
+         (setq pts (list (spachk:fr-pt fr (car bb))
+                         (spachk:fr-pt fr (cadr bb))
+                         (spachk:fr-pt fr (list (caar bb) (cadadr bb)))
+                         (spachk:fr-pt fr (list (caadr bb) (cadar bb)))))))
+      (foreach p pts
+        (setq lo (if lo (list (min (car lo) (car p)) (min (cadr lo) (cadr p)))
+                        (list (car p) (cadr p)))
+              hi (if hi (list (max (car hi) (car p)) (max (cadr hi) (cadr p)))
+                        (list (car p) (cadr p)))))
+      (if (and lo hi) (list lo hi)))))
+
+;; The extents of every one of ENTS in frame FR, together.
+(defun spachk:fr-box-of (ents fr / e bb out)
+  (foreach e ents
+    (if (setq bb (spachk:fr-box e fr))
+      (setq out (if out (spachk:bbunion out bb) bb))))
+  out)
+
+;; Which way an outline's straight edges run, as (angle . length) --
+;; an ellipse gives its major axis; a circle, or a polyline all arcs,
+;; gives nothing.
+(defun spachk:edge-dirs (ent / ty s p q a out)
+  (setq ty (spachk:etype ent))
+  (cond
+    ((member ty '("LWPOLYLINE" "POLYLINE"))
+     (foreach s (spachk:pl-segs ent)
+       (setq p (car s) q (cadr s))
+       (if (and (< (abs (caddr s)) 1.0e-9)
+                (> (distance p q) spachk:*tiny*))
+         (setq out (cons (cons (atan (- (cadr q) (cadr p))
+                                     (- (car q) (car p)))
+                               (distance p q))
+                         out)))))
+    ((= ty "ELLIPSE")
+     (setq a (spachk:dxf 11 ent))
+     (if (and a (> (+ (abs (car a)) (abs (cadr a))) spachk:*tiny*))
+       (setq out (list (cons (atan (cadr a) (car a)) 1.0))))))
+  out)
+
+;; Which way one linear dimension measures, as a World angle: a rotated
+;; dimension's own group 50, an aligned one's line through its points.
+;; nil for any other kind.
+(defun spachk:dim-dir (e / f p q)
+  (setq f (spachk:dxf 70 e))
+  (if (and f (numberp f))
+    (cond
+      ((= (logand 7 f) 0)
+       (if (spachk:dxf 50 e) (spachk:dxf 50 e) 0.0))
+      ((= (logand 7 f) 1)
+       (setq p (spachk:dxf 13 e) q (spachk:dxf 14 e))
+       (if (and p q
+                (> (+ (abs (- (car q) (car p))) (abs (- (cadr q) (cadr p))))
+                   spachk:*tiny*))
+         (atan (- (cadr q) (cadr p)) (- (car q) (car p))))))))
+
+;; Which way the linear overalls measure, as (angle . 1).
+(defun spachk:dim-dirs (dims / e a out)
+  (foreach e dims
+    (if (setq a (spachk:dim-dir e))
+      (setq out (cons (cons a 1.0) out))))
+  out)
+
+;; Which way LINEs run -- the hinges, a border's rules -- as
+;; (angle . length).
+(defun spachk:line-dirs (lines / e p q out)
+  (foreach e lines
+    (setq p (spachk:dxf 10 e) q (spachk:dxf 11 e))
+    (if (and p q
+             (> (distance (list (car p) (cadr p)) (list (car q) (cadr q)))
+                spachk:*tiny*))
+      (setq out (cons (cons (atan (- (cadr q) (cadr p)) (- (car q) (car p)))
+                            (distance (list (car p) (cadr p))
+                                      (list (car q) (cadr q))))
+                      out))))
+  out)
+
+;; Where overall E stands against the cover box COVBB, both in frame FR:
+;; ("above" . distance), ("left" . distance), or nil when it is on
+;; neither side SPA uses.  Above is asked first: SPA's across dim is the
+;; top one.
+(defun spachk:standing (e covbb fr / loc dx dy)
+  (if (setq loc (spachk:dim-loc e))
+    (progn
+      (setq loc (spachk:fr-pt fr loc)
+            dy  (- (cadr loc) (cadadr covbb))    ; above the top
+            dx  (- (caar covbb) (car loc)))      ; left of the left edge
+      (cond ((> dy 0.0) (cons "above" dy))
+            ((> dx 0.0) (cons "left" dx))))))
+
+;; The turn of the UCS dimension E was made in, radians: the negative
+;; of its group 51, or 0.0 -- World -- when it carries none.
+(defun spachk:dim-turn (e / h)
+  (setq h (spachk:dxf 51 e))
+  (if (numberp h) (- h) 0.0))
+
+;; Are two turns, each in [0, 2pi), the same one?
+(defun spachk:turn-same (a b / d)
+  (setq d (abs (- a b)))
+  (or (< d 1.0e-6) (< (- (* 2.0 pi) d) 1.0e-6)))
+
+;; DIMS' turns (spachk:dim-turn) tallied: ((turn . count) ...), each turn
+;; in [0, 2pi).
+(defun spachk:turn-tally (dims / e t0 votes v hit out)
+  (foreach e dims
+    (setq t0 (rem (spachk:dim-turn e) (* 2.0 pi)) hit nil out nil)
+    (if (< t0 0.0) (setq t0 (+ t0 (* 2.0 pi))))
+    (foreach v votes
+      (if (and (not hit) (spachk:turn-same (car v) t0))
+        (setq hit T out (cons (cons (car v) (1+ (cdr v))) out))
+        (setq out (cons v out))))
+    (setq votes (if hit out (cons (cons t0 1) out))))
+  votes)
+
+;; Of the turns CANDS, those TALLY gives the most votes (none: 0).
+(defun spachk:turn-most (cands tally / c v n best out)
+  (foreach c cands
+    (setq n 0)
+    (foreach v tally (if (spachk:turn-same (car v) c) (setq n (cdr v))))
+    (cond ((or (null best) (> n best)) (setq best n out (list c)))
+          ((= n best) (setq out (cons c out)))))
+  out)
+
+;; The UCS turn the drawing was made in, or nil with no dimension at
+;; all.  The overalls COVN vote.  A tie among them goes to the turn the
+;; OTHER dimensions -- Water's Edge, Overlap, corner marks, which SPA
+;; made in the same UCS -- were made in most; a tie still standing to a
+;; turned UCS over World (a dimension re-made by hand in World is the
+;; edit, not the original), then to the turn nearest World.  With no
+;; overalls the other dimensions vote alone, ties broken the same way.
+(defun spachk:turn-vote (covn others / tally cands c turned d bd best)
+  (setq tally (spachk:turn-tally others))
+  (if covn
+    (setq cands (spachk:turn-most
+                  (mapcar 'car (spachk:turn-tally covn))
+                  (spachk:turn-tally covn))
+          cands (if (cdr cands) (spachk:turn-most cands tally) cands))
+    (setq cands (spachk:turn-most (mapcar 'car tally) tally)))
+  (foreach c cands
+    (if (not (spachk:turn-same c 0.0)) (setq turned (cons c turned))))
+  (if (and turned (cdr cands)) (setq cands turned))
+  (foreach c cands
+    (setq d (min c (- (* 2.0 pi) c)))
+    (if (or (null bd) (< d bd)) (setq bd d best c)))
+  best)
+
+;; The cover's frame: nil for World, else (cos sin).  COV is the cover
+;; outline (nil when there is not exactly one), COVN its overalls, DIMS
+;; every dimension in the selection, HNGS the hinge lines.  See the
+;; head of this section for the rule.
+;;
+;; The recorded turn is the UCS the dimensions were MADE in.  A drawing
+;; ROTATEd after it was made keeps its dimensions' group 51 (whether
+;; ROTATE rewrites it is unconfirmed), so the quarter is taken nearest a
+;; turn it no longer has: right for a rotation under 45 degrees, a
+;; quarter off past it -- no worse than reading everything in World.
+(defun spachk:cover-frame (cov covn dims hngs / fams hint a tn k th d bd best
+                                                cs up e p q most)
+  (setq fams (if cov (spachk:fr-fams (spachk:edge-dirs cov)))
+        hint (cond ((spachk:fr-mode (spachk:dim-dirs covn)))
+                   ((spachk:fr-mode (spachk:line-dirs hngs))))
+        a    (cond (hint (spachk:fr-snap hint fams))
+                   ((if cov (spachk:fr-long (spachk:edge-dirs cov))))
+                   (t 0.0))
+        a    (spachk:fr-fold a)
+        ;; the UCS the drawing was made in, else World
+        tn   (cond ((spachk:turn-vote
+                      covn (vl-remove-if '(lambda (e) (member e covn)) dims)))
+                   (t 0.0))
+        k    0)
+  ;; the quarter turns of A the hinges run UP in -- SPA's hinges always
+  ;; run up the cover, and the audit reads their runs along Y -- or all
+  ;; four with no hinges; the recorded turn only chooses among those
+  (repeat 4
+    (setq th (+ a (* k 0.5 pi)) up 0)
+    (foreach e hngs
+      (setq p (spachk:fr-pt (list (cos th) (sin th)) (spachk:dxf 10 e))
+            q (spachk:fr-pt (list (cos th) (sin th)) (spachk:dxf 11 e)))
+      (if (> (abs (- (cadr q) (cadr p))) (abs (- (car q) (car p))))
+        (setq up (1+ up))))
+    (cond ((or (null most) (> up most)) (setq most up cs (list th)))
+          ((= up most) (setq cs (cons th cs))))
+    (setq k (1+ k)))
+  ;; of those, the one nearest the recorded turn
+  (foreach th (reverse cs)
+    (setq d (rem (abs (- th tn)) (* 2.0 pi)))
+    (if (> d pi) (setq d (- (* 2.0 pi) d)))
+    (if (or (null bd) (< d bd)) (setq bd d best th)))
+  ;; square to World is World: nil, and the code there always was
+  (if (and (< (abs (sin best)) 1.0e-9) (> (cos best) 0.0))
+    nil
+    (list (cos best) (sin best))))
+
+;; A border's own frame, from the entities of one sheet's frame: nil for
+;; World (a border square to World measures as it always did), else the
+;; direction of its longest straight edge, turned to the quarter in
+;; which it is wider than tall -- a title block lies landscape.
+(defun spachk:border-frame (ents / e pairs a c s k fr bb best)
+  (foreach e ents
+    (setq pairs (append (if (= (spachk:etype e) "LINE")
+                            (spachk:line-dirs (list e))
+                            (spachk:edge-dirs e))
+                        pairs)))
+  (setq a (spachk:fr-long pairs))
+  (if (and a (> (abs a) 1.0e-9))
+    (progn
+      (setq c (cos a) s (sin a) k 0)
+      (repeat 4
+        (setq fr (nth k (list (list c s) (list (- s) c)
+                              (list (- c) (- s)) (list s (- c))))
+              bb (spachk:fr-box-of ents fr))
+        (if (and (null best) bb
+                 (>= (spachk:bw bb) (- (spachk:bh bb) spachk:*tiny*)))
+          (setq best fr))
+        (setq k (1+ k)))
+      (if best best (list c s)))))
+
 ;;; -------------------- the hinge arrangement chart ----------------------
 ;;;  Copied from SPA (spa:hingetypes) so the audit measures against the
 ;;;  same rule the drawing was built to: fold hinges on even positions
@@ -755,7 +1245,7 @@
 ;; correct sheets side by side read STRETCHED.  So the frames are told
 ;; apart (spachk:clusters) and the one around, or nearest, the spa is
 ;; measured.  Returns (box . number-of-frames), nil with no border.
-(defun spachk:border-box (ss / ents ss2 i e bb bbs cl f best bestd d)
+(defun spachk:border-box (ss / ents ss2 i e bb bbs cl f best bestd d mine fr)
   (setq ents nil i 0)
   (if ss
     (repeat (sslength ss)
@@ -794,6 +1284,18 @@
       (setq best (car cl))
       (foreach bb (cdr cl) (setq best (spachk:bbunion best bb)))
       (setq cl (list best))))
+  ;; the frame measured in its own axes: a sheet drawn in a turned UCS
+  ;; is turned in World, and its World box read a correct 0.6x title
+  ;; block as STRETCHED.  Square to World the frame is nil and the box
+  ;; stands as found.
+  (if best
+    (progn
+      (foreach e ents
+        (if (and (setq bb (cal:bbox-ent e))
+                 (spachk:inside-p bb best spachk:*tiny*))
+          (setq mine (cons e mine))))
+      (if (setq fr (spachk:border-frame mine))
+        (setq best (spachk:fr-box-of mine fr)))))
   (if best (cons best (length cl))))
 
 ;;; ======================================================================
@@ -1007,8 +1509,10 @@
 
 ;; The roster: are the dimensions a finished spa sheet needs present,
 ;; and do the overalls read the outline's true size?
-(defun spachk:audit-roster (dims cov wat covbb watbb / rows ents covn watn
-                                           lapn m want e)
+;; FR is the cover's frame (spachk:cover-frame), which COVBB and WATBB
+;; are measured in.
+(defun spachk:audit-roster (dims cov wat covbb watbb fr / rows ents covn
+                                           watn lapn m want e a d)
   (setq rows nil ents nil
         covn (spachk:dims-noted dims spachk:*sfx-cover*)
         watn (spachk:dims-noted dims spachk:*sfx-water*)
@@ -1071,10 +1575,19 @@
                                   "' dimension")
                           1))))
       (progn
-        (setq m (spachk:dim-meas (car lapn))
+        ;; the lap along the way the dimension MEASURES, in the cover's
+        ;; frame: SPA dimensions the lap at the bottom, up the cover, so
+        ;; a water's edge lapped 3 across and 2 up reads 2 -- and read
+        ;; against the across lap, SPA's own drawing failed
+        (setq m    (spachk:dim-meas (car lapn))
+              a    (spachk:dim-dir (car lapn))
+              d    (if a (spachk:fr-pt fr (list (cos a) (sin a))))
               want (if (and covbb watbb)
-                       (* 0.5 (- (spachk:bw covbb)
-                                 (spachk:bw watbb)))
+                       (if (and d (> (abs (cadr d)) (abs (car d))))
+                           (* 0.5 (- (spachk:bh covbb)
+                                     (spachk:bh watbb)))
+                           (* 0.5 (- (spachk:bw covbb)
+                                     (spachk:bw watbb))))
                        nil))
         (if (and m want (> (abs (- m want)) spachk:*meas-tol*))
           (setq rows (append rows
@@ -1091,37 +1604,40 @@
   (spachk:res rows (reverse ents)))
 
 ;; The overalls' standoffs -- SPA puts the across dim 2 ft above the
-;; cover and the up dim 3 ft to its left.
-(defun spachk:audit-standoff (covn covbb / rows e loc dx dy)
+;; cover and the up dim 3 ft to its left.  Above and left are the
+;; cover's own (spachk:cover-frame): this form measures along World's,
+;; and is what the audit ran before there were frames.
+(defun spachk:audit-standoff (covn covbb)
+  (spachk:audit-standoff-in covn covbb nil))
+
+;; The same in frame FR, which COVBB is already measured in.  Above and
+;; left are the cover's own -- SPA's, in the UCS it drew in.
+(defun spachk:audit-standoff-in (covn covbb fr / rows e st)
   (setq rows nil)
   (if (and covbb covn)
     (foreach e covn
-      (setq loc (spachk:dim-loc e))
-      (if loc
-        (progn
-          (setq dy (- (cadr loc) (cadadr covbb))  ; above the top
-                dx (- (caar covbb) (car loc)))    ; left of the left edge
-          (cond
-            ;; above the cover: the across dim
-            ((> dy 0.0)
-             (if (> (abs (- dy spachk:*topoff*)) spachk:*off-tol*)
-               (setq rows (append rows
-                           (list (spachk:row
-                                   (strcat "Overall " (spachk:dxf 5 e)
-                                           ": stands " (spachk:dist dy)
-                                           " above the cover, SPA puts it "
-                                           (spachk:dist spachk:*topoff*))
-                                   1))))))
-            ;; left of the cover: the up dim
-            ((> dx 0.0)
-             (if (> (abs (- dx spachk:*dimoff*)) spachk:*off-tol*)
-               (setq rows (append rows
-                           (list (spachk:row
-                                   (strcat "Overall " (spachk:dxf 5 e)
-                                           ": stands " (spachk:dist dx)
-                                           " left of the cover, SPA puts it "
-                                           (spachk:dist spachk:*dimoff*))
-                                   1)))))))))))
+      (setq st (spachk:standing e covbb fr))
+      (cond
+        ;; above the cover: the across dim
+        ((and st (= (car st) "above"))
+         (if (> (abs (- (cdr st) spachk:*topoff*)) spachk:*off-tol*)
+           (setq rows (append rows
+                       (list (spachk:row
+                               (strcat "Overall " (spachk:dxf 5 e)
+                                       ": stands " (spachk:dist (cdr st))
+                                       " above the cover, SPA puts it "
+                                       (spachk:dist spachk:*topoff*))
+                               1))))))
+        ;; left of the cover: the up dim
+        ((and st (= (car st) "left"))
+         (if (> (abs (- (cdr st) spachk:*dimoff*)) spachk:*off-tol*)
+           (setq rows (append rows
+                       (list (spachk:row
+                               (strcat "Overall " (spachk:dxf 5 e)
+                                       ": stands " (spachk:dist (cdr st))
+                                       " left of the cover, SPA puts it "
+                                       (spachk:dist spachk:*dimoff*))
+                               1)))))))))
   (spachk:res rows nil))
 
 ;;; --- 5. the hinges ------------------------------------------------------
@@ -1178,15 +1694,15 @@
               (setq best opt)))
         best)))
 
-(defun spachk:audit-hinges (ss covbb grade taper / rows ents hngs labels n xs
-                                                 row opts allowed fw fl
+;; HNGS are the hinge lines (spachk:hinge-lines), found once by the
+;; audit.  FR is the cover's frame (spachk:cover-frame), which COVBB is
+;; measured in: a hinge runs along its Y and the pieces lie along its X.
+(defun spachk:audit-hinges (ss hngs covbb grade taper fr / rows ents labels
+                                                 n xs row opts allowed fw fl
                                                  sorted e want got
                                                  maxrun maxpiece prev
                                                  allvel hw h r k nm vd lvl)
   (setq rows nil ents nil
-        hngs (vl-remove-if-not
-               '(lambda (e) (= (spachk:etype e) "LINE"))
-               (spachk:loose-ents ss spachk:*lay-cover*))
         labels (vl-remove-if-not
                  '(lambda (e) (spachk:on-layer-p e spachk:*lay-text*))
                  (spachk:ents-of-type ss "MTEXT")))
@@ -1194,10 +1710,11 @@
     (spachk:res
       (list (spachk:row "Hinges: none drawn on layer COVER" 1)) nil)
     (progn
-      ;; west to east
+      ;; west to east, along the cover
       (setq sorted (vl-sort hngs
                      '(lambda (a b)
-                        (< (car (spachk:dxf 10 a)) (car (spachk:dxf 10 b))))))
+                        (< (car (spachk:fr-pt fr (spachk:dxf 10 a)))
+                           (car (spachk:fr-pt fr (spachk:dxf 10 b)))))))
       (setq n (1+ (length sorted))
             allvel (= grade "THERMOLIGHT"))
       ;; --- the piece count against the taper
@@ -1233,8 +1750,8 @@
       (setq maxrun 0.0)
       (foreach e sorted
         (setq maxrun (max maxrun
-                          (abs (- (cadr (spachk:dxf 11 e))
-                                  (cadr (spachk:dxf 10 e)))))))
+                          (abs (- (cadr (spachk:fr-pt fr (spachk:dxf 11 e)))
+                                  (cadr (spachk:fr-pt fr (spachk:dxf 10 e))))))))
       ;; the widest piece, measured before either check so the sheet can
       ;; be chosen from the drawing rather than from the row's order
       (if covbb
@@ -1242,8 +1759,9 @@
             (setq maxpiece 0.0 prev (caar covbb))
             (foreach e sorted
               (setq maxpiece (max maxpiece
-                                  (- (car (spachk:dxf 10 e)) prev))
-                    prev (car (spachk:dxf 10 e))))
+                                  (- (car (spachk:fr-pt fr (spachk:dxf 10 e)))
+                                     prev))
+                    prev (car (spachk:fr-pt fr (spachk:dxf 10 e)))))
             (setq maxpiece (max maxpiece (- (caadr covbb) prev)))))
       (setq row (spachk:foampick opts maxpiece maxrun)
             fw  (car row)
@@ -1700,7 +2218,7 @@
 ;; report's second column - and a lite run skips it altogether.
 ;; Returns (main-rows dim-rows flagged-entities).
 (defun spachk:audit (ss lite dofix / rows drows ents blk att g tp cov wat covo
-                                 wato dims covn r covbb watbb)
+                                 wato dims covn hngs r covbb watbb fr)
   (setq rows nil drows nil ents nil)
 
   ;; 1 -- the block
@@ -1725,9 +2243,16 @@
         ents (append ents (spachk:res-ents r))
         covo (spachk:outline-ents ss spachk:*lay-cover*)
         cov  (if (= 1 (length covo)) (car covo) nil))
-  ;; the cover's bounding box, resolved ONCE here and threaded down to
+  ;; the cover's own frame -- its edges' direction, turned to the
+  ;; quarter of the UCS its dimensions were made in (group 51,
+  ;; spachk:cover-frame): nil, World, for a cover SPA drew in World --
+  ;; and its box in that frame, resolved ONCE here and threaded down to
   ;; every sibling below instead of each re-resolving it off cov itself
-  (setq covbb (if cov (cal:bbox-ent cov)))
+  (setq dims  (spachk:dims ss)
+        covn  (spachk:dims-noted dims spachk:*sfx-cover*)
+        hngs  (spachk:hinge-lines ss)
+        fr    (spachk:cover-frame cov covn dims hngs)
+        covbb (if cov (spachk:fr-box cov fr)))
 
   ;; 3 -- the water's edge outline
   (setq r (spachk:audit-outline ss spachk:*lay-water* "Water's edge" nil)
@@ -1735,7 +2260,7 @@
         ents (append ents (spachk:res-ents r))
         wato (spachk:outline-ents ss spachk:*lay-water*)
         wat  (if (= 1 (length wato)) (car wato) nil))
-  (setq watbb (if wat (cal:bbox-ent wat)))
+  (setq watbb (if wat (spachk:fr-box wat fr)))
 
   (setq r (spachk:audit-nesting covbb watbb)
         rows (append rows (spachk:res-rows r)))
@@ -1744,7 +2269,6 @@
   ;; column; the roster and standoffs are SPA's own rules and stay on
   ;; the main sheet.
   (setq rows (append rows (list (spachk:row "THE OVERALLS" 3))))
-  (setq dims (spachk:dims ss))
   ;; the dimension-layer verdict runs in every mode, lite included
   (setq r (spachk:audit-dimlayer dims)
         rows (append rows (spachk:res-rows r)))
@@ -1752,18 +2276,17 @@
     (setq r     (spachk:audit-dims dims cov wat)
           drows (spachk:res-rows r)
           ents  (append ents (spachk:res-ents r))))
-  (setq r (spachk:audit-roster dims cov wat covbb watbb)
+  (setq r (spachk:audit-roster dims cov wat covbb watbb fr)
         rows (append rows (spachk:res-rows r))
         ents (append ents (spachk:res-ents r)))
-  (setq covn (spachk:dims-noted dims spachk:*sfx-cover*)
-        r    (spachk:audit-standoff covn covbb)
+  (setq r    (spachk:audit-standoff-in covn covbb fr)
         rows (append rows (spachk:res-rows r)))
 
   ;; 5 -- the hinges (only meaningful with a taper)
   (setq rows (append rows (list (spachk:row "THE HINGES" 3))))
   (if tp
     (progn
-      (setq r (spachk:audit-hinges ss covbb g tp)
+      (setq r (spachk:audit-hinges ss hngs covbb g tp fr)
             rows (append rows (spachk:res-rows r))
             ents (append ents (spachk:res-ents r))))
     (setq rows (append rows

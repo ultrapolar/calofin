@@ -57,6 +57,9 @@ labelled sample perimeter that has one of everything — a 2° kink
 (padded), a concave 4′-0″ radius (padded row) and a concave 6′-0″
 radius (too big — exempt) — and then runs the real pad-placing
 pipeline on it step by step, pausing so you can watch each rule fire. At the end it offers to erase the demo again.
+The demo is built from the spot you pick, in whatever UCS is current
+(Enter is that UCS's origin, the `0,0` the prompt names), square to
+World like the pads it draws, and the view is zoomed to frame all of it.
 
 ## Revisions
 

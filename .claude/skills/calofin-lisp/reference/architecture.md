@@ -177,7 +177,7 @@ so `make check` does not run it. Run it on a machine that has AutoCAD.
 
 ## Failure reporting — LAZDIAG
 
-`lisp/lazdiag/LAZDIAG.lsp`. Every command is wired to it at five call
+`lisp/lazdiag/LAZDIAG.lsp`. Every command is wired to it at six call
 sites (see standards.md). What it produces:
 
 - **a report**, when something breaks: a DXF in the user's Downloads

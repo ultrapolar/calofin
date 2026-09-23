@@ -413,6 +413,91 @@ check(f"all {tested} call(s) agree across {len(PAIRS) - skipped} "
 print(f"  ({skipped} pair(s) excused by SKIP, {len(_vms)} source file(s) "
       f"loaded beside the library)")
 
+# ---------------------------------------------------- the ones that ask
+# A helper that prompts cannot be called here -- there is no drafter to
+# answer it -- so SKIP excuses it from the calls above.  That left the
+# ask helpers with no parity at all, and they are the ones a UCS fix
+# lands in: pf:askpoint and its four siblings took the click to World,
+# cal:askpoint did not, and a regeneration would have shipped the bug in
+# LAZPASS.lsp while every twin check stayed green.  So each asking pair
+# is held to the library's TEXT instead: the same forms once the
+# prefix, the Back sentinel, comments, case and the LAZDIAG hooks are
+# set aside.  A tool whose askkw takes the HIDDEN keyword list third
+# (the mirror's askkw_hidden, which rewrites its call sites) is the one
+# shape that differs on purpose, and is excused by that flag.
+
+def _defun_text(src, name):
+    m = re.search(r"^\(defun\s+%s\s*\(" % re.escape(name), src, re.M | re.I)
+    if not m:
+        return None
+    depth, i, n, instr = 0, m.start(), len(src), False
+    while i < n:
+        c = src[i]
+        if instr:
+            if c == "\\":
+                i += 1
+            elif c == '"':
+                instr = False
+        elif c == '"':
+            instr = True
+        elif c == ";":
+            while i < n and src[i] != "\n":
+                i += 1
+            continue
+        elif c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return src[m.start():i + 1]
+        i += 1
+    return None
+
+
+def _norm(text, pfx):
+    """The forms, with what legitimately differs between copies taken
+    out: comments, the LAZDIAG hooks, the Back sentinel's name, the
+    helper prefix, and the case of anything outside a string."""
+    parts = re.split(r'("(?:[^"\\]|\\.)*")', text)
+    out = []
+    for k, part in enumerate(parts):
+        if k % 2:
+            out.append(part)
+            continue
+        part = re.sub(r";[^\n]*", "", part)
+        part = re.sub(r"'[A-Za-z]+-BACK\b", "'X-BACK", part)
+        part = re.sub(r"(?<![\w:*-])" + re.escape(pfx) + r"(?=[\w*-])",
+                      "X:", part, flags=re.I)
+        out.append(part.lower())
+    t = "".join(out)
+    t = re.sub(r"\(if lzd:ask \(lzd:ask .*? (\S+)\) \1\)", "", t)
+    return " ".join(t.split())
+
+
+asked = excused = 0
+text_drift = []
+for tool, src, local, cal, la, ca in PAIRS:
+    if SKIP.get(cal, "").split(";")[0] != "asks":
+        continue
+    d = mirror_shared.TOOLS[tool]
+    if d.get("askkw_hidden") and re.search(r"askkw|askyn", cal):
+        excused += 1
+        continue
+    tsrc = open(os.path.join(REPO_DIR, src), encoding="utf-8",
+                errors="replace").read()
+    lt, ct = _defun_text(tsrc, local), _defun_text(LIB_SRC, cal)
+    if not lt or not ct:
+        continue
+    lp = re.match(r"[^:-]+[:-]", local).group(0)
+    asked += 1
+    if _norm(lt, lp) != _norm(ct, "cal:"):
+        text_drift.append(f"{tool}: {local} does not read as {cal} -- "
+                          f"change both, or neither")
+
+check(f"all {asked} asking pair(s) read as the library's text "
+      f"({excused} hidden-keyword askkw/askyn excused)", not text_drift,
+      "\n         ".join(text_drift[:12]))
+
 if failures:
     print(f"\n{len(failures)} cal: parity check(s) FAILED")
     sys.exit(1)

@@ -135,7 +135,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v3.7")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.8")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -455,12 +455,17 @@
 ;; <subject> be treated?"  Returns "Square", "Radius", "Cut" or
 ;; "NotGiven" - the legacy words and NG are accepted typed in full and
 ;; normalized HERE, never downstream - or FIT-BACK.
-(defun fit:asktreat (subject dflt back / v)
+(defun fit:asktreat (subject dflt back / v kws)
+  ;; the bracket is DERIVED from the visible words (section 1 rule 1),
+  ;; so it cannot drift from the initget list; the hidden aliases go on
+  ;; the initget list only
+  (setq kws "Square Radius Cut NotGiven")
   (setq v (fit:askkw (strcat "How should " subject " be treated?")
-                     "Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL"
-                     "Square/Radius/Cut/NotGiven"
+                     (strcat kws " NG 90 ROUNDED DIAG DIAGONAL")
+                     (vl-string-translate " " "/" kws)
                      dflt back))
-  (cond ((= v "NG") "NotGiven")
+  (cond ((eq v 'FIT-BACK) v)
+        ((= v "NG") "NotGiven")
         ((= v "90") "Square")
         ((= v "ROUNDED") "Radius")
         ((member v '("DIAG" "DIAGONAL")) "Cut")
@@ -879,7 +884,10 @@
                          "\" - click the one you mean.")))
          (t (setq out (car dupes) done T))))
       (t
-       (setq out (fit:cand-nearest v cands snap))
+       ;; The click is in the drafter's UCS and the candidates are
+       ;; World, off the INSERTs themselves: under a moved UCS the raw
+       ;; click measured against them found nothing, or the wrong point.
+       (setq out (fit:cand-nearest (trans v 1 0) cands snap))
        (if out
          (setq done T)
          (princ (strcat "\nNo survey point there - click one, or type"

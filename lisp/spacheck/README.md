@@ -240,6 +240,41 @@ These carry a table or a list rather than a single value, so they are named here
 * The drawing is in **inches**, as SPA draws it.
 * Hinges are LINEs on `COVER`; the outline is a closed polyline. A
   drawing that puts hinges on another layer will report none.
+* Sizes, standoffs, the overlap and the hinge pieces and runs are
+  measured along the **cover's own axes**, read off the drawing alone —
+  not World's, and never the UCS the reviewer has on, so one sheet gets
+  one verdict whoever opens it. SPA draws along the current UCS, so a
+  spa drawn in a turned UCS is turned in World, and measured along World
+  X/Y its 84 x 60 cover came out 102.7 x 94.0. The angle comes from the
+  `Cover Size` overalls (failing them, the hinges), made exact by the
+  outline's nearest edge direction; with neither, the outline's longest
+  straight edge — never the heaviest edge direction, which an octagon's
+  or a cut corner's diagonals can win. Which quarter turn is "up" is
+  NOT guessed from where the overalls stand — that is what the audit
+  judges — but read from what the drawing records: a dimension keeps the
+  UCS it was made in as DXF group 51 (dragging it does not change it; one
+  made in World has none). The `Cover Size` overalls vote; the other
+  dimensions (Water's Edge, Overlap, corner marks) break a tie among
+  them or vote alone when they are gone; a tie still standing goes to
+  the turned UCS, since a dimension re-made by hand in World is the edit,
+  not the original; with no dimension at all, World. When hinges are
+  drawn the quarter must have them running up the cover, as SPA's always
+  do, and the recorded turn only chooses between the two quarters that
+  do. "Above" and "left" are the cover's own — SPA's, in the UCS it
+  drew in. So every drawing SPA made in World
+  is read exactly as it always was, whatever was dragged, erased or
+  swapped. A turned cover with no dimension and no hinge left is read in
+  the quarter nearest World: right up to 45 degrees, a quarter off
+  beyond it. A drawing ROTATEd after it was made keeps its dimensions'
+  group 51 (whether ROTATE rewrites it is unconfirmed), so it is read in
+  the quarter nearest the turn it was MADE in: right for a rotation under
+  45 degrees, a quarter off past it — no worse than reading it in World.
+  The title-block border is measured in its own frame (its longest
+  edge, landscape).
+* The `Overlap` reading is held against the lap along the direction that
+  dimension measures, in the cover's frame. SPA dimensions the lap at
+  the bottom, up the cover, so a 78 x 56 water's edge in an 84 x 60
+  cover reads 2 — the up lap, not the across lap of 3.
 * "Exactly 0.6×" means within `*border-tol*` — 0.5% either way — so a
   border drawn to 422.4 × 326.175 passes and one at the liner size does
   not. Tighten it to 0.0 to demand the number to the last decimal.
@@ -267,6 +302,7 @@ These carry a table or a list rather than a single value, so they are named here
 ```
 python3 tests/test_spacheck.py                          # standalone tier
 CALOFIN_LISP_ROOT=shared python3 tests/test_spacheck.py # grouped tier
+python3 tests/test_ucsfix_spacheck.py   # a spa SPA drew in a turned UCS
 ```
 
 The tests run the **real** `SPA.LSP` in `tests/lispvm.py` to build a

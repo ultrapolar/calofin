@@ -32,7 +32,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lispvm import VM, Dot, LispError, parse_all  # noqa: E402
+from lispvm import VM, Dot, LispError, Sym, parse_all  # noqa: E402
 
 HERE = os.path.dirname(__file__)
 CORNERSTP = os.path.join(HERE, '..', 'lisp', 'cornerstp', 'CORNERSTP.lsp')
@@ -360,6 +360,37 @@ for name, path, cmd, pair, prompts_of, full, form_script in TOOLS:
     assert snapshot(g), "%s: run-with-answers drew nothing" % name
     print("   %s: store empty after both entry points; plain run re-asks"
           % name)
+
+
+# --------------------------------------------------------------------
+# 4b. With LAZDIAG loaded, the store the form handed in is in the
+#     transcript -- the questions it answered are never asked, so a
+#     report of the run could not be replayed without it (lzd:state).
+# --------------------------------------------------------------------
+print("== 4b. the form's answers are in the LAZDIAG transcript ==")
+
+LAZDIAG = os.path.join(HERE, '..', 'lisp', 'lazdiag', 'LAZDIAG.lsp')
+
+for name, path, cmd, pair, prompts_of, full, form_script in TOOLS:
+    g = fresh(path)
+    g.load(LAZDIAG)
+    # a clean run's lzd:end files the run and clears the transcript, so
+    # read it there, the moment before
+    g.loads("(defun lzd:end (tool) (setq test:*log* lzd:*log*) tool)")
+    ws = walls(g, pair)
+    g.script = [ws] + form_script[1:]
+    g.prompts = []
+    g.eval(parse_all("(%s %s)" % (RUNNERS[cmd], full))[0])
+    log = g.globals.get(Sym('test:*log*')) or []
+    lines = [l for l in log if isinstance(l, str)
+             and l.startswith("  = %s " % STORE[cmd])]
+    assert lines, "%s: no '= %s' line in the transcript: %r" % (
+        name, STORE[cmd], log[-4:])
+    # written as AutoLISP reads it back -- a (key . value) pair, the
+    # key a quoted symbol -- which is what the replay decodes
+    assert "('DIMS . \"No\")" in lines[0], \
+        "%s: the store is not written as pairs: %s" % (name, lines[0][:120])
+    print("   %s: %s" % (name, lines[0][:70]))
 
 
 # --------------------------------------------------------------------

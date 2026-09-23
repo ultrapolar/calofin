@@ -35,7 +35,7 @@
 ;;;            LISPLABVER   print the loaded version
 ;;; ======================================================================
 
-(setq *lisplab-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *lisplab-version* "v1.8")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -1008,6 +1008,11 @@
           (setq u (getdist base "\nDemo size unit <5.0>: "))
           (if lzd:ask (lzd:ask "\nDemo size unit <5.0>: " u) u)
           (if (null u) (setq u 5.0))
+          ;; The pick - and Enter's 0,0 - are the drafter's UCS, and
+          ;; entmake keeps World: taken raw, a moved UCS drew the
+          ;; lesson somewhere else entirely.  From here on BASE is the
+          ;; pick's World point, which is all the demo draws from.
+          (setq base (trans base 1 0))
           (setq recs (lab:db-demo base u)
                 drew T)
           (lab:pause)))))

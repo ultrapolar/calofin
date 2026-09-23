@@ -103,7 +103,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.6")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.7")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -404,6 +404,11 @@
     ((= (type v) 'REAL) (lzd:real v))
     ((= (type v) 'SYM) (strcat "'" (vl-princ-to-string v)))
     ((= (type v) 'ENAME) "<ent>")
+    ;; a dotted pair -- a form store's (key . value) -- written the way
+    ;; AutoLISP reads one back.  Ahead of the point test: (8 . "0") has
+    ;; a number for its car and no cadr, and foreach over it throws
+    ((and (listp v) (not (listp (cdr v))))
+     (strcat "(" (lzd:enc (car v)) " . " (lzd:enc (cdr v)) ")"))
     ((and (listp v) (numberp (car v)))
      (strcat "(" (lzd:num (car v)) " " (lzd:num (cadr v)) " "
              (lzd:num (if (caddr v) (caddr v) 0.0)) ")"))
@@ -465,6 +470,46 @@
 (defun lzd:step (label)
   (setq lzd:*step* (lzd:str label))
   nil)
+
+;; What the run was HANDED before its first prompt.  A form -- LAZFORM,
+;; LAZSPA, LAZSTEP, LAZSIDE, the palette -- answers some or all of a
+;; tool's questions by leaving them in the tool's store (pool:*form*,
+;; spa:*form*, *cs-form* ...) and then calling the command, and the
+;; questions the store answers are never asked.  Those answers are
+;; inputs as much as a typed one is, and a transcript without them
+;; replays a run nobody made: the replay is asked what the form
+;; answered, every recorded answer lands a prompt early, and the probe
+;; chases that divergence instead of the failure.  So a command names
+;; its store at the top, straight after lzd:begin -- check_lazdiag
+;; derives which from its X:run-with-answers and holds it to that --
+;; and this writes one line per symbol that is SET:
+;;
+;;     = pool:*form*   -> (('SHAPE . "L") ('B . 240.0) ('C) ...)
+;;
+;; which tools/probe_report.py puts back before it replays.  Each entry
+;; of an association list is also added to the answers THE INPUTS
+;; section reads, as "form: B", so a zero the sheet handed in is flagged
+;; the way a typed one is.  A symbol that is nil -- a typed run's empty
+;; store -- writes nothing.  Run from inside a run: nothing may throw.
+(defun lzd:state (syms / s v e k)
+  (foreach s syms
+    (setq v (vl-catch-all-apply 'eval (list s)))
+    (if (and v (not (vl-catch-all-error-p v)))
+      (progn
+        (lzd:say (strcat "  = " (strcase (vl-princ-to-string s) t)
+                         "   -> " (lzd:enc v)))
+        (if (listp v)
+          (foreach e v
+            (if (and (listp e) e (not (listp (car e))))
+              (progn
+                (setq k (car e))
+                (setq lzd:*answers*
+                  (cons (cons (strcat "form: "
+                                      (if (= (type k) 'STR) k
+                                          (strcase (vl-princ-to-string k) t)))
+                              (cdr e))
+                        lzd:*answers*)))))))))
+  syms)
 
 ;; Register geometry the tool did not draw but is working ON -- the
 ;; selection it was handed, the entity it was asked to measure.  Takes an

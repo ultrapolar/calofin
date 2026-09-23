@@ -65,7 +65,8 @@ Common to all three:
   THE WALL, and the first tread it draws is the flat between the wall
   and the first chord, so the flight covers the same distances the
   plan's tread chain does. The flight
-  always runs down and to the left; every depth gets its own vertical
+  always runs down and to the left of the current UCS, so it stands
+  upright in a turned one; every depth gets its own vertical
   linear dim climbing with the steps, the overall depth sits further
   out, the treads carry no dims.
 * **Bead the steps** (`[Yes/No] <Yes>`, then `Which steps have beaded

@@ -226,7 +226,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v9.5")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v9.6")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -2268,11 +2268,16 @@
 ;;; arc would need an extrusion of its own -- so c:OASIS refuses to run
 ;;; in one rather than draw something wrong.
 
-;; T when the current UCS lies flat in the world plan, i.e. its Z axis is
-;; parallel to the world Z.  Every plan-drafting UCS is.
+;; T when the current UCS lies flat in the world plan AND faces up: its Z
+;; axis is the world +Z.  Every plan-drafting UCS is.  Parallel is not
+;; enough -- a UCS turned upside down (UCS X 180, or three points picked
+;; with Y clockwise of X) has Z = -1, and there an arc's angles, carried
+;; across by adding the UCS turn, run the other way round in the World
+;; and every corner arc is drawn as its mirror image.  POOL, SPA and
+;; POOLSIDE refuse the same UCS for the same reason.
 (defun oasis:ucs-flat-p ( / z)
   (setq z (trans '(0.0 0.0 1.0) 1 0 T))
-  (< (abs (- (abs (caddr z)) 1.0)) oasis:*ucsfuzz*))
+  (< (abs (- (caddr z) 1.0)) oasis:*ucsfuzz*))
 
 ;; How far the current UCS is turned from the world X axis.  Read off the
 ;; components rather than with (angle ...), which projects onto the UCS
@@ -4217,6 +4222,7 @@
     (if lzd:report (lzd:report "OASIS" *oasis-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "OASIS" *oasis-version*))
+  (if lzd:state (lzd:state '(oasis:*form*)))
 
   ;; before the push: what an earlier run left in these must never be
   ;; taken for this run's -- an undo group it did not open, a preview
@@ -4240,7 +4246,7 @@
     ;;    could not follow it there anyway
     ((not (oasis:ucs-flat-p))
      (princ (strcat "\nOASIS: the current UCS is tilted out of the world"
-                    " plan, so a flat plan pool"))
+                    " plan, or upside down, so a flat plan pool"))
      (princ (strcat "\n       cannot be laid out in it.  Set the UCS back"
                     " to World (or to any"))
      (princ "\n       plan UCS) and run OASIS again.")
