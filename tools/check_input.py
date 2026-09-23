@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Every input asks for what the drafter can actually give it.
 
-Two AutoCAD input facts the test VM does not model, each of which
-shipped quiet failures past every test because nothing in make check
-could see them:
+Two AutoCAD input facts that shipped quiet failures past every test,
+because until the test VM modelled them (lispvm.MISS, the spacebar
+rule) nothing could see them -- and the VM only sees what a test
+reaches, so this reads every pick and every prompt in the tree:
 
   A MISS IS NIL.  A click on empty paper at an entsel answers nil,
         exactly as Enter does.  The only difference is ERRNO: 7 for

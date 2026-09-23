@@ -37,6 +37,7 @@ sys.path.insert(0, TESTS_DIR)
 sys.path.insert(0, os.path.join(REPO_DIR, "tools"))
 
 from lispvm import VM, LispError  # noqa: E402
+from lispvm import MISS  # noqa: E402
 import check_lazdiag as cz  # noqa: E402
 import probe_report as pr  # noqa: E402
 
@@ -143,6 +144,22 @@ DEMOS = fixture("DEMOS", r"""(setq *demos-version* "v1.0")
           d (distance (cdr (assoc 10 e)) (cdr (assoc 11 e))))
     (if (> d lim) (car 1))
     (setq i (1+ i)))
+  (princ))
+""")
+
+#: fails only when a pick MISSED first: a miss re-asks, Enter ends
+DEMOM = fixture("DEMOM", r"""(setq *demom-version* "v1.0")
+(defun c:DEMOM ( / *error* sel n done)
+  (defun *error* (msg)
+    (princ (strcat "\nDEMOM error: " msg))
+    (princ))
+  (setq n 0 done nil)
+  (while (not done)
+    (setvar "ERRNO" 0)
+    (setq sel (entsel "\nPick a line: "))
+    (cond ((and (null sel) (= 7 (getvar "ERRNO"))) (setq n (1+ n)))
+          (T (setq done T))))
+  (if (> n 0) (car 1))
   (princ))
 """)
 
@@ -276,6 +293,22 @@ try:
     check("an unknown command is an error, not a guess", False)
 except LookupError:
     check("an unknown command is an error, not a guess", True)
+
+print("\na missed pick is recorded as a miss, and replays as one")
+# A click on nothing and Enter are the same nil at an entsel; ERRNO 7 is
+# the difference.  Written as nil, the replay fed Enter where the drafter
+# had missed -- the re-ask loop ended, the failure never came back, and
+# the probe reported a control run that did not reproduce.
+path = report_of(DEMOM, "DEMOM", [MISS, None])
+parsed = pr.parse_report(pr.report_lines(pr.read_dxf(path)[1]))
+encs = [a.enc for a in parsed["answers"]]
+check("the transcript writes the miss as <miss> and Enter as nil",
+      encs == ["<miss>", "nil"], encs)
+check("...and <miss> reads back as lispvm.MISS",
+      pr.decode("<miss>") is MISS)
+res = pr.probe(path, tool_path=DEMOM)
+check("the replay reproduces the failure the miss led to",
+      res.data["reproduced"], res.data["control"])
 
 print("\na replayed answer the VM refuses is a divergence, not a crash")
 # The VM refuses an answer no drafter can type where the replay has got

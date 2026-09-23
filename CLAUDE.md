@@ -267,7 +267,9 @@ above, which binds the answer for the length of the record and hands
 it straight back, so the wrapped call means what the bare one did and
 the `nil` that ends a loop is written down like any other answer. The
 answers are typed -- `nil`, `12.5`, `"Yes"`, `(x y z)`,
-`(<ent> (x y z))` -- which is what makes the transcript REPLAYABLE:
+`(<ent> (x y z))`, and `<miss>` for a pick that landed on empty paper
+(nil with ERRNO 7, which Enter's nil is not) -- which is what makes the
+transcript REPLAYABLE:
 `python3 tools/probe_report.py REPORT.dxf` loads the tool at the
 report's version into the test VM, hands it the geometry and the
 answers the report carries, confirms the same failure comes back, then

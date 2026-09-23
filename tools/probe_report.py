@@ -48,7 +48,7 @@ sys.path.insert(0, str(REPO / "tests"))
 sys.path.insert(0, str(HERE))
 
 from lispvm import (VM, LispError, Sym, T, Ent, Dot,  # noqa: E402
-                    Unanswerable, NotModelled)
+                    Unanswerable, NotModelled, MISS)
 from callib import COMMAND, LISP_DIR, RELEASES_DIR, NOT_A_TOOL, lsp_files  # noqa: E402
 
 ERRLAYER = "CALOFIN-ERROR"
@@ -327,6 +327,11 @@ def decode(enc):
             return None
         if t == "nil":
             return None
+        if t == "<miss>":
+            # a click on nothing (LAZDIAG writes it for a nil with
+            # ERRNO 7): replayed as one, so the tool's miss branch --
+            # not its Enter branch -- is the one the replay takes
+            return MISS
         if t == "T":
             return T
         if t == "<ent>":

@@ -103,7 +103,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.5")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.6")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -387,6 +387,7 @@
 ;; on the feed and prove nothing about the bug.
 ;;
 ;;   nil          Enter, or NA
+;;   <miss>       a click on nothing: nil with ERRNO 7 -- see lzd:ask
 ;;   25.5         a number, decimal whatever LUNITS says
 ;;   "Radius"     a string -- a keyword, a note, a typed dimension
 ;;   (x y z)      a point; Z always written
@@ -432,8 +433,17 @@
 
 (defun lzd:ask (prompt answer)
   (lzd:step prompt)
-  (lzd:say (strcat "  ? " (lzd:str prompt)
-                   "   -> " (lzd:enc answer)))
+  ;; A nil with ERRNO 7 is a pick that landed on empty paper, not an
+  ;; Enter -- the two are the same nil, and a tool that tells them apart
+  ;; zeroes ERRNO right before its pick (check_input) and reads 7 after.
+  ;; Written as nil, a replay fed Enter where the drafter had missed:
+  ;; the loop the miss re-asks in ended instead, and the probe chased a
+  ;; failure down the wrong path.  Read here, not reset: the tool reads
+  ;; the same ERRNO on the next line.
+  (lzd:say (strcat "  ? " (lzd:str prompt) "   -> "
+                   (if (and (null answer) (= 7 (getvar "ERRNO")))
+                     "<miss>"
+                     (lzd:enc answer))))
   (setq lzd:*answers* (cons (cons (lzd:str prompt) answer) lzd:*answers*))
   ;; A CLICK is also a labelled point on the report's CALOFIN-PICKS
   ;; layer.  Every input reaches this line -- check_lazdiag sees to that
