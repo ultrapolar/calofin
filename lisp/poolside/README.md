@@ -46,7 +46,9 @@ exactly what they meant, and the re-asks keep the ruler. The floor
 `B` and the RUNS beside them do not get one: those are taped off the
 sheet, and there is no short list of what a run comes to. The ruler is
 scratch on `POOLSIDE-RULER`, down before the next question and swept
-on every way out, Esc included.
+on every way out, Esc included. A `POOLSIDE-RULER` found locked is
+unlocked (and POOLSIDE says so): a locked layer takes the ruler but
+will not give it back. Off or frozen is left as it is.
 
 ```
    C  --.___                    ___.--  C          <- waterline

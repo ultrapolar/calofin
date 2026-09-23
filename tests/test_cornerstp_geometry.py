@@ -1294,17 +1294,27 @@ def test_outer_guards_fall_back_to_square():
 def numlist(text):
     """ns-numlist: the step numbers in a typed answer, in order.
 
-    Runs of digits are numbers; everything else separates, so "1 3 4",
-    "1,3,4" and "1, 3 and 4" all read the same.
+    Spaces and commas separate and "and" is a separator word, so
+    "1 3 4", "1,3,4" and "1, 3 and 4" all read the same; "1-3" is the
+    range 1, 2, 3 (PERPPTS's spelling).  Any other token -- a word, a
+    backwards range, a stray dash, a number past three digits -- makes
+    the whole answer unreadable and nothing comes back, so the prompt
+    asks again.  (It once read every non-digit as a separator, and 1-3
+    was steps 1 and 3; and 1-100000 was expanded a step at a time.)
     """
-    out, tok = [], ""
-    for ch in text + " ":
-        if ch.isdigit():
-            tok += ch
-        else:
-            if tok:
-                out.append(int(tok))
-            tok = ""
+    out = []
+    for tok in text.replace(",", " ").split():
+        if tok.upper() == "AND":
+            continue
+        a, dash, b = tok.partition("-")
+        if not dash:
+            b = a
+        if not (a.isdigit() and b.isdigit() and len(a) <= 3
+                and len(b) <= 3 and int(a) <= int(b)):
+            return []
+        for k in range(int(a), int(b) + 1):
+            if k not in out:
+                out.append(k)
     return out
 
 
@@ -1346,6 +1356,13 @@ def test_numlist_reads_every_separator_the_same():
     assert numlist("  2  ") == [2]
     assert numlist("10 2") == [10, 2], "multi-digit numbers stay whole"
     assert numlist("") == [] and numlist("none") == [], "nothing to read"
+    assert numlist("1-3") == [1, 2, 3], "a range is every step in it"
+    assert numlist("2-4, 1") == [2, 3, 4, 1]
+    assert numlist("3-1") == [] and numlist("1 thru 3") == [], \
+        "an answer it cannot read is asked again, not guessed at"
+    assert numlist("1-100000") == [] and numlist("1000") == [], \
+        "no run draws a thousand steps: refused, not expanded"
+    assert numlist("1-999")[-1] == 999, "three digits still read"
 
 
 def test_treadents_picks_the_tread_not_a_riser_or_a_dim():

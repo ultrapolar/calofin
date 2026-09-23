@@ -111,6 +111,36 @@ assert not any(p.startswith('\nC -') or p.startswith('\nD -')
 
 
 # --------------------------------------------------------------------
+# 1b. A depth of zero or less is not a depth.  The typed prompt refuses
+#     both ('A length must be more than zero'), and the callers only
+#     check D against C -- so a sheet that wrote C as -3'4" and D as
+#     -10" (elevations) drew a wall standing above the waterline, and a
+#     C of 0 drew a zero-length C dimension, both without a word.  The
+#     form value is spent and the letter asked at the keyboard instead.
+# --------------------------------------------------------------------
+print("== 1b. a zero or negative depth from the form is asked instead ==")
+
+ZERO_C = """'((btype . "Wedge") (h . 30.0) (f . 180.0)
+              (c . 0.0) (d . 60.0))"""
+z = by_form(ZERO_C, LEAD + [None, 60.0, None, 40.0])
+same(a, z, "zero C")
+assert [p for p, _ in z.prompts if p.startswith('\nC -')], \
+    "a C of zero was taken from the form"
+assert not [p for p, _ in z.prompts if p.startswith('\nD -')], \
+    "a good D should still come from the form"
+
+NEG = """'((btype . "Wedge") (h . 30.0) (f . 180.0)
+           (c . -40.0) (d . -10.0))"""
+n = by_form(NEG, LEAD + [None, 60.0, None, 40.0, 60.0])
+same(a, n, "negative C and D")
+for letter in ('C', 'D'):
+    assert [p for p, _ in n.prompts if p.startswith('\n%s -' % letter)], \
+        "a negative %s was taken from the form" % letter
+print("   C = 0 and C/D below zero are asked at the keyboard, and the pool"
+      " drawn is the typed one")
+
+
+# --------------------------------------------------------------------
 # 2.  Depths only. This is the case the side-view diagram exists for --
 #     the operator reads C and D off the section and leaves the plan
 #     chain to be picked up at the command line.

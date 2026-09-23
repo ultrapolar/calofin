@@ -135,10 +135,15 @@ DIMENSION layer.
 ## Revisions
 
 `CDCALLOUT.lsp` carries the auto-stamped banner
-`(setq *cdcallout-version* "v1.11")` that `tools/release_lisp.py`
+`(setq *cdcallout-version* "v1.12")` that `tools/release_lisp.py`
 reads; run it after any change and the dated twin
-`releases/CDCALLOUT_MMDDYY_REV111.lsp` regenerates itself. Bump the
+`releases/CDCALLOUT_MMDDYY_REV112.lsp` regenerates itself. Bump the
 banner with every revision.
+
+* **v1.12** — a click on one of a doubled number's rings is read in the
+  current UCS and moved into the world before it is measured against
+  the points. With the UCS origin moved off the world one it took
+  whichever point sat nearest the click's bare UCS numbers.
 
 * **v1.11** — the load greeting is silent inside the whole build
   (`*calofin-quiet*`, set by `LAZPASS.lsp` and `CALOFIN-LOADER.lsp`);

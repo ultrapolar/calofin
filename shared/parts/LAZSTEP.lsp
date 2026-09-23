@@ -135,7 +135,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v2.0")
+(setq *lazstep-version* "v2.1")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -1720,6 +1720,12 @@
              (lzt:recall-save (lzt:recall-slot))
              (setq out (lzt:form) done T))))
          (t (setq done T))))))
+  ;; the dialog's run ends with the dialog.  What the command does with
+  ;; the answer -- runs POOL off the form, launches the tool picked -- is
+  ;; a run of its own: left standing, this one was JOINED by it (the
+  ;; command is still what CMDNAMES names), and a failure in the tool
+  ;; was filed under a dialog no report can replay
+  (if lzd:end (lzd:end "LAZSTEP"))
   out)
 
 ;;; -------------------- commands ----------------------------------------

@@ -35,7 +35,7 @@
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
 
-(setq *wcalst-version* "v2.0")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v2.1")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 ;;; -------------------- tunables ----------------------------------------
@@ -514,7 +514,7 @@
   hit
 )
 
-(defun wc:inwin (sgm wins / hit lo hi wn)
+(defun wc:inwin (sgm wins / hit lo hi wn a b)
   ;; T when BOTH ends of segment SGM lie inside one of the windows in
   ;; WINS, each a (corner corner) pair in any order -- AutoCAD's own
   ;; Window rule, applied to one segment rather than to a whole entity.
@@ -522,13 +522,20 @@
   ;; took the whole entity, and with it the whole far side became the
   ;; "stair section" -- developed rigidly, every dart dropped, and the
   ;; summary reading a bottom line 0.00% off.
-  (setq hit nil)
+  ;; The corners were clicked, so they are UCS; the segment came out of
+  ;; entget, so it is world.  The ends go into the UCS for the test --
+  ;; a window drawn under a turned UCS is square to THAT, not to the
+  ;; world -- because compared raw, a moved UCS caught nothing and the
+  ;; stairs were cut full of darts under a clean-looking summary.
+  (setq hit nil
+        a (trans (list (car (car sgm)) (cadr (car sgm)) 0.0) 0 1)
+        b (trans (list (car (cadr sgm)) (cadr (cadr sgm)) 0.0) 0 1))
   (foreach wn wins
     (setq lo (list (min (car (car wn)) (car (cadr wn)))
                    (min (cadr (car wn)) (cadr (cadr wn))))
           hi (list (max (car (car wn)) (car (cadr wn)))
                    (max (cadr (car wn)) (cadr (cadr wn)))))
-    (if (and (wc:ptin (car sgm) lo hi) (wc:ptin (cadr sgm) lo hi))
+    (if (and (wc:ptin a lo hi) (wc:ptin b lo hi))
       (setq hit T)))
   hit
 )
@@ -618,7 +625,7 @@
                  rsgns rsgn rkeep rmaj sumk ln
                  strest nodes2 endpts dpa stentry stpath usedj stpt stgo
                  stcand se pA pB stang stca stsn sttot stlen stprev stdx
-                 stdy dfeats run stairrng stage wc-pick)
+                 stdy dfeats run stairrng stage wc-pick stnone sthit stw)
 
   (defun *error* (msg)
     (if inundo (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -678,7 +685,10 @@
          ((not (ssmemb (car pick) ss))
           (princ "  (that entity is not in the selection)"))
          (T
-          (setq en (car pick) pk (cadr pick))
+          ;; the pick point is UCS and the segments are world: raw, a
+          ;; moved UCS seeded the trace from whichever segment of a
+          ;; polyline sat nearest the untranslated numbers
+          (setq en (car pick) pk (trans (cadr pick) 1 0))
           ;; seed = the segment of the picked entity nearest the pick
           (setq seed nil d2min 1.0e18 i 0)
           (foreach sg segs
@@ -1025,7 +1035,7 @@
   ;; treads come out level with their exact lengths and every riser
   ;; keeps its exact rise (validated against a hand-drawn example:
   ;; every segment length is preserved to the hundredth)
-  (setq synth nil stkeys nil stairrng nil)
+  (setq synth nil stkeys nil stairrng nil stnone 0)
   (if stwins
     (progn
       ;; candidate segments: both ends inside a window, on the far
@@ -1041,6 +1051,14 @@
           (setq stsegs (cons (list (car sgm) (cadr sgm)) stsegs))
         )
       )
+      ;; a window that caught no far-side line holds nothing back, and
+      ;; its stairs get darts like the rest of the band -- counted here
+      ;; so the report can say so instead of reading as a clean run
+      (foreach stw stwins
+        (setq sthit nil)
+        (foreach sgm stsegs
+          (if (wc:inwin sgm (list stw)) (setq sthit T)))
+        (if (not sthit) (setq stnone (1+ stnone))))
       ;; process each connected stair path
       (while stsegs
         ;; flood-fill one connected component
@@ -1461,6 +1479,10 @@
   (if (> stdrop 0)
     (princ (strcat "\n  " (itoa stdrop) " dart(s) fall inside the stair"
                    " section(s) and are left for the hand work there.")))
+  (if (> stnone 0)
+    (princ (strcat "\n  " (itoa stnone) " stair window(s) caught no line"
+                   " of the far side, so nothing was held back there -"
+                   " window both ends of each segment to be kept.")))
   (princ (strcat "\n  top line " (wc:num toplen)
                  ", bottom before " (wc:num botb)
                  ", bottom after " (wc:num bota)

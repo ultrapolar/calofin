@@ -98,7 +98,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.20")
+(setq *lazform-version* "v2.21")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -1990,6 +1990,12 @@
                               (nth lzf:*btype* lzf:*btypes*))))))
      (unload_dialog dcl)
      (vl-file-delete f)))
+  ;; the dialog's run ends with the dialog.  What the command does with
+  ;; the answer -- runs POOL off the form, launches the tool picked -- is
+  ;; a run of its own: left standing, this one was JOINED by it (the
+  ;; command is still what CMDNAMES names), and a failure in the tool
+  ;; was filed under a dialog no report can replay
+  (if lzd:end (lzd:end "LAZTXT"))
   out)
 
 (defun c:LAZTXT ( / c form)
@@ -2471,9 +2477,17 @@
            (numberp (setq v (cal:formanswer (cal:trim (lzf:get key))))))
       v))
 
+;; ...and a depth is more than zero before it is compared at all.
+;; POOL's own prompts refuse zero and a leading minus, and since REV41
+;; pool:askh spends such a form answer and asks at the command line --
+;; so a sheet that writes depths as negative elevations (C -3'4", D
+;; -10") would pass the D-beats-C test here, light Insert, and then
+;; have POOL ask for both again.  Said here instead.
 (defun lzf:depthbad ( / cv dv c2v)
   (setq cv (lzf:depth "c") dv (lzf:depth "d") c2v (lzf:depth "c2"))
   (cond
+    ((vl-some '(lambda (v) (and v (<= v 0.0))) (list cv dv c2v))
+     "C, D and C2 must be more than zero - POOL will not take them otherwise.")
     ((and cv dv (<= dv cv))
      "D must be deeper than C - POOL will not take it otherwise.")
     ((and cv c2v dv (or (< c2v cv) (> c2v dv)))
@@ -2884,6 +2898,12 @@
   (setq dcl nil)
   (if f (vl-file-delete f))
   (setq f nil)
+  ;; the dialog's run ends with the dialog.  What the command does with
+  ;; the answer -- runs POOL off the form, launches the tool picked -- is
+  ;; a run of its own: left standing, this one was JOINED by it (the
+  ;; command is still what CMDNAMES names), and a failure in the tool
+  ;; was filed under a dialog no report can replay
+  (if lzd:end (lzd:end "LAZFORM"))
   out)
 
 ;; WHERE THE DIALOG COMES BACK UP.  done_dialog reports the position it

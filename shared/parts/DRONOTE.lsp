@@ -44,7 +44,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dronote-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *dronote-version* "v1.3")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -138,6 +138,15 @@
     (strcat dn:*header* "\\P" dn:*bullet* txt)
     (strcat dn:*bullet* txt)))
 
+;; How far the current UCS is turned from the world X axis, so a note
+;; reads along the UCS the drafter is drawing in.  Taken off the UCS X
+;; axis moved into the world -- not off UCSXDIR run back into the UCS,
+;; which is (1 0 0) there however far the UCS is turned, so it would
+;; always answer zero.  0 in the world UCS.
+(defun dn:ucsang ( / v)
+  (setq v (trans '(1.0 0.0 0.0) 1 0 T))
+  (atan (cadr v) (car v)))
+
 ;; entmake an MTEXT at INS reading STR, in the properties the shop's own
 ;; review notes carry: attached TOP LEFT at the point, dn:*style* at
 ;; dn:*text-hgt*, wrapped at dn:*text-width*, upright, its lines spaced
@@ -145,7 +154,8 @@
 ;; 250-char DXF chunks - MTEXT carries at most 250 characters in group
 ;; 1, and the header takes a fixed bite out of that, so a note
 ;; lengthened past it would otherwise lose everything past the first
-;; chunk.  Returns the new ename.
+;; chunk.  INS is a WORLD point, which is what entmake reads group 10
+;; as.  Returns the new ename.
 (defun dn:mtext (ins str / dxf)
   (setq dxf (list '(0 . "MTEXT") '(100 . "AcDbEntity")
                   (cons 8 dn:*layer*) '(100 . "AcDbMText")
@@ -159,7 +169,7 @@
   (entmakex (append dxf
                     (list (cons 1 str)
                           (cons 7 dn:*style*)
-                          '(50 . 0.0)        ; rotation
+                          (cons 50 (dn:ucsang)) ; upright in the UCS
                           '(73 . 1)          ; line spacing: at least
                           (cons 44 dn:*line-space*)))))
 
@@ -224,7 +234,12 @@
          (T
           (cal:ensure-layer dn:*layer* dn:*layer-color*)
           (dn:ensure-style dn:*style* dn:*style-font*)
-          (setq placed (cons (cons (dn:mtext (list (car pt) (cadr pt) 0.0)
+          ;; the click answers in the UCS and entmake wants the world:
+          ;; untranslated, a UCS off the world origin put the note that
+          ;; far from the click and still said "Note placed."
+          (setq placed (cons (cons (dn:mtext (trans (list (car pt) (cadr pt)
+                                                          0.0)
+                                                    1 0)
                                              (dn:written txt))
                                    txt)
                              placed)

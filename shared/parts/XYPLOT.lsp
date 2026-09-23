@@ -58,7 +58,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.9")
+(setq *xyplot-version* "v1.10")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -279,8 +279,15 @@
                 val  (+ (* feet 12.0) inch)
                 xyp:*dirty* T)))
       (if neg (setq val (- val)))
-      ;; --- final sanity: non-positive or still impossible -> unreadable --
-      (if (or (<= val 0.0) (and maxd (> val (* maxd 1.1))))
+      ;; --- final sanity: no digit at all, or still impossible -> unreadable
+      ;; A coordinate is not a tape: 0 is the origin and a negative is the
+      ;; other side of it, both real readings.  ABCDEF's rule that a value
+      ;; of 0 or less is unreadable came across with the parser, and it
+      ;; dropped the reference corner and every negative offset from the
+      ;; plot while the report called them unreadable.  What a coordinate
+      ;; cell must have is a digit: a lone "-", the sheet's usual "not
+      ;; measured", parses to 0 and is still left blank.
+      (if (or (not (wcmatch s "*#*")) (and maxd (> val (* maxd 1.1))))
         (progn (setq xyp:*dirty* T) nil)
         val))))
 
@@ -768,6 +775,9 @@
 
 ;; Pre-select graph 1's points and start ABHD on them.  (ABCDEF's handoff,
 ;; for the same reason and with the same caveat when ABHD is not loaded.)
+;; XYPLOT's undo group is already closed when this runs, so an Esc inside
+;; ABHD - which reaches ABHD's handler, not this command's - leaves the
+;; plot as one U and nothing of XYPLOT's standing open.
 (defun xyp:to-abhd (ss / n)
   (setq n (if ss (sslength ss) 0))
   (cond
@@ -781,10 +791,21 @@
                     "\n  whole LAZPASS.lsp build), then run ABHD and"
                     "\n  window graph 1's points.")))
     (T
-     (princ (strcat "\n  Starting ABHD on the " (itoa n)
-                    " point(s) of graph 1 ..."))
-     (sssetfirst nil ss)
-     (vl-cmdf "_.ABHD"))))
+     ;; with PICKFIRST off a pre-selection cannot be handed over at all,
+     ;; so ABHD will ask for the points.  One line says so: a "starting
+     ;; on the points" line followed by one taking it back left the
+     ;; drafter unsure whether ABHD had them or not.
+     (if (= 0 (getvar "PICKFIRST"))
+       (princ (strcat "\n  Starting ABHD - PICKFIRST is off, so window"
+                      " graph 1's " (itoa n) " point(s) when it asks."))
+       (progn
+         (princ (strcat "\n  Starting ABHD on the " (itoa n)
+                        " point(s) of graph 1 ..."))
+         (sssetfirst nil ss)))
+     ;; the c: function, CALLED: (vl-cmdf "_.ABHD") reached the command
+     ;; processor, which does not know AutoLISP commands, so ABHD never
+     ;; started after the line above said it was starting
+     (c:ABHD))))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Main command

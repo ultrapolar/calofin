@@ -522,6 +522,41 @@ check("  but it IS said, in cyan",
 check("  and every hinge on it is velcro",
       set(labels(vm)) == {"Velcro Hinge"}, str(labels(vm)))
 
+# -- a click that missed the block.  entsel answers nil for it, as for
+#    Enter; ERRNO 7 is the difference.  Taken for Skip, a click just
+#    beside a Thermo-Light block drew a STANDARD 4-2 cover and the report
+#    said, in red, that no taper was given.
+
+
+def missed(vm):
+    vm.sysvars["ERRNO"] = 7
+    return None
+
+
+vm = fresh(RECT)
+spa = list(vm.entities)
+vm.loads(block("Thermo-Light", "1-3/8"))
+blk = [e for e in vm.entities if e not in spa][0]
+said = run(vm, [spa, None, missed, [blk, [400.0, 400.0, 0.0]]])
+check("a click that misses the block is asked again, not taken for Skip",
+      row_after(vm, "GRADE / TAPER") == "THERMO 1-3/8",
+      str(row_after(vm, "GRADE / TAPER")))
+check("  and says it hit nothing", "Nothing there" in said)
+check("  so no taper is claimed missing",
+      not any("TAPER NOT GIVEN" in t for t in red(vm)), str(red(vm)))
+check("  and the hinges are the block's (all velcro)",
+      set(labels(vm)) == {"Velcro Hinge"}, str(labels(vm)))
+
+# ...while a real Enter is still Skip, whatever ERRNO an earlier call
+# left behind -- it is cleared before the pick
+vm = fresh(RECT)
+spa = list(vm.entities)
+vm.sysvars["ERRNO"] = 7
+said = run(vm, [spa, None, None])
+check("Enter with a stale ERRNO is still Skip",
+      "TAPER NOT GIVEN - STD 4-2 ASSUMED" in red(vm)
+      and "Nothing there" not in said, str(red(vm)))
+
 # -- typing it
 vm = fresh(RECT)
 spa = list(vm.entities)

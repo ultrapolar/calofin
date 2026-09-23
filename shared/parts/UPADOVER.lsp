@@ -119,7 +119,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *upadover-version* "v1.3")
+(setq *upadover-version* "v1.4")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -493,10 +493,29 @@
 ;; "Pt.17", the way the prompts and the report name a point.
 (defun upad:ptname (nm) (strcat upad:*pt-prefix* nm))
 
-;; Every survey point in the drawing, as (position name).
+;; The space the drafter is drawing in: model space from the Model tab
+;; and from inside a layout's viewport, the layout's paper only when it
+;; is the paper that is active -- PADDLE's pair, under this prefix.
+;; The sweep below read every space at once, so a sheet whose title
+;; block carries a numbered point turned a typed number into "2 points
+;; are numbered" with only one of them anywhere near the pool; and the
+;; pads went into the ACTIVE LAYOUT's block, which from inside a
+;; viewport is the sheet's paper, not the model space the perimeter
+;; was picked in.  The sweep and the inserts both go through these two,
+;; so they cannot disagree.
+(defun upad:tab ()
+  (if (= 1 (getvar "CVPORT")) (getvar "CTAB") "Model"))
+
+(defun upad:space (doc)
+  (if (and (= 0 (getvar "TILEMODE")) (/= 1 (getvar "CVPORT")))
+      (vla-get-ModelSpace doc)
+      (vla-get-Block (vla-get-ActiveLayout doc))))
+
+;; Every survey point in the space being drawn in, as (position name).
 (defun upad:collect-points ( / ss i en ed typ p nm out)
   (setq out nil
-        ss  (ssget "_X" '((0 . "INSERT,POINT"))))
+        ss  (ssget "_X" (list '(0 . "INSERT,POINT")
+                              (cons 410 (upad:tab)))))
   (if ss
     (progn
       (setq i 0)
@@ -958,7 +977,7 @@
   (setvar "CMDECHO" 0)
   (setq undo-open (cal:undobegin)
         doc       (vla-get-ActiveDocument (vlax-get-acad-object))
-        space     (vla-get-Block (vla-get-ActiveLayout doc))
+        space     (upad:space doc)
         padsize   upad:*padsize*
         blkname   upad:*blkname*
         stage     1

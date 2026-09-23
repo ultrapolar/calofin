@@ -61,8 +61,18 @@ def _entmakex(vm, a):
     return e
 
 
+_VM_TBLOBJNAME = BUILTINS[Sym('tblobjname')]
+
+
 def _tblobjname(vm, a):
-    return vm.layer_records.get(a[1].upper(), NIL)
+    """A record this file materialized, else the VM's own -- which is
+    what AutoCAD answers for any layer tblsearch can see, one made by a
+    plain entmake included.  Answering nil there instead had OASIS's
+    ruler-layer unlock (tblsearch, then entget the record) die on a
+    layer the run itself had made."""
+    rec = vm.layer_records.get(a[1].upper()) \
+        if str(a[0]).upper() == 'LAYER' else None
+    return rec if rec is not None else _VM_TBLOBJNAME(vm, a)
 
 
 BUILTINS[Sym('entmakex')] = _entmakex
@@ -3125,6 +3135,45 @@ def test_no_local_shadows_a_function():
     print("ok  no shadow   -> no local hides a function the file calls")
 
 
+def test_a_refused_run_leaves_no_dim_style_behind():
+    """The dim style snapshot is taken at the top of every run, and a
+    standing one is never overwritten.  The UCS refusal and the
+    no-closed-outline exit put the sysvars back but left that snapshot
+    standing -- so the drafter who ran OASIS in a tilted UCS with style
+    A current, made B current later, and ran OASIS again had A put back
+    over B at the end of a perfectly clean run."""
+    tilted = (0.0, 0.7071067811865476, 0.7071067811865476)
+
+    def styled():
+        vm = newvm()
+        for name in ('A', 'B'):
+            vm.tables['DIMSTYLE'].add(name)
+        vm.sysvars['DIMSTYLE'] = 'A'
+        return vm
+
+    # the refusal on its own: nothing asked, and nothing left standing
+    vm = styled()
+    with fake_trans(zdir=tilted):
+        run(vm, [], 'refused')
+    assert not vm.globals.get(Sym('oasis:*odstyle*')), \
+        vm.globals.get(Sym('oasis:*odstyle*'))
+    # ...then B, and a clean run: B is what it hands back
+    vm.sysvars['DIMSTYLE'] = 'B'
+    run(vm, script(), 'after the refusal')
+    assert vm.sysvars['DIMSTYLE'] == 'B', vm.sysvars['DIMSTYLE']
+
+    # and the other quiet exit: radii that close no outline
+    vm = styled()
+    vm.loads('(defun oasis:solve (w h rl rt rr ftl ftr fbc fbr off var)'
+             ' nil)')
+    run(vm, script()[:-1], 'no outline')    # no bottom offered
+    assert 'nothing drawn' in ''.join(vm.printed), ''.join(vm.printed)
+    assert not vm.globals.get(Sym('oasis:*odstyle*')), \
+        vm.globals.get(Sym('oasis:*odstyle*'))
+    print("ok  dim style   -> a refused run drops its snapshot; the next"
+          " run hands back the style current when it began")
+
+
 if __name__ == '__main__':
     test_reference_drawing()
     test_outline_closes()
@@ -3241,4 +3290,5 @@ if __name__ == '__main__':
     test_version_command()
     test_the_error_mode_is_popped_on_every_exit()
     test_no_local_shadows_a_function()
+    test_a_refused_run_leaves_no_dim_style_behind()
     print("all OASIS tests passed")

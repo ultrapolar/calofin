@@ -32,8 +32,10 @@ end, in the **`CROSS DIMENSIONS`** dimension style, on the
 6. **The line each dimension was made from is erased** — the tie
    measurement is left as a dimension and nothing else. Only lines that
    really did get a dimension go; the report says how many, and off
-   which layers (normally `POOL` or `POINTS`). Set `cdc:*erase*` to
-   `nil` to keep them.
+   which layers (normally `POOL` or `POINTS`). A line on a **locked**
+   layer cannot be erased: it stays under its new dimension and the
+   report says so, naming the layer, rather than counting it as gone.
+   Set `cdc:*erase*` to `nil` to keep them.
 
 The whole run is one undo group, so a single `U` puts the lines back and
 takes the dimensions away. (With UNDO switched off in the drawing no
@@ -76,11 +78,15 @@ names:
 ## Revisions
 
 `CDCREATE.lsp` carries the auto-stamped banner
-`(setq *cdcreate-version* "v1.4")` that `tools/release_lisp.py` reads;
+`(setq *cdcreate-version* "v1.6")` that `tools/release_lisp.py` reads;
 run it after any change and the dated twin
-`releases/CDCREATE_MMDDYY_REV14.lsp` regenerates itself. Bump the banner
+`releases/CDCREATE_MMDDYY_REV16.lsp` regenerates itself. Bump the banner
 with every revision.
 
+* **v1.6** — a line on a locked layer, which AutoCAD refuses to erase,
+  is reported as still in the drawing under its new dimension, naming
+  its layer, instead of being counted among the lines erased. The
+  report used to say every dimensioned line had gone when some had not.
 * **v1.4** — every knob sits in one configuration block at the top of
   the file, each with its explanation beside it (the header's tunables
   list, which said less, is gone), and the layer colour joined them.
@@ -136,7 +142,8 @@ repo's AutoLISP VM (`tests/lispvm.py`) and drives `c:CDCREATE` with
 scripted selections — pickfirst and prompted, mixed selections, an empty
 drawing, a drawing with no `CROSS DIMENSIONS` style, a hostile
 `DIMLAYER`, a non-zero offset, ties drawn on `POOL` and `POINTS`,
-`cdc:*erase*` switched off, a frozen/locked/off `DIMENSION` layer,
+`cdc:*erase*` switched off, a line on a locked layer that cannot be
+erased, a frozen/locked/off `DIMENSION` layer,
 already-dimensioned ties (either way round, inside one run, across two
 runs, and at the edge of the tolerance), the text-end rule on flat,
 steep, near-vertical and either-way-round lines, UNDO switched off, the

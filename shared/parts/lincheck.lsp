@@ -110,6 +110,12 @@
   (setq *lin:log* (reverse out))
 )
 
+;; T when a typed string means "go back a step" - getstring prompts
+;; cannot take initget keywords, so Back is typed like a note.
+(defun lin:back-word (s)
+  (member (strcase s) lin:*back-words*)
+)
+
 ;; Section header - printed to the command line and added to the report.
 (defun lin:head (title)
   (princ (strcat "\n\n" lin:*head-echo-in* title lin:*head-echo-out*))
@@ -127,7 +133,7 @@
                                  ", or type a note): ")))
   (if lzd:ask (lzd:ask (getvar "LASTPROMPT") val) val)
   (cond
-    ((and back (cal:back-word-p val)) 'LIN-BACK)
+    ((and back (lin:back-word val)) 'LIN-BACK)
     ((= val "") (lin:log (strcat lin:*tick* item)) val)
     (T (lin:log (strcat lin:*tick* item lin:*note-sep* val)) val)
   )
@@ -172,7 +178,7 @@
                                  (if back ", B = back" "") "): ")))
   (if lzd:ask (lzd:ask (getvar "LASTPROMPT") val) val)
   (cond
-    ((and back (cal:back-word-p val)) 'LIN-BACK)
+    ((and back (lin:back-word val)) 'LIN-BACK)
     ((or (= val "") (= (strcase val) "NA") (= (strcase val) "N/A"))
      (lin:log (strcat "    " label ": NA (not provided)")) val)
     (T (lin:log (strcat "    " label ": " val)) val)
@@ -417,7 +423,7 @@
                                      ", B = back, blank to finish): ")))
     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") entry) entry)
     (cond
-      ((cal:back-word-p entry)
+      ((lin:back-word entry)
        (if (> n 0)
          (progn
            (setq n (1- n))

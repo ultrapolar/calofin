@@ -29,7 +29,9 @@ afterwards.
    stock is, loudly (`ANCHORS DO NOT AGREE: ...`), but still places
    anchored -- nothing is silently rescaled.
 5. The **highlighted entities are erased** -- only after the new
-   geometry is placed -- and the scratch block definition is purged.
+   geometry is proven on the anchor -- and the scratch block definition
+   is purged. The done line counts what `ERASE` really took, and names
+   anything it left behind.
 
 The whole run is one UNDO step; a single `U` rolls it all back.
 
@@ -75,6 +77,19 @@ In the `SETTINGS` block at the top of `STOCKCOVER.lsp`:
 * An unreachable folder or an unmatched name ends the run with a
   message (try `STOCKLIST`); nothing is erased unless new geometry was
   actually placed.
+* **Locked layers.** `ERASE` and `MOVE` pass over a locked layer's
+  objects without a word, so a highlight on a locked layer -- or a
+  locked current layer, which the insert lands on -- is refused before
+  anything is inserted: `Unlock POOL first, then run STOCKCOVER
+  again.` Stock pieces that land on a locked layer of the same name
+  are caught after the move: STOCKCOVER says the stock did NOT all
+  move, names the layer, and leaves the old perimeter in place for one
+  `U` to roll back.
+* **Any UCS.** The stock is squared to the World axes after the
+  insert (`-INSERT` reads its 0.0 rotation in the current UCS and
+  through `ANGBASE`), and the anchors -- World points -- reach `MOVE`
+  through `trans`. Under a UCS turned to follow the pool the stock used
+  to come in turned, and the anchor mismatch blamed the file name.
 * Requires the Visual LISP engine (ActiveX for bounding boxes and the
   insert fallback), which ships with full AutoCAD. AutoCAD LT cannot
   run this file.

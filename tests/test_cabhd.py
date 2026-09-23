@@ -656,6 +656,37 @@ check('the probe took the selection, the Select prompt was never asked',
 check('and the fit still ran to a kept polyline',
       kept_polyline(vm) is not None)
 
+print('CABHD -- a click that misses the outlines is asked again')
+# entsel answers nil for Enter AND for a click on empty space; only
+# ERRNO 7 tells them apart.  Taken as Enter, a near-miss kept the
+# default and erased the fit reached for.
+
+
+def miss(vm):
+    vm.sysvars['ERRNO'] = 7
+    return None
+
+
+def click_fit(n):
+    """A click on candidate N, whose ename exists only once it is drawn."""
+    def pick(vm):
+        fits = [e for e in vm.entities if e not in vm.deleted
+                and group(vm, e, 0)[:1] == ['LWPOLYLINE']
+                and group(vm, e, 8)[:1] == ['POOL-FIT']]
+        return [fits[n - 1], [0.0, 0.0, 0.0]] if len(fits) >= n else None
+    return pick
+
+
+try:
+    vm = run(18, keep=None, extra=[miss, click_fit(3)])
+    err = ''
+except LispError as e:
+    err = str(e).splitlines()[0]
+check('the miss is named and the pick asked again, then fit 3 is kept',
+      not err
+      and 'nothing there - click one of the outlines' in ''.join(vm.printed)
+      and 'Keeping fit 3' in ''.join(vm.printed))
+
 print()
 if failures:
     print('%d FAILURE(S):' % len(failures))

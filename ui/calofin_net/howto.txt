@@ -356,7 +356,7 @@ Click a point, type 4'4.5, 44.5 or a letter; stamps it canonically, a ruler pick
 A letter labels a point the way the survey names them - A, B, C ... Z, AA - and moves on as it lands, so a run of labels is click, click, click rather than retyping each one.
 What it asks, in order:
  1. Click a point to place text (Enter when done)
- 2. Text - 4'-4 1/2", just 4'4.5, or a letter like A
+ 2. Text - 4'-4-1/2", just 4'4.5, or a letter like A
  3. Click to place text, click the ruler to change it, or type new text (Enter when done)
 
 == DRONE ==

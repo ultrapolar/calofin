@@ -32,6 +32,8 @@
 ;;;   point the same way, and this uses their classifier: an "ab_pt"
 ;;;   INSERT wherever it sits, any other INSERT on the POINTS layer, and
 ;;;   a plain POINT on that layer, numbered by its "number" attribute.
+;;;   Only model space is read: a point block pasted onto a layout is
+;;;   not one of the pool's points.
 ;;;
 ;;; Workflow
 ;;;   1. Select the perimeter -- the wall the distances were taped off.
@@ -155,8 +157,10 @@
 ;;;   right edge of the view: the eighths of an inch for a whole inch
 ;;;   either side of the last distance, graded like a tape with the
 ;;;   last one ringed.  Click a row and that is the distance; type one
-;;;   and it reads as DIMSTAMP reads (44, 44.5, 44 1/2, 3'8, 4'-4 1/2"
-;;;   - kept exactly as typed, only the ruler rounds to the eighth);
+;;;   and it reads as DIMSTAMP reads (44, 44.5, 44-1/2, 3'8, 4'-4-1/2"
+;;;   - kept exactly as typed, only the ruler rounds to the eighth; a
+;;;   fraction is dashed, because the spacebar is Enter here and 44 1/2
+;;;   would hand the 1/2 to the next question);
 ;;;   click empty space and it is the first of two points to measure
 ;;;   between, as getdist always offered.  Back means what it always
 ;;;   did.  The ruler is scratch on the marks layer, down when the
@@ -192,7 +196,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.10")
+(setq *perpmark-version* "v1.11")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -644,9 +648,15 @@
 (defun pm:ptname (nm) (strcat pm:*pt-prefix* nm))
 
 ;; Every survey point in the drawing, as (position name entity).
+;;
+;; Model space only.  "_X" sweeps every layout too, so a survey-point
+;; block pasted onto a sheet -- a key plan, a detail -- was a candidate
+;; beside the real one: a typed number came back "two points are
+;; numbered N", or a click was measured against paper-space numbers
+;; that have nothing to do with the pool.
 (defun pm:collect-points ( / ss i en ed typ p nm out)
   (setq out nil
-        ss  (ssget "_X" '((0 . "INSERT,POINT"))))
+        ss  (ssget "_X" '((0 . "INSERT,POINT") (410 . "Model"))))
   (if ss
     (progn
       (setq i 0)
@@ -726,10 +736,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -770,6 +784,14 @@
 ;;;            ladder it is standing on (nil = a tape)
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
+
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
 
 ;;; -------------------- end of the length ruler -------------------------
 
@@ -817,6 +839,12 @@
 ;; prose inside the angle brackets on a loop prompt whose Enter ends the
 ;; loop (nil = a point is required).  Returns the candidate, nil for
 ;; Enter, or CAL-BACK.
+;;
+;; A click comes back in the CURRENT UCS and the survey points are read
+;; out of entget in WCS, so the click is carried into WCS before it is
+;; measured against them.  Compared raw, a UCS moved off World matched
+;; the click against the wrong numbers: the point under the crosshair
+;; was "not there", or a different point was marked.
 (defun pm:askpoint (msg tail back cands / v out done dupes)
   (setq done nil out nil)
   (while (not done)
@@ -848,7 +876,7 @@
                          "\" - click the one you mean.")))
          (t (setq out (car dupes) done T))))
       (t
-       (setq out (pm:nearest v cands))
+       (setq out (pm:nearest (trans v 1 0) cands))
        (if out
          (setq done T)
          (princ (strcat "\nNo survey point there - click one, or type"

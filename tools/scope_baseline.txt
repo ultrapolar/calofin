@@ -140,7 +140,6 @@ lisp/fitabhd/FITABHD.lsp|fit:add-point|setq|fit-npt
 lisp/fitabhd/FITABHD.lsp|fit:add-point|setq|fit-ptnames
 lisp/fitabhd/FITABHD.lsp|fit:add-point|setq|fit-pts
 lisp/fitabhd/FITABHD.lsp|fit:omit-loop|setq|fit-omit
-lisp/honefillet/HONEFILLET.lsp|c:honefillet|setq-global|*error*
 lisp/lhd/lhd.lsp|c:lhd|setq-global|*error*
 lisp/lhd/lhd.lsp|lh:add-point|setq|lh-ptnames
 lisp/lhd/lhd.lsp|lh:add-point|setq|lh-zvals
@@ -202,7 +201,6 @@ lisp/pool/POOLDEMO.LSP|pooldemo:run|setq-global|pool:*smallwarned*
 lisp/pool/TUTORIALPOOL.LSP|tutorial:run|setq-global|pool:*base*
 lisp/pool/TUTORIALPOOL.LSP|tutorial:run|setq-global|pool:*dotlt*
 lisp/pool/TUTORIALPOOL.LSP|tutorial:run|setq-global|pool:*smallwarned*
-lisp/smartfillet/SMARTFILLET.lsp|c:smartfillet|setq-global|*error*
 lisp/spa/TUTORIALSPA.LSP|tut:demo|setq-global|spa:*advice*
 lisp/spa/TUTORIALSPA.LSP|tut:demo|setq-global|spa:*base*
 lisp/spa/TUTORIALSPA.LSP|tut:demo|setq-global|spa:*dotlt*
@@ -326,7 +324,6 @@ shared/parts/FITABHD.lsp|fit:add-point|setq|fit-npt
 shared/parts/FITABHD.lsp|fit:add-point|setq|fit-ptnames
 shared/parts/FITABHD.lsp|fit:add-point|setq|fit-pts
 shared/parts/FITABHD.lsp|fit:omit-loop|setq|fit-omit
-shared/parts/HONEFILLET.lsp|c:honefillet|setq-global|*error*
 shared/parts/LINTXTCHK.lsp|c:lintxtchk|foreach|item
 shared/parts/MOHAMADDLE.lsp|mohamaddle--dodge|foreach|pad
 shared/parts/MOHAMADDLE.lsp|mohamaddle--dodge|foreach|q
@@ -354,7 +351,6 @@ shared/parts/POOL.lsp|pool:setnth|foreach|x
 shared/parts/POOLDEMO.lsp|pooldemo:run|foreach|fn
 shared/parts/POOLDEMO.lsp|pooldemo:run|setq-global|pool:*dotlt*
 shared/parts/POOLDEMO.lsp|pooldemo:run|setq-global|pool:*smallwarned*
-shared/parts/SMARTFILLET.lsp|c:smartfillet|setq-global|*error*
 shared/parts/SPACHECK.lsp|spachk:demo|setq|undo-open
 shared/parts/TUTORIALPOOL.lsp|tutorial:run|setq-global|pool:*base*
 shared/parts/TUTORIALPOOL.lsp|tutorial:run|setq-global|pool:*dotlt*

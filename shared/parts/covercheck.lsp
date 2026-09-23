@@ -241,7 +241,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.26")
+(setq *cchk-version* "v1.27")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -672,12 +672,15 @@
   (if c c 256))
 
 (defun cchk:set-color (ent color / ed old)
+  ;; T when the colour went in.  entmod answers nil on a LOCKED layer
+  ;; and changes nothing, so a caller that goes on to say "flagged
+  ;; (red)" has to ask first, or the report claims a mark nobody sees
   (setq ed  (entget ent)
         old (assoc 62 ed))
-  (entmod (if old
-            (subst (cons 62 color) old ed)
-            (append ed (list (cons 62 color)))))
-  (entupd ent))
+  (if (entmod (if old
+                (subst (cons 62 color) old ed)
+                (append ed (list (cons 62 color)))))
+    (progn (entupd ent) T)))
 
 (defun cchk:make-xline (p1 p2 / len)
   ;; infinite construction line through p1-p2 on the check layer,
@@ -1134,10 +1137,27 @@
   (if done (entupd ent))
   done)
 
+;; The space the drafter is working in, as group 410 names it: the
+;; layout only on the paper itself.  Inside a layout viewport CTAB
+;; still names the layout while every pick lands in model space.
+(defun cchk:space ()
+  (if (and (= 0 (getvar "TILEMODE")) (= 1 (getvar "CVPORT")))
+    (getvar "CTAB")
+    "Model"))
+
 ;; The Tech Title block: the first INSERT whose name carries it, looked
 ;; for in the selection and then across the drawing, since the title
 ;; block sits outside the area someone highlights as often as not.
-(defun cchk:find-title (ss / pat i e ed out ss2)
+;; Returns (insert where count): where is 'sel (it was highlighted),
+;; 'only (the one Tech Title in the drawing) or 'nearest, and count is
+;; how many the drawing holds.  A combined job has a Tech Title per
+;; sheet, and taking the FIRST the database returned checked -- and
+;; rewrote -- whichever sheet's date came back first, not the one
+;; being checked.  So with several, the one nearest the checked
+;; drawing (preferring the space the drafter is working in) is READ,
+;; and the caller writes only to 'sel or 'only.
+(defun cchk:find-title (ss / pat i e ed out ss2 all here pool bb minx miny
+                             maxx maxy cx cy best bestd d p)
   (setq pat (strcat "*" (cchk:squash *cchk-title-block*) "*") i 0)
   (if ss
     (repeat (sslength ss)
@@ -1147,22 +1167,61 @@
       (if (and (null out) ed (= "INSERT" (cdr (assoc 0 ed)))
                (wcmatch (cchk:squash (cchk:block-name e)) pat))
         (setq out e))))
-  (if (null out)
+  (if out
+    (list out 'sel 1)
     (progn
       (setq ss2 (ssget "_X" '((0 . "INSERT"))) i 0)
       (if ss2
         (repeat (sslength ss2)
           (setq e (ssname ss2 i) i (1+ i))
-          (if (and (null out)
-                   (wcmatch (cchk:squash (cchk:block-name e)) pat))
-            (setq out e))))))
-  out)
+          (if (wcmatch (cchk:squash (cchk:block-name e)) pat)
+            (setq all (cons e all)))))
+      (setq all (reverse all))
+      (cond
+        ((null all) nil)
+        ((null (cdr all)) (list (car all) 'only 1))
+        (t
+         ;; the centre of what was highlighted, from the same extents
+         ;; the report is placed by
+         (setq i 0)
+         (if ss
+           (repeat (sslength ss)
+             (setq bb (cal:bbox-ent (ssname ss i)) i (1+ i))
+             (if bb
+               (setq minx (if minx (min minx (caar bb)) (caar bb))
+                     miny (if miny (min miny (cadar bb)) (cadar bb))
+                     maxx (if maxx (max maxx (caadr bb)) (caadr bb))
+                     maxy (if maxy (max maxy (cadadr bb)) (cadadr bb))))))
+         (if minx
+           (setq cx (* 0.5 (+ minx maxx)) cy (* 0.5 (+ miny maxy))))
+         ;; a distance between a model point and a paper-space insert
+         ;; means nothing, so the drafter's own space is looked in first
+         (setq here (vl-remove-if-not
+                      '(lambda (e)
+                         (= (strcase (cond ((cdr (assoc 410 (entget e))))
+                                           ("Model")))
+                            (strcase (cchk:space))))
+                      all)
+               pool (if here here all))
+         (foreach e pool
+           (setq p (cdr (assoc 10 (entget e)))
+                 d (if cx (distance (list cx cy) (list (car p) (cadr p))) 0.0))
+           (if (or (null bestd) (< d bestd))
+             (setq best e bestd d)))
+         (list best 'nearest (length all)))))))
 
 ;; The verdict: (sentence . needs-attention).  With no Tech Title in
 ;; reach there is nothing to read, and that is said plainly rather than
 ;; flagged -- a cover or spa sheet may well be checked on its own.
-(defun cchk:audit-date (ss dofix / blk ed raw bad wrote)
-  (setq blk (cchk:find-title ss))
+(defun cchk:audit-date (ss dofix / blk ed raw bad wrote found many)
+  (setq found (cchk:find-title ss)
+        blk   (car found)
+        ;; several Tech Titles and none highlighted: the one read is a
+        ;; best guess, so it is named and never written to
+        many  (if (eq (cadr found) 'nearest)
+                (strcat " (" (itoa (caddr found)) " Tech Titles in the drawing"
+                        " - read the one nearest the checked drawing, "
+                        (cdr (assoc 5 (entget blk))) ")")))
   (if (null blk)
     (cons (strcat "no '" *cchk-title-block* "' block in reach - date NOT CHECKED")
           nil)
@@ -1178,20 +1237,26 @@
       ;; noticed, today's goes in over it in the same MM/DD/YYYY form
       ;; with any label in front of it kept.  Only an attribute can be
       ;; written, and only for COVERCHECK - the scans read.
-      (if (and bad dofix)
+      (if (and bad dofix (not many))
         (setq wrote (cchk:set-attrib blk *cchk-date-tag*
                                    (cchk:date-fixed (if raw raw "")))))
       (cond
         (wrote (cons (strcat *cchk-date-tag* " " bad " - UPDATED to "
                            (cchk:mdy-str (cchk:today-mdy)))
                    T))
+        ((and bad dofix many)
+         (cons (strcat *cchk-date-tag* " " bad " - NEEDS UPDATING, not"
+                       " written: highlight that sheet's Tech Title" many)
+               T))
         ((and bad dofix)
          (cons (strcat *cchk-date-tag* " " bad " - fix it in the block") T))
         (bad (cons (strcat *cchk-date-tag* " " bad
-                           " - NEEDS UPDATING (run COVERCHECK)")
+                           " - NEEDS UPDATING (run COVERCHECK)"
+                           (if many many ""))
                    T))
         (t (cons (strcat *cchk-date-tag* " = '"
-                         (vl-string-trim " \t" (cchk:datenorm raw)) "' - OK")
+                         (vl-string-trim " \t" (cchk:datenorm raw)) "' - OK"
+                         (if many many ""))
                  nil))))))
 
 ;; The whole report: the cover checks on the MAIN sheet - a large
@@ -1341,7 +1406,10 @@
 
 (defun cchk:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed pair)
   ;; re-fit the arc through its fixed end, its old midpoint and the
-  ;; target point; returns T on success
+  ;; target point; returns T on success, nil when no arc fits (the
+  ;; points are collinear), and 'refused when one fits but the write
+  ;; is turned down -- a LOCKED layer, which is no reason to tell the
+  ;; drafter their arc was "collinear" and then call it attached
   (if (and (> (distance target fixed) *cchk-same-pt*)
            (setq c (cal:circumcenter fixed mid target)))
     (progn
@@ -1359,7 +1427,8 @@
       (foreach pair (list (cons 10 c) (cons 40 r) (cons 50 a1) (cons 51 a2))
         (setq ed (subst pair (assoc (car pair) ed) ed)))
       (if (entmod ed)
-        (progn (entupd ent) T)))))
+        (progn (entupd ent) T)
+        'refused))))
 
 (defun cchk:move-arc-end (ent which target / mid other)
   ;; re-fit the arc so the chosen endpoint lands on target (WCS)
@@ -1399,13 +1468,19 @@
               (cal:axis-pt a1 u (max lena s2)))))))
 
 (defun cchk:merge-lines (la lb info / ed)
-  ;; stretch la's LINE over the union of both, delete lb's LINE
+  ;; stretch la's LINE over the union of both, delete lb's LINE; T when
+  ;; that happened.  lb goes only once la has really been stretched: a
+  ;; LOCKED layer refuses the entmod, and erasing lb then would lose
+  ;; the length it carried -- and "merged" would be reported over two
+  ;; lines still standing
   (setq ed (entget (cchk:seg-ent la))
         ed (subst (cons 10 (nth 3 info)) (assoc 10 ed) ed)
         ed (subst (cons 11 (nth 4 info)) (assoc 11 ed) ed))
-  (entmod ed)
-  (entupd (cchk:seg-ent la))
-  (entdel (cchk:seg-ent lb)))
+  (if (entmod ed)
+    (progn
+      (entupd (cchk:seg-ent la))
+      (entdel (cchk:seg-ent lb))
+      T)))
 
 (defun cchk:whole-line-p (s / ed)
   ;; T when the segment IS its owner entity - only whole LINEs can be
@@ -1907,7 +1982,9 @@
   ;; line.
   ;; Returns (original final how) when the point was looked at, where
   ;; how is 'auto / 'user / 'kept / 'anchor; nil when the point was
-  ;; already fine.
+  ;; already fine.  how is 'locked when the point is off its object but
+  ;; the dimension's layer refused the write: nothing can be moved, so
+  ;; nothing is asked, and a fourth element says how far off it is.
   (setq ed (entget ent)
         pt (cdr (assoc gcode ed)))
   (if pt
@@ -1934,11 +2011,22 @@
             (setq sugg anch  dsug danch  what "the shared anchor point"))
            (near
             (setq sugg (cadr near)  dsug dnear  what "the nearest object")))
-         (if (and sugg (> dsug *cchk-tol*))
-           (progn
-             ;; show the suggestion in place, but keep the original spot
-             ;; marked so both are on screen while the question is asked
-             (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
+         (cond
+           ((not (and sugg (> dsug *cchk-tol*))) nil)
+           ;; show the suggestion in place, but keep the original spot
+           ;; marked so both are on screen while the question is asked.
+           ;; A LOCKED layer refuses that write, and then every answer
+           ;; to Move/Keep/Pick would be a claim about a point that
+           ;; never moved -- the report used to say "moved onto the
+           ;; nearest object" over a dimension still off by the same
+           ;; amount.  Say what is wrong and leave it.
+           ((not (entmod (subst (cons gcode sugg) (assoc gcode ed) ed)))
+            (princ (strcat "\n  " label " is NOT ATTACHED - " what " is "
+                           (cchk:dist dsug) " away, but the dimension's"
+                           " layer is locked: NOT moved."))
+            (list pt pt 'locked
+                  (strcat label " off by " (cchk:dist dsug))))
+           (t
              (entupd ent)
              (princ (strcat "\n  " label " is not on any object - " what
                             " is " (cchk:dist dsug) " away."))
@@ -1970,10 +2058,12 @@
 
 (defun cchk:review-dim (ent cands anchors num total / ed dtype h sty p13 p14
                                               r1 r2 looked moved kept held
-                                              ok note meas assocnote fcol)
+                                              lockd ok note meas assocnote fcol
+                                              painted)
   ;; interactive review of one dimension.
   ;; Returns (handle ok-flag report-note moved-point-count measurement
-  ;; anchor-held-point-count).
+  ;; anchor-held-point-count locked-point-count painted), painted T when
+  ;; a flagged dimension really took the flag colour.
   (setq ed    (entget ent)
         h     (cdr (assoc 5 ed))
         sty   (cchk:dim-style ent)
@@ -1995,9 +2085,12 @@
   ;; a point held at a shared anchor was looked at and deliberately not
   ;; touched - it is neither a move nor a Keep answer, so it is counted
   ;; on its own and kept out of both tallies
+  ;; A point on a locked layer that could not be moved is neither: it
+  ;; is still off, and says so in the report line on its own.
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
         held   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'anchor)) looked)
-        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept anchor)))
+        lockd  (vl-remove-if-not '(lambda (x) (eq (caddr x) 'locked)) looked)
+        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept anchor locked)))
                              looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
   ;; only when something actually moved is there an old position worth
@@ -2012,15 +2105,19 @@
   (redraw ent 4)
   (redraw)
   (if (member ok '(back skip))
-    (list h ok nil (length moved) meas (length held))  ; navigation: caller handles it
+    (list h ok nil (length moved) meas (length held) (length lockd) nil)  ; navigation: caller handles it
     (progn
       (setq ok (eq ok 'yes)
             fcol (cal:ink *cchk-flag-color* 'flag))
       (setq note (strcat
-                   (if ok
-                     "OK"
-                     (strcat "FLAGGED to fix ("
-                             (cchk:color-name fcol) ")"))
+                   (cond
+                     (ok "OK")
+                     ;; the red is the flag: on a locked layer it does
+                     ;; not go on, and the line must not say it did
+                     ((setq painted (cchk:set-color ent fcol))
+                      (strcat "FLAGGED to fix ("
+                              (cchk:color-name fcol) ")"))
+                     (t "FLAGGED to fix - layer locked, NOT coloured"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -2033,9 +2130,14 @@
                      (strcat " - " (itoa (length held))
                              " point(s) held at a shared anchor")
                      "")
+                   (if lockd
+                     (strcat " - "
+                             (cchk:join (mapcar 'cadddr lockd) ", ")
+                             " - NOT ATTACHED, layer locked, NOT moved")
+                     "")
                    (if assocnote assocnote "")))
-      (if (not ok) (cchk:set-color ent fcol))
-      (list h ok note (length moved) meas (length held)))))
+      (list h ok note (length moved) meas (length held) (length lockd)
+            painted))))
 
 ;; --- arc review ----------------------------------------------------
 
@@ -2079,20 +2181,28 @@
   (entmod ed)
   (entupd ent))
 
-(defun cchk:review-arc-end (ent which label cands / p target st ans final how)
+(defun cchk:review-arc-end (ent which label cands / p target st ans final how
+                                                  res)
   ;; audits one arc endpoint: a detached end is snapped where it looks
   ;; like it belongs, then you choose - Move (take it), Keep (put the
   ;; arc back exactly as drawn) or Pick your own spot.
   ;; Returns (original final how) when the end was looked at, where how
-  ;; is 'auto / 'user / 'kept; nil when the end was already fine.
+  ;; is 'auto / 'user / 'kept, or 'locked when the arc's layer refused
+  ;; the re-fit and nothing was asked; nil when the end was already fine.
   (setq p      (if (eq which 'start)
                  (vlax-curve-getStartPoint ent)
                  (vlax-curve-getEndPoint ent))
         target (cchk:arc-end-target ent which cands)
         st     (cchk:arc-state ent))
   (cond
+    ((and target
+          (eq 'refused (setq res (cchk:move-arc-end ent which target))))
+     (princ (strcat "\n  " label " is NOT ATTACHED - the nearest object end is "
+                    (cchk:dist (distance p target)) " away, but the arc's"
+                    " layer is locked: NOT moved."))
+     (list p p 'locked))
     (target
-     (if (cchk:move-arc-end ent which target)
+     (if res
        (progn
          (princ (strcat "\n  " label " is not attached to an object end - nearest is "
                         (cchk:dist (distance p target)) " away."))
@@ -2111,7 +2221,7 @@
                            (cchk:ptstr final) " - the arc is unchanged.")))
            (t
             (setq ans (trans ans 1 0))
-            (if (cchk:move-arc-end ent which ans)
+            (if (eq T (cchk:move-arc-end ent which ans))
               (progn
                 (setq final ans
                       how   'user)
@@ -2134,16 +2244,18 @@
        nil
        (progn
          (setq ans (trans ans 1 0))
-         (if (cchk:move-arc-end ent which ans)
+         (if (eq T (cchk:move-arc-end ent which ans))
            (list p ans 'user)
            (progn
-             (princ "\n  Could not re-fit the arc through that spot (collinear?); unchanged.")
+             (princ "\n  Could not re-fit the arc through that spot (collinear or layer locked?); unchanged.")
              nil)))))
     (t nil)))
 
-(defun cchk:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note acol)
+(defun cchk:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept
+                                              lockd note acol)
   ;; interactive review of one arc's endpoints.
-  ;; Returns (handle untouched-flag report-note moved-point-count).
+  ;; Returns (handle untouched-flag report-note moved-point-count
+  ;; locked-endpoint-count).
   (setq ed     (entget ent)
         h      (cdr (assoc 5 ed))
         planar (cchk:planar-arc-p ed))
@@ -2158,12 +2270,20 @@
   (redraw ent 4)
   (redraw)
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
-        moved  (vl-remove-if '(lambda (x) (eq (caddr x) 'kept)) looked)
+        lockd  (vl-remove-if-not '(lambda (x) (eq (caddr x) 'locked)) looked)
+        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept locked)))
+                             looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
   (setq acol (cal:ink *cchk-arc-color* 'arc))
   (if moved (cchk:set-color ent acol))
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
+               ;; a detached end on a locked layer is a finding, not
+               ;; "endpoints OK": nothing was asked because nothing
+               ;; could be written
+               (lockd (strcat (itoa (length lockd))
+                              " endpoint(s) NOT ATTACHED - layer locked,"
+                              " NOT moved"))
                ((and moved kept)
                 (strcat (itoa (length moved)) " endpoint(s) moved ("
                         (cchk:color-name acol) "), "
@@ -2174,16 +2294,17 @@
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
-  (list h (null moved) note (length moved)))
+  (list h (null moved) note (length moved) (length lockd)))
 
 ;; --- overlapping line review ---------------------------------------
 
 (defun cchk:review-olap (la lb num total / info ea eb h1 h2 lay1 lay2 label
-                                           ans mergeable kinds ocol)
+                                           ans mergeable kinds ocol ok1 ok2)
   ;; interactive review of one overlapping segment pair.
   ;; Returns nil when the pair no longer overlaps (an earlier merge
   ;; absorbed it); otherwise (label report-note action ents...) where
-  ;; action is merged / flagged / left and ents keep their cyan.
+  ;; action is merged / flagged / left / locked (a Merge the layer
+  ;; refused) and ents keep their cyan.
   (setq ea (cchk:seg-ent la)
         eb (cchk:seg-ent lb))
   (if (and (entget ea) (entget eb) (setq info (cchk:overlap-info la lb)))
@@ -2229,8 +2350,13 @@
       (redraw)
       (setq ocol (cal:ink *cchk-olap-color* 'olap))
       (cond
+        ((and (= ans "Merge") (not (cchk:merge-lines la lb info)))
+         ;; the lines share a layer (or Merge was never offered), so
+         ;; one refusal is the pair's: both are left exactly as drawn
+         (princ "\n  Could NOT merge - the layer is locked; both lines left as drawn.")
+         (list label "could NOT merge - layer locked, left as drawn"
+               'locked))
         ((= ans "Merge")
-         (cchk:merge-lines la lb info)
          (cchk:set-color ea ocol)
          (princ (strcat "\n  Merged into one line ("
                         (cchk:color-name ocol) ")."))
@@ -2239,18 +2365,27 @@
                        (cchk:color-name ocol) ")")
                'merged ea))
         ((= ans "Flag")
-         (cchk:set-color ea ocol)
-         (cchk:set-color eb ocol)
-         (princ (strcat "\n  Flagged to fix ("
-                        (cchk:color-name ocol) ")."))
+         ;; the colour IS the flag; a locked layer refuses it, and the
+         ;; line says which of the two did not take it
+         (setq ok1 (cchk:set-color ea ocol)
+               ok2 (cchk:set-color eb ocol))
+         (princ (if (and ok1 ok2)
+                  (strcat "\n  Flagged to fix (" (cchk:color-name ocol) ").")
+                  "\n  Flagged to fix - but a locked layer refused the colour."))
          (list label
                (strcat
                  (if (cchk:whole-line-p la)
                    (if (= (strcase lay1) (strcase lay2))
-                     "flagged to fix ("
-                     "different layers - flagged to fix (")
-                   "polyline edge - flagged to fix (")
-                 (cchk:color-name ocol) ")")
+                     "flagged to fix"
+                     "different layers - flagged to fix")
+                   "polyline edge - flagged to fix")
+                 (cond
+                   ((and ok1 ok2) (strcat " (" (cchk:color-name ocol) ")"))
+                   ((or ok1 ok2)
+                    (strcat " (" (cchk:color-name ocol) ") - "
+                            (if ok1 h2 h1)
+                            " on a locked layer, NOT coloured"))
+                   (t " - layer locked, NOT coloured")))
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -2902,9 +3037,12 @@
 (defun cchk:pad-centers (/ ss2 i e ed nm bb out)
   ;; centers (extents middle) of every pad already in the drawing: an
   ;; INSERT on the pads layer, or one whose (effective) name is a pad
-  ;; block from *cchk-pad-blocks* - scoped to the current layout tab
-  ;; so a pad sitting in another tab is never counted as covering this one
-  (setq ss2 (ssget "_X" (list '(0 . "INSERT") (cons 410 (getvar "CTAB"))))
+  ;; block from *cchk-pad-blocks* - scoped to the space the drafter is
+  ;; working in so a pad sitting in another tab is never counted as
+  ;; covering this one.  CTAB alone was the sheet from inside a layout
+  ;; viewport: no model-space pad was found, and every 36" spot was
+  ;; circled as missing one
+  (setq ss2 (ssget "_X" (list '(0 . "INSERT") (cons 410 (cchk:space))))
         i   0)
   (if ss2
     (repeat (sslength ss2)
@@ -3234,10 +3372,22 @@
                      "No")
        (progn
          (setq replp T)
-         (setq pk (entsel (strcat "\nPick the '" *cchk-repl-block*
-                                  "' block <it is not placed>: ")))
-         (if lzd:ask (lzd:ask (getvar "LASTPROMPT") pk) pk)
-         (if lzd:watch (lzd:watch pk) pk)
+         ;; entsel answers nil for a click on empty space exactly as it
+         ;; does for Enter, and only Enter means "it is not placed": a
+         ;; missed click used to write "block is MISSING - add it" in
+         ;; red over a disclaimer standing a few units away, and the
+         ;; drafter added a second one.  ERRNO 7 is the miss; ask again.
+         (setq pk 'RETRY)
+         (while (eq pk 'RETRY)
+           (setvar "ERRNO" 0)
+           (setq pk (entsel (strcat "\nPick the '" *cchk-repl-block*
+                                    "' block <it is not placed>: ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") pk) pk)
+           (if lzd:watch (lzd:watch pk) pk)
+           (if (and (null pk) (= 7 (getvar "ERRNO")))
+             (progn
+               (princ "\n  Nothing there - click the block, or press Enter if it is not placed.")
+               (setq pk 'RETRY))))
          (cond
            ((and pk
                  (= "INSERT" (cdr (assoc 0 (entget (car pk)))))
@@ -3317,7 +3467,8 @@
                       saved keep res n total lines
                       anchors anchheld
                       ndok ndflag ndmoved ndanch naok namoved nasnap
-                      nomerged noflag noleft
+                      nomerged noflag noleft ndlock dimlock nalock nolock
+                      dimnc ndnc
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
@@ -3332,13 +3483,20 @@
     ;; (a colour on a layer the user declined to unlock is in saved
     ;; too) used to skip the close and the CMDECHO restore below, and
     ;; a throw inside *error* is the one error nothing catches.
+    ;; The re-lock has a catch of its own: sharing one with the colour
+    ;; restore meant any throw in a set-color skipped it and left the
+    ;; drafter's layer unlocked with nothing said.  It still runs
+    ;; AFTER the colours, because a layer locked first would refuse
+    ;; every colour on it and leave those items grey.
     (vl-catch-all-apply
       '(lambda ()
          (foreach pair saved
            (if (and (not (member (car pair) keep)) (entget (car pair)))
              (cchk:set-color (car pair) (cdr pair))))
-         (foreach l relock (cchk:set-layer-lock l T))
          (redraw))
+      nil)
+    (vl-catch-all-apply
+      '(lambda () (foreach l relock (cchk:set-layer-lock l T)))
       nil)
     (if undo-open
       (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
@@ -3364,7 +3522,8 @@
      (setq cands nil dims nil arcs nil blks nil segs nil
            saved nil keep nil lines nil i 0
            ndok 0 ndflag 0 ndmoved 0 ndanch 0 naok 0 namoved 0 nasnap 0
-           nomerged 0 noflag 0 noleft 0)
+           nomerged 0 noflag 0 noleft 0 ndlock 0 nalock 0 nolock 0
+           dimlock nil dimnc nil)
      (repeat (sslength ss)
        (setq e  (ssname ss i)
              i  (1+ i)
@@ -3501,6 +3660,11 @@
           (if (> (nth 5 res) 0)
             (setq anchheld (cons (cons e (nth 5 res))
                                  (vl-remove (assoc e anchheld) anchheld))))
+          ;; ...and so are points a locked layer would not let move:
+          ;; they are still off when Back sends the dimension round again
+          (if (> (nth 6 res) 0)
+            (setq dimlock (cons (cons e (nth 6 res))
+                                (vl-remove (assoc e dimlock) dimlock))))
           (cond
             ((eq (cadr res) 'skip)
              (cchk:set-color e grey)
@@ -3534,7 +3698,8 @@
                                            (vl-remove (assoc e1 carried)
                                                       carried))))
                      (setq dlines (cdr dlines))))
-                 (setq keep (vl-remove e1 keep))
+                 (setq keep  (vl-remove e1 keep)
+                       dimnc (vl-remove (assoc e1 dimnc) dimnc))
                  (cchk:set-color e1 grey)
                  (princ "\n  Stepping back one dimension."))
                (princ "\n  Already at the first dimension."))
@@ -3544,7 +3709,11 @@
                (progn (setq ndok (1+ ndok))
                       (cchk:set-color e grey))
                (progn (setq ndflag (1+ ndflag))
-                      (setq keep (cons e keep))))
+                      (setq keep (cons e keep))
+                      ;; a flag its locked layer would not take: counted
+                      ;; as flagged, never as coloured
+                      (if (not (nth 7 res))
+                        (setq dimnc (cons (cons e 1) dimnc)))))
              (setq sty (cchk:dim-style e))
              ;; moves this dim collected on an earlier pass, before a
              ;; Back sent us round again -- they are real and belong
@@ -3566,6 +3735,8 @@
                                 dlines))))
           (setq n (1+ n)))
         (foreach pair anchheld (setq ndanch (+ ndanch (cdr pair))))
+        (foreach pair dimlock (setq ndlock (+ ndlock (cdr pair))))
+        (setq ndnc (length dimnc))
         (if skiprest
           (setq lines (cons (strcat "Dimensions: " (itoa (- total (length dlines)))
                                     " left UNREVIEWED (skipped by user)")
@@ -3583,11 +3754,15 @@
           (cchk:set-color e (cdr (assoc e saved)))
           (setq res (cchk:review-arc e cands n total))
           (setq nasnap (+ nasnap (cadddr res)))
-          (if (cadr res)
-            (progn (setq naok (1+ naok))
-                   (cchk:set-color e grey))
-            (progn (setq namoved (1+ namoved))
-                   (setq keep (cons e keep))))           ; moved: stays magenta
+          (cond
+            ;; detached, but its layer is locked: not OK and not moved
+            ((> (nth 4 res) 0) (setq nalock (1+ nalock)))
+            ((cadr res)
+             (setq naok (1+ naok))
+             (cchk:set-color e grey))
+            (t
+             (setq namoved (1+ namoved))
+             (setq keep (cons e keep))))                ; moved: stays magenta
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
 
         ;; --- overlapping lines, one pair at a time ------------------
@@ -3607,8 +3782,10 @@
             ((null res)                       ; absorbed by an earlier merge
              (cchk:unstage e1 keep grey)
              (cchk:unstage e2 keep grey))
-            ((eq (caddr res) 'left)
-             (setq noleft (1+ noleft))
+            ((member (caddr res) '(left locked))
+             (if (eq (caddr res) 'left)
+               (setq noleft (1+ noleft))
+               (setq nolock (1+ nolock)))
              (cchk:unstage e1 keep grey)
              (cchk:unstage e2 keep grey)
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
@@ -3645,24 +3822,40 @@
             (cons (strcat "Dimensions checked: " (itoa (length dims))
                           " (correct: " (itoa ndok)
                           ", flagged to fix: " (itoa ndflag)
+                          (if (> ndnc 0)
+                            (strcat " - " (itoa ndnc)
+                                    " NOT coloured, layer locked")
+                            "")
                           ", points adjusted: " (itoa ndmoved)
                           (if (> ndanch 0)
                             (strcat ", held at a shared anchor: " (itoa ndanch))
                             "")
+                          (if (> ndlock 0)
+                            (strcat ", NOT moved (layer locked): " (itoa ndlock))
+                            "")
                           ")")
-                  (> ndflag 0))
+                  (or (> ndflag 0) (> ndlock 0)))
             (cons (strcat "Arcs checked: " (itoa (length arcs))
                           " (OK: " (itoa naok)
                           ", with endpoints moved: " (itoa namoved)
-                          ", endpoints moved in total: " (itoa nasnap) ")")
-                  (> namoved 0))
+                          ", endpoints moved in total: " (itoa nasnap)
+                          (if (> nalock 0)
+                            (strcat ", detached but layer locked: " (itoa nalock))
+                            "")
+                          ")")
+                  (or (> namoved 0) (> nalock 0)))
             (cons (strcat "Overlapping line pairs: " (itoa (length olaps))
                           (if olaps
                             (strcat " (merged: " (itoa nomerged)
                                     ", flagged: " (itoa noflag)
-                                    ", left as drawn: " (itoa noleft) ")")
+                                    ", left as drawn: " (itoa noleft)
+                                    (if (> nolock 0)
+                                      (strcat ", could NOT merge (layer locked): "
+                                              (itoa nolock))
+                                      "")
+                                    ")")
                             " - none found"))
-                  (> noflag 0))))
+                  (or (> noflag 0) (> nolock 0)))))
         (setq dimlay (cchk:dimlayer-verdict dims)
               units  (cchk:audit-units ss)
               datev  (cchk:audit-date ss T))
@@ -3700,6 +3893,10 @@
                        "\nDimensions: " (itoa (length dims)) " checked, "
                        (itoa ndok) " correct, "
                        (itoa ndflag) " flagged to fix (red)"
+                       (if (> ndnc 0)
+                         (strcat " - " (itoa ndnc)
+                                 " of them NOT coloured (layer locked)")
+                         "")
                        (if (> ndmoved 0)
                          (strcat ", " (itoa ndmoved) " point(s) adjusted")
                          "")
@@ -3707,14 +3904,26 @@
                          (strcat ", " (itoa ndanch)
                                  " point(s) held at a shared anchor")
                          "")
+                       (if (> ndlock 0)
+                         (strcat ", " (itoa ndlock)
+                                 " point(s) NOT moved (layer locked)")
+                         "")
                        "\nArcs: " (itoa (length arcs)) " checked, "
                        (itoa namoved) " with endpoint(s) moved ("
                        (itoa nasnap) " endpoint(s), magenta)"
+                       (if (> nalock 0)
+                         (strcat ", " (itoa nalock)
+                                 " detached but NOT moved (layer locked)")
+                         "")
                        "\nOverlapping lines: " (itoa (length olaps)) " pair(s) found"
                        (if olaps
                          (strcat ", " (itoa nomerged) " merged, "
                                  (itoa noflag) " flagged (cyan), "
-                                 (itoa noleft) " left as drawn")
+                                 (itoa noleft) " left as drawn"
+                                 (if (> nolock 0)
+                                   (strcat ", " (itoa nolock)
+                                           " could NOT be merged (layer locked)")
+                                   ""))
                          "")))
         (foreach l (car cres) (princ (strcat "\n" l)))
         (princ (strcat "\nReport placed on the right side of the drawing (layer "
@@ -3762,7 +3971,9 @@
                       " (Enter = whole drawing): "))
       (setq ss (ssget))
       (if lzd:watch (lzd:watch ss) ss)))
-  (if (null ss) (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB"))))))
+  ;; Enter = the whole of the space the drafter is working in: model
+  ;; space from a layout viewport too, where CTAB names the sheet
+  (if (null ss) (setq ss (ssget "_X" (list (cons 410 (cchk:space))))))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
     (t
@@ -4076,28 +4287,42 @@
 
 ;; inserts a Cover Details demo instance with OVVAL/SPVAL as its
 ;; attribute answers; returns the new INSERT, or nil if it couldn't
-;; be built (a stuck/odd command sequence is not silently ignored)
-(defun cchk:tut-insert-details (pt ovval spval
-                                 / oldattdia oldattreq oldfiledia pre new)
+;; be built.  Entmade, not -INSERT: the typed rotation "0" was read
+;; through ANGBASE/ANGDIR, so a surveyor's template turned the block,
+;; the insertion point went in with the drafter's running snaps live,
+;; and a WCS point was read as a UCS one while every other piece of
+;; the demo is entmade in WCS from the same base.  The attributes sit
+;; where the definition's ATTDEFs put them (see cchk:tut-details-block).
+(defun cchk:tut-insert-details (pt ovval spval / pre new lay h)
   (if (not (tblsearch "BLOCK" *cchk-details-block*))
     (cchk:tut-details-block *cchk-details-block*))
-  (setq oldattdia  (getvar "ATTDIA")
-        oldattreq  (getvar "ATTREQ")
-        oldfiledia (getvar "FILEDIA"))
-  (setvar "ATTDIA" 0) (setvar "ATTREQ" 1) (setvar "FILEDIA" 0)
-  (setq pre (entlast))
-  (vl-catch-all-apply
-    '(lambda ()
-       (command "_.-INSERT" *cchk-details-block* pt "1" "1" "0" ovval spval "")) '())
-  (setvar "ATTDIA" oldattdia) (setvar "ATTREQ" oldattreq) (setvar "FILEDIA" oldfiledia)
-  (setq new (if pre (entnext pre) (entnext)))
+  (setq pre (entlast)
+        lay (getvar "CLAYER")
+        h   6.0)
+  (if (and (entmake (list '(0 . "INSERT") '(100 . "AcDbEntity") (cons 8 lay)
+                          '(100 . "AcDbBlockReference") '(66 . 1)
+                          (cons 2 *cchk-details-block*)
+                          (cons 10 pt) '(41 . 1.0) '(42 . 1.0) '(43 . 1.0)
+                          '(50 . 0.0)))
+           (entmake (list '(0 . "ATTRIB") '(100 . "AcDbEntity") (cons 8 lay)
+                          '(100 . "AcDbText") (cons 10 pt) (cons 40 h)
+                          (cons 1 ovval) '(100 . "AcDbAttribute")
+                          '(2 . "OVERLAP") '(70 . 0)))
+           (entmake (list '(0 . "ATTRIB") '(100 . "AcDbEntity") (cons 8 lay)
+                          '(100 . "AcDbText")
+                          (cons 10 (list (car pt) (- (cadr pt) h) (caddr pt)))
+                          (cons 40 h) (cons 1 spval) '(100 . "AcDbAttribute")
+                          '(2 . "SPACING") '(70 . 0)))
+           (entmake (list '(0 . "SEQEND") (cons 8 lay))))
+    (setq new (if pre (entnext pre) (entnext))))
   (if (and new (entget new) (= "INSERT" (cdr (assoc 0 (entget new)))))
     (progn (cchk:tag new "TUTORIAL") new)))
 
 ;; the whole demo scene, anchored at BP (WCS, z=0). Each piece is
 ;; independent - one failing (e.g. no DASHED linetype available)
 ;; never stops the rest from being built.
-(defun cchk:tut-build (bp / bx by oldfiledia oldosmode pre newdim detpt ins)
+(defun cchk:tut-build (bp / bx by oldfiledia oldosmode pre newdim detpt ins
+                           guard)
   (setq bx (car bp) by (cadr bp))
   (cal:ensure-layer *cchk-pool-layer* 7)
   (cal:ensure-layer *cchk-tut-layer* 5)
@@ -4113,11 +4338,22 @@
   (princ *cchk-pool-layer*) (princ "'.")
 
   ;; a dashed cover outline on the same layer, so the NA/dashed check
-  ;; has something to find (skips cleanly if DASHED can't be loaded)
-  (setq oldfiledia (getvar "FILEDIA"))
-  (setvar "FILEDIA" 0)
-  (vl-catch-all-apply '(lambda () (command "_.-LINETYPE" "_Load" "DASHED" "acad.lin" "")) '())
-  (setvar "FILEDIA" oldfiledia)
+  ;; has something to find (skips cleanly if DASHED can't be loaded).
+  ;; Loaded only when missing: with DASHED already in the drawing --
+  ;; the usual case in a shop that draws dashed covers -- -LINETYPE
+  ;; asks "Reload it?", the "" answered THAT, the shop's own DASHED was
+  ;; quietly replaced by acad.lin's, and the command was left open to
+  ;; swallow the next one.  Anything still asking is cancelled here.
+  (if (not (tblsearch "LTYPE" "DASHED"))
+    (progn
+      (setq oldfiledia (getvar "FILEDIA"))
+      (setvar "FILEDIA" 0)
+      (vl-catch-all-apply '(lambda () (command "_.-LINETYPE" "_Load" "DASHED" "acad.lin" "")) '())
+      (setq guard 0)
+      (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+        (command)
+        (setq guard (1+ guard)))
+      (setvar "FILEDIA" oldfiledia)))
   (if (tblsearch "LTYPE" "DASHED")
     (progn
       (entmake (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity")
@@ -4142,7 +4378,7 @@
       (setq ins (cchk:tut-insert-details detpt "15\"" "3x3"))
       (if ins
         (princ "\n  Built: 'Cover Details' block (Overlap/Spacing set wrong on purpose).")
-        (princ "\n  Skipped: could not insert the 'Cover Details' demo block (-INSERT did not complete as expected)."))))
+        (princ "\n  Skipped: could not insert the 'Cover Details' demo block (the drawing refused the entity)."))))
 
   ;; an off-object dimension point: point 1 sits 4" below the pool's
   ;; true bottom-left corner instead of on it
@@ -4186,7 +4422,7 @@
   (cchk:tut-label (list (+ bx 195.0) (+ by 78.0) 0.0) 4.0 "(5) Cover Details set wrong on purpose")
   T)
 
-(defun c:TUTORIALCOVERCHECK ( / *error* oldecho os0 att0 req0 fil0
+(defun c:TUTORIALCOVERCHECK ( / *error* oldecho os0 fil0
                                undo-open bp)
   (defun *error* (msg)
     ;; object snaps first, before anything below it can throw.
@@ -4197,12 +4433,11 @@
     (if os0 (setvar "OSMODE" os0))
     (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
-    ;; cchk:tut-insert-details drops ATTDIA/ATTREQ/FILEDIA round its
-    ;; -INSERT and puts them back inline; a throw inside that window
-    ;; left FILEDIA at 0, which turns every OPEN into a command-line
-    ;; prompt -- so the tutorial holds the three itself
-    (if att0 (setvar "ATTDIA" att0))
-    (if req0 (setvar "ATTREQ" req0))
+    ;; cchk:tut-build drops FILEDIA round its -LINETYPE and puts it
+    ;; back inline; a throw inside that window left FILEDIA at 0, which
+    ;; turns every OPEN into a command-line prompt -- so the tutorial
+    ;; holds it itself.  (The demo block is entmade now, so ATTDIA and
+    ;; ATTREQ are no longer touched and no longer held.)
     (if fil0 (setvar "FILEDIA" fil0))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALCOVERCHECK error: " msg)))
@@ -4218,7 +4453,7 @@
       (if lzd:ask (lzd:ask "\nPick a base point for the demo, clear of your real geometry <0,0>: " bp) bp)
       (if (null bp) (setq bp (list 0.0 0.0 0.0)))
       (setq oldecho (getvar "CMDECHO") os0 (getvar "OSMODE")
-            att0 (getvar "ATTDIA") req0 (getvar "ATTREQ") fil0 (getvar "FILEDIA"))
+            fil0 (getvar "FILEDIA"))
       (setvar "CMDECHO" 0)
       ;; only when undo is recording - _Begin in a drawing with UNDO
       ;; off (bit 1 of UNDOCTL clear) errors out of the command

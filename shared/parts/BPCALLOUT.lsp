@@ -45,7 +45,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *bpcallout-version* "v1.10")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.11")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -211,12 +211,22 @@
                   (cons 10 (list (car ctr) (cadr ctr) 0.0))
                   (cons 40 bp:*radius*))))
 
-;; Write the callout text at P.
+;; How far the current UCS is turned from the world X axis, so the
+;; callout reads along the UCS the drafter is drawing in.  Taken off
+;; the UCS X axis moved into the world -- not off UCSXDIR run back into
+;; the UCS, which is (1 0 0) there however far the UCS is turned, so it
+;; would always answer zero.  0 in the world UCS.
+(defun bp:ucsang ( / v)
+  (setq v (trans '(1.0 0.0 0.0) 1 0 T))
+  (atan (cadr v) (car v)))
+
+;; Write the callout text at P, a WORLD point.
 (defun bp:draw-text (p str)
   (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
                   (cons 8 bp:*layer*) '(100 . "AcDbText")
                   (cons 10 (list (car p) (cadr p) 0.0))
                   (cons 40 bp:*text-hgt*)
+                  (cons 50 (bp:ucsang))
                   (cons 1 str))))
 
 ;;; -------------------- the command ------------------------------------
@@ -225,7 +235,7 @@
 ;; the whole call, so a local called "last" turns every (last ...) in
 ;; the body into "no function definition: LAST" at runtime.
 (defun c:BPCALLOUT (/ *error* undo-open cands pk hit ctr nm old picked names
-                      txtpt phrase lastpt)
+                      txtpt phrase lastpt u)
   ;; the rings and the callout are one undo group, so a run backed out
   ;; halfway takes one U rather than one per circle; the group is only
   ;; closed if it was opened (STANDARDS section 5)
@@ -261,6 +271,12 @@
   (while (setq pk ((lambda (v) (if lzd:ask (lzd:ask "\nClick a bad point (a ringed one un-rings it, Enter when done): " v) v))
                     (getpoint
                       "\nClick a bad point (a ringed one un-rings it, Enter when done): ")))
+    ;; a click answers in the UCS and the survey points are WORLD
+    ;; data, so the click is moved into the world before it is matched
+    ;; or ringed.  Untranslated, a UCS off the world origin missed
+    ;; every point and ringed the bare UCS numbers somewhere else,
+    ;; saying "ringed where clicked" over a ring nowhere near the click
+    (setq pk (trans pk 1 0))
     (setq hit (bp:nearest-point pk cands))
     (if hit
       (setq ctr (car hit) nm (cdr hit))
@@ -302,9 +318,18 @@
          (setq picked (reverse picked)          ; back to newest-first
                txtpt  'RETRY))
         (T
-         (if (null txtpt)                       ; Enter: tuck it beside
-           (setq txtpt (list (+ (car lastpt) bp:*text-gap*)
-                             (- (cadr lastpt) bp:*text-gap*))))
+         ;; Enter tucks it right of and below the last ring AS THE
+         ;; DRAFTER SEES IT: the step is taken in the UCS and the
+         ;; result moved into the world.  Stepped along world X and Y,
+         ;; a turned UCS set the callout on a diagonal off the ring,
+         ;; reading along the UCS but sitting somewhere else
+         (if (null txtpt)
+           (setq u     (trans lastpt 0 1)
+                 txtpt (trans (list (+ (car u) bp:*text-gap*)
+                                    (- (cadr u) bp:*text-gap*)
+                                    0.0)
+                              1 0))
+           (setq txtpt (trans txtpt 1 0)))      ; a click: UCS to world
          (bp:draw-text txtpt phrase)
          (princ (strcat "\nBPCALLOUT: " (itoa (length picked))
                         " point(s) ringed on layer " bp:*layer*

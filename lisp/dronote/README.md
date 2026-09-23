@@ -54,11 +54,16 @@ DRONOTE: 2 notes placed on layer TEXT.
 ## Revisions
 
 `DRONOTE.lsp` carries the auto-stamped banner
-`(setq *dronote-version* "v1.1")` that `tools/release_lisp.py` reads;
+`(setq *dronote-version* "v1.3")` that `tools/release_lisp.py` reads;
 run it after any change and the dated twin
-`releases/DRONOTE_MMDDYY_REV11.lsp` regenerates itself. Bump the
+`releases/DRONOTE_MMDDYY_REV13.lsp` regenerates itself. Bump the
 banner with every revision.
 
+* **v1.3** — the note lands where it was clicked in any UCS: the
+  click is moved into the world before the note is written, and the
+  note reads along a turned UCS. With the UCS origin moved off the
+  world one it used to land that far from the click while the run said
+  "Note placed."
 * **v1.1** — the note is written the way the shop's own is: the
   standing header (`dn:*header*`) on the first line with the note
   bulleted under it, on layer `TEXT` in the `Attributes` style at 9.5,

@@ -25,7 +25,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lispvm import VM, Dot  # noqa: E402
+from lispvm import VM, Dot, LispError, Sym  # noqa: E402
 
 LSP = os.path.join(os.path.dirname(__file__), '..',
                    'lisp', 'autodim', 'AutoDim.lsp')
@@ -611,14 +611,17 @@ print('   Back at the pad question: the floor dims question re-opens')
 
 print('== the pads themselves: PADDLE gets the plan, and gets it last ==')
 #: PADDLE is a command in its own right: it starts from the drafter's
-#: settings rather than this run's, and it reads the plan off the
-#: pickfirst set instead of hunting the whole drawing for the largest
-#: closed loop - a title block border is a bigger one than the pool.
+#: settings rather than this run's, and it takes the plan it is handed
+#: in *calofin-handoff* instead of hunting the whole drawing for the
+#: largest closed loop - a title block border is a bigger one than the
+#: pool.  The stub reads the handoff the way PADDLE's paddle--handed
+#: does: addressed to PADDLE, cleared at the read.
 PADSTUB = """
   (setq padruns 0 padsaw nil padecho nil padpick nil)
-  (defun c:PADDLE ()
+  (defun c:PADDLE ( / h)
+    (setq h *calofin-handoff* *calofin-handoff* nil)
     (setq padruns (1+ padruns)
-          padsaw  (ssget "_I")
+          padsaw  (if (and h (= (car h) "PADDLE")) (cadr h))
           padecho (getvar "CMDECHO")
           padpick (getvar "PICKFIRST"))
     (princ))"""
@@ -645,7 +648,7 @@ def autodim_pads(answers, segs=PLAN, pickfirst=1, paddle=True, undoctl=None,
 vm, ents = autodim_pads(['No', 'Yes'])
 assert vm.globals['padruns'] == 1, vm.globals['padruns']
 assert sorted(vm.globals['padsaw'][1:], key=str) == sorted(ents, key=str)
-print('   PADDLE ran once, handed the step-1 plan as its pickfirst set')
+print('   PADDLE ran once, handed the step-1 plan')
 
 # CMDECHO back at the drafter's 1 and the undo group closed before
 # PADDLE started: it opens an undo mark of its own, so one U backs out
@@ -666,13 +669,45 @@ vm, _ = autodim_pads([], segs=FLIGHT, asks=False)
 assert vm.globals['padruns'] == 0
 print('   a side view of steps: no pad question, no pads')
 
-# PICKFIRST at 0 would let sssetfirst highlight while PADDLE's
-# (ssget "_I") read nothing - so it is switched on, and put back
+# The plan used to go over as a pickfirst set with PICKFIRST switched
+# on round the call.  The handoff global needs no setting of the
+# drafter's: at 0 PADDLE still gets the plan, and it stays 0.
 vm, ents = autodim_pads(['No', 'Yes'], pickfirst=0)
-assert vm.globals['padpick'] == 1, vm.globals['padpick']
+assert vm.globals['padpick'] == 0, vm.globals['padpick']
 assert sorted(vm.globals['padsaw'][1:], key=str) == sorted(ents, key=str)
 assert vm.sysvars['PICKFIRST'] == 0, vm.sysvars['PICKFIRST']
-print('   PICKFIRST switched on for the handover and put back after')
+assert vm.globals.get(Sym('*calofin-handoff*')) is None
+print('   PICKFIRST at 0: never touched, and PADDLE still gets the plan')
+
+# Esc inside PADDLE runs PADDLE's own handler - it declares *error* as
+# a local, as every command here does - and unwinds past AUTODIM's.
+# A PICKFIRST borrow could not be put back from there, and a drafter at
+# 0 was left at 1 for good; with no borrow there is nothing to put back.
+vm = fresh()
+ents = draw(vm, PLAN)
+vm.loads(TRACE)
+vm.loads("""
+  (setq padhandled nil)
+  (defun c:PADDLE ( / *error*)
+    (defun *error* (msg)
+      (setq *calofin-handoff* nil padhandled msg)
+      (princ))
+    (initget "Yes No")
+    (getkword "\\nClose the gap the arrow points at with a zero fillet? [Yes/No]: ")
+    (princ))""")
+vm.handle_errors = True
+vm.sysvars['PICKFIRST'] = 0
+
+
+def _esc(vm):
+    raise LispError('Function cancelled', vm)
+
+
+vm.run('c:AUTODIM', [None, ents, None, 'No', 'Yes', _esc])
+assert vm.globals['padhandled'] == 'Function cancelled', vm.globals['padhandled']
+assert vm.sysvars['PICKFIRST'] == 0, vm.sysvars['PICKFIRST']
+assert vm.globals.get(Sym('*calofin-handoff*')) is None
+print("   Esc inside PADDLE (its own handler): PICKFIRST still the drafter's 0")
 
 # PADDLE is its own file and may not be loaded at all
 vm, _ = autodim_pads(['No', 'Yes'], paddle=False)
@@ -695,8 +730,8 @@ assert vm.globals['padruns'] == 1, vm.globals['padruns']
 assert undo_cmds(vm) == [], undo_cmds(vm)
 print('   undo recording off: no group, and the pads still go in')
 
-# an error AFTER the pad answer and before the handoff: the handler puts
-# PICKFIRST back and PADDLE is not run on a run that died
+# an error AFTER the pad answer and before the handoff: PICKFIRST is
+# untouched and PADDLE is not run on a run that died
 vm = fresh()
 ents = draw(vm, PLAN)
 vm.loads(TRACE)
@@ -708,7 +743,7 @@ vm.run('c:AUTODIM', [None, ents, None, 'No', 'Yes'])
 assert len(vm.handled_errors) == 1, vm.handled_errors
 assert vm.sysvars['PICKFIRST'] == 0, vm.sysvars['PICKFIRST']
 assert vm.globals['padruns'] == 0, vm.globals['padruns']
-print('   a run that dies after the answer: PICKFIRST back, no pads placed')
+print('   a run that dies after the answer: PICKFIRST untouched, no pads placed')
 
 
 print('== a floor dims chain runs object to object ==')
@@ -1049,7 +1084,7 @@ assert TAIL, 'the SETTINGS block lost its end marker'
 
 #: the globals that are NOT settings: per-run state, reset by ad:begin
 STATE = {'ad:*dims*', 'ad:*rads*', 'ad:*skipped*', 'ad:*curstyle*',
-         'ad:*homestyle*'}
+         'ad:*homestyle*', 'ad:*stuck*'}
 settings = set(re.findall(r'\(setq (ad:\*[a-z-]+\*)', HEAD))
 used = set(re.findall(r'ad:\*[a-z-]+\*', SOURCE))
 assert len(settings) >= 20, sorted(settings)

@@ -165,8 +165,11 @@ It takes a click OR a typed number:
 
 `ask-len` draws a column of nearby values near the right edge and takes
 a click on a row, a typed measurement in any spelling `parse-len` reads
-(`44`, `44.5`, `44 1/2`, `4'4.5`, `4'-4 1/2"`), Enter, a keyword, or two
-points to measure between.
+(`44`, `44.5`, `44-1/2`, `4'4.5`, `4'-4-1/2"`), Enter, a keyword, or two
+points to measure between. Fractions are shown **dashed**: it is a
+`getpoint`, where the spacebar is Enter, so a spaced `44 1/2` enters 44
+and hands `1/2` to the next question -- never teach the spaced form for
+a click-or-type prompt.
 
 Two families, and **the caller picks**:
 - **TAPE** — eighths of an inch either side of the LAST answer. Needs a
@@ -285,13 +288,22 @@ behind it down too.
 - The saved value must be where the handler can see it: a **local of the
   command** (the handler is nested inside it) or the `tool:*sysold*`
   snapshot. A helper saving into its own local is out of reach.
+- **A command that pushes `*push-error-using-command*` gets a handler
+  that sees GLOBALS ONLY** -- AutoCAD resets the evaluator first, so
+  every local and every helper defun in the arglist is gone. Such a
+  command keeps what its handler reads in prefixed globals, reset at
+  the top of each run before the push, and its cleanup helpers are
+  top-level defuns. Better still, do not push: a handler that uses only
+  `setvar`, `command-s` and ActiveX needs no push and keeps its locals.
 - **Borrow only what you move.** A sysvar in the restore table is a
   promise to write it back; listing `OSMODE` without ever muting it
   hands the drafter the OPENING snapshot over any snap they ticked
   mid-run, on a clean exit.
 
-`DIMSTYLE` cannot be `setvar`'d back — restore it with
-`(vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" old))`.
+`DIMSTYLE` cannot be `setvar`'d back — restore it through ActiveX,
+`(vla-put-ActiveDimStyle doc (vla-item (vla-get-DimStyles doc) old))`
+under `vl-catch-all-apply`, which is legal in either error mode
+(`command-s "_.-DIMSTYLE"` is refused under a push, uncatchably).
 
 A handler that genuinely must drive `(command)` itself declares
 `(if *push-error-using-command* (*push-error-using-command*))` after the

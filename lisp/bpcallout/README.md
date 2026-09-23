@@ -64,11 +64,18 @@ BPCALLOUT: 3 point(s) ringed on layer FGStep;  "Pt.12, Pt.15 and Pt.20 are bad"
 ## Revisions
 
 `BPCALLOUT.lsp` carries the auto-stamped banner
-`(setq *bpcallout-version* "v1.8")` that `tools/release_lisp.py`
+`(setq *bpcallout-version* "v1.11")` that `tools/release_lisp.py`
 reads; run it after any change and the dated twin
-`releases/BPCALLOUT_MMDDYY_REV18.lsp` regenerates itself. Bump the
+`releases/BPCALLOUT_MMDDYY_REV111.lsp` regenerates itself. Bump the
 banner with every revision.
 
+* **v1.11** — a click is read in the current UCS and moved into the
+  world before it is matched against the survey points, ringed, or used
+  as the callout's spot. With the UCS origin moved off the world one —
+  a pool corner, say — the snap used to miss every point and the ring
+  and the text landed that far from the clicks. The callout text reads
+  along a turned UCS, and **Enter** at the text prompt tucks it right of
+  and below the last ring as the UCS has them, not along the world axes.
 * **v1.8** — every knob sits in one configuration block at the top of
   the file, each with its explanation, and the layer colour, the
   default text spot and the callout wording joined the ones already
@@ -103,7 +110,7 @@ from a startup file:
 | `bp:*snap*` | `12.0` | A pick within this of a survey point rings that point (the nearest when several qualify); farther away the pick itself is ringed as `Pt.?` |
 | `bp:*exact-eps*` | `0.001` | Two ring centres this close are the same spot, so a second click on a ringed point un-rings it |
 | `bp:*text-hgt*` | `6.0` | Callout text height |
-| `bp:*text-gap*` | `10.0` | Enter at the text prompt tucks the callout this far right of and below the last ring |
+| `bp:*text-gap*` | `10.0` | Enter at the text prompt tucks the callout this far right of and below the last ring, in the current UCS |
 | `bp:*pt-prefix*` | `"Pt."` | How a point is named: prefix + number, `Pt.12` |
 | `bp:*tail-one*` | `" is bad"` | What follows the name when one point was ringed |
 | `bp:*tail-many*` | `" are bad"` | …and when two or more were |

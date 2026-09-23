@@ -43,7 +43,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.10")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -975,22 +975,58 @@
 ;;;  Prompt helper: read a feet-inch dimension from the keyboard.
 ;;; --------------------------------------------------------------------------
 
+;; T when S is two or more bare numbers side by side, with no foot
+;; mark or dash to say which is feet: "20 6".  The sheet reader sums
+;; the tokens, so that answer was taken as 26" -- a frame a tenth the
+;; size of the 20'-6" the drafter most likely meant.
+(defun altabcdef:wholes-apart-p (s / n tok)
+  (setq n 0)
+  (if (not (or (vl-string-search "'" s) (vl-string-search "-" s)))
+    (foreach tok (altabcdef:tokens (altabcdef:strip s "\""))
+      (if (not (vl-string-search "/" tok)) (setq n (1+ n)))))
+  (> n 1))
+
 ;; With BACK non-nil, typing B (Back; Undo works too) returns the
 ;; symbol AB-BACK so the caller can re-open its previous question.
-(defun altabcdef:getdim (prompt back / s v)
+(defun altabcdef:getdim (prompt back / s v apart)
   (setq v nil)
   (while (null v)
     (setq s (getstring T (strcat "\n" prompt " (e.g. 20'-6\""
                                  (if back ", B = back" "") "): ")))
     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
+    ;; (getstring T) keeps the blanks round an answer.  Left on, a
+    ;; padded " 214" that the distance reader turned away fell to the
+    ;; sheet reader below, which refused it as a scan repair it never
+    ;; needed; trimmed, it is 214 whichever reader takes it
+    (setq s (cal:trim s))
     (cond
       ((and back (member (strcase s) '("B" "BACK" "U" "UNDO")))
        (setq v 'AB-BACK))
       (T
-       (setq v (altabcdef:ftin->in s nil))
-       (if (or (null v) (<= v 0.0))
-         (progn (princ "  ** enter a positive dimension, e.g. 20'-6\"")
-                (setq v nil))))))
+       ;; Read the way AutoCAD reads a typed distance first, so 214 is
+       ;; 214 inches.  The sheet reader's scan repairs used to get it
+       ;; first: they took a slash-less 214 for a 2/4 whose slash was
+       ;; scanned as a 1, and the frame was built half an inch wide
+       ;; with no word said.  A typed answer only a repair can read,
+       ;; or one that leaves feet and inches to a guess, is refused
+       ;; rather than guessed at, and every reading is echoed back so
+       ;; a misread shows at once.
+       (setq altabcdef:*dirty* nil
+             apart nil
+             v (distof s 4))
+       (if (null v)
+         (if (altabcdef:wholes-apart-p s)
+           (setq apart T)
+           (setq v (altabcdef:ftin->in s nil))))
+       (cond
+         ((or apart (and v altabcdef:*dirty*))
+          (princ (strcat "  ** \"" s "\" cannot be read as typed -"
+                         " enter it as e.g. 20'-6 1/2\" or 246.5"))
+          (setq v nil))
+         ((or (null v) (<= v 0.0))
+          (princ "  ** enter a positive dimension, e.g. 20'-6\"")
+          (setq v nil))
+         (T (princ (strcat "\n  read as " (altabcdef:in->ftin v))))))))
   v)
 
 ;;; --------------------------------------------------------------------------

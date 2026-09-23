@@ -12,10 +12,16 @@ own name because every `lisp/` tool has to load and work alone.
 2. Type `MOHAMADDLE`.
 3. Answer **Pad size (inches)? [24/36] <36>:** — pick `24` or `36`.
    The prompt remembers whatever you picked last and offers that as
-   the default next time, for the rest of the drawing session.
+   the default next time, for the rest of the drawing session. A
+   default the size table does not offer -- a `*mohamaddle-defaultkw*`
+   retuned to `"48"`, or a size dropped from `*mohamaddle-sizes*` -- is
+   matched to a listed size ignoring case, else falls back to `36`,
+   else to the first size listed, rather than being handed back on
+   Enter to fail.
 4. Select the perimeter geometry (polylines, lines, arcs — any mix)
    — or just press **Enter** and MOHAMADDLE auto-detects the perimeter
-   as the largest closed loop it can find in the current tab.
+   as the largest closed loop it can find in the space you are drawing
+   in -- model space from inside a layout's viewport, not the sheet.
    Highlighting the perimeter *before* step 2 skips this prompt: a
    pickfirst selection is taken as-is.
 5. If what you gave it closes except for a gap, MOHAMADDLE draws an

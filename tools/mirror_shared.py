@@ -74,6 +74,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'spa:ink': 'cal:ink',
+            'spa:inkoverride': 'cal:inkoverride',
             'spa:v+': 'cal:v+', 'spa:v-': 'cal:v-', 'spa:v*': 'cal:v*',
             'spa:dot': 'cal:dot', 'spa:perp': 'cal:perp',
             'spa:mid': 'cal:mid', 'spa:trim': 'cal:trim',
@@ -230,6 +231,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'cst:ink': 'cal:ink',
+            'cst:inkoverride': 'cal:inkoverride',
             'cst:askkw': 'cal:askkw', 'cst:askyn': 'cal:askyn',
             'cst:back-word-p': 'cal:back-word-p',
             'cst:trim': 'cal:trim', 'cst:pad': 'cal:pad',
@@ -644,6 +646,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'lobf:ink': 'cal:ink',
+            'lobf:inkoverride': 'cal:inkoverride',
             'lobf:2d': 'cal:2d', 'lobf:dist': 'cal:dist',
             'lobf:v-': 'cal:v-', 'lobf:v+': 'cal:v+', 'lobf:v*': 'cal:v*',
             'lobf:dot': 'cal:dot', 'lobf:perp': 'cal:perp',
@@ -750,7 +753,6 @@ TOOLS = {
         'src': 'lisp/spacheck/SPACHECK.lsp',
         'swap': {
             'spachk:trim': 'cal:trim',
-            'spachk:datestr': 'cal:datestr',
             'spachk:mtext': 'cal:mtext',
             'spachk:bbox': 'cal:bbox-ent',
             'spachk:ensure-layer': 'cal:ensure-layer',
@@ -783,6 +785,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'pool:ink': 'cal:ink',
+            'pool:inkoverride': 'cal:inkoverride',
             'pool:v+': 'cal:v+', 'pool:v-': 'cal:v-', 'pool:v*': 'cal:v*',
             'pool:dot': 'cal:dot', 'pool:perp': 'cal:perp',
             'pool:mid': 'cal:mid', 'pool:npos': 'cal:angnorm',
@@ -857,6 +860,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'psd:ink': 'cal:ink',
+            'psd:inkoverride': 'cal:inkoverride',
             'psd:2d': 'cal:2d', 'psd:v+': 'cal:v+', 'psd:v*': 'cal:v*',
             'psd:mid': 'cal:mid',
             'psd:askkw': 'cal:askkw', 'psd:askyn': 'cal:askyn',
@@ -960,6 +964,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'lzf:ink': 'cal:ink',
+            'lzf:inkoverride': 'cal:inkoverride',
             'lzf:glyph': 'cal:imgglyph',
             'lzf:text': 'cal:imgtext',
             'lzf:textw': 'cal:imgtextw',
@@ -1052,6 +1057,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'lzs:ink': 'cal:ink',
+            'lzs:inkoverride': 'cal:inkoverride',
             'lzs:glyph': 'cal:imgglyph',
             'lzs:text': 'cal:imgtext',
             'lzs:textw': 'cal:imgtextw',
@@ -1108,6 +1114,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'lzv:ink': 'cal:ink',
+            'lzv:inkoverride': 'cal:inkoverride',
             'lzv:glyph': 'cal:imgglyph',
             'lzv:text': 'cal:imgtext',
             'lzv:textw': 'cal:imgtextw',
@@ -1167,6 +1174,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'lzt:ink': 'cal:ink',
+            'lzt:inkoverride': 'cal:inkoverride',
             'lzt:glyph': 'cal:imgglyph',
             'lzt:text': 'cal:imgtext',
             'lzt:textw': 'cal:imgtextw',
@@ -1515,6 +1523,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'oasis:ink': 'cal:ink',
+            'oasis:inkoverride': 'cal:inkoverride',
             'oasis:v+': 'cal:v+', 'oasis:v*': 'cal:v*',
             'oasis:pad': 'cal:pad',
             'oasis:osup': 'cal:osup', 'oasis:osdown': 'cal:osdown',
@@ -1584,6 +1593,7 @@ TOOLS = {
         'swap': {
             # the ink table: one body, and the library's is it
             'abf:ink': 'cal:ink',
+            'abf:inkoverride': 'cal:inkoverride',
             'abf:askkw': 'cal:askkw', 'abf:askyn': 'cal:askyn',
             'abf:back-word-p': 'cal:back-word-p',
             'abf:ensure-layer': 'cal:ensure-layer',
@@ -1900,22 +1910,20 @@ TOOLS = {
         },
         'drop_globals': [],
     },
-    # One helper: the Back-word test, under chk:back-word.
-    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    # Uses no library helper.  Its Back-word test looks like
+    # cal:back-word-p but reads chk:*back-words*, a tunable a shop adds
+    # synonyms to -- and the library's copy has the four words baked in,
+    # so swapping it made the knob work in one build and not the other.
     'ccprecheck': {
         'src': 'lisp/ccprecheck/ccprecheck.lsp',
-        'swap': {
-            'chk:back-word': 'cal:back-word-p',
-        },
+        'swap': {},
         'drop_globals': [],
     },
-    # One helper: the Back-word test, under lin:back-word.
-    # [verified: byte-identical except the legacy banner vs the twin on disk]
+    # Uses no library helper -- lin:back-word reads lin:*back-words*,
+    # for the same reason as ccprecheck's above.
     'lincheck': {
         'src': 'lisp/lincheck/lincheck.lsp',
-        'swap': {
-            'lin:back-word': 'cal:back-word-p',
-        },
+        'swap': {},
         'drop_globals': [],
     },
     # Uses no library helper -- the twin is the file plus the shared

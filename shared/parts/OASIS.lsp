@@ -229,7 +229,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v9.3")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v9.4")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -958,10 +958,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -1003,17 +1007,38 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The scratch layer the rows are drawn on, made if it is missing.  A
 ;; layer of its own is what lets a drafter turn the ruler off without
 ;; turning anything of the pool off with it.
-(defun oasis:rulerlayer ()
+;; LOCKED is not left alone: entmake draws onto a locked layer but
+;; entdel refuses there, so every ruler drawn stayed in the drawing
+;; for good and each redraw added another copy -- and LAYISO's
+;; lock-and-fade locks this layer with everything else.  It is
+;; calofin scratch, so it is unlocked, said once, and left unlocked.
+(defun oasis:rulerlayer ( / ed fl)
   (if (not (tblsearch "LAYER" oasis:*ruler-layer*))
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 oasis:*ruler-layer*) '(70 . 0) '(62 . 7)
-                   (cons 6 "CONTINUOUS"))))
+                   (cons 6 "CONTINUOUS")))
+    (progn
+      (setq ed (entget (tblobjname "LAYER" oasis:*ruler-layer*))
+            fl (cdr (assoc 70 ed)))
+      (if (and fl (= 4 (logand 4 fl))
+               (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed)))
+        (princ (strcat "\nOASIS: layer " oasis:*ruler-layer*
+                       " was locked - unlocked so the ruler can be"
+                       " taken down again.")))))
   oasis:*ruler-layer*)
 
 ;; Take the ruler down -- the one call *error* and the clean exit both
@@ -3433,11 +3458,22 @@
 ;; out of the question, and a ruler left standing is scratch on a pool
 ;; that is otherwise finished.
 (setq oasis:*ruler*   nil)
+;; The live preview and the undo-group flag, module globals for the
+;; same reason: c:OASIS pushes the error mode, so its handler runs with
+;; the command's locals gone.  Both are reset at the top of every run.
+(setq oasis:*prev*      nil)
+(setq oasis:*undo-open* nil)
 
-(defun c:OASIS ( / *error* undo-open guard ans pos k steps v var base w h
-                   rl rt rr ftl ftr fbc fbr off cbase arcs ents nests prev
+(defun c:OASIS ( / *error* ans pos k steps v var base w h
+                   rl rt rr ftl ftr fbc fbr off cbase arcs ents nests
                    lt a nchk gotbot)
-  (defun *error* (msg)
+  ;; Everything this handler reads is a GLOBAL or its own.  The mode is
+  ;; pushed below, and under the push AutoCAD resets the evaluator
+  ;; before *error* runs: every local of c:OASIS reads nil here.  The
+  ;; preview and the undo flag were locals, so an Esc at a radius left
+  ;; the half-drawn preview on the drawing -- part of it on the real
+  ;; POOL layer, looking like work -- and the undo group open.
+  (defun *error* (msg / guard)
     ;; user settings come back FIRST so nothing below can skip them --
     ;; and that means FIRST, which this handler did not used to be.  It
     ;; opened with (cal:dimstyrestore), whose (command ...) is exactly
@@ -3457,18 +3493,20 @@
     (while (and (> (getvar "CMDACTIVE") 0) (< guard oasis:*cmdguard*))
       (command)
       (setq guard (1+ guard)))
-    ;; and only now, with nothing pending, the style -- it is read-only
-    ;; to setvar, so it is the one restore here that needs a command
+    ;; the style -- read-only to setvar, so it goes back through an
+    ;; ActiveX put, which drives no command and is legal in every error
+    ;; mode.  After the drain is harmless, no longer required
     (cal:dimstyrestore)
     ;; the preview is scaffolding, not a result -- it goes whether the run
     ;; finished or the user pressed Esc part-way through the questions.
     ;; So are the pool-bottom flow's numbered tangency marks, which are
     ;; put up by a defun this handler cannot see the locals of -- hence
     ;; oasis:*marks*.  Esc there left them on a finished pool.
-    (oasis:pv-clear prev)
+    (setq oasis:*prev* (oasis:pv-clear oasis:*prev*))
     (setq oasis:*marks* (oasis:pv-clear oasis:*marks*))
     (oasis:rulerkill)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if oasis:*undo-open* (command "_.UNDO" "_End"))
+    (setq oasis:*undo-open* nil)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nOASIS error: " msg)))
@@ -3477,6 +3515,11 @@
     (princ))
   (if lzd:begin (lzd:begin "OASIS" *oasis-version*))
 
+  ;; before the push: what an earlier run left in these must never be
+  ;; taken for this run's -- an undo group it did not open, a preview
+  ;; that is not its own
+  (setq oasis:*undo-open* nil
+        oasis:*prev*      nil)
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
   ;; CMDACTIVE drain and the UNDO close above; harmless no-op guard on
   ;; older releases where it doesn't exist
@@ -3507,7 +3550,7 @@
      (if (= 1 (logand 1 (getvar "UNDOCTL")))
        (progn
          (command "_.UNDO" "_Begin")
-         (setq undo-open T)))
+         (setq oasis:*undo-open* T)))
      (cal:ensure-layer oasis:*poollayer* oasis:*poolcolor*)
      (cal:ensure-layer oasis:*guidelayer* oasis:*guidecolor*)
      (cal:ensure-layer oasis:*dimlayer* oasis:*dimcolor*)
@@ -3527,7 +3570,7 @@
      (while (progn (setq steps (oasis:steps ans))
                    (< pos (length steps)))
        (setq k    (nth pos steps)
-             prev (oasis:preview prev ans k)
+             oasis:*prev* (oasis:preview oasis:*prev* ans k)
              v    (oasis:askstep k ans))
        (if (eq v 'OASIS-BACK)
            (if (> pos 0)
@@ -3581,7 +3624,7 @@
      ;; the questions are over: nothing after this point is a form's to
      ;; answer, the pool-bottom flow at the end least of all
      (setq oasis:*fkey* nil)
-     (setq prev (oasis:pv-clear prev)
+     (setq oasis:*prev* (oasis:pv-clear oasis:*prev*)
            var  (oasis:variant ans) base (nth 1 ans)
            w    (nth 2 ans) h    (nth 3 ans)
            rl   (oasis:leftrad var (nth 3 ans) (nth 4 ans))
@@ -3594,8 +3637,8 @@
          (progn
            (princ (strcat "\nOASIS: those radii do not make a closed outline"
                           " -- nothing drawn."))
-           (if undo-open (command "_.UNDO" "_End"))
-           (setq undo-open nil)
+           (if oasis:*undo-open* (command "_.UNDO" "_End"))
+           (setq oasis:*undo-open* nil)
            (cal:sysrestore))
          (progn
            (cal:osdown)
@@ -3666,8 +3709,8 @@
            (cal:osdown)
            (cal:dimstyrestore)
 
-           (if undo-open (command "_.UNDO" "_End"))
-           (setq undo-open nil)
+           (if oasis:*undo-open* (command "_.UNDO" "_End"))
+           (setq oasis:*undo-open* nil)
            (cal:sysrestore)
            (foreach a gotbot (princ a))))))
   ;; whatever route the run took out, the store goes with it -- an
@@ -3675,6 +3718,14 @@
   (oasis:fclear)
   (setq oasis:*fkey* nil)
   (oasis:rulerkill)
+  ;; ...and so does the dim style snapshot.  The UCS refusal and the
+  ;; no-closed-outline exit used to leave it standing, and dimstysave
+  ;; will not overwrite a standing one: the NEXT run -- this tool's, or
+  ;; in the grouped build SPA's or OLAUTO's -- then put back the style
+  ;; that was current at the refusal, over the one the drafter had
+  ;; made current since.  Nothing on those exits moved the style, so
+  ;; here it only drops the snapshot; a property put, safe after _End.
+  (cal:dimstyrestore)
   ;; ...and so does the error mode pushed at the top: every quiet exit
   ;; and the drawn one come through here, and a mode left stacked
   ;; refuses command-s inside every later handler in the session

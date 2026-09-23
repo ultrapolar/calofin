@@ -2329,6 +2329,31 @@ assert leaked.get('btype') == 'Normal', \
     "LAZTXT inherited the bottom type from a LAZFORM run: %r" % leaked
 print("   it starts from a clean slate, not from the last LAZFORM run")
 
+# A failure in the tool the form hands over to is THAT tool's.  The
+# dialog begins a LAZDIAG run of its own, and LAZDIAG joins a run begun
+# inside another while CMDNAMES still names the command -- so a dialog
+# run left standing was joined by POOL, and POOL's failure was filed as
+# LAZTXT's, under a dialog no report can replay.  The dialog ends its
+# run when it closes.
+tv = stubbed(with_pool=True)
+tv.load(os.path.join(REPO, 'lisp', 'lazdiag', 'LAZDIAG.lsp'))
+tv.loads('''(defun pool:run-with-answers (form / *error*)
+  (defun *error* (msg)
+    (if lzd:report (lzd:report "POOL" "v9.9" msg)) (princ))
+  (if lzd:begin (lzd:begin "POOL" "v9.9"))
+  (car 1))''')
+tv.loads('(setq stub:*rcs* \'(1))')
+tv.loads('(setq stub:*type* \'(("tp" "480")))')
+tv.handle_errors = True
+try:
+    tv.run('c:LAZTXT', [])
+except lispvm.LispError:
+    pass
+last = tv.globals.get(lispvm.Sym('lzd:*last*'))
+assert last and str(last[0]).upper() == 'POOL', \
+    "POOL's failure after the form was filed as %r" % (last and last[0])
+print("   a failure in POOL after the form is filed under POOL")
+
 
 print("== the hopper letters POOL only asks on a Normal bottom ==")
 # POOL routes on the bottom type BEFORE it reaches the H/G/F/E chain
@@ -2523,6 +2548,19 @@ assert 'C2 has to land between' in stateline(nv), stateline(nv)
 nv.loads('(lzf:put "c2" "60")')
 assert stateline(nv).startswith('Ready'), stateline(nv)
 print("   D deeper than C and C2 between them, said here not at the prompt")
+
+# ...and a depth above zero, before it is compared at all.  A sheet that
+# writes depths as negative elevations passed the D-beats-C test (-10 is
+# "deeper" than -40), lit Insert, and then had POOL -- which refuses a
+# depth of zero or less -- ask for both again at the command line.
+nv.loads('(lzf:put "c" "-40") (lzf:put "d" "-10") (lzf:put "c2" "-20")')
+assert stateline(nv) == ('C, D and C2 must be more than zero - POOL will '
+                         'not take them otherwise.'), stateline(nv)
+nv.loads('(lzf:put "c" "0") (lzf:put "d" "80") (lzf:put "c2" "60")')
+assert 'must be more than zero' in stateline(nv), stateline(nv)
+nv.loads('(lzf:put "c" "40")')
+assert stateline(nv).startswith('Ready'), stateline(nv)
+print("   a zero or negative depth is refused here, not at the command line")
 
 
 print("== the marked letters are drawn BOLD, in the missing colour ==")

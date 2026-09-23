@@ -99,21 +99,21 @@
 ;;;    one question more than the answer needs.  Back at the pad
 ;;;    question re-opens the floor dims one, so an answer given by
 ;;;    mistake is not a run wasted.
-;;;    Yes to pads hands PADDLE the step-1 plan as a pickfirst
-;;;    selection rather than letting it hunt for one: PADDLE
-;;;    auto-detects the largest closed loop in the WHOLE drawing, and a
-;;;    title block border is a bigger loop than the pool.  Handed the
-;;;    plan, it pads what was just dimensioned and asks nothing - it
+;;;    Yes to pads hands PADDLE the step-1 plan rather than letting
+;;;    it hunt for one: PADDLE auto-detects the largest closed loop in
+;;;    the WHOLE drawing, and a title block border is a bigger loop
+;;;    than the pool.  Handed the plan, it pads what was just
+;;;    dimensioned and asks nothing - it
 ;;;    keeps the lines, arcs and polylines out of what it is given, so
 ;;;    a plan drawn without any of those is the one case where it falls
 ;;;    back on its own selection prompt.
-;;;    PICKFIRST is switched on for the handoff and put back after -
-;;;    with it at 0, sssetfirst still highlights while PADDLE's
-;;;    (ssget "_I") reads nothing, and the handoff would go quietly
-;;;    missing.  (An Esc inside PADDLE is caught by PADDLE's own
-;;;    handler, which is the innermost one, so this command's never
-;;;    sees it and PICKFIRST is left switched on - AutoCAD's own
-;;;    default, and the state a drafter who never turned it off is in.)
+;;;    The plan goes over in the global *calofin-handoff*, which
+;;;    PADDLE reads before its own pickfirst probe and clears.  It used
+;;;    to go as a pickfirst set with PICKFIRST switched on round the
+;;;    call, and an Esc inside PADDLE is caught by PADDLE's own
+;;;    handler, the innermost one - so this command's restore never
+;;;    ran, and a drafter who works with PICKFIRST at 0 was left at 1
+;;;    for good.  The global borrows no setting of theirs.
 ;;;    The pads go in LAST, once the dims are placed and this command's
 ;;;    layer, dimension style, CMDECHO and undo group are back: PADDLE
 ;;;    is a command in its own right and must start from the drafter's
@@ -242,7 +242,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v2.3")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v2.4")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -590,6 +590,7 @@
 (setq ad:*dims*      nil    ; the places that already carry a dimension
       ad:*rads*      nil    ; the arcs that already carry a radius dim
       ad:*skipped*   0      ; how many dims this run left to what was there
+      ad:*stuck*     0      ; measuring lines this run could not erase
       ad:*curstyle*  nil    ; the dimension style in force right now
       ad:*homestyle* nil)   ; what to fall back on when a style is missing
 
@@ -709,7 +710,8 @@
 (defun ad:begin ()
   (setq ad:*homestyle* (getvar "DIMSTYLE")
         ad:*curstyle*  (getvar "DIMSTYLE")
-        ad:*skipped*   0)
+        ad:*skipped*   0
+        ad:*stuck*     0)
   (ad:dimscan))
 
 ;; T when a and b are the same point on the plan, within tol
@@ -801,12 +803,18 @@
   (setq ad:*skipped* (1+ ad:*skipped*))
   0)
 
-;; tell the user what the run left to the dims that were already there
+;; tell the user what the run left to the dims that were already there,
+;; and any measuring line it could not take away again (ad:scrapprobe)
 (defun ad:skipreport ()
   (if (> ad:*skipped* 0)
     (prompt (strcat "\n" (itoa ad:*skipped*)
                     " dimension(s) skipped - that place is dimensioned"
-                    " already."))))
+                    " already.")))
+  (if (> ad:*stuck* 0)
+    (prompt (strcat "\n" (itoa ad:*stuck*)
+                    " measuring line(s) could NOT be erased - they are"
+                    " still in the drawing.  Erase them before a floor"
+                    " dims run reads them as walls."))))
 
 ;; -------------------------------------------------- placing dimensions
 
@@ -1091,6 +1099,32 @@
 (defun ad:geomfilter ()
   (list (cons 0 ad:*geom-types*)))
 
+;; A selection another command hands AUTODIM - TYLERDRONESUITE's carried
+;; trace, when AUTODIM is put back in its list - through a global rather
+;; than a pickfirst set, because the pickfirst route needs PICKFIRST at
+;; 1 and a borrow of it cannot be put back once a nested command's own
+;; handler has taken an Esc.  It holds (NAME SELECTION), is read only by
+;; the command NAME, and is cleared at the read whoever it was for - and
+;; by the handler, for a failure before the read.  ad:paddle hands
+;; PADDLE the plan the same way.
+(setq *calofin-handoff* nil)
+
+;; The handed-over selection narrowed to ad:*geom-types* (the filter the
+;; pickfirst read uses) and to what is still in the drawing, or nil when
+;; nothing was handed to AUTODIM.
+(defun ad:handed ( / h ss i e)
+  (setq h                 *calofin-handoff*
+        *calofin-handoff* nil)
+  (if (and (listp h) (= (car h) "AUTODIM") (cadr h))
+    (progn
+      (setq ss (ssadd) i 0)
+      (repeat (sslength (cadr h))
+        (setq e (ssname (cadr h) i)
+              i (1+ i))
+        (if (and (entget e) (wcmatch (cdr (assoc 0 (entget e))) ad:*geom-types*))
+          (ssadd e ss)))
+      (if (< 0 (sslength ss)) ss))))
+
 ;; dxf filter for a stairs or side-view highlight - ad:*stair-types*
 (defun ad:stairfilter ()
   (list (cons 0 ad:*stair-types*)))
@@ -1112,6 +1146,41 @@
             i   (1+ i))))
   (reverse out))
 
+;; Erase EN - a measuring line or a dim this run drew - even where its
+;; layer is locked; T once it is gone.  The measuring lines carry no
+;; layer of their own, so with ad:*layer* nil they land on the current
+;; layer, and AutoCAD draws on a locked current layer but will not
+;; erase from one: a plain entdel refused without a word, and every
+;; side of the plan left its full-length probe line behind (a later
+;; floor dims run then read them as obstacles), while a Back left the
+;; dims it meant to roll back.  So a refused erase has the layer
+;; unlocked for that one entdel and locked again straight after.
+(defun ad:scrap (en / lay rec ed fl)
+  (if (and en (entget en))
+    (progn
+      (vl-catch-all-apply 'entdel (list en))
+      (if (entget en)
+        (progn
+          (setq lay (cdr (assoc 8 (entget en)))
+                rec (if lay (tblobjname "LAYER" lay))
+                ed  (if rec (entget rec))
+                fl  (cdr (assoc 70 ed)))
+          (if (and fl (= 4 (logand 4 fl)))
+            (progn
+              (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed))
+              (vl-catch-all-apply 'entdel (list en))
+              (setq ed (entget rec))
+              (entmod (subst (cons 70 fl) (assoc 70 ed) ed))))))))
+  (not (and en (entget en))))
+
+;; A measuring line that still will not go, its layer unlocked or not,
+;; is counted for the end-of-run report rather than dropped: left
+;; unsaid it is a stray full-length LINE across the drafter's plan, and
+;; the next floor dims run sweeps it in as an obstacle.
+(defun ad:scrapprobe (en)
+  (if (and en (not (ad:scrap en)))
+    (setq ad:*stuck* (1+ ad:*stuck*))))
+
 ;; T if nothing in objs (ad:ss-objs of the selection) lies between pt
 ;; and pt + dist along direction ang
 (defun ad:sideclear (pt ang dist eps objs / lin lobj rtn clear)
@@ -1132,7 +1201,7 @@
             objs (cdr objs))
       (if (and (not (vl-catch-all-error-p rtn)) rtn)
         (setq clear nil))))
-  (if lin (entdel lin))
+  (ad:scrapprobe lin)
   clear)
 
 ;; if segment p1-p2 lies on the perimeter of the highlighted geometry,
@@ -1392,7 +1461,7 @@
         (cond ((< (abs d) tol)                   (setq starton t))
               ((< (abs (- d len)) tol)           (setq endon t))
               ((and (> d tol) (< d (- len tol))) (setq ds (cons d ds)))))
-      (entdel lin)
+      (ad:scrapprobe lin)
       ;; sorted break points, near-coincident ones merged
       (setq chain (list p1)
             prev  0.0)
@@ -1424,13 +1493,19 @@
 ;; erase everything drawn after entity MARK (nil = an empty drawing) -
 ;; the rollback when a Back re-opens an earlier dimensioning step.  The
 ;; record of what is dimensioned is read again afterwards, so a dim
-;; this rolled back does not go on blocking its own place.
-(defun ad:eraseafter (mark / en nx)
-  (setq en (if mark (entnext mark) (entnext)))
+;; this rolled back does not go on blocking its own place.  Anything
+;; that would not go is SAID: a Back that quietly left its dims behind
+;; would have the step re-drawn on top of them.
+(defun ad:eraseafter (mark / en nx stuck)
+  (setq en    (if mark (entnext mark) (entnext))
+        stuck 0)
   (while en
     (setq nx (entnext en))
-    (if (entget en) (entdel en))
+    (if (not (ad:scrap en)) (setq stuck (1+ stuck)))
     (setq en nx))
+  (if (> stuck 0)
+    (prompt (strcat "\n" (itoa stuck) " object(s) from that step could NOT be"
+                    " erased - they are still in the drawing.")))
   (ad:dimscan))
 
 ;; prompt the user to draw one floor dims line and dimension it,
@@ -1487,27 +1562,34 @@
     ((eq out 'skip) nil)
     (T (car out))))
 
-;; Step 4's other branch.  Hand PADDLE the plan as a pickfirst
-;; selection rather than letting it hunt for one: PADDLE auto-detects
-;; the largest closed loop in the WHOLE drawing, and a title block
-;; border is a bigger loop than the pool.  Handed the plan, it pads
-;; what was just dimensioned and asks nothing - the same handoff
-;; LINGUTTER and TYLERDRONESUITE make.
+;; Step 4's other branch.  Hand PADDLE the plan rather than letting it
+;; hunt for one: PADDLE auto-detects the largest closed loop in the
+;; WHOLE drawing, and a title block border is a bigger loop than the
+;; pool.  Handed the plan, it pads what was just dimensioned and asks
+;; nothing - the same handoff LINGUTTER and TYLERDRONESUITE make.
+;;
+;; It goes over in *calofin-handoff* (see ad:handed), not as a
+;; pickfirst set.  That needed PICKFIRST at 1, so this run switched it
+;; on round the call - and an Esc inside PADDLE runs only PADDLE's own
+;; handler, so the restore never ran and a drafter who works at 0 was
+;; left at 1 for good, with nothing said.  PADDLE clears the global at
+;; the read and from its handler; the clear after the call keeps a
+;; PADDLE old enough not to read it (before v1.17, say a pinned dated
+;; twin) from leaving a stale set behind.  That PADDLE gets nothing,
+;; though, and asks for its own perimeter - answer it with a pick, not
+;; Enter, which auto-detects.  The bundle ships the two in step.
 ;;
 ;; PADDLE is its own file, so it may not be in this session: an unbound
 ;; c: symbol is nil, which is the test here.  When it is missing the
 ;; dims have still been placed, and saying so beats dying on an
 ;; undefined function.
-;;
-;; The caller switches PICKFIRST on and puts it back - with it at 0
-;; sssetfirst still highlights while PADDLE's (ssget "_I") reads
-;; nothing, and the handoff would go quietly missing.
 (defun ad:paddle (plan)
   (if c:PADDLE
     (progn
       (prompt "\nHanding the plan to PADDLE for the pads...")
-      (sssetfirst nil plan)
-      (c:PADDLE))
+      (setq *calofin-handoff* (list "PADDLE" plan))
+      (c:PADDLE)
+      (setq *calofin-handoff* nil))
     (prompt (strcat "\nPADDLE is not loaded, so no pads were placed - the"
                     " dimensions above are all this run did.  APPLOAD"
                     " PADDLE.lsp (or shared/LAZPASS.lsp, which is the whole"
@@ -1843,7 +1925,7 @@
   ;; never puts that question
   (list n nil))
 
-(defun c:AUTODIM (/ *error* oldcmd olddim oldlay oldpick plan risers res n
+(defun c:AUTODIM (/ *error* oldcmd olddim oldlay plan risers res n
                     all stage done pad undo-open)
   (defun *error* (msg)
     ;; only close a group that was actually opened - the handler is
@@ -1854,21 +1936,21 @@
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldlay (setvar "CLAYER" oldlay))
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    ;; only switched on for the PADDLE handoff, and nil the rest of the
-    ;; run - an Esc in that window is the one this puts back
-    (if oldpick (setvar "PICKFIRST" oldpick))
-    (setq oldpick nil)
+    (setq *calofin-handoff* nil)     ; one never read goes with the run
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (if lzd:report (lzd:report "AUTODIM" *autodim-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "AUTODIM" *autodim-version*))
-  ;; a pickfirst selection if there is one, otherwise ask for it.  The
+  ;; a set handed over in *calofin-handoff* (ad:handed), else a
+  ;; pickfirst selection if there is one, otherwise ask for it.  The
   ;; probe sits OUTSIDE the loop below, as AUTOBEAD's does: a Back out
   ;; of step 2's question lands on the interactive highlight, never on
   ;; a re-probe of a pickfirst set the drafter has no way to change
   ;; from here.
-  (setq plan (ssget "_I" (ad:geomfilter)))
+  (setq plan (ad:handed))
+  (if (null plan)
+    (setq plan (ssget "_I" (ad:geomfilter))))
   (if lzd:watch (lzd:watch plan) plan)
   ;; Step 1 and step 2's question walk back into each other, as a two
   ;; stage chain - a step counter over a cond, the shape every other
@@ -1960,19 +2042,9 @@
       ;; The pads go in last of all, with this command's layer, style,
       ;; CMDECHO and undo group already back: PADDLE is a command in its
       ;; own right, it starts from the drafter's settings rather than
-      ;; this run's, and it opens an undo mark of its own.  The handoff
-      ;; also has to come after the last (command ...) above, which
-      ;; would clear the pickfirst set it puts up.
-      (if pad
-        (progn
-          ;; with PICKFIRST at 0 sssetfirst still highlights while
-          ;; PADDLE's (ssget "_I") reads nothing, and the handoff would
-          ;; go quietly missing
-          (setq oldpick (getvar "PICKFIRST"))
-          (setvar "PICKFIRST" 1)
-          (ad:paddle plan)
-          (setvar "PICKFIRST" oldpick)
-          (setq oldpick nil)))))
+      ;; this run's, and it opens an undo mark of its own.  No setting
+      ;; of the drafter's is borrowed for the handoff (see ad:paddle).
+      (if pad (ad:paddle plan))))
   (if lzd:end (lzd:end "AUTODIM"))
   (princ))
 

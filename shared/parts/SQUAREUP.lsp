@@ -74,7 +74,7 @@
 ;;; the same one.
 ;;; ======================================================================
 
-(setq *squareup-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *squareup-version* "v1.2")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/
 
@@ -657,6 +657,16 @@
 
 ;;; -------------------- the run -----------------------------------------
 
+;; The space the drafter is drawing in: model space from the Model tab
+;; or from inside a layout's viewport, the layout itself only when its
+;; paper is active.  CTAB alone is wrong from a viewport.  Enter = the
+;; whole drawing sweeps only this: a bare "_X" pulled the title block
+;; and viewports in too, which ROTATE skips as not in the current
+;; space -- while the done line counted them turned and the locked
+;; VIEWPORT layer was reported freed for a turn it was never part of.
+(defun sq:space ()
+  (if (= 1 (getvar "CVPORT")) (getvar "CTAB") "Model"))
+
 (defun sq:run ( / work per read pts spans walls wall span pick chosen
                   turn about wpts tie)
 
@@ -671,7 +681,7 @@
       (setq work (ssget))
       (if lzd:watch (lzd:watch work) work)
       (if (null work)
-        (setq work (ssget "_X")))))
+        (setq work (ssget "_X" (list (cons 410 (sq:space))))))))
 
   (if (null work)
     (princ "\nSQUAREUP: there is nothing in this drawing to turn.")

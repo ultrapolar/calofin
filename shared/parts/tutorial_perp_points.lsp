@@ -28,7 +28,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.9")
+(setq *tutperp-version* "v0.10")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -69,7 +69,7 @@
 
 (defun c:TUTORIALPERPPTS (/ *error* tutp:say tutp:pause tutp:track
                             tutp:finish
-                            os ce pd undoOpen ents mode ans p sz z
+                            os ce pd plt plw undoOpen ents mode ans p sz z
                             n i tt bx q d lens len base np
                             basePts newPts bases2 new2 e s)
 
@@ -87,9 +87,11 @@
     (setq ents (cons (entlast) ents)))
 
   (defun tutp:finish ()
-    (if pd (setvar "PDMODE"  pd))
-    (if os (setvar "OSMODE"  os))
-    (if ce (setvar "CMDECHO" ce))
+    (if pd  (setvar "PDMODE"    pd))
+    (if os  (setvar "OSMODE"    os))
+    (if plt (setvar "PLINETYPE" plt))
+    (if plw (setvar "PLINEWID"  plw))
+    (if ce  (setvar "CMDECHO"   ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
              (setq undoOpen nil))))
@@ -102,9 +104,11 @@
     (princ))
   (if lzd:begin (lzd:begin "TUTORIALPERPPTS" *tutperp-version*))
 
-  (setq os (getvar "OSMODE")
-        ce (getvar "CMDECHO")
-        pd (getvar "PDMODE")
+  (setq os  (getvar "OSMODE")
+        ce  (getvar "CMDECHO")
+        pd  (getvar "PDMODE")
+        plt (getvar "PLINETYPE")
+        plw (getvar "PLINEWID")
         ents '())
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -271,6 +275,10 @@
       (if lzd:ask (lzd:ask "\nDemo size <100>: " sz) sz)
       (if (null sz) (setq sz 100.0))
       (setvar "OSMODE" 0)
+      ;; the demo shows what PERPPTS draws -- a lightweight hairline
+      ;; polyline -- whatever PLINETYPE and the width PLINE last used say
+      (setvar "PLINETYPE" 2)
+      (if (and plw (/= plw 0.0)) (setvar "PLINEWID" 0.0))
       (if (member pd '(0 1)) (setvar "PDMODE" 3))
       (setq z (caddr p))
 

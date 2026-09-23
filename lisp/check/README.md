@@ -17,6 +17,12 @@ Both audits run over the selection and print a per-entity log plus a
 summary on the command line. Everything happens inside a single UNDO
 group, so one `U` reverts every change CHECK made.
 
+A dimension or arc on a **locked layer** is still audited but cannot be
+changed. One that needs a fix is named in the log and counted apart in
+the summary (`1 stray on a locked layer - NOT shifted`,
+`1 loose on a locked layer - NOT snapped`). It is never counted as
+clean. Unlock the layer and run CHECK again to fix it.
+
 ## Audit 1 — dimensions attached to objects
 
 Every linear/aligned/rotated dimension's two definition points (the

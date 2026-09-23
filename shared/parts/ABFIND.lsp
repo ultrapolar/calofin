@@ -395,7 +395,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.19")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.20")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 

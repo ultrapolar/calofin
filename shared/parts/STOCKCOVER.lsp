@@ -51,7 +51,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.9") ; printed on load and at command
+(setq *stockcover-version* "v1.10") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -183,6 +183,90 @@
         (- (cadr (cadr an)) (cadr (car an)))))
 
 ;;; -------------------------------------------------------------------
+;;;  locked layers, and checking the swap really happened
+;;; -------------------------------------------------------------------
+
+;;; ERASE and MOVE pass over anything on a locked layer without a word
+;;; under CMDECHO 0, and -INSERT still lands on a locked current layer
+;;; that EXPLODE and MOVE then refuse.  A locked POOL layer left the old
+;;; perimeter under the new cover while the done line counted it "out";
+;;; a locked current layer left the cover at 0,0 and the perimeter gone.
+(defun stock:locked-p (lname / tb)
+  (and lname
+       (setq tb (tblsearch "LAYER" lname))
+       (= 4 (logand 4 (cdr (assoc 70 tb))))))
+
+;;; Every locked layer SS sits on, each named once.  The selection is
+;;; walked rather than the table: a locked layer nothing highlighted
+;;; sits on cannot get in the way.
+(defun stock:locked-layers (ss / i lay seen out)
+  (setq i 0)
+  (while (< i (sslength ss))
+    (setq lay (cdr (assoc 8 (entget (ssname ss i)))))
+    (if (and lay (not (member (strcase lay) seen)))
+      (progn
+        (setq seen (cons (strcase lay) seen))
+        (if (stock:locked-p lay) (setq out (cons lay out)))))
+    (setq i (1+ i)))
+  (reverse out))
+
+;;; What stops the swap before it starts: the locked layers the
+;;; highlight sits on, plus a locked current layer, which the insert
+;;; lands on.
+(defun stock:in-the-way (ss / out cl)
+  (setq out (stock:locked-layers ss)
+        cl  (getvar "CLAYER"))
+  (if (and (stock:locked-p cl)
+           (not (member (strcase cl) (mapcar 'strcase out))))
+    (setq out (append out (list cl))))
+  out)
+
+(defun stock:names (lst / out s)          ; ("A" "B") -> "A, B"
+  (foreach s lst
+    (setq out (if out (strcat out ", " s) s)))
+  out)
+
+;;; How many of SS are really gone from the drawing -- the count the
+;;; done line reports, rather than the size of the set handed to ERASE.
+(defun stock:gone (ss / i n)
+  (setq i 0 n 0)
+  (while (< i (sslength ss))
+    (if (null (entget (ssname ss i))) (setq n (1+ n)))
+    (setq i (1+ i)))
+  n)
+
+;;; T when box NBB is box OBB shifted by D, in plan: the proof the MOVE
+;;; took every piece, since a piece MOVE skipped stays where it was and
+;;; drags the box with it.
+(defun stock:shifted-p (obb nbb d)
+  (and nbb
+       (equal (list (+ (car (car obb)) (car d)) (+ (cadr (car obb)) (cadr d))
+                    (+ (car (cadr obb)) (car d)) (+ (cadr (cadr obb)) (cadr d)))
+              (list (car (car nbb)) (cadr (car nbb))
+                    (car (cadr nbb)) (cadr (cadr nbb)))
+              1e-4)))
+
+;;; The stock squared to the World axes, whatever the UCS.  -INSERT
+;;; reads its 0.0 rotation in the current UCS, and through ANGBASE as
+;;; well, so under a UCS turned to follow the pool the stock came in
+;;; turned by the same angle, its anchor span stopped matching, and the
+;;; drafter was told they had named the wrong stock drawing.  Where it
+;;; landed does not matter -- the anchors are measured after this --
+;;; so only the turn is undone, as a World-axis ActiveX transform that
+;;; carries any attributes along with the reference.
+(defun stock:square (e / ed rot nrm)
+  (setq ed  (if e (entget e))
+        rot (cdr (assoc 50 ed))
+        nrm (cdr (assoc 210 ed)))
+  (if (and (= "INSERT" (cdr (assoc 0 ed)))
+           rot
+           (not (equal rot 0.0 1e-12))
+           (or (null nrm) (equal nrm '(0.0 0.0 1.0) 1e-9)))
+    (vla-Rotate (vlax-ename->vla-object e)
+                (vlax-3d-point (cdr (assoc 10 ed)))
+                (- rot))))
+
+;;; -------------------------------------------------------------------
 ;;;  reading the stock DWG in
 ;;; -------------------------------------------------------------------
 
@@ -275,7 +359,7 @@
                        oscm osos osclay osiu osareq osadia undone
                        folder files ss-old tbb tsz tanch name last hits
                        pick i file path bname mark ss-new sbb ssz sanch
-                       dx dy f)
+                       dx dy f locked stuck out)
 
   (defun stock:restore ()
     (if oscm   (setvar "CMDECHO"  oscm))
@@ -332,9 +416,15 @@
           (princ "\nHighlight the perimeter to be replaced: ")
           (setq ss-old (ssget))
           (if lzd:watch (lzd:watch ss-old) ss-old)))
-      (if (null ss-old)
-        (stock:say "nothing highlighted - nothing to replace.")
-        (progn
+      (cond
+        ((null ss-old)
+         (stock:say "nothing highlighted - nothing to replace."))
+        ;; refused before anything is inserted, with the layers named:
+        ;; the commands below would pass over them without a word
+        ((setq locked (stock:in-the-way ss-old))
+         (stock:say (strcat "Unlock " (stock:names locked)
+                            " first, then run STOCKCOVER again.")))
+        (t
           (setq tbb (cal:bbox-ss ss-old))
           (if (null tbb)
             (stock:say "could not measure the highlighted entities.")
@@ -417,8 +507,18 @@
                   (if (null bname)
                     (stock:say (strcat "could not read " path))
                     (progn
-                      (if *stock-explode*
-                        (command "_.EXPLODE" (entlast) ""))
+                      ;; Only a reference this insert placed is turned
+                      ;; or exploded.  -INSERT can define the block and
+                      ;; still place nothing, and then entlast is the
+                      ;; drafter's own last object: a rotated block of
+                      ;; theirs was squared to 0 and blown apart, and
+                      ;; STOCKCOVER went on to say the stock brought
+                      ;; nothing in.
+                      (if (not (eq (entlast) mark))
+                        (progn
+                          (stock:square (entlast))
+                          (if *stock-explode*
+                            (command "_.EXPLODE" (entlast) ""))))
                       (setq ss-new (stock:new-ents mark))
                       (if (null ss-new)
                         (stock:say (strcat path " brought nothing in."))
@@ -457,18 +557,47 @@
                               ;; ------------------------- place:
                               ;; ONE move, bottom-left anchor to
                               ;; bottom-left anchor, and it stays
-                              ;; exactly there
+                              ;; exactly there.  The anchors are World
+                              ;; points and MOVE reads the UCS, so both
+                              ;; go through trans: a turned UCS turned
+                              ;; the displacement with it.
                               (command "_.MOVE" ss-new ""
-                                       (car sanch) (car tanch))
-                              (command "_.ERASE" ss-old "")
+                                       (trans (car sanch) 0 1)
+                                       (trans (car tanch) 0 1))
                               (if *stock-explode*
                                 (command "_.-PURGE" "_B" bname "_N"))
-                              (stock:say
-                                (strcat (vl-filename-base file) " placed on the anchor - "
-                                        (itoa (sslength ss-new))
-                                        " object(s) in, "
-                                        (itoa (sslength ss-old))
-                                        " out."))))))))
+                              ;; the old perimeter goes only once the
+                              ;; new one is proven on the anchor: a
+                              ;; stock piece landing on a locked layer
+                              ;; of the same name is one MOVE skips
+                              (setq stuck (stock:locked-layers ss-new))
+                              (if (or stuck
+                                      (not (stock:shifted-p
+                                             sbb (cal:bbox-ss ss-new)
+                                             (mapcar '- (car tanch) (car sanch)))))
+                                (progn
+                                  (stock:say
+                                    (strcat "the stock did NOT all move onto the anchor"
+                                            (if stuck
+                                              (strcat " - pieces are on locked layer(s) "
+                                                      (stock:names stuck))
+                                              "")
+                                            "."))
+                                  (stock:say "the old perimeter was left in place - one U rolls this back."))
+                                (progn
+                                  (command "_.ERASE" ss-old "")
+                                  (setq out (stock:gone ss-old))
+                                  (stock:say
+                                    (strcat (vl-filename-base file) " placed on the anchor - "
+                                            (itoa (sslength ss-new))
+                                            " object(s) in, "
+                                            (itoa out)
+                                            " out."))
+                                  (if (< out (sslength ss-old))
+                                    (stock:say
+                                      (strcat (itoa (- (sslength ss-old) out))
+                                              " highlighted object(s) could NOT be erased"
+                                              " - they are still under the new cover.")))))))))))
                   ;; closed only if one was opened, as the handler
                   ;; above is: with undo recording off (UNDOCTL bit 1
                   ;; clear) there is none, and an _End on nothing is an

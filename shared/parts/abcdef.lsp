@@ -90,7 +90,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.9")
+(setq *abcdef-version* "v5.10")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -1465,29 +1465,61 @@
           (reverse rows))))))
 
 ;;; --------------------------------------------------------------------------
-;;;  Prompt helper: read a feet-inch dimension from the keyboard.
-;;; --------------------------------------------------------------------------
-
-;; With BACK non-nil, typing B (Back; Undo works too) returns the
-;; symbol CAL-BACK so the caller can re-open its previous question.
-;;; --------------------------------------------------------------------------
 ;;;  Asking
 ;;; --------------------------------------------------------------------------
 
-(defun abcdef:getdim (prompt back / s v)
+;; T when S is two or more bare numbers side by side, with no foot
+;; mark or dash to say which is feet: "20 6".  The sheet reader sums
+;; the tokens, so that answer was taken as 26" -- a frame a tenth the
+;; size of the 20'-6" the drafter most likely meant.
+(defun abcdef:wholes-apart-p (s / n tok)
+  (setq n 0)
+  (if (not (or (vl-string-search "'" s) (vl-string-search "-" s)))
+    (foreach tok (abcdef:tokens (abcdef:strip s "\""))
+      (if (not (vl-string-search "/" tok)) (setq n (1+ n)))))
+  (> n 1))
+
+;; With BACK non-nil, typing B (Back; Undo works too) returns the
+;; symbol CAL-BACK so the caller can re-open its previous question.
+(defun abcdef:getdim (prompt back / s v apart)
   (setq v nil)
   (while (null v)
     (setq s (getstring T (strcat "\n" prompt " (e.g. 20'-6\""
                                  (if back ", B = back" "") "): ")))
     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
+    ;; (getstring T) keeps the blanks round an answer.  Left on, a
+    ;; padded " 214" that the distance reader turned away fell to the
+    ;; sheet reader below, which refused it as a scan repair it never
+    ;; needed; trimmed, it is 214 whichever reader takes it
+    (setq s (cal:trim s))
     (cond
       ((and back (member (strcase s) '("B" "BACK" "U" "UNDO")))
        (setq v 'CAL-BACK))
       (T
-       (setq v (abcdef:ftin->in s nil))
-       (if (or (null v) (<= v 0.0))
-         (progn (princ "  ** enter a positive dimension, e.g. 20'-6\"")
-                (setq v nil))))))
+       ;; Read the way AutoCAD reads a typed distance first, so 214 is
+       ;; 214 inches.  The sheet reader's scan repairs used to get it
+       ;; first: they took a slash-less 214 for a 2/4 whose slash was
+       ;; scanned as a 1, and the frame was built half an inch wide
+       ;; with no word said.  A typed answer only a repair can read,
+       ;; or one that leaves feet and inches to a guess, is refused
+       ;; rather than guessed at, and every reading is echoed back so
+       ;; a misread shows at once.
+       (setq abcdef:*dirty* nil
+             apart nil
+             v (distof s 4))
+       (if (null v)
+         (if (abcdef:wholes-apart-p s)
+           (setq apart T)
+           (setq v (abcdef:ftin->in s nil))))
+       (cond
+         ((or apart (and v abcdef:*dirty*))
+          (princ (strcat "  ** \"" s "\" cannot be read as typed -"
+                         " enter it as e.g. 20'-6 1/2\" or 246.5"))
+          (setq v nil))
+         ((or (null v) (<= v 0.0))
+          (princ "  ** enter a positive dimension, e.g. 20'-6\"")
+          (setq v nil))
+         (T (princ (strcat "\n  read as " (abcdef:in->ftin v))))))))
   v)
 
 ;;; --------------------------------------------------------------------------
@@ -1589,6 +1621,14 @@
 ;; already here; APPLOADed on its own, abcdef.lsp has no business pretending
 ;; otherwise, so the absence is reported rather than discovered at the
 ;; command line.
+;;
+;; ABHD is its c: function, CALLED - never (command)/(vl-cmdf) "_.ABHD".
+;; The command processor does not know AutoLISP commands (typing ABHD works
+;; only through the command line's own c: fallback, which those skip), so
+;; that call answered Unknown command after this said ABHD was starting,
+;; and the points stayed gripped for whatever the drafter typed next.  The
+;; caller has closed ABCDEF's undo group before this runs: from here on
+;; ABHD's own handler is the one an Esc reaches, and ABCDEF's is not.
 (defun abcdef:to-abhd (ss / n)
   (setq n (if ss (sslength ss) 0))
   (cond
@@ -1602,10 +1642,18 @@
                     "\n  whole LAZPASS.lsp build), then run ABHD and"
                     "\n  window the points.")))
     (T
-     (princ (strcat "\n  Starting ABHD on the " (itoa n)
-                    " point(s) just plotted ..."))
-     (sssetfirst nil ss)
-     (vl-cmdf "_.ABHD"))))
+     ;; with PICKFIRST off a pre-selection cannot be handed over at all,
+     ;; so ABHD will ask for the points.  One line says so: a "starting
+     ;; on the points" line followed by one taking it back left the
+     ;; drafter unsure whether ABHD had them or not.
+     (if (= 0 (getvar "PICKFIRST"))
+       (princ (strcat "\n  Starting ABHD - PICKFIRST is off, so window the "
+                      (itoa n) " point(s) just plotted when it asks."))
+       (progn
+         (princ (strcat "\n  Starting ABHD on the " (itoa n)
+                        " point(s) just plotted ..."))
+         (sssetfirst nil ss)))
+     (c:ABHD))))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Main command
@@ -1618,7 +1666,7 @@
                     placed p
                     flag totn tots n3 swapcd tmp angs chk rstr rl
                     stage done mark ss rep line nby4 nby3 nby2 ndrop
-                    nlow path)
+                    nlow path fit)
   (vl-load-com)
   (princ (strcat "\nABCDEF " *abcdef-version*))
   ;; the plot is one undo group, so a cancelled run backs out with a
@@ -1985,15 +2033,21 @@
           (princ (strcat "\n\n  The " (itoa good)
                          " point(s) are ab_pt blocks on layer "
                          abcdef:*point-layer* ", numbered from the sheet."))
+          ;; the answer is only noted here: ABHD starts below, once the
+          ;; plot's undo group is closed
           (if (and (> good 0)
                    (= "Yes" (cal:askkw
                               "Fit a pool perimeter through these points now?"
                               "Yes No" "Yes/No" "Yes" nil)))
-            (abcdef:to-abhd ss)
+            (setq fit T)
             (princ "\n  Left as points - run ABHD (or CABHD) when ready."))
           (princ)))))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
+  ;; ABHD runs after the group is closed, so the plot is one U and ABHD's
+  ;; fit another, and an Esc inside ABHD - which reaches ABHD's handler,
+  ;; not this command's - cannot leave ABCDEF's group standing open
+  (if fit (abcdef:to-abhd ss))
   (if lzd:end (lzd:end "ABCDEF"))
   (princ))
 

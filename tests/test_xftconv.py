@@ -38,7 +38,34 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lispvm import VM, Dot, LispError  # noqa: E402
+from lispvm import VM, Dot, LispError, Sym, BUILTINS  # noqa: E402
+
+# XFTCONV and XFTRECONV run in the default error mode on purpose: under
+# *push-error-using-command* AutoCAD unwinds the command's locals before
+# *error* runs, and both handlers read theirs.  So every "left as found"
+# check below asserts that nothing was pushed at all -- the stock VM
+# tracks only the depth, which a push and its matching pop also leave
+# at 0, and a check on that alone passed with or without the push.
+_push = BUILTINS[Sym('*push-error-using-command*')]
+
+
+def _counting_push(vm, a):
+    vm.error_mode_pushes = getattr(vm, 'error_mode_pushes', 0) + 1
+    return _push(vm, a)
+
+
+BUILTINS[Sym('*push-error-using-command*')] = _counting_push
+
+
+def mode_as_found(vm):
+    """The error mode was never pushed, and nothing popped it."""
+    return (getattr(vm, 'error_mode_pushes', 0) == 0
+            and vm.error_mode_depth == 0 and vm.error_mode_underflow == 0)
+
+
+def mode_state(vm):
+    return (getattr(vm, 'error_mode_pushes', 0), vm.error_mode_depth,
+            vm.error_mode_underflow)
 
 HERE = os.path.dirname(__file__)
 ROOT = os.environ.get('CALOFIN_LISP_ROOT', 'lisp')
@@ -301,9 +328,8 @@ check("every marker line and every text is gone",
       all(e in vm.deleted for e in ents), repr(vm.deleted))
 check("system variables restored",
       vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1)
-check("the error mode pushed for the handler is popped on the way out",
-      vm.error_mode_depth == 0 and vm.error_mode_underflow == 0,
-      repr((vm.error_mode_depth, vm.error_mode_underflow)))
+check("the error mode is left as found (never pushed)",
+      mode_as_found(vm), repr(mode_state(vm)))
 
 # ----------------------------------------------------------------------
 # 3. Enter = everything in this space (the "_X" sweep)
@@ -356,9 +382,8 @@ check("the locked layer is named and nothing runs",
       not [c for c in vm.commands if c] and
       not inserts(vm) and not vm.deleted,
       ''.join(vm.printed)[-200:])
-check("...and that quiet exit pops the error mode too",
-      vm.error_mode_depth == 0 and vm.error_mode_underflow == 0,
-      repr((vm.error_mode_depth, vm.error_mode_underflow)))
+check("...and that quiet exit leaves the error mode as found",
+      mode_as_found(vm), repr(mode_state(vm)))
 
 # ----------------------------------------------------------------------
 # 6. the quiet "nothing to work on" exit, and an Esc at the highlight
@@ -368,9 +393,9 @@ print("nothing to work on, and Esc, both leave the session as they found it")
 vm = newvm([LAYERS])
 vm.sysvars['CTAB'] = 'Model'
 vm.run('c:XFTCONV', [None, None])      # Enter, and the sweep finds nothing
-check("nothing to work on: said so, mode popped, settings untouched",
+check("nothing to work on: said so, mode never pushed, settings untouched",
       'Nothing to work on' in ''.join(vm.printed)
-      and vm.error_mode_depth == 0 and vm.error_mode_underflow == 0
+      and mode_as_found(vm)
       and vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1)
 
 vm = newvm([LAYERS])
@@ -384,10 +409,10 @@ def esc(vm):
 vm.run('c:XFTCONV', [None, esc])
 check("Esc at the highlight went through the handler, once",
       vm.handled_errors == ['Function cancelled'], repr(vm.handled_errors))
-check("...which popped the mode and restored the settings",
-      vm.error_mode_depth == 0 and vm.error_mode_underflow == 0
+check("...which restored the settings, the mode never pushed",
+      mode_as_found(vm)
       and vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1,
-      repr((vm.error_mode_depth, vm.sysvars)))
+      repr((mode_state(vm), vm.sysvars)))
 check("a cancel prints no error line", not any(
     'XFTCONV error' in s for s in vm.printed))
 
@@ -488,7 +513,7 @@ check("no _.UNDO command at all was issued",
       not [c for c in vm.commands if c and c[0] == '_.UNDO'],
       repr(vm.commands))
 check("and the run ended clean rather than through the handler",
-      vm.handled_errors == [] and vm.error_mode_depth == 0
+      vm.handled_errors == [] and mode_as_found(vm)
       and 'XFTCONV error' not in ''.join(vm.printed),
       repr(vm.handled_errors))
 
@@ -717,9 +742,10 @@ check("with the style present the attribute is written in it",
 
 # ----------------------------------------------------------------------
 # 20. an error mid-run reaches the command's own handler, which puts
-#     the settings back, closes the group it opened and pops the mode
+#     the settings back and closes the group it opened -- in the
+#     default error mode, where it can still see the command's locals
 # ----------------------------------------------------------------------
-print("an error mid-run: restore, close the group, pop the mode")
+print("an error mid-run: restore, close the group, mode never pushed")
 
 vm = newvm([LAYERS])
 vm.handle_errors = True
@@ -738,10 +764,10 @@ check("the group the run opened was closed by the handler",
       [c for c in vm.commands if c and c[0] == '_.UNDO']
       == [['_.UNDO', '_Begin'], ['_.UNDO', '_End']],
       repr(vm.commands))
-check("settings restored and the error mode popped",
+check("settings restored, the error mode never pushed",
       vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1
-      and vm.error_mode_depth == 0 and vm.error_mode_underflow == 0,
-      repr((vm.sysvars['OSMODE'], vm.error_mode_depth)))
+      and mode_as_found(vm),
+      repr((vm.sysvars['OSMODE'], mode_state(vm))))
 check("reported under the tool's name, with the U hint",
       any('XFTCONV error:' in s for s in vm.printed)
       and any('use U to roll the run back' in s for s in vm.printed),
@@ -892,9 +918,10 @@ check("nothing erased is handed to that SCALE",
 check("the revert is one undo group",
       [c for c in vm.commands if c and c[0] == '_.UNDO'] ==
       [['_.UNDO', '_Begin'], ['_.UNDO', '_End']], repr(vm.commands))
-check("the error mode is popped and the settings are back",
-      vm.error_mode_depth == 0 and vm.error_mode_underflow == 0
-      and vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1)
+check("the error mode is left as found and the settings are back",
+      mode_as_found(vm)
+      and vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1,
+      repr((mode_state(vm), vm.sysvars['OSMODE'])))
 check("the report counts both halves of the job",
       '2 "ab_pt" block(s) taken back off the survey.' in ''.join(vm.printed)
       and '6 marker and text object(s) put back.' in ''.join(vm.printed),
@@ -970,8 +997,8 @@ check("two runs in one highlight are refused by name",
 check("...and nothing at all is touched",
       [shape(d) for d in ents(vm)] == was and not vm.commands,
       repr(vm.commands))
-check("...and that exit pops the error mode too",
-      vm.error_mode_depth == 0 and vm.error_mode_underflow == 0)
+check("...and that exit leaves the error mode as found",
+      mode_as_found(vm), repr(mode_state(vm)))
 
 vm = newvm([LAYERS])
 ents_in = made(vm, marker(0.0, 0.5)) + made(vm, name_text(0.2, 1.0, "P3"))
@@ -1008,9 +1035,9 @@ print("XFTRECONV, cut short")
 vm = newvm([LAYERS])
 vm.sysvars['CTAB'] = 'Model'
 vm.run('c:XFTRECONV', [None, None])
-check("an empty drawing: says so, mode popped, settings untouched",
+check("an empty drawing: says so, mode never pushed, settings untouched",
       'Nothing to work on' in ''.join(vm.printed)
-      and vm.error_mode_depth == 0 and vm.error_mode_underflow == 0
+      and mode_as_found(vm)
       and vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1)
 
 vm = newvm([LAYERS])
@@ -1018,9 +1045,10 @@ vm.handle_errors = True
 vm.run('c:XFTRECONV', [None, esc])
 check("Esc at the highlight goes through the handler, once",
       vm.handled_errors == ['Function cancelled'], repr(vm.handled_errors))
-check("...which popped the mode and restored the settings",
-      vm.error_mode_depth == 0 and vm.error_mode_underflow == 0
-      and vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1)
+check("...which restored the settings, the mode never pushed",
+      mode_as_found(vm)
+      and vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1,
+      repr(mode_state(vm)))
 check("a cancel prints no error line",
       not any('XFTRECONV error' in s for s in vm.printed))
 

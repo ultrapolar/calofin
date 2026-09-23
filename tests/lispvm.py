@@ -300,6 +300,16 @@ class VM:
             # written while a save that keeps one restored nil over the
             # value: two tiers, two answers, from one file.
             'AUNITS': 0, 'ANGBASE': 0.0, 'ANGDIR': 0,
+            # ERRNO exists from the moment AutoCAD starts, at 0, and a
+            # routine that clears it before an entsel (the only way to
+            # tell a missed click from Enter) has to have something to
+            # clear.  Left unseeded, getvar answered nil and the clear
+            # read as a sysvar the run had created and never put back.
+            # PLINEWID is 0.0 in a new drawing; PLINE runs at it.
+            'ERRNO': 0, 'PLINEWID': 0.0,
+            # the command line: "" between commands, the command's
+            # name while run() drives one (see run)
+            'CMDNAMES': '',
             'CANNOSCALEVALUE': 1.0, 'DIMSCALE': 1.0, 'FILEDIA': 1,
             'DIMTXT': 0.18, 'TEMPPREFIX': 'C:\\Temp\\',
             'CECOLOR': 'BYLAYER', 'CELTYPE': 'BYLAYER', 'CELWEIGHT': -1,
@@ -695,6 +705,13 @@ class VM:
         fn = self.get(Sym(name.lower()))
         if not (isinstance(fn, tuple) and fn[0] == 'defun'):
             raise LispError(f"{name} is not defined", self)
+        # CMDNAMES names the command AutoCAD is running, as it does for
+        # a c: command typed at the command line -- and only that one: a
+        # (c:OTHER) the command calls as a function adds nothing to it,
+        # which is how LAZDIAG tells a nested run from a later one
+        was = self.sysvars.get('CMDNAMES', '')
+        if name.lower().startswith('c:'):
+            self.sysvars['CMDNAMES'] = name[2:].upper()
         try:
             r = self.call_defun(Sym(name.lower()), fn, [])
         except LispError as e:
@@ -704,6 +721,8 @@ class VM:
                 self._check_balanced(name)
                 return NIL
             raise
+        finally:
+            self.sysvars['CMDNAMES'] = was
         self._check_balanced(name)
         if self.script:
             raise LispError(
@@ -2421,6 +2440,25 @@ def _wcmatch(vm, a):
 
 
 BUILTINS[Sym('logior')] = lambda vm, a: _logop(vm, a, lambda x, y: x | y, 0)
+# (~ n) is the bitwise NOT -- (logand flags (~ 4)) clears a layer's lock
+# bit -- and (lsh n k) shifts left for k > 0, right for k < 0.  Both are
+# 32-bit integer operations in AutoLISP; the tree reaches them in the
+# locked-layer paths of the review tools, which no suite could run.
+BUILTINS[Sym('~')] = lambda vm, a: _i32(~_int(vm, a[0], '~'))
+BUILTINS[Sym('lsh')] = lambda vm, a: _i32(
+    (_int(vm, a[0], 'lsh') << _int(vm, a[1], 'lsh')) if _int(vm, a[1], 'lsh') >= 0
+    else ((_int(vm, a[0], 'lsh') & 0xFFFFFFFF) >> -_int(vm, a[1], 'lsh')))
+
+
+def _int(vm, v, who):
+    if not isinstance(v, int) or isinstance(v, bool):
+        raise LispError(f"{who}: bad argument type: fixnump {v!r}", vm)
+    return v
+
+
+def _i32(n):
+    n &= 0xFFFFFFFF
+    return n - 0x100000000 if n & 0x80000000 else n
 BUILTINS[Sym('logand')] = lambda vm, a: _logop(vm, a, lambda x, y: x & y, -1)
 
 

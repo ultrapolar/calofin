@@ -113,6 +113,12 @@
   (setq *chk:log* (reverse out))
 )
 
+;; T when a typed string means "go back a step" - getstring prompts
+;; cannot take initget keywords, so Back is typed like a note.
+(defun chk:back-word (s)
+  (member (strcase s) chk:*back-words*)
+)
+
 ;; Print an instruction/note to the command line and log it.
 (defun chk:note (msg)
   (princ (strcat chk:*note-echo* msg))
@@ -164,7 +170,7 @@
                                  " or press Enter): ")))
   (if lzd:ask (lzd:ask (getvar "LASTPROMPT") val) val)
   (cond
-    ((and back (cal:back-word-p val)) 'CHK-BACK)
+    ((and back (chk:back-word val)) 'CHK-BACK)
     ((= val "") (chk:log (strcat chk:*confirm-mark* item)) val)
     (T (chk:log (strcat chk:*confirm-mark* item chk:*val-sep* val)) val)
   )

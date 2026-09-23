@@ -5,7 +5,12 @@ from the four corners of a rectangle, works out where each point has to be,
 and plots it as a survey point the rest of the toolkit can use. Load
 `abcdef.lsp` (APPLOAD), type `ABCDEF`, pick the sheet, enter the two
 rectangle dimensions, choose a placement method, and pick where corner A
-goes.
+goes.  The dimensions are read the way AutoCAD reads a typed distance
+(`20'-6"`, or plain inches such as `246`; a plain `214` is 214 inches)
+and echoed back as read.  One that only the sheet's scan repairs could
+read (a `17'-10 114` whose `114` would be taken for `1/4"`), or two bare
+numbers such as `20 6` that leave feet and inches to a guess, is refused
+and asked again rather than guessed at.
 
 `ABCDEFVER` prints the loaded version.
 
@@ -156,8 +161,11 @@ step.
 
 The run therefore ends by offering to fit the pool perimeter straight
 away: answer `Yes` and the points just plotted are pre-selected and `ABHD`
-starts on them. (Loaded on its own rather than as part of the calofin
-build, `abcdef.lsp` says so and leaves the points ready instead.)
+starts on them, once the plot's own undo group is closed, so the plot is
+one `U` and the fit another. (Loaded on its own rather than as part of
+the calofin build, `abcdef.lsp` says so and leaves the points ready
+instead. With `PICKFIRST` off nothing can be pre-selected, and it says
+that too: `ABHD` asks for the points.)
 
 Nothing else goes on the `POINTS` layer: the rectangle and its corner tags
 are on `ABCDEF-FRAME`, and notes on doubtful points on `ABCDEF-WARN`.

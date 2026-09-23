@@ -31,7 +31,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq pooldemo:*version* "092226 REV09")
+(setq pooldemo:*version* "092226 REV10")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -353,27 +353,42 @@
   (if lzd:end (lzd:end "POOLDEMO"))
   (princ))
 
-(defun pooldemo:run ( / *error* undo-open cells k org)
+;; T while this run's own undo group is open.  A GLOBAL, and this
+;; file's own: pooldemo:run pushes the error mode so its handler may
+;; (command), and AutoCAD resets the evaluator before that handler
+;; runs, so a local of the run reads nil in it -- an Esc or a failure
+;; mid-sheet left the group open and the drafter's next edits went
+;; into it.  Reset at the top
+;; of every run, so a flag a dead run left set can never close a group
+;; this run did not open (the fault the shared pool:*undogrp* had).
+(setq pooldemo:*undo-open* nil)
 
-  ;; the handler lives where the group is opened, so the flag it reads
-  ;; is this run's own local -- it used to be pool:*undogrp*, shared
-  ;; with POOL and the tutorial
+(defun pooldemo:run ( / *error* cells k org)
+
+  ;; the handler lives where the group is opened, and reads only
+  ;; globals: after the pushed mode's reset nothing local survives
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPOOLDEMO error: " msg)))
     (cal:sysrestore)
-    (if undo-open (setq undo-open (cal:undoend)))
+    (if pooldemo:*undo-open* (setq pooldemo:*undo-open* (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "POOLDEMO" pooldemo:*version* msg))
     (princ))
   (if lzd:begin (lzd:begin "POOLDEMO" pooldemo:*version*))
 
+  (setq pooldemo:*undo-open* nil)
   (if *push-error-using-command* (*push-error-using-command*))
   (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER" "AUNITS" "ANGBASE" "ANGDIR"))
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil)
+  ;; this run calls pool:report directly, and pool:report reads
+  ;; pool:*giveask*: a POOL cut short at its Given-dimension pick left
+  ;; it set, and this sheet's report drew Given marks nobody asked for.
+  ;; Guarded, since a POOL.LSP older than this file has no such helper
+  (if pool:givereset (pool:givereset))
   (setvar "CMDECHO" 0)
-  (setq undo-open (cal:undobegin))
+  (setq pooldemo:*undo-open* (cal:undobegin))
   (setvar "OSMODE" 0)
   (setvar "LUNITS" 4)
   ;; POOL's rotated dimensions type their angle: zero, east, CCW
@@ -403,7 +418,7 @@
     (setq k (1+ k)))
 
   (command "_.ZOOM" "_Extents")
-  (if undo-open (setq undo-open (cal:undoend)))
+  (if pooldemo:*undo-open* (setq pooldemo:*undo-open* (cal:undoend)))
   (cal:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ (strcat "\nPOOLDEMO complete -- " (itoa (length cells))

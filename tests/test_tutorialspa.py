@@ -22,7 +22,7 @@ import sys
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_DIR = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, TESTS_DIR)
-from lispvm import VM, LispError  # noqa: E402
+from lispvm import VM, LispError, Sym  # noqa: E402
 
 SPA = os.path.join(REPO_DIR, 'lisp', 'spa', 'SPA.LSP')
 TUT = os.path.join(REPO_DIR, 'lisp', 'spa', 'TUTORIALSPA.LSP')
@@ -130,6 +130,28 @@ except LispError as e:
     raise AssertionError(f'[gate] {e}') from None
 check('it names SPA.LSP', 'Load SPA.LSP first' in ''.join(vm.printed))
 check('and asked nothing', not vm.prompts)
+
+print('tutorial -- every run it opens in LAZDIAG it also closes')
+#: stand-ins for LAZDIAG's two ends, recording the order they are called
+#: in.  A clean run that never reached lzd:end left its context standing:
+#: the NEXT TUTORIALSPA appended to it, and a failure there filed the
+#: earlier run's answers and drawing as its own.
+LZD = '''(setq t:*lzd* nil)
+(defun lzd:begin (tool ver) (setq t:*lzd* (cons (list "begin" tool) t:*lzd*)))
+(defun lzd:end (tool) (setq t:*lzd* (cons (list "end" tool) t:*lzd*)))'''
+PAIR = [['begin', 'TUTORIALSPA'], ['end', 'TUTORIALSPA']]
+vm = newvm()
+vm.loads(LZD)
+vm.run('c:TUTORIALSPA', ['Checks', None])
+check('a clean Checks run ends what it began',
+      list(reversed(vm.globals.get(Sym('t:*lzd*')) or [])) == PAIR)
+vm = VM()
+vm.load(TUT)
+vm.loads('(setq spa:*version* nil)')
+vm.loads(LZD)
+vm.run('c:TUTORIALSPA', [])
+check('so does the refusal without SPA.LSP',
+      list(reversed(vm.globals.get(Sym('t:*lzd*')) or [])) == PAIR)
 
 print('statics -- banner and the dated twin')
 for path, name in ((TUT, 'TUTORIALSPA.LSP'),):

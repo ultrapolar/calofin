@@ -63,15 +63,18 @@ stages want the same thing picked — `TYDRN` the text in it, `PADDLE`
 the perimeter — and AutoCAD clears the pickfirst set the moment a
 command consumes it. Run by hand that means selecting the same trace
 once per stage. Here the suite reads the highlight at the start and
-puts it back before each stage, so every stage opens with exactly what
-you picked and takes from it whatever its own filter takes. Highlight nothing first and the suite asks once, up front; press
+hands it to each stage in the global `*calofin-handoff*`, which the
+stage reads where it would have read the pickfirst set, so every stage
+opens with exactly what you picked and takes from it whatever its own
+filter takes. Highlight nothing first and the suite asks once, up front; press
 `Enter` there and each stage asks on its own, exactly as it does alone.
 
 **The carried selection grows by what each stage draws**, because a
 later stage is meant to see the earlier ones' work — that is the whole
 reason for the order. (It is what let `AUTODIM`, when it was in the
 list, open with the pads `PADDLE` had just dropped, and it is what any
-stage added to `*tydrn-suite*` after another gets for free.) Anything a
+stage added to `*tydrn-suite*` after another gets for free, as long as
+it reads `*calofin-handoff*` -- `TYDRN`, `PADDLE` and `AUTODIM` do.) Anything a
 stage erases drops out of the set the same way, so nothing dead is
 handed on.
 
@@ -79,11 +82,15 @@ handed on.
 dimensioning, which is in nobody's original pick — typed by hand it
 starts with nothing selected too.
 
-`PICKFIRST` is forced to `1` for the run and put back afterwards. At
-`0`, `sssetfirst` still highlights but `ssget "_I"` reads nothing, and
-the whole handoff would go quietly missing — the one failure mode worth
-spending a sysvar to rule out. `Esc` at the suite's own selection prompt
-puts it back too; `Esc` inside a stage does not, for the reason below.
+**`PICKFIRST` is not touched.** The pick used to go over as a
+pickfirst set, with `PICKFIRST` forced to `1` round the stages (at `0`,
+`sssetfirst` still highlights but `ssget "_I"` reads nothing). But
+`Esc` inside a stage runs only that stage's handler, for the reason
+below, so the restore never ran and a drafter who works at `0` was left
+at `1` with nothing said. The handoff global borrows no setting of
+yours; it holds the stage's name and the set, is read only by that
+stage, and is cleared at the read and by the stage's handler, so it
+never outlives the call it was made for.
 
 **Nothing is skipped or reworded.** Each stage is the command itself,
 asking its own questions — so `TYDRN` still offers *"Select text to
@@ -153,9 +160,9 @@ stays run, which is the other reason the check happens first. The
 handler AutoCAD calls there is the *stage's* own, not the suite's: every
 command in the build declares `*error*` as a local (STANDARDS section 5)
 and the innermost binding wins, so the stage puts its own layers, undo
-group and settings back while the suite's `PICKFIRST` restore is
-skipped. It is left at `1`, the factory default — what letting each
-stage own its cleanup costs.
+group and settings back -- and clears the handoff -- while the suite's
+handler is skipped. That is why the suite borrows nothing it would have
+to put back.
 
 **It is on the LazPanel.** `TYLERDRONESUITE` has a button on the panel's
 `Rest` and `Points` pages, captioned *Drone suite: tidy, pad, CDIM* — so
@@ -187,7 +194,9 @@ At the top of `tydrn.lsp`:
 
 `PADDLE` and `AUTODIM` use a selection that is already highlighted
 when they start, instead of asking for one — the way every native
-AutoCAD command behaves, and what lets the suite hand a stage its pick.
+AutoCAD command behaves -- and a selection handed to them in
+`*calofin-handoff*` before that, which is what lets the suite hand a
+stage its pick.
 With nothing highlighted they prompt exactly as they always did,
 `Enter` and all, so running either on its own is unchanged. (`AUTODIM`
 keeps that behaviour even though it is out of the suite's flow.)
@@ -230,6 +239,5 @@ the command line verbatim unless AutoLISP defines it here -- plus
 retuning and turning off the finisher, and the handoff itself: that one
 highlight reaches every calofin stage, that it grows to include what an
 earlier stage drew, that an erased entity is not passed on, that `CDIM`
-gets a cleared selection, and that `PICKFIRST` is put back -- on the
-success path and through the command's own `*error*` at its selection
-prompt.  `CALOFIN_LISP_ROOT=shared` reruns it against the grouped twin.
+gets a cleared selection, and that `PICKFIRST` is never touched -- an
+`Esc` inside a stage that has its own handler included.  `CALOFIN_LISP_ROOT=shared` reruns it against the grouped twin.

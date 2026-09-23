@@ -83,7 +83,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacovcreate-version* "v1.1")
+(setq *spacovcreate-version* "v1.2")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value SPACOVCREATE reads that somebody might want
@@ -1112,6 +1112,10 @@
 ;; Returns (grade taper assumed-flag), or SCV-BACK.
 (defun scv:askblock (back / v ed bn att g tp)
   (cal:osup)
+  ;; ERRNO is sticky, so it is cleared before the pick and read straight
+  ;; after (wrapped: an engine that makes it read-only must not kill the
+  ;; command at its own prompt).  See the miss clause below.
+  (vl-catch-all-apply 'setvar (list "ERRNO" 0))
   (initget (if back "Type Skip Back Undo" "Type Skip"))
   (setq v (entsel (strcat "\nSelect the block that gives the taper [Type/Skip"
                           (if back "/Back" "") "] <Skip>: ")))
@@ -1123,6 +1127,14 @@
     ((and (= (type v) 'STR) (= v "Type"))
      (setq tp (scv:asktaper))
      (if (eq tp 'SCV-BACK) (scv:askblock back) (list scv:*grade-dflt* tp nil)))
+    ;; entsel answers nil for Enter AND for a click that hit nothing;
+    ;; ERRNO 7 is the miss.  Taken for the skip, a click just beside
+    ;; the block drew a STANDARD 4-2 cover and the report said the
+    ;; taper was not given -- when it was, in the block they aimed at.
+    ((and (null v) (= 7 (getvar "ERRNO")))
+     (scv:say (strcat "Nothing there - click the block itself, type T to"
+                      " type the taper, or press Enter to skip."))
+     (scv:askblock back))
     ((or (null v) (= (type v) 'STR))            ; Skip, or Enter
      (list scv:*grade-dflt* scv:*taper-dflt* t))
     (t

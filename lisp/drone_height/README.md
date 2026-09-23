@@ -14,7 +14,7 @@ out of the photo's own metadata instead of the office's blind
 
 | Command | What it does |
 | --- | --- |
-| `DDFIX` | Select a feature, enter its height above/below the deck, apply the scale correction (about the selection's centre by default -- pick a shared corner as base point when the feature shares an edge with the pool) |
+| `DDFIX` | Select a feature, enter its height above/below the deck, apply the scale correction about the selection's centre. There is no base-point option: for a feature that shares an edge with the pool, U the DDFIX and `SCALE` it about the shared corner by the factor DDFIX printed |
 | `DDSET` | Set or forget the drone height H (DDFIX also asks the first time) |
 | `DDALT` | Read RelativeAltitude out of the original DJI image and set H |
 | `DDCAL` | Back-solve H from a feature of known true size (cross-check) |
@@ -42,6 +42,11 @@ loaded.
 2. Typical flow: `DDGPS` (or `DDALT`, or `DDSET`) to establish H, then
    `DDFIX` per raised/sunken feature; `DDCAL` when a feature of known
    size is available to cross-check H.
+3. `DDFIX` will not take a pick with anything on a locked layer: it
+   names the layer and asks for the pick again. SCALE would skip that
+   object without a word and scale the rest about a centre the skipped
+   object still pulled on, so the feature would come out half corrected
+   and out of place.
 
 ## Assumptions
 

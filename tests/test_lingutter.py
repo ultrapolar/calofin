@@ -63,6 +63,7 @@ if os.path.basename(LISP_ROOT) == "shared":
 else:
     LIB = None
 
+import lispvm  # noqa: E402
 from lispvm import VM, NIL, LispError, Ent, Dot, Sym  # noqa: E402
 
 failures = []
@@ -1159,28 +1160,60 @@ check("P9 ...and it says so", "nothing highlighted" in out, out[-200:])
 
 print("== P10. PADDLE is handed the perimeter, not left to guess ==")
 
+# The perimeter goes over in *calofin-handoff*, which PADDLE reads
+# before its own pickfirst probe.  It used to go as a pickfirst set, and
+# ssget "_I" reads nothing with PICKFIRST at 0 -- a drafter who works
+# verb-noun got PADDLE's perimeter prompt, where Enter auto-detects the
+# very border the handoff exists to avoid.  The VM's "_I" does not look
+# at PICKFIRST, so that half of AutoCAD is modelled here for the run.
 vm, inside, outside = twoareas()
-vm.loads('(defun c:PADDLE ( / ss)'
-         ' (setq ss (ssget "_I" \'((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))'
+vm.sysvars['PICKFIRST'] = 0
+vm.loads('(defun c:PADDLE ( / h ss)'
+         ' (setq h *calofin-handoff* *calofin-handoff* nil)'
+         ' (setq ss (if (and h (= (car h) "PADDLE")) (cadr h)))'
+         ' (if (null ss)'
+         '   (setq ss (ssget "_I" \'((0 . "LWPOLYLINE,POLYLINE,LINE,ARC")))))'
          ' (princ (strcat "\\nSTUB-PADDLE-GOT " (if ss (itoa (sslength ss)) "0")))'
          ' (princ))')
-vm.run('c:LINGUTTER', [inside, "Yes"])
+_real_ssget = lispvm.BUILTINS[Sym('ssget')]
+
+
+def _ssget_pickfirst_off(vm, a):
+    if (a and isinstance(a[0], str) and a[0].upper().lstrip('_') == 'I'
+            and vm.sysvars.get('PICKFIRST') == 0):
+        vm.pickfirst = None             # highlighted, but not readable
+        return NIL
+    return _real_ssget(vm, a)
+
+
+lispvm.BUILTINS[Sym('ssget')] = _ssget_pickfirst_off
+try:
+    vm.run('c:LINGUTTER', [inside, "Yes"])
+finally:
+    lispvm.BUILTINS[Sym('ssget')] = _real_ssget
 out = "".join(str(x) for x in vm.printed)
-check("P10 PADDLE's pickfirst probe finds exactly the new perimeter",
+check("P10 PADDLE is handed exactly the new perimeter, PICKFIRST at 0",
       "STUB-PADDLE-GOT 1" in out, out[-300:])
 check("P10 ...so it never has to auto-detect past the drawing outside",
       "STUB-PADDLE-GOT 0" not in out)
+check("P10 ...PICKFIRST is left at the drafter's 0",
+      vm.sysvars['PICKFIRST'] == 0)
+check("P10 ...and no handoff is left lying about",
+      vm.globals.get(Sym('*calofin-handoff*')) is None)
 
-# and the real PADDLE takes a pickfirst selection the same way
+# and the real PADDLE reads a handed-over perimeter the same way
 vm = newvm()
 vm.load(PADDLE)
 rectangle(vm, 0, 0, 300, 200)
 vm.loads('(setq tst-ss (ssadd))')
 vm.loads('(foreach e (list (ssname (ssget "_X") 0)) (ssadd e tst-ss))')
-vm.loads('(sssetfirst nil tst-ss)')
-got = vm.loads('(sslength (ssget "_I" \'((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))')
-check("P10 PADDLE.lsp asks for its selection with an _I probe first",
-      '(ssget "_I"' in open(PADDLE).read() and int(got) == 1, got)
+vm.loads('(setq *calofin-handoff* (list "PADDLE" tst-ss))')
+got = vm.loads('(sslength (paddle--handed "LWPOLYLINE,POLYLINE,LINE,ARC"))')
+check("P10 PADDLE.lsp takes a handed-over perimeter before its _I probe",
+      '(paddle--handed "LWPOLYLINE' in open(PADDLE).read() and int(got) == 1,
+      got)
+check("P10 ...and clears the handoff as it reads it",
+      vm.globals.get(Sym('*calofin-handoff*')) is None)
 
 
 # ------------------------------------------- P11. the knobs, misconfigured

@@ -100,7 +100,9 @@ hinge pass it is the grey guide spa that is up, not your drawing.
 Skipping it is therefore an answer, not a postponement: the taper is
 typed at the hinge pass instead, the grade falls back to `Standard`, and
 a Thermo-Light cover has to be told through the block or the form for
-the two rules above to apply.
+the two rules above to apply. Only Enter skips: a click that hits
+nothing says `Nothing there` and asks again, so a pick that just misses
+the block cannot spend the one offer.
 
 ## Water's edge vs cover size
 
@@ -448,9 +450,23 @@ is gone by the time you see it.
 ## Millimetres
 
 Any measurement may be typed **in millimetres by putting the unit on the
-number** — `600mm`, `1524 MM`, `76.2mm` — and it is converted to inches
+number** — `600mm`, `1524MM`, `76.2mm` — and it is converted to inches
 (÷ 25.4). This works at every distance prompt: the guided measurements,
 the corner sizes, the lap, the spillaway lengths.
+
+**No space before the unit.** The spacebar is Enter at a distance
+prompt, so `300 mm` hands in 300 *inches* and leaves the `mm` to
+answer the next question. A size over 30 ft is longer than any spa, so
+SPA refuses it — `1524 mm` typed with the space is caught that way —
+and says to type the unit touching the number; the question is asked
+again. The same bound holds for a value arriving from the SPA form: one
+over 30 ft is not drawn, it is asked for at the command line.
+
+Millimetres are a **command-line** spelling. The SPA forms — `LAZSPA`
+and the palette's spa chart — read their boxes with AutoCAD's `distof`,
+as inches or feet-and-inches only; a box it cannot read — `600mm`
+included — is sent as empty, and that question is asked at the command
+line, where the millimetres can be typed.
 
 Inches and architectural input are unchanged (`84`, `6'10-1/2"`), and
 object snaps stay live, so a distance can still be **picked** off

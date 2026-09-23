@@ -204,10 +204,14 @@
 ;;;                                 point, and the ruler re-grades
 ;;;                                 round it for the next;
 ;;;     * type a length          -- read the way DIMSTAMP reads: 44,
-;;;                                 44.5, 44 1/2, 4'4.5 and 4'-4 1/2"
+;;;                                 44.5, 44-1/2, 4'4.5 and 4'-4-1/2"
 ;;;                                 all mean what they say, kept
 ;;;                                 exactly as typed (44.3 stays 44.3;
-;;;                                 the ruler rounds to the eighth);
+;;;                                 the ruler rounds to the eighth).
+;;;                                 A fraction is DASHED: the spacebar
+;;;                                 is Enter here, so 44 1/2 would be
+;;;                                 44 for this point and 1/2 for the
+;;;                                 next;
 ;;;     * Enter                  -- the last length again, as before;
 ;;;     * click EMPTY SPACE      -- the first of two points to measure
 ;;;                                 the length between, which is what
@@ -224,8 +228,8 @@
 ;;;   * The whole run is one UNDO group: a single U reverses everything.
 ;;;   * Esc or an error at any prompt restores every system variable it
 ;;;     changed (OSMODE, CMDECHO, PDMODE, CLAYER, the CE* creation
-;;;     defaults and the current dimension style), erases the temporary
-;;;     guides and closes the UNDO group.
+;;;     defaults, PLINETYPE, PLINEWID and the current dimension style),
+;;;     erases the temporary guides and closes the UNDO group.
 ;;;   * Bad input re-prompts instead of aborting the command; zero and
 ;;;     negative lengths are rejected, as is a direction click that lands
 ;;;     on the curve itself (where "which side" would be ambiguous).
@@ -245,7 +249,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.23")
+(setq *cperp-version* "v0.24")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -312,10 +316,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -356,6 +364,14 @@
 ;;;            ladder it is standing on (nil = a tape)
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
+
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
 
 ;;; -------------------- end of the length ruler -------------------------
 
@@ -843,7 +859,8 @@
 
 (defun c:CPERPPTS (/ *error* cperp:kill cperp:unplace cperp:finish
                                       rl rr
-                     os ce pd clay cec celt celw celts cdim undoOpen tmpEnts
+                     os ce pd plw clay cec celt celw celts cdim undoOpen
+                     tmpEnts stopped
                      srcData srcLayer srcColor srcLtype srcLw srcLts
                      dimPairs dimStyle pr
                      sel crv etype sp ep click rev side tot
@@ -874,17 +891,23 @@
             idxs      (cdr idxs)))
     (setq i tgt))
 
-  ;; single cleanup path shared by normal exit, Esc and errors
-  (defun cperp:finish (/ guard)
-    ;; The drafter's settings come back FIRST -- ahead of the drain
-    ;; below, which is the one form in here that can throw.  A bare
-    ;; (command) from *error* is legal only while a pushed error mode is
-    ;; actually in effect; where it is not, AutoCAD rejects it, the throw
-    ;; lands inside the handler and every line after it is skipped.  This
-    ;; whole defun WAS those lines: the handler is nothing but a call to
-    ;; it, so a rejected drain used to take the OSMODE restore, the layer,
-    ;; the creation defaults and the error-mode pop with it.  Putting back
-    ;; values this run captured itself is pure setvar and cannot throw.
+  ;; single cleanup path shared by normal exit, Esc and errors.
+  ;;
+  ;; It runs in AutoCAD's DEFAULT error mode, and must: it is local to
+  ;; the command and reads only the command's locals, and under
+  ;; *push-error-using-command* AutoCAD resets the evaluator before
+  ;; *error* runs.  The handler used to call an undefined cperp:finish
+  ;; there and die at its first form -- OSMODE left at 0, the drafter on
+  ;; PERPPTS-TEMP, the guides left in, no report, and the mode pushed
+  ;; for the session.  The push was only for a bare (command) drain of
+  ;; a pending PLINE, and none is ever pending: every (command ...) here
+  ;; is fed points the run computed, with no prompt in between, so an
+  ;; Esc lands at one of the run's own prompts.  No push, no pop, no
+  ;; drain; command-s only.
+  (defun cperp:finish ()
+    ;; The drafter's settings come back FIRST: putting back values this
+    ;; run captured itself is pure setvar and cannot throw, so nothing
+    ;; after this block can take them with it.
     (if os    (setvar "OSMODE"    os))
     (if pd    (setvar "PDMODE"    pd))
     (if cec   (setvar "CECOLOR"   cec))
@@ -892,27 +915,22 @@
     (if celw  (setvar "CELWEIGHT" celw))
     (if celts (setvar "CELTSCALE" celts))
     (if plt   (setvar "PLINETYPE" plt))
+    (if plw   (setvar "PLINEWID"  plw))
     ;; CLAYER last of the setvars: it is the one that can throw here, if
     ;; the layer it names was purged while the run was open
     (if clay  (setvar "CLAYER"    clay))
-    (setq guard 0)
-    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
-      (command)
-      (setq guard (1+ guard)))
-    ;; The error mode comes off HERE, after the last bare (command) and
-    ;; before the first command-s: under a push AutoCAD refuses command-s
-    ;; inside *error* with "INTERNAL error in FAIL", past any
-    ;; vl-catch-all-apply, and the rest of the handler never runs
-    ;; -- the DIMSTYLE restore and the undo close below.  Both exits come
-    ;; through here, so a clean run's mode is not left stacked for the
-    ;; session either (AutoLISP reference, *push-error-using-command*).
-    (if *pop-error-mode* (*pop-error-mode*))
     (if rl (setq rl (cal:ruler-off rl)))
     (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
     (setq tmpEnts nil)
+    ;; cdim is cleared once it is put back: a stop the run explains
+    ;; comes through here twice, once before its (exit) and once from
+    ;; the handler, and the second -DIMSTYLE landed AFTER the undo group
+    ;; had closed -- one more thing for the drafter's next U to undo.
+    ;; Everything else in here is already safe to run twice.
     (if (and cdim (tblsearch "DIMSTYLE" cdim))
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" cdim)))
-    ;; CMDECHO after the drain, so the drain itself stays quiet
+    (setq cdim nil)
+    ;; CMDECHO after the -DIMSTYLE restore, so that stays quiet
     (if ce (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
@@ -920,16 +938,18 @@
 
   (defun *error* (msg)
     (cperp:finish)
-    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-      (princ (strcat "\nError: " msg))
-      (princ "\nCancelled."))
+    ;; stopped = the run has already said why it is stopping (a resize
+    ;; the layer would not take, too few points left to join) and ended
+    ;; itself by (exit), which arrives here like an Esc.  "Cancelled."
+    ;; under that reason told the drafter they had pressed a key they
+    ;; had not.
+    (if (not stopped)
+      (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nError: " msg))
+        (princ "\nCancelled.")))
     (if lzd:report (lzd:report "CPERPPTS" *cperp-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "CPERPPTS" *cperp-version*))
-  ;; AutoCAD 2012+ requires this so *error* may call (command) - the
-  ;; CMDACTIVE drain in cperp:finish; harmless no-op guard on older
-  ;; releases where it doesn't exist
-  (if *push-error-using-command* (*push-error-using-command*))
 
   ;; --- save state and open one undo group for the whole run -----------
   (setq os    (getvar "OSMODE")
@@ -942,11 +962,19 @@
         celts (getvar "CELTSCALE")
         cdim  (getvar "DIMSTYLE")
         plt   (getvar "PLINETYPE")
+        plw   (getvar "PLINEWID")
         tmpEnts '())
   (setvar "CMDECHO" 0)
   ;; PLINE must produce a lightweight polyline so the arc bulges can be
   ;; written into it and the result stays a plain LWPOLYLINE
   (setvar "PLINETYPE" 2)
+  ;; ...and a hairline one.  PLINE starts at PLINEWID, which the drawing
+  ;; saves and any earlier PLINE Width answer sets, and cperp:arcs keeps
+  ;; every group but the bulges -- so one 2" wide polyline drawn earlier
+  ;; made every measured course a heavy 2" band, with nothing said.
+  ;; Moved only when it is not already 0, so a run borrows nothing it
+  ;; does not have to give back.
+  (if (and plw (/= plw 0.0)) (setvar "PLINEWID" 0.0))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -1093,6 +1121,7 @@
                                  " likely on a locked, frozen or switched-off"
                                  " layer.  Free the layer and run CPERPPTS again."))
                   (cperp:finish)
+                  (setq stopped T)
                   (exit)))
               ;; re-read: the curve itself is what every round measures along
               (setq tot (cperp:curvelen crv)
@@ -1359,6 +1388,7 @@
       (progn
         (princ "\nToo few points were placed to build a polyline.")
         (cperp:finish)
+        (setq stopped T)
         (exit)))
     (setvar "CLAYER"    srcLayer)
     (setvar "CECOLOR"   srcColor)

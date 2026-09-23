@@ -139,7 +139,12 @@ nothing but the RMS column to say so.
 2. Type **`ALTABCDEF`** and press Enter.
 3. Pick the spreadsheet in the file dialog.
 4. Enter the **A-B** width and the **A-D** height when prompted (e.g.
-   `20'-6"`).
+   `20'-6"`, or plain inches such as `246` -- a plain `214` is 214
+   inches).  Each answer is echoed back in feet-inches as it was read.
+   One that only the sheet's scan repairs could read (a `17'-10 114`
+   whose `114` would be taken for `1/4"`), or two bare numbers such as
+   `20 6` that leave feet and inches to a guess, is refused and asked
+   again rather than guessed at.
 5. Pick the insertion point for corner **A** (or press Enter for `0,0`).
 
 The command draws:

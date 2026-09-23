@@ -56,7 +56,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.11"     ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.12"     ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -121,12 +121,23 @@
     (setq i (1+ i)))
   (reverse res))
 
-(defun autobead-newents (mark / e res)
-  ;; Every entity added to the database after 'mark' that is still alive.
+(defun autobead-newents (mark / e ed res)
+  ;; Every MAIN entity added to the database after 'mark' that is still
+  ;; alive.  entlast answers the last main entity, so when the drawing
+  ;; ends in an attributed block (a survey point) or a heavy polyline,
+  ;; entnext from that mark walks into the block's own ATTRIBs and
+  ;; SEQEND, or the polyline's VERTEXes -- the drafter's, not this
+  ;; run's.  They came back as new chains to bead and as demo geometry
+  ;; to erase, and entdel, which refuses a subentity, had them reported
+  ;; as objects on a locked layer.  A subentity goes with its parent, so
+  ;; it is never listed here on its own.
   (setq res '()
         e   (if mark (entnext mark) (entnext)))
   (while e
-    (if (entget e) (setq res (cons e res)))
+    (if (and (setq ed (entget e))
+             (not (member (cdr (assoc 0 ed))
+                          '("ATTRIB" "VERTEX" "SEQEND"))))
+      (setq res (cons e res)))
     (setq e (entnext e)))
   (reverse res))
 
@@ -318,6 +329,32 @@
               (autobead-newents mark)))
     pieces))
 
+;;; ---- run-time state -------------------------------------------------------
+;; Not settings: what a build has to put right if it dies.  (The rule
+;; above has three semicolons on purpose: it is where tools/knobs.py
+;; ends the SETTINGS block, so LAZTUNE never offers these as knobs.)
+;; They live here, not in autobead-build's locals, because the build
+;; pushes the error mode so its handler may drain a pending command
+;; with (command), and under a push AutoCAD resets the evaluator before
+;; *error* runs -- the handler sees globals only.  As locals they all
+;; read nil there, so a bead that failed or was cancelled part-way left
+;; OSMODE at 0, PEDITACCEPT at 1, CMDECHO off, its undo group open and
+;; its working copies in the drawing.  Every one is cleared at the top
+;; of each build, before the push, so nothing a dead run left behind is
+;; acted on.
+
+(setq autobead:*oldos* nil)      ; OSMODE the build muted
+(setq autobead:*oldpa* nil)      ; PEDITACCEPT
+(setq autobead:*oldoe* nil)      ; OFFSETERASE
+(setq autobead:*oldgt* nil)      ; OFFSETGAPTYPE
+(setq autobead:*oldcmd* nil)     ; CMDECHO
+(setq autobead:*temps* nil)      ; working copies / chains still standing
+(setq autobead:*undo-open* nil)  ; T while the build's undo group is open
+(setq autobead:*who* nil)        ; (tool version) a failure is filed under
+(setq autobead:*demo* nil)       ; (mark) while the tutorial demo is up
+(setq autobead:*demo-call* nil)  ; T from the demo's call until a build takes it
+(setq autobead:*in-demo* nil)    ; T in the build the demo called
+
 ;; ---- engine ----------------------------------------------------------------
 ;; Everything that touches the drawing lives here, so AUTOBEAD and the
 ;; tutorial exercise exactly the same code path.  sidewalls / treadpts come
@@ -327,17 +364,31 @@
 ;;   "None"          - no wall bead at all; only the step faces bead
 ;; skippts names step lines to leave unbeaded - one point on each, and the
 ;; step routines put the last step drawn there, since the line that closes
-;; a run has no riser to bead.  All points are WCS; nil nil nil beads
-;; everything.  Returns the number of bead objects created.
+;; a run has no riser to bead.  dirpt is the direction click as picked
+;; (current UCS -- OFFSET reads it that way); treadpts and skippts are
+;; WCS.  nil nil nil beads everything.  Returns the number of bead
+;; objects created.
 
 (defun autobead-build (ss dirpt sidewalls treadpts skippts
                        / *error* beadoff layname fuzz wallmode heldsteps
-                         oldcmd oldos oldpa temps undo-open
                          mark copies ss2 chains mark2 news
                          beadcount failcount c e i src dup drift
                          gaps g sp ep perimchains stepchains steplines
                          perimbeads bps pieces mp kept culled filtered
                          misses brks dirw hit p eobj)
+
+  ;; what the handler reads is cleared FIRST, before the push and before
+  ;; anything is moved: a run that died without its handler must not
+  ;; hand this one a group to close or settings to put back
+  (setq autobead:*oldos* nil autobead:*oldpa* nil autobead:*oldoe* nil
+        autobead:*oldgt* nil autobead:*oldcmd* nil
+        autobead:*temps* nil autobead:*undo-open* nil)
+  ;; ...and whether this is the tutorial demo's build is TAKEN here, not
+  ;; left standing: the demo sets the flag in the form that calls this,
+  ;; and it is spent on the way in, so a demo mark some earlier run left
+  ;; behind can never be swept by a step routine's failed bead
+  (setq autobead:*in-demo*   autobead:*demo-call*
+        autobead:*demo-call* nil)
 
   (setq beadoff *autobead-offset*
         layname *autobead-layer*
@@ -356,58 +407,95 @@
 
   ;; -- error handler: cancel stuck commands, purge temp geometry,
   ;;    restore system variables, close the undo group -------------------
+  ;; Everything it reads is one of the run-time globals above: under the
+  ;; push below AutoCAD resets the evaluator before this runs, and every
+  ;; local of this build reads nil in here.
   (defun *error* (msg)
     ;; the drafter's settings come back FIRST, ahead of the flush below.
     ;; autobead-flush is a bare (command) drain -- the one form up here
-    ;; that can throw -- and it used to sit in front of these two, so a
+    ;; that can throw -- and it used to sit in front of these, so a
     ;; drain that died left every object snap unticked and PEDITACCEPT
-    ;; at 1.  Two setvars of values this run captured itself cannot
-    ;; throw, so nothing is risked by putting them above it.
-    (if oldos (setvar "OSMODE" oldos))
-    (if oldpa (setvar "PEDITACCEPT" oldpa))
-    (autobead-flush)
+    ;; at 1.  Setvars of values this run captured itself cannot throw,
+    ;; so nothing is risked by putting them above it.
+    (if autobead:*oldos* (setvar "OSMODE" autobead:*oldos*))
+    (if autobead:*oldpa* (setvar "PEDITACCEPT" autobead:*oldpa*))
+    (if autobead:*oldoe* (setvar "OFFSETERASE" autobead:*oldoe*))
+    (if autobead:*oldgt* (setvar "OFFSETGAPTYPE" autobead:*oldgt*))
+    (setq autobead:*oldos* nil autobead:*oldpa* nil
+          autobead:*oldoe* nil autobead:*oldgt* nil)
+    ;; ...and under a catch, so a drain that throws cannot take the
+    ;; sweep, the undo close and the report below it down with it
+    (vl-catch-all-apply 'autobead-flush nil)
     ;; the error mode comes off HERE, after the last bare (command) and
     ;; before the first command-s: under a push AutoCAD refuses command-s
     ;; inside *error* with "INTERNAL error in FAIL", past any
     ;; vl-catch-all-apply, and the rest of the handler never runs
     (if *pop-error-mode* (*pop-error-mode*))
-    (foreach e temps
+    (foreach e autobead:*temps*
       (if (and e (entget e)) (entdel e)))
+    (setq autobead:*temps* nil)
     ;; only close a group that was actually opened -- an error thrown
     ;; before the _Begin below (a cancelled selection, a failed getvar)
     ;; used to run _End on nothing, which errors inside the handler
-    (if undo-open
+    (if autobead:*undo-open*
       (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
-    (setq undo-open nil)
-    (if oldcmd (setvar "CMDECHO" oldcmd))
+    (setq autobead:*undo-open* nil)
+    ;; a build the tutorial demo called takes the demo's sample pool
+    ;; down with it.  Only this handler runs when the build fails -- the
+    ;; demo's own never does -- so the pool used to be left standing on
+    ;; POOL-TUTORIAL, and its mark with it
+    (if autobead:*in-demo* (vl-catch-all-apply 'autobead-demo-sweep nil))
+    (setq autobead:*in-demo* nil)
+    (if autobead:*oldcmd* (setvar "CMDECHO" autobead:*oldcmd*))
+    (setq autobead:*oldcmd* nil)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nAUTOBEAD error: " msg)))
-    (if lzd:report (lzd:report "AUTOBEAD" *autobead-version* msg))
+    (if lzd:report (lzd:report (car autobead:*who*) (cadr autobead:*who*) msg))
     (princ))
-  (if lzd:begin (lzd:begin "AUTOBEAD" *autobead-version*))
+  ;; Whose run a failure in here belongs to.  CORNERSTP, HEMISTEP and
+  ;; NORMIESTEP call this as the tail of THEIR run, and a begin of its
+  ;; own logged that run 'ok', dropped its prompts and filed the failure
+  ;; as AUTOBEAD's, with none of the answers that led to it.  So a run
+  ;; already under way is joined, not replaced, and reported under its
+  ;; own name; c:AUTOBEAD has begun as AUTOBEAD by the time it calls.
+  (if (and lzd:begin (not lzd:*tool*))
+    (lzd:begin "AUTOBEAD" *autobead-version*))
+  (setq autobead:*who* (if lzd:*tool*
+                         (list lzd:*tool* lzd:*ver*)
+                         (list "AUTOBEAD" *autobead-version*)))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
-  ;; autobead-flush drain and the UNDO close above; harmless no-op
-  ;; guard on older releases where it doesn't exist
+  ;; autobead-flush drain above; harmless no-op guard on older releases
+  ;; where it doesn't exist
   (if *push-error-using-command* (*push-error-using-command*))
 
-  (setq oldcmd (getvar "CMDECHO"))
+  (setq autobead:*oldcmd* (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
     (progn
       (command "_.UNDO" "_Begin")
-      (setq undo-open T)))
-  (setq oldos (getvar "OSMODE")
-        oldpa (getvar "PEDITACCEPT")
-        temps '()
+      (setq autobead:*undo-open* T)))
+  (setq autobead:*oldos* (getvar "OSMODE")
+        autobead:*oldpa* (getvar "PEDITACCEPT")
+        autobead:*oldoe* (getvar "OFFSETERASE")
+        autobead:*oldgt* (getvar "OFFSETGAPTYPE")
         beadcount 0)
 
   (autobead-ensure-layer layname)
   (setvar "OSMODE" 0)          ; keep osnaps out of the internal commands
   (setvar "PEDITACCEPT" 1)     ; auto-accept line/arc -> pline conversion
+  ;; OFFSET's own two settings are kept in the registry, so they are
+  ;; whatever the drafter last answered in an OFFSET of their own.
+  ;; Erase=Yes (OFFSETERASE 1) deleted each working chain as it was
+  ;; offset -- the step chains step 5 breaks the wall beads at were gone
+  ;; by then, so every wall bead ran on past its breaklines or went whole,
+  ;; and the report still counted the beads.  A fillet or chamfer gap type
+  ;; rounds off the corners this file promises are trimmed and extended.
+  (if autobead:*oldoe* (setvar "OFFSETERASE" 0))
+  (if autobead:*oldgt* (setvar "OFFSETGAPTYPE" 0))
 
   ;; 1) copy the selection in place so the originals are never touched
   (setq mark   (entlast)
@@ -423,7 +511,7 @@
         (setq copies (cons dup copies))))
     (setq i (1+ i)))
   (setq copies (reverse copies)
-        temps  copies)
+        autobead:*temps* copies)
 
   (cond
     ((null copies)
@@ -431,7 +519,7 @@
 
     (drift
      (foreach e copies (if (entget e) (entdel e)))
-     (setq temps '())
+     (setq autobead:*temps* '())
      (prompt (strcat "\nAborted: the working copies did not land on the"
                      " source geometry.\nNothing was drawn.")))
 
@@ -442,7 +530,7 @@
      (command "._pedit" "_multiple" ss2 "" "_join" fuzz "")
      (autobead-flush)
      (setq chains (autobead-newents mark)
-           temps  chains)
+           autobead:*temps* chains)
 
      ;; 3) classify: a chain whose BOTH endpoints land mid-span on other
      ;;    chains is a step line crossing the pool; the rest are walls
@@ -542,7 +630,7 @@
      ;; 6) discard the temporary chains
      (foreach c chains
        (if (entget c) (entdel c)))
-     (setq temps '())
+     (setq autobead:*temps* '())
 
      ;; 7) report -- including what was actually built, so a bead that
      ;;    lands in the wrong place can be diagnosed from the command line
@@ -591,11 +679,17 @@
                        " farther from the pool line.")))))
 
   ;; -- restore --------------------------------------------------------------
-  (setvar "PEDITACCEPT" oldpa)
-  (setvar "OSMODE" oldos)
-  (if undo-open (command "_.UNDO" "_End"))
-  (setq undo-open nil)
-  (setvar "CMDECHO" oldcmd)
+  (setvar "OSMODE" autobead:*oldos*)
+  (setvar "PEDITACCEPT" autobead:*oldpa*)
+  (if autobead:*oldoe* (setvar "OFFSETERASE" autobead:*oldoe*))
+  (if autobead:*oldgt* (setvar "OFFSETGAPTYPE" autobead:*oldgt*))
+  (setq autobead:*oldos* nil autobead:*oldpa* nil
+        autobead:*oldoe* nil autobead:*oldgt* nil)
+  (if autobead:*undo-open* (command "_.UNDO" "_End"))
+  (setq autobead:*undo-open* nil
+        autobead:*in-demo*   nil)
+  (setvar "CMDECHO" autobead:*oldcmd*)
+  (setq autobead:*oldcmd* nil)
   ;; the mode pushed at the top comes off on this exit too, not only in
   ;; the handler -- stacked, it refuses command-s inside every later
   ;; handler (AutoLISP reference, *push-error-using-command*)
@@ -718,9 +812,11 @@
 ;; ==========================================================================
 ;;; TUTORIALAUTOBEAD
 ;;; --------------------------------------------------------------------------
-;;; Two modes:
-;;;   Read - a written walkthrough: every step, every check, every setting
-;;;   Demo - draws a sample pool and beads it live, pausing at each stage
+;;; [Checks/Demo/Both] <Both>:
+;;;   Checks - a written walkthrough: every step, every check, every setting
+;;;   Demo   - draws a sample pool and beads it live, pausing at each stage
+;;;   Both   - the one, then the other.  Read, the old name for Checks,
+;;;            is still taken typed in full.
 ;;; ==========================================================================
 
 (defun autobead-pause (msg)
@@ -847,8 +943,25 @@
                   (cons 10 a)
                   (cons 11 b))))
 
+(defun autobead-demo-sweep ( / e left)
+  ;; Erase what the demo drew -- every entity after the mark it took
+  ;; before its first line, the sample pool and the build's beads alike,
+  ;; and nothing else.  The cleanup used to erase the whole Bead Track
+  ;; layer, which is where the drafter's own AUTOBEAD output lives, so a
+  ;; Yes (the default) at the demo's last question took every bead in
+  ;; the drawing with it and said only "Demo geometry erased."
+  ;; Returns how many it could NOT erase: entdel refuses on a locked
+  ;; layer, and the caller says so rather than claim the lot went.
+  (setq left 0)
+  (if autobead:*demo*
+    (foreach e (autobead-newents (car autobead:*demo*))
+      (vl-catch-all-apply 'entdel (list e))
+      (if (entget e) (setq left (1+ left)))))
+  (setq autobead:*demo* nil)
+  left)
+
 (defun autobead-tutorial-demo ( / base lay pts prev ents ss dirpt
-                                  x y made e )
+                                  x y made e left)
   (setq lay "POOL-TUTORIAL")
 
   (autobead-say
@@ -857,7 +970,7 @@
           "  A sample pool with two step lines will be drawn in your"
           "  drawing and beaded for real, using the same code AUTOBEAD"
           "  uses. It goes on a temporary layer and you will be offered"
-          "  a cleanup at the end. Undo (U) also removes all of it."))
+          "  a cleanup at the end."))
 
   (if (null (setq base ((lambda (v) (if lzd:ask (lzd:ask "\nPick an empty spot for the demo pool: " v) v))
                          (getpoint
@@ -865,9 +978,19 @@
     (progn (prompt "\nDemo cancelled.") (princ))
 
     (progn
+      ;; the pick is in the current UCS and entmake reads WCS.  Built
+      ;; from the raw numbers the pool landed somewhere else under a
+      ;; moved UCS, the zoom framed an empty patch, and the direction
+      ;; click was measured against lines that were not where the
+      ;; drafter saw them.  So the pool is built round the WCS point
+      ;; clicked -- the tread point handed to the build is WCS too.
+      (setq base (trans base 1 0))
       (autobead-demo-layer lay)
       (setq x (car base)
             y (cadr base))
+      ;; everything the demo draws comes after this mark, and it is all
+      ;; the cleanup (or an Esc, through the command's handler) takes
+      (setq autobead:*demo* (list (entlast)))
 
       ;; open-ended pool run: bottom wall, end wall, top wall, plus two
       ;; step lines crossing the pool near the end wall
@@ -885,9 +1008,18 @@
           (autobead-demo-line (list (+ x 210.0) y 0.0)
                               (list (+ x 210.0) (+ y 144.0) 0.0) lay)))
 
+      ;; ZOOM reads UCS: the window is the four WCS corners round the
+      ;; pool as the current UCS sees them
+      (setq pts (mapcar '(lambda (p) (trans p 0 1))
+                        (list (list (- x 60.0) (- y 60.0) 0.0)
+                              (list (+ x 360.0) (- y 60.0) 0.0)
+                              (list (+ x 360.0) (+ y 204.0) 0.0)
+                              (list (- x 60.0) (+ y 204.0) 0.0))))
       (command "._zoom" "_window"
-               (list (- x 60.0) (- y 60.0))
-               (list (+ x 360.0) (+ y 204.0)))
+               (list (apply 'min (mapcar 'car pts))
+                     (apply 'min (mapcar 'cadr pts)))
+               (list (apply 'max (mapcar 'car pts))
+                     (apply 'max (mapcar 'cadr pts))))
 
       (autobead-pause
         (strcat "STEP 1 - the pool\n"
@@ -933,9 +1065,15 @@
                     " bead survives only on the click's\n      side of"
                     " that line."))
 
-          (setq made (autobead-build ss dirpt "Some"
-                       (list (list (+ x 267.0) (+ y 72.0) 0.0))
-                       nil))
+          ;; the flag says to the build's handler "this is the demo's":
+          ;; if the build fails, that handler is the only one that runs,
+          ;; and it takes the sample pool down too.  The build spends
+          ;; the flag on entry, so it is set in the same form as the call
+          (setq made (progn
+                       (setq autobead:*demo-call* T)
+                       (autobead-build ss dirpt "Some"
+                         (list (list (+ x 267.0) (+ y 72.0) 0.0))
+                         nil)))
 
           (autobead-say
             (list ""
@@ -957,16 +1095,35 @@
                      (getkword
                        "\nErase the demo pool and its bead? [Yes/No] <Yes>: ")))
         (progn
-          (foreach e ents (if (entget e) (entdel e)))
-          (if (setq ss (ssget "_X" (list (cons 8 *autobead-layer*))))
-            (command "._erase" ss ""))
-          (prompt "\nDemo geometry erased.")))
+          (setq left (autobead-demo-sweep))
+          (if (> left 0)
+            (prompt (strcat "\nDemo geometry erased, except " (itoa left)
+                            " object(s) on a locked layer - NOT erased."))
+            (prompt "\nDemo geometry erased."))))
+      ;; kept, or already swept: either way nothing is the handler's now
+      (setq autobead:*demo* nil)
       (prompt "\nTutorial complete. Type AUTOBEAD to use it for real.")
       (princ))))
 
 ;; ---- entry point -----------------------------------------------------------
 
-(defun c:TUTORIALAUTOBEAD ( / ans )
+(defun c:TUTORIALAUTOBEAD ( / *error* ans )
+  ;; An Esc at any of the demo's questions used to leave its sample pool
+  ;; standing on POOL-TUTORIAL with nothing said: the command had no
+  ;; handler.  This one takes the demo back down -- only what the demo
+  ;; drew, through the same sweep as its cleanup -- and opens no group
+  ;; and moves no setting, so there is nothing else to put back.  A
+  ;; failure inside the bead build itself is the build's handler's.
+  (defun *error* (msg)
+    (vl-catch-all-apply 'autobead-demo-sweep nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nTUTORIALAUTOBEAD error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALAUTOBEAD" *autobead-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "TUTORIALAUTOBEAD" *autobead-version*))
+  ;; nothing a dead demo left behind is swept by this one
+  (setq autobead:*demo* nil)
   ;; the tutorial selector of STANDARDS section 3; the old Read stays
   ;; accepted typed in full, hidden
   (initget "Checks Demo Both READ")
@@ -978,6 +1135,7 @@
   (if (= ans "READ") (setq ans "Checks"))
   (if (member ans '("Checks" "Both")) (autobead-tutorial-read))
   (if (member ans '("Demo" "Both")) (autobead-tutorial-demo))
+  (if lzd:end (lzd:end "TUTORIALAUTOBEAD"))
   (princ))
 
 ;; ---------------------------------------------------------------------------

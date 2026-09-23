@@ -237,6 +237,23 @@ for tool, src, local, cal in COPIES:
                     if a != b:
                         ok, detail = False, '%s/%s %r vs %r' % (theme, role,
                                                                 a, b)
+    if cal == 'cal:ink':
+        # the drafter's per-role override (CALSET Itemcolors,
+        # LAZBACKUP) -- the standalone copies ignored it once, so the
+        # same profile coloured a cue one way in LAZPASS and another
+        # when the tool was APPLOADed alone.  An out-of-range or
+        # non-numeric value is refused by both and falls to the table.
+        for val in ('77', '300', '0', 'abc', ''):
+            ev(vm, '(setenv "CalofinInk-FADE" "%s")' % val)
+            a = ev(vm, "(%s 'auto 'fade)" % local)
+            b = ev(vm, "(%s 'auto 'fade)" % cal)
+            if a != b:
+                ok, detail = False, 'CalofinInk-FADE=%s %r vs %r' % (val,
+                                                                     a, b)
+        if ok and ev(vm, '(progn (setenv "CalofinInk-FADE" "77") '
+                         "(%s 'auto 'fade))" % local) != 77:
+            ok, detail = False, 'override not honoured'
+        ev(vm, '(setenv "CalofinInk-FADE" "")')
     check('%-14s %-10s == %s' % (tool, local, cal), ok, detail)
 
 print('== the item-type roles: flag/arc/olap/orig/sugg/point/constr/report ==')

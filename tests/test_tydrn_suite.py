@@ -36,11 +36,17 @@ ordering and the refusals, which is all it contributes:
   * THAT ONE HIGHLIGHT REACHES EVERY STAGE.  The calofin stages want
     the same trace picked, and AutoCAD clears the pickfirst set the
     moment a command consumes it -- so run by hand the trace is
-    highlighted once per stage.  The suite reads it once and puts it
-    back before each stage, grows it by what each stage draws (so a
-    stage always opens with the earlier ones' work), and hands CDIM a
-    cleared one, because the dimensioning it tidies is in nobody's
-    original pick.
+    highlighted once per stage.  The suite reads it once and hands it
+    to each stage in *calofin-handoff*, grows it by what each stage
+    draws (so a stage always opens with the earlier ones' work), and
+    hands CDIM nothing, because the dimensioning it tidies is in
+    nobody's original pick.
+
+  * THAT PICKFIRST IS NEVER TOUCHED.  The pick used to go over as a
+    pickfirst set with PICKFIRST forced to 1, and an Esc inside a stage
+    runs only that stage's own handler -- so a drafter who works at 0
+    was left at 1.  The stages here that matter for that have handlers
+    of their own, the way every real stage does.
 
   * THAT IT DOES NOT WRAP THE STAGES IN ONE UNDO GROUP.  One U per
     stage backs the suite out, so a stage that went well is not undone
@@ -90,10 +96,19 @@ STUBS = r'''
 (foreach e *trace* (ssadd e *pre*))
 
 (defun ssgetfirst () (list nil *pre*))
-(defun sssetfirst (a b) (setq *handed* (cons b *handed*)) t)
+(defun sssetfirst (a b) (setq *gripped* (cons b *gripped*)) t)
+
+;; What a stage was handed: *calofin-handoff* when it is addressed to
+;; that stage, read and cleared the way TYDRN's and PADDLE's own
+;; readers do.  The finisher is recorded the same way when it is queued.
+(defun stage-saw (nm / h)
+  (setq h *calofin-handoff* *calofin-handoff* nil)
+  (setq *handed* (cons (if (and h (= (car h) nm)) (cadr h)) *handed*)))
 
 ;; what the suite queues on the command line, verbatim
-(defun vla-sendcommand (d s) (setq *sent* (cons s *sent*)) t)
+(defun vla-sendcommand (d s)
+  (stage-saw (vl-string-trim " " s))
+  (setq *sent* (cons s *sent*)) t)
 '''
 
 #: PADDLE and AUTODIM live in other files, so the suite has to find
@@ -105,8 +120,8 @@ STUBS = r'''
 #: stub records that it was CALLED, which is the mechanism itself now --
 #: a direct call is the only thing that reaches an AutoLISP command.
 STAGES = r'''
-(defun c:TYDRN   () (setq *ran* (cons "TYDRN" *ran*)) (princ))
-(defun c:PADDLE  () (setq *ran* (cons "PADDLE" *ran*)) (princ))
+(defun c:TYDRN   () (stage-saw "TYDRN") (setq *ran* (cons "TYDRN" *ran*)) (princ))
+(defun c:PADDLE  () (stage-saw "PADDLE") (setq *ran* (cons "PADDLE" *ran*)) (princ))
 '''
 
 #: A TYDRN that draws: what a stage adds to the drawing is what the
@@ -115,6 +130,7 @@ STAGES = r'''
 #: this list, opened with the pads PADDLE had just dropped.)
 DRAWING_STAGES = r'''
 (defun c:TYDRN ()
+  (stage-saw "TYDRN")
   (setq *ran* (cons "TYDRN" *ran*)
         *drew* (entmakex '((0 . "TEXT") (1 . "B") (10 2.0 2.0))))
   (princ))
@@ -272,8 +288,13 @@ def test_the_stage_list_is_what_drives_it():
 
 def handed(vm):
     """The set each stage was handed, in stage order.  nil means the
-    suite cleared the selection before that stage."""
+    suite handed that stage nothing."""
     return list(reversed(vm.get(Sym('*handed*')) or []))
+
+
+def gripped(vm):
+    """What the suite left gripped before each stage, in stage order."""
+    return list(reversed(vm.get(Sym('*gripped*')) or []))
 
 
 def test_one_highlight_reaches_every_calofin_stage():
@@ -297,6 +318,8 @@ def test_cdim_is_handed_a_cleared_selection():
     # Typed by hand there is nothing selected either, so clearing is
     # what keeps CDIM behaving the way its operator knows it.
     check("the finisher gets nil, not the trace", h[2] is None)
+    check("and nothing is left gripped for it, or for any stage",
+          gripped(vm) == [None, None, None])
     vm = run(extra_setup='(setq *tydrn-finish-cmd* nil)')
     check("with no finisher there is no third handoff",
           len(handed(vm)) == 2)
@@ -327,6 +350,7 @@ def test_an_erased_entity_is_not_handed_on():
     # rather than kept.
     vm = run(stages=STAGES + r'''
 (defun c:TYDRN ()
+  (stage-saw "TYDRN")
   (setq *ran* (cons "TYDRN" *ran*))
   (entdel (car *trace*))
   (princ))
@@ -366,26 +390,88 @@ def test_nothing_highlighted_means_one_prompt_not_three():
           len(vm.prompts) == 1 and not vm.script)
 
 
-def test_pickfirst_is_forced_on_and_put_back():
-    print("\nPICKFIRST at 0 would let the handoff go quietly missing")
-    # sssetfirst still highlights with PICKFIRST at 0, but ssget "_I"
-    # reads nothing - the failure would be silent, which is the one
-    # worth spending a sysvar to rule out.
-    vm = run(stages=r'''
+def test_pickfirst_is_never_touched():
+    print("\nPICKFIRST at 0 stays 0, and the pick still arrives")
+    # The pick used to go over as a pickfirst set, with PICKFIRST forced
+    # to 1 round the stages (at 0 ssget "_I" reads nothing).  The
+    # handoff global needs no setting of the drafter's at all.
+    vm = run(stages=STAGES + r'''
 (defun tydrn-spy () (setq *seen* (cons (getvar "PICKFIRST") *seen*)))
-(defun c:TYDRN   () (tydrn-spy) (princ))
-(defun c:PADDLE  () (tydrn-spy) (princ))
+(defun c:TYDRN   () (tydrn-spy) (stage-saw "TYDRN") (princ))
+(defun c:PADDLE  () (tydrn-spy) (stage-saw "PADDLE") (princ))
 ''',
-             # off before the run, so a restore to AutoCAD's own default
-             # of 1 cannot pass for one
+             # off before the run, so AutoCAD's own default of 1
+             # cannot pass for the drafter's setting
              extra_setup='(setvar "PICKFIRST" 0)')
-    check("every direct-call stage ran with it on",
-          [x for x in (vm.get(Sym('*seen*')) or [])] == [1, 1])
-    check("and it is back to what it was afterwards",
+    check("every stage ran with the drafter's 0",
+          [x for x in (vm.get(Sym('*seen*')) or [])] == [0, 0])
+    h = handed(vm)
+    check("and was handed the trace all the same",
+          all(h[i] is not None
+              and all(e in h[i] for e in vm.get(Sym('*trace*')))
+              for i in (0, 1)))
+    check("PICKFIRST is 0 afterwards", vm.sysvars.get('PICKFIRST') == 0)
+    check("and no handoff is left lying about",
+          vm.get(Sym('*calofin-handoff*')) is None)
+
+
+def test_esc_inside_a_stage_leaves_pickfirst_alone():
+    print("\nEsc inside a stage runs the STAGE's handler, not the suite's")
+    # Every real stage declares *error* as a local, so an Esc at one of
+    # its questions runs that handler and unwinds past the suite's --
+    # the suite's restore never ran, and a drafter at 0 was left at 1.
+    vm = VM()
+    lispvm.BUILTINS[Sym('vl-cmdf')] = lispvm.BUILTINS[Sym('command')]
+    vm.loads(STUBS)
+    vm.load(LSP)
+    vm.loads(STAGES + r'''
+(defun c:TYDRN ( / *error*)
+  (defun *error* (msg)
+    (setq *calofin-handoff* nil *stage-handled* msg)
+    (princ))
+  (setq *ran* (cons "TYDRN" *ran*))
+  (initget "Yes No")
+  (getkword "\nA question inside the stage [Yes/No]: ")
+  (princ))
+''')
+    vm.loads('(setvar "PICKFIRST" 0)')
+    vm.handle_errors = True
+
+    def esc(vm):
+        raise LispError('Function cancelled', vm)
+
+    vm.run('c:TYLERDRONESUITE', [esc])
+    check("the stage's own handler took the Esc",
+          vm.get(Sym('*stage-handled*')) == 'Function cancelled')
+    check("the suite stopped there", ran(vm) == ["TYDRN"])
+    check("PICKFIRST is still the drafter's 0",
           vm.sysvars.get('PICKFIRST') == 0)
+    check("and the handoff went with the stage",
+          vm.get(Sym('*calofin-handoff*')) is None)
 
 
-def test_esc_at_the_suites_own_prompt_puts_pickfirst_back():
+def test_the_real_tydrn_reads_and_clears_its_handoff():
+    print("\nTYDRN takes the TEXT in a set handed to it, and clears it")
+    vm = VM()
+    vm.loads(STUBS)
+    vm.load(LSP)
+    vm.loads('(setq *calofin-handoff* (list "TYDRN" *pre*))'
+             '(setq got (tydrn:handed "TEXT"))')
+    got = vm.get(Sym('got'))
+    text = vm.get(Sym('*trace*'))[2]
+    check("only the TEXT of the trace is taken",
+          got is not None and got[1:] == [text])
+    check("and the handoff is cleared at the read",
+          vm.get(Sym('*calofin-handoff*')) is None)
+    vm.loads('(setq *calofin-handoff* (list "PADDLE" *pre*))'
+             '(setq got (tydrn:handed "TEXT"))')
+    check("a handoff meant for another stage is not taken",
+          vm.get(Sym('got')) is None)
+    check("but is cleared all the same -- it is stale by then",
+          vm.get(Sym('*calofin-handoff*')) is None)
+
+
+def test_esc_at_the_suites_own_prompt():
     print("\nEsc at the suite's own prompt goes through its own handler")
     # The handler is LOCAL to the command, as every handler in this file
     # is (STANDARDS section 5) -- it used to be installed by swapping
@@ -409,7 +495,7 @@ def test_esc_at_the_suites_own_prompt_puts_pickfirst_back():
     vm.run('c:TYLERDRONESUITE', [esc])
     check("the cancel went through the command's own handler",
           list(vm.handled_errors) == ['Function cancelled'])
-    check("PICKFIRST is back at what the drawing had",
+    check("PICKFIRST is what the drawing had",
           vm.sysvars.get('PICKFIRST') == 0)
     check("no stage ran", ran(vm) == [])
     check("and a plain cancel says nothing about an error",
@@ -430,8 +516,10 @@ def main():
                test_the_carried_set_grows_by_what_a_stage_draws,
                test_an_erased_entity_is_not_handed_on,
                test_nothing_highlighted_means_one_prompt_not_three,
-               test_pickfirst_is_forced_on_and_put_back,
-               test_esc_at_the_suites_own_prompt_puts_pickfirst_back,
+               test_pickfirst_is_never_touched,
+               test_esc_inside_a_stage_leaves_pickfirst_alone,
+               test_the_real_tydrn_reads_and_clears_its_handoff,
+               test_esc_at_the_suites_own_prompt,
                test_a_missing_stage_is_named_and_nothing_runs,
                test_lists_of_names_read_as_a_sentence,
                test_the_suite_opens_no_undo_group_of_its_own,

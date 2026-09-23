@@ -30,10 +30,11 @@
 ;;;
 ;;;  BASE POINT
 ;;;  ----------
-;;;  DDFIX scales about the CENTRE of the selection by default, so the feature
-;;;  stays put and only changes size. If a feature shares an edge with the pool
-;;;  (e.g. a spillover spa), pick that shared corner as the base point instead
-;;;  so the shared edge does not move.
+;;;  DDFIX always scales about the CENTRE of the selection, so the feature
+;;;  stays put and only changes size; it does not ask for a base point. A
+;;;  feature that shares an edge with the pool (e.g. a spillover spa) moves
+;;;  that edge too. For one of those, U the DDFIX and run SCALE yourself about
+;;;  the shared corner, by the factor DDFIX printed ("Applied scale ...").
 ;;;
 ;;;  COMMANDS
 ;;;  --------
@@ -63,7 +64,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *dronedistortion-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *dronedistortion-version* "v1.4")   ; announced on load; release_lisp.py
                                              ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -98,6 +99,41 @@
     (setq i (1+ i)))
   (if lomin
     (mapcar '(lambda (a b) (/ (+ a b) 2.0)) lomin himax)))
+
+;; -- the locked layers anything in a selection sits on --------------------------
+;; SCALE passes over whatever is on a locked layer and still succeeds, so a
+;; feature picked together with a label on a locked layer came out half
+;; corrected under "Applied scale ..." -- and the centre it was scaled about
+;; was taken from the whole pick, the object that stayed put included, so
+;; what did move landed in the wrong place too.  Each layer looked up once.
+(defun dd-locked-layers (ss / i lay seen out tb)
+  (setq i 0)
+  (while (< i (sslength ss))
+    (setq lay (cdr (assoc 8 (entget (ssname ss i)))))
+    (if (and lay (not (member (strcase lay) seen)))
+      (progn
+        (setq seen (cons (strcase lay) seen))
+        (if (and (setq tb (tblsearch "LAYER" lay))
+                 (= 4 (logand 4 (cdr (assoc 70 tb)))))
+          (setq out (cons lay out)))))
+    (setq i (1+ i)))
+  (reverse out))
+
+;; T, having said so, when the pick holds anything on a locked layer: the
+;; pick has to change before any height is asked for.
+(defun dd-locked-say (ss / lays txt l)
+  (if (setq lays (dd-locked-layers ss))
+    (progn
+      (setq txt (car lays))
+      (foreach l (cdr lays) (setq txt (strcat txt ", " l)))
+      (princ (strcat "\nLocked layer" (if (cdr lays) "s " " ") txt
+                     " - SCALE would leave what is on "
+                     (if (cdr lays) "them" "it")
+                     " behind and move the rest about the wrong centre."
+                     "\nSelect without "
+                     (if (cdr lays) "them" "it")
+                     ", or Enter, unlock, and run DDFIX again."))
+      T)))
 
 ;; -- parse one numeric piece into a number of inches; nil if not numeric -------
 ;; "6"   "6.5"   "6-1/2"   "1/2"  ->  number
@@ -164,7 +200,8 @@
   ;; re-opens an interactive pick.
   (setq ss (ssget "_I"))
   (if lzd:watch (lzd:watch ss) ss)
-  (setq stage (if ss 2 1) done nil)
+  ;; a pickfirst set with a locked member goes back to the pick
+  (setq stage (if (and ss (not (dd-locked-say ss))) 2 1) done nil)
   (while (not done)
     (cond
 
@@ -173,9 +210,10 @@
        (princ "\nSelect the spa / obstacle to correct (one or more objects), then Enter.")
        (setq ss (ssget))
        (if lzd:watch (lzd:watch ss) ss)
-       (if (null ss)
-         (progn (princ "\nNothing selected.") (setq done T))
-         (setq stage 2)))
+       (cond
+         ((null ss) (princ "\nNothing selected.") (setq done T))
+         ((dd-locked-say ss))                ; stays at the pick
+         (t (setq stage 2))))
 
       ;; 2) drone height above the deck - remembered; Enter keeps last value
       ((= stage 2)
@@ -230,7 +268,11 @@
                                (rtos (* 100.0 (- appf 1.0)) 2 2) "% too BIG."))
                 (princ (strcat "\nSunken feature: it was traced ~"
                                (rtos (* 100.0 (- 1.0 appf)) 2 2) "% too SMALL."))))
-            (princ "\nSCALE did not run - are the objects on a locked layer?"))))
+            ;; not the locked-layer guess this used to make: the pick
+            ;; has been refused at stage 1 for that already, so naming
+            ;; it here sent the drafter after the one cause it is not
+            (princ (strcat "\nSCALE did not run - nothing was scaled."
+                           "  Check the selection and its layers.")))))
        (setq done T))))
   (setvar "CMDECHO" cmd)
   (if lzd:end (lzd:end "DDFIX"))

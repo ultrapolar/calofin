@@ -37,7 +37,8 @@ bulges or ARC entities.
 2. Type `PADDLE`.
 3. Select the perimeter geometry (polylines, lines, arcs — any mix)
    — or just press **Enter** and PADDLE auto-detects the perimeter
-   as the largest closed loop it can find in the current tab.
+   as the largest closed loop it can find in the space you are drawing
+   in -- model space from inside a layout's viewport, not the sheet.
    Highlighting the perimeter *before* step 2 skips this prompt: a
    pickfirst selection is taken as-is.
 4. If what you gave it closes except for a gap, PADDLE draws an arrow
@@ -106,10 +107,16 @@ Everything inserted in one run is a single undo step.
   over without a pad.
 
 A **pickfirst** selection is taken as-is: highlight the perimeter
-before typing `PADDLE` and it never asks. `LINGUTTER` hands its
-freshly drawn perimeter over that way, which matters because
-auto-detect reads the *whole* drawing for its largest closed loop and
-would otherwise be as happy with a title block border.
+before typing `PADDLE` and it never asks. `LINGUTTER`, `AUTODIM` and
+`TYLERDRONESUITE` hand over the perimeter they already hold, which
+matters because auto-detect reads the *whole* drawing for its largest
+closed loop and would otherwise be as happy with a title block border.
+They hand it through the global `*calofin-handoff*` -- `("PADDLE"
+<selection>)`, read before the pickfirst probe and cleared at the read
+and by PADDLE's error handler -- rather than as a pickfirst set, which
+needs `PICKFIRST` at 1: switching it on round the call left a drafter
+who works at 0 at 1 whenever PADDLE was Esc'd, because an Esc inside
+PADDLE runs only PADDLE's own handler.
 
 ## The gap in a perimeter that nearly closes
 
@@ -215,7 +222,7 @@ node — so interior geometry is never stepped onto and an outline with a
 gap in it fails loudly rather than being replaced by whatever else
 happened to close. It redraws that exterior as one polyline on `POOL`,
 erases everything else it was shown bar the dimensions worth keeping,
-and hands the polyline to PADDLE as a pickfirst selection. It does share
+and hands the polyline to PADDLE through `*calofin-handoff*`. It does share
 this file's segment readers (`paddle--ent-segs` and friends), ported
 under `lg:`, and `tests/test_lingutter.py` runs both on the same
 geometry so those cannot drift.

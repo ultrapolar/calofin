@@ -667,6 +667,28 @@ def _today():
     return vm.loads('(spachk:mdy-str (spachk:today-mdy))')
 
 
+def test_the_report_stamp_is_whole_at_any_dimzin():
+    """The report's date stamp once sliced (rtos CDATE 2 6), which
+    DIMZIN 8 -- SPA's own setting -- trims: at ten o'clock it read
+    "20260923.1" and stamped " 1:".  And the one-file build swapped in
+    the library's YYYY-MM-DD, so the same report carried two forms.
+    Held here at both: the sheet's MM/DD/YYYY, and whole."""
+    lib = os.path.join(HERE, '..', 'shared', 'parts', 'CALOFIN-LIB.lsp')
+    twin = os.path.join(HERE, '..', 'shared', 'parts', 'SPACHECK.lsp')
+    for label, files in (('lisp', [CHK]), ('shared', [lib, twin])):
+        vm = VM()
+        for f in files:
+            vm.load(f)
+        for dz in (0, 8):
+            vm.sysvars['DIMZIN'] = dz
+            for cd, want in ((20260923.1, '09/23/2026 10:00'),
+                             (20260923.093512, '09/23/2026 09:35'),
+                             (20261231.2359, '12/31/2026 23:59')):
+                vm.sysvars['CDATE'] = cd
+                got = vm.loads('(spachk:datestr)')
+                assert got == want, (label, dz, cd, got)
+
+
 def test_todays_date_in_the_tech_title_passes():
     vm = build([None, 'Coversize', 'Rectangle', None,
                 84.0, None, 'Yes', '90', 'No', 'No'])
@@ -717,7 +739,7 @@ def test_no_tech_title_says_so_without_crying_wolf():
 
 def _date_attrib(vm):
     """What the Tech Title's Date attribute reads right now."""
-    return vm.loads('(spachk:ins-attrib (spachk:find-title (ssget "_X"))'
+    return vm.loads('(spachk:ins-attrib (car (spachk:title-pick (ssget "_X")))'
                     ' spachk:*date-tag*)')
 
 

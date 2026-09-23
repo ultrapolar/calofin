@@ -88,7 +88,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *mohamaddle-version* "v1.3")
+(setq *mohamaddle-version* "v1.4")
 
 ;; --- the pad itself ---
 ;; Pad sizes MOHAMADDLE offers, in the order shown at the prompt.  Each
@@ -184,7 +184,23 @@
 ;; to go back to, so it offers no Back (tools/back_baseline.txt).  The
 ;; keyword string and the bracket shown are both built off the table,
 ;; so a third size needs no other edit here.
-(defun mohamaddle--asksize (dflt / kws shown v)
+;;
+;; The default is checked against the table HERE, not at load: it is a
+;; LAZTUNE knob, and an override lands after load.  A default the table
+;; does not offer ("48", a dwg path, a size dropped from the list) was
+;; handed straight back on Enter, found no entry, and died on
+;; arithmetic with nil -- and was saved as the next default first, so
+;; every Enter after it died the same way.  An unoffered default is
+;; matched case-folded to a table keyword, else falls back to the
+;; shipped "36", else to the first size listed.
+(defun mohamaddle--asksize (dflt / kws shown v hit)
+  (setq hit (if (= (type dflt) 'STR)
+                (vl-some '(lambda (s)
+                            (if (= (strcase (car s)) (strcase dflt)) (car s)))
+                         *mohamaddle-sizes*)))
+  (setq dflt (cond (hit)
+                   ((assoc "36" *mohamaddle-sizes*) "36")
+                   (T (car (car *mohamaddle-sizes*)))))
   (setq kws (apply 'strcat (mapcar '(lambda (s) (strcat (car s) " "))
                                    *mohamaddle-sizes*)))
   (setq shown (vl-string-translate " " "/" (substr kws 1 (1- (strlen kws)))))
@@ -995,6 +1011,23 @@
                    (mapcar '(lambda (p) (list 10 (car p) (cadr p))) pts)))
   (entlast))
 
+;; The space the drafter is drawing in: model space from the Model tab
+;; and from inside a layout's viewport, the layout's paper only when it
+;; is the paper that is active.  CTAB and the active layout both name
+;; the LAYOUT from inside a viewport, so the sweeps below read the
+;; sheet and found no perimeter and no arrows there, while the pads
+;; were inserted into paper space over a model-space pool.  Every sweep
+;; and every insert goes through these two, so they cannot disagree.
+;; (vla-get-ModelSpace is reached only inside a viewport; everywhere
+;; else the active layout's block already is the right space.)
+(defun mohamaddle--tab ()
+  (if (= 1 (getvar "CVPORT")) (getvar "CTAB") "Model"))
+
+(defun mohamaddle--space (doc)
+  (if (and (= 0 (getvar "TILEMODE")) (/= 1 (getvar "CVPORT")))
+      (vla-get-ModelSpace doc)
+      (vla-get-Block (vla-get-ActiveLayout doc))))
+
 ;; the pad tools' own marks and nobody else's: every run clears the gap layer
 ;; and re-marks whatever is still open, so an arrow does not outlive
 ;; the gap it pointed at when the drafter closes one by hand.  Returns
@@ -1002,7 +1035,7 @@
 (defun mohamaddle--clear-arrows ( / ss i n)
   (setq n 0)
   (if (setq ss (ssget "_X" (list (cons 8 *mohamaddle-gap-layer*)
-                                 (cons 410 (getvar "CTAB")))))
+                                 (cons 410 (mohamaddle--tab)))))
       (progn
         (setq i 0)
         (repeat (sslength ss)
@@ -1051,7 +1084,7 @@
   open)
 
 ;; --------------------------- selection -----------------------------
-;; Turns a selection set (or the whole current tab when SS is nil) into
+;; Turns a selection set (or the whole current space when SS is nil) into
 ;; (loops opens): the closed perimeter loops, as vertex lists, and the
 ;; open chains that would not close, as segments.  Auto-detect keeps
 ;; only the largest loop.  Every segment carries the entity it came off
@@ -1063,7 +1096,7 @@
   (setq auto (not ss))
   (if auto
       (setq ss (ssget "_X" (list '(0 . "LWPOLYLINE,POLYLINE,LINE,ARC")
-                                 (cons 410 (getvar "CTAB"))))))
+                                 (cons 410 (mohamaddle--tab))))))
   (if ss
       (progn
         (setq i 0)
@@ -1130,7 +1163,7 @@
   (if lzd:begin (lzd:begin "MOHAMADDLE" *mohamaddle-version*))
 
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
-        space (vla-get-Block (vla-get-ActiveLayout doc)))
+        space (mohamaddle--space doc))
 
   (princ (strcat "\nMOHAMADDLE " *mohamaddle-version*))
 

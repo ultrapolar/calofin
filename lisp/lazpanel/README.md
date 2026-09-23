@@ -441,6 +441,21 @@ What is refused, and why each one earns its place:
   matters: `(defun c:CHECK () ...)` would retarget `check_drawing.lsp`'s
   own `CHECK` for the whole session, and `DIMARCCHECK` -- which is
   `(c:CHECK)` -- with it, while `lzp:has` kept the button lit.
+- **an AutoCAD command or an `acad.pgp` shortcut**, which are not
+  AutoLISP functions and so were invisible to the check above. A
+  native command beats a `c:` function of the same name, so an alias
+  `AREA` was stored and never ran; and `PL`, `C`, `SP` or `PO` -- the
+  natural short names for `POOL` and `SPA` -- took `PLINE`'s,
+  `CIRCLE`'s, `SPELL`'s or `POINT`'s shortcut away in every drawing.
+  `getcname` asks the command table, `acad.pgp` is read off the
+  support path, and both are asked again when a stored name is
+  re-applied at load. A stored name refused there is **said**, not
+  dropped: the load prints `PL (your name for POOL) is not applied --
+  PL is an AutoCAD shortcut in acad.pgp.` and points at `LAZNAME`,
+  once a session (the blackboard carries what was said, so a Startup
+  Suite does not repeat it in every drawing); LAZNAME's list shows the
+  row as `(type PL - not applied)`, and its closing count takes in only
+  the names that answer, naming the rest with their reasons.
 - a caption carrying `;` or `=`, the store's own separators, or a
   double quote, which `lzp:dcl-one` pastes straight into DCL and which
   would make every page of the panel fail to load.
@@ -460,7 +475,13 @@ regenerated build change under them without losing either. What
 neither reaches is somewhere the profile does not: a new machine, a
 rebuilt profile, a drafter borrowing somebody else's seat for a day.
 `LAZBACKUP`, typed, is that -- `[Export/Import/Quit]`, then a file to
-write to or read from.
+write to or read from. A bare name, with no drive and no leading `\`,
+means that name in your Documents folder (`MYDOCUMENTSPREFIX`) both
+ways, and the line that reports the write names the whole path -- a
+bare name used to land in whatever folder AutoCAD's working directory
+was. A file that is already there is not replaced without a question:
+`Replace it? [Yes/No/Back] <No>`, where Enter leaves it exactly as it
+was and `Back` asks for another name.
 
 `Export` writes one plain text file: `[Alias]` and `[Caption]`, one
 `COMMAND=value` line each, then `[Settings]` -- `CalofinTheme`,
@@ -511,7 +532,12 @@ number, a string, a symbol, a quoted list or a `(list ...)`/`(cons
 refused before it is even typed against, and then its kind has to
 match the shipped value's (a whole number is widened to a real where
 the block has one; a colour knob may go between a number and `'auto`).
-`OK` stays greyed while a box holds something that will not read, the
+A handful of globals sit in their tools' tunables blocks without being
+settings at all -- a sysvar snapshot (`hn:*sysold*` and its kin), a
+preview's entities, the picks so far, the last size offered -- and
+those are refused by name: a value stored on `HONEFILLET`'s snapshot
+was re-applied at every panel open and left `OSMODE` at 0 after every
+run. `OK` stays greyed while a box holds something that will not read, the
 same bargain every other editor here keeps. `LAZBACKUP` carries them
 under `[Knobs]`, one line each, through the same checks on the way
 back in.
@@ -592,7 +618,10 @@ hexagon doubled from 16 pixels keeps the 16-pixel staircase on its
 diagonals and those diagonals are the whole shape. If the
 toolbar gets closed or lost, `LAZBUTTON` brings it back; a toolbar
 that is merely hidden is re-shown rather than duplicated, and one that
-you have docked or moved is left where you put it.
+you have docked or moved is left where you put it. Loading the file
+only makes the toolbar when there is none and re-ices one that is
+there: a toolbar you CLOSED stays closed -- it used to reappear at the
+first drawing of every session -- until you type `LAZBUTTON`.
 
 Two details worth knowing, because both were wrong first time round:
 
@@ -605,7 +634,7 @@ Two details worth knowing, because both were wrong first time round:
   and `Write` rejected it outright --
 
   ```
-    written : NO - writing ...lazpanel-16.bmp failed: ADODB.Stream:
+    written : NO - writing ...lazpanel-16-dark.bmp failed: ADODB.Stream:
     Arguments are of the wrong type, are out of acceptable range, or
     are in conflict with one another.
   ```
@@ -699,11 +728,15 @@ A `.bmp` has no alpha channel, so the square around the orange hexagon
 is PAINTED, and it was painted `54 54 54` -- dark-theme panel grey --
 for everybody. On the light theme that is a dark tile in a light
 toolbar, and it had been since the button shipped. `lzp:ui` reads
-`COLORTHEME` (and `CalofinTheme`, which beats it), and the two BMPs
-are regenerated on every load anyway, so the ground is picked rather
-than assumed. A theme nothing can report keeps the dark grey that was
-always there. `LAZICON` reports which one it used and where the answer
-came from.
+`COLORTHEME` (and `CalofinTheme`, which beats it), so the ground is
+picked rather than assumed, and the ground is in the FILE NAME --
+`lazpanel-16-dark.bmp` and `lazpanel-16-light.bmp`, the same for 32.
+A pair already on disk is not written again, and under one name per
+size that check kept whichever ground was written first for good; the
+CUI also caches a toolbar bitmap by name, so switching theme has to
+hand the button a new name, not the same file rewritten. A theme
+nothing can report keeps the dark grey that was always there.
+`LAZICON` reports which one it used and where the answer came from.
 
 ## Install & run
 
@@ -810,8 +843,8 @@ got to.
 ```
 LAZICON: where the button's picture comes from.
   TEMPPREFIX : C:\Users\you\AppData\Local\Temp\
-  small      : C:\Users\you\AppData\Local\Temp\lazpanel-16.bmp
-  large      : C:\Users\you\AppData\Local\Temp\lazpanel-32.bmp
+  small      : C:\Users\you\AppData\Local\Temp\lazpanel-16-dark.bmp
+  large      : C:\Users\you\AppData\Local\Temp\lazpanel-32-dark.bmp
   written    : yes, as a VT_UI1 array
   on disk    : found
   SetBitmaps : accepted - the button should show it now

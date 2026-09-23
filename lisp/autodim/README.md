@@ -108,16 +108,18 @@ as well.
 not a pair: No to floor dims is followed by `Would you like pads?` and
 Yes to them is not, because the run that is dimensioning the floor is
 not the run that wants the pads laid out. Yes to pads hands `PADDLE`
-the plan you highlighted in step 1, as a pickfirst selection rather
-than letting it hunt for one: `PADDLE` auto-detects the largest closed
+the plan you highlighted in step 1 rather than letting it hunt for
+one: `PADDLE` auto-detects the largest closed
 loop in the *whole* drawing, and a title block border is a bigger loop
 than the pool. `PADDLE` keeps the lines, arcs and polylines out of what
 it is handed, which is what a perimeter is made of, so a plan drawn
 without any of those is the one case where it falls back on asking for
-a selection itself. `PICKFIRST` is switched on for the handover and put back
-after -- with it at 0, `sssetfirst` still highlights while `PADDLE`'s
-`(ssget "_I")` reads nothing, and the handover would go quietly
-missing.
+a selection itself. The plan goes over in the global
+`*calofin-handoff*`, which `PADDLE` reads before its own pickfirst
+probe and clears. It used to go as a pickfirst set with `PICKFIRST`
+switched on round the call -- and an Esc inside `PADDLE` runs only
+`PADDLE`'s own handler, so a drafter who works with `PICKFIRST` at 0
+was left at 1 for good. The global borrows no setting of yours.
 
 The pads go in **last**, once the dims are placed and this command's
 layer, dimension style, `CMDECHO` and undo group are back: `PADDLE` is
@@ -251,7 +253,16 @@ The numbers that are *not* settings -- the `1e-8` zero-length guards, the
 * Ellipses and splines have no one radius to call out, so the
   perimeter step passes over them.
 * The two floor-dim lines are construction only -- erased once their
-  chain is created. A chain breaks where a span is already dimensioned
+  chain is created. So are the lines the perimeter step draws to find
+  the clear side of each wall. They land on the current layer, and
+  AutoCAD draws on a locked current layer but will not erase from one,
+  so a refused erase unlocks that layer for the one erase and locks it
+  again -- a locked layer used to keep every probe line, with nothing
+  said. A measuring line that still will not go is counted, and the
+  count comes out with the end-of-run report (`N measuring line(s)
+  could NOT be erased`), because a stray line left across the plan is
+  one the next floor dims run reads as a wall. A `Back` that rolls a
+  step's dims away says how many would not go, if any. A chain breaks where a span is already dimensioned
   and where the style has to change, so a short span still lands in
   inches without dragging the rest of the chain with it.
 * Break points closer together than 0.0001 drawing units are merged so
@@ -303,9 +314,10 @@ changes nothing.
 
 The pad branch is in there too: the question is put after No to floor
 dims and never after Yes, `Back` at it re-opens the floor dims
-question, and the handover gives `PADDLE` the step-1 plan as its
-pickfirst set -- after `CMDECHO` is back and the undo group is closed,
-with `PICKFIRST` switched on for it and put back after. A session
+question, and the handover gives `PADDLE` the step-1 plan through
+`*calofin-handoff*` -- after `CMDECHO` is back and the undo group is
+closed, with `PICKFIRST` never touched, an Esc inside `PADDLE`
+included. A session
 without `PADDLE` loaded says so and still finishes.
 
 `CALOFIN_LISP_ROOT=shared python3 tests/test_autodim.py` runs the same

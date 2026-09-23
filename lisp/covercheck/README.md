@@ -41,7 +41,11 @@ alongside.
      A wrong one is **rewritten to today** in that same form, keeping
      any `Date =` label in front of it, and the report says what was
      found and what was set. `COVERSCAN` says NEEDS UPDATING and
-     writes nothing.
+     writes nothing. With no Tech Title in the highlight the drawing is
+     searched; when it holds more than one (a sheet each), the one
+     nearest the checked drawing is read and named in the report, and
+     its date is never written -- highlight that sheet's title to have
+     COVERCHECK update it.
    - Feet-and-inches: every text stating feet must state inches
      (`5'` flagged; `5'-0"`, `3'-2"`, plain `40"` fine).
    - Every dimension on the `DIMENSION` layer, strays counted and the
@@ -69,7 +73,9 @@ alongside.
      demands one.
    - A "Replacement Disclaimer" block should be present; COVERCHECK
      asks whether the drawing is a replacement when it cannot tell
-     (COVERSCAN just notes the block is not there).
+     (COVERSCAN just notes the block is not there). At its "Pick the
+     block" prompt only Enter means "it is not placed": a click that
+     hits nothing asks again.
    - **Pads**: the outline is run through PADDLE's concave-feature
      rules at 36" -- inside corners bending more than 30 degrees,
      concave radii of 4'-0" or less bending more than 10 degrees in
@@ -102,6 +108,20 @@ report and markers instead of stacking a second copy.
 | `COVERCHECKVER` | Print which build is loaded (`COVERCHECKVERSION`, the pre-standard name, is kept as an alias) |
 | `TUTORIALCOVERCHECK` | Builds a practice cover sheet with planted faults and walks the review on it |
 | `TUTORIALCOVERCHECKCLEAN` | Erases everything the tutorial built, report and markers included |
+
+`COVERSCAN`'s Enter (no highlight) scans the whole of the space you
+are working in -- model space from the Model tab or a layout
+viewport, the sheet itself only from paper space. The pad census
+reads the same space.
+
+**Locked layers.** COVERCHECK offers to unlock the selection's locked
+layers for the run and re-locks them at the end (or on Esc). Answer No
+and it still reviews those items, but never claims a change the layer
+refused: a stray dimension point is reported `NOT ATTACHED, layer
+locked, NOT moved` without the Move/Keep/Pick question, a detached arc
+`NOT ATTACHED - layer locked`, a refused Merge `could NOT merge -
+layer locked`, and a No answer `FLAGGED to fix - layer locked, NOT
+coloured`.
 
 ## Tunables
 
@@ -275,6 +295,11 @@ drafter through LAZTUNE. A number is always used exactly as given.
 
 ## Tests
 
+`python3 tests/test_covercheck.py` drives the scans and the guided
+review end to end; `python3 tests/test_fix_review_a.py` adds the
+arc re-fit and overlap merge passes, locked layers, the viewport and
+multi-sheet cases, the tutorial's demo block and the RESCUE/CLEAN
+sweeps over real marks.
 `python3 tests/test_covercheck_pads.py` loads the real
 `covercheck.lsp` and `PADDLE.lsp` into one AutoLISP VM session and
 runs both pad implementations against the same outlines -- every

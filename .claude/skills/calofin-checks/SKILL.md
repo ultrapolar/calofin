@@ -1,6 +1,6 @@
 ---
 name: calofin-checks
-description: Decoding a failing check or test in the calofin repo - make check, make test, make parity, or any of check_lisp / check_scope / check_standards / check_lazdiag / check_osnap / check_color / check_perf / check_back / check_vb / check_dcl / check_registry, and the generator staleness checks (mirror_shared, release_lisp, build_shared_bundle, gen_ui_data, gen_ui_charts, gen_knobs, gen_ribbon_icons, gen_agents_md / a stale AGENTS.md). Use when a check is red, a test fails, or a tier has drifted, to find the cause and the fix without reading the checker's source.
+description: Decoding a failing check or test in the calofin repo - make check, make test, make parity, or any of check_lisp / check_scope / check_standards / check_lazdiag / check_handlers / check_osnap / check_color / check_perf / check_back / check_vb / check_dcl / check_registry, and the generator staleness checks (mirror_shared, release_lisp, build_shared_bundle, gen_ui_data, gen_ui_charts, gen_knobs, gen_ribbon_icons, gen_agents_md / a stale AGENTS.md). Use when a check is red, a test fails, or a tier has drifted, to find the cause and the fix without reading the checker's source.
 ---
 
 # Decoding a calofin check failure
@@ -124,6 +124,26 @@ thing is a bug the drafter meets in the **next** command they run.
 
 ---
 
+## `check_handlers.py` — every handler reaches its end
+
+An `*error*` handler is the only code that runs on Esc. When it dies
+part-way the drafter sees nothing wrong: no report, no FAIL in the log,
+the undo group left open, the error mode left pushed. The check reads
+each handler in evaluation order, helpers spliced in, under the error
+mode its command put in force, and names the first form that cannot
+work there. Reads all three tiers.
+
+| Rule | Cause | Fix |
+| --- | --- | --- |
+| H1 | a command that pushes `*push-error-using-command*` has a handler calling a helper **declared in the command's arglist** — undefined once AutoCAD resets the evaluator | make it a top-level defun over global state |
+| H2 | ...or reading a **command local** (directly or through a helper) — under a push it reads the GLOBAL, normally nil, so the cleanup keyed on it is skipped | keep what the handler reads in prefixed globals reset at the top of the run, before the push — or drop the push |
+| H3 | `command-s` while the mode is still pushed — refused past any `vl-catch-all-apply` (SPA's death) | pop first, or use ActiveX (`vla-put-ActiveDimStyle`, `vla-EndUndoMark`) |
+| H4 | a bare `(command)` in a default-mode handler (no push, or after the pop) — refused | `command-s`, or ActiveX |
+| H5 | a command that ran `lzd:begin` calls a defun with its own `*error*` and `lzd:begin` — a failure in there runs ONLY the inner handler | do the outer's cleanup before the hand-off; accepted pairs go in `tools/handler_baseline.txt` with a reason. `LOG-MISFILED` on top means the outer began under a name that is not its command's: LAZDIAG joins an inner run to the outer only when CMDNAMES still names it, so begin under the command's own name |
+| H6 | a pushing command pops (through its finish) and then `(exit)`s — the handler runs again with nothing to pop | end with `(princ)`, or guard the second pass |
+
+---
+
 ## `check_osnap.py` — the drafter's object snaps
 
 Reads **all three tiers**, `releases/` included, because a dated twin is
@@ -136,7 +156,7 @@ what a shop pins to and it only gets a fix when `release_lisp.py` re-runs.
 | the restore sits **behind** something that can throw in the handler | move the `setvar`s to the top of the handler; an error inside `*error*` skips every later line. A bare `(command ...)` can throw |
 | the snapshot is dropped behind a form that can throw | move the drop ahead of it, or every LATER run restores this run's OSMODE |
 | a sysvar table lists `OSMODE` but the tool never mutes it | **remove it** — listing it hands the drafter the opening snapshot over any snap they ticked mid-run |
-| the save is in a helper's own local | move it to a local **of the command**, or to `tool:*sysold*` — the handler is nested inside the command and can only see what the command can |
+| the save is in a helper's own local | move it to a local **of the command**, or to `tool:*sysold*` — the handler is nested inside the command and can only see what the command can. **If the command pushes `*push-error-using-command*`, only the global works**: a pushed handler sees no locals at all |
 
 ---
 

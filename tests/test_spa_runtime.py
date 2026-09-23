@@ -450,13 +450,47 @@ def test_mm_measurement():
     assert abs((max(xs) - min(xs)) - 2134.0 / 25.4) < 1e-9
 
 
-def test_mm_is_case_and_space_insensitive():
+def test_mm_is_case_insensitive():
+    """MM reads like mm.  The unit touches the number: at a typed
+    prompt the spacebar is Enter, so a spaced '1524 MM' cannot reach
+    the parser in one piece (see the test below)."""
     vm = run([None, 'Coversize', 'ROund', None,
-              '1524 MM',
+              '1524MM',
+              'No', 'No'],
+             'mm/round-upper')
+    circles = drawn(vm, 'CIRCLE', 'COVER')
+    assert abs(circles[0][40] - 30.0) < 1e-9, circles[0][40]
+
+
+def test_a_spaced_mm_is_refused_not_taken_as_inches():
+    """'1524 mm' typed with the space: getdist returns at the space with
+    the NUMBER 1524, and the 'MM' is typed into whatever comes next.
+    That 1524 was taken as a 127-ft diameter without a word and the MM
+    was refused at the auto-hinge question.  No spa is that big, so it
+    is refused with the spelling that works; the stray MM then meets
+    the same question again and is refused as not a measurement."""
+    vm = run([None, 'Coversize', 'ROund', None,
+              1524.0, 'MM',          # what the spacebar makes of 1524 MM
+              '1524mm',              # ...and what the hint says to type
               'No', 'No'],
              'mm/round-spaced')
     circles = drawn(vm, 'CIRCLE', 'COVER')
     assert abs(circles[0][40] - 30.0) < 1e-9, circles[0][40]
+    said = ''.join(vm.printed)
+    assert 'longer than any spa' in said and '1524mm' in said, said
+    asked = [p for p, _ in vm.prompts if 'diameter' in p]
+    assert len(asked) == 3, asked
+    # the measurement sequence (spa:asks) refuses it the same way
+    vm = run([None, 'Coversize', 'Rectangle', None,
+              2134.0, 'MM', '2134mm',     # the width, spaced then right
+              '1524mm',
+              'Yes', '90',
+              'No', 'No'],
+             'mm/rect-spaced')
+    vs, _ = plverts(vm, 'COVER')
+    xs = [v[0] for v in vs]
+    assert abs((max(xs) - min(xs)) - 2134.0 / 25.4) < 1e-9, xs
+    assert 'longer than any spa' in ''.join(vm.printed)
 
 
 def test_mm_at_a_typed_prompt():
@@ -961,6 +995,125 @@ def test_the_octagon_and_round_guides_hand_over_the_same_way():
             "%s took its guide away mid-question: %r" % (shape, notes)
         assert notes[2] == 0 and notes[3] == 0, \
             "%s left its guide on the screen: %r" % (shape, notes)
+
+
+# ----------------------------------------- a click that missed the block
+
+THERMO = BLOCK.replace('GRADE: Standard', 'GRADE: Thermo-Light') \
+              .replace('TAPER: 4-3', 'TAPER: 1-3/8')
+
+
+def missed(vm):
+    """A click that hit nothing: entsel answers nil, as it does for
+    Enter, and ERRNO is 7 -- the only thing that tells the two apart."""
+    vm.sysvars['ERRNO'] = 7
+    return None
+
+
+def thermo_run(head):
+    vm = VM()
+    vm.load(LSP)
+    vm.loads(THERMO)
+    blk = vm.globals['blk']
+    vm.run('c:SPA', head + [blk,              # the block, this time
+                            'Rectangle', None, 140.0, 60.0,
+                            'Yes', '90',
+                            'Yes', 'No'])      # auto-hinge, no spillaway
+    return vm
+
+
+def test_a_missed_click_at_the_details_block_is_asked_again():
+    """A click just beside the Spa Cover Details block used to be taken
+    for Enter: the one offer was spent, its Thermo-Light GRADE never
+    read, and a Standard cover drawn -- with the water's-edge question
+    and a typed taper put to the drafter instead, and nothing said.
+    A miss is asked again now, and the block clicked second time round
+    gives exactly the run a first-time hit does."""
+    hit = thermo_run([])
+    vm = thermo_run([missed])
+    picks = [p for p, _ in vm.prompts if 'Spa Cover Details' in p]
+    assert len(picks) == 2, [p for p, _ in vm.prompts]
+    assert 'Nothing there' in ''.join(vm.printed), ''.join(vm.printed)
+    for name in ('spa:*grade*', 'spa:*taper*'):
+        assert vm.globals.get(Sym(name)) == hit.globals.get(Sym(name)), \
+            (name, vm.globals.get(Sym(name)), hit.globals.get(Sym(name)))
+    assert vm.globals.get(Sym('spa:*grade*')) == 'THERMOLIGHT'
+    assert not [p for p, _ in vm.prompts if "water's edge" in p]
+    assert hinge_labels(vm) == hinge_labels(hit), \
+        (hinge_labels(vm), hinge_labels(hit))
+
+
+def test_enter_is_still_the_skip_with_a_stale_errno():
+    """ERRNO is sticky: a 7 some earlier call left behind must not turn
+    a real Enter into a miss.  It is cleared before the pick."""
+    vm = VM()
+    vm.load(LSP)
+    vm.sysvars['ERRNO'] = 7
+    vm.run('c:SPA', [None, 'Coversize', 'Rectangle', None,
+                     140.0, 60.0, 'Yes', '90',
+                     'Yes', 'No', 'No', '4-3'])
+    picks = [p for p, _ in vm.prompts if 'Spa Cover Details' in p]
+    assert len(picks) == 1, picks
+    assert 'Nothing there' not in ''.join(vm.printed)
+
+
+# ------------------------------- the second outline, octagon and round
+
+def test_the_octagon_cover_is_the_water_s_edge_offset_by_the_lap():
+    """Enter at 'Draw the cover size as well' (Yes), Enter at 'Take it
+    from' (Offset), Enter at the lap (6"): every cover edge runs parallel
+    to its water's-edge edge, 6" out -- the cut faces included, which
+    is the one part of the offset that is not a plain shift."""
+    vm = run([None, 'Watersedge', 'OCtagon', None,
+              95.0, None, 'NA', 'NA', 'NA', 'NA', 'NA',
+              'Yes', 'No',            # auto-hinge, no spillaway
+              None, None, None,       # as well: Yes, Offset, 6" lap
+              '4-3'],                 # the taper the hinges need
+             'octagon/second-outline')
+    pool, _ = plverts(vm, 'POOL')
+    cover, _ = plverts(vm, 'COVER')
+    assert len(pool) == 8 and len(cover) == 8, (pool, cover)
+    for i in range(8):
+        a, b = pool[i], pool[(i + 1) % 8]
+        c, d = cover[i], cover[(i + 1) % 8]
+        ex, ey = b[0] - a[0], b[1] - a[1]
+        el = (ex * ex + ey * ey) ** 0.5
+        cross = ex * (d[1] - c[1]) - ey * (d[0] - c[0])
+        assert abs(cross) < 1e-6, ("edge %d not parallel" % i, a, b, c, d)
+        off = abs(ex * (c[1] - a[1]) - ey * (c[0] - a[0])) / el
+        assert abs(off - 6.0) < 1e-6, ("edge %d is %.6f out" % (i, off))
+    assert hinge_labels(vm), "no hinges on the second outline's cover"
+
+
+def test_the_round_cover_is_the_water_s_edge_plus_the_lap():
+    vm = run([None, 'Watersedge', 'ROund', None,
+              84.0,
+              'No',                   # no auto-hinge
+              None, None, None],      # as well: Yes, Offset, 6" lap
+             'round/second-outline')
+    assert [d[40] for d in drawn(vm, 'CIRCLE', 'POOL')] == [42.0]
+    assert [d[40] for d in drawn(vm, 'CIRCLE', 'COVER')] == [48.0]
+
+
+def test_a_corner_spillway_follows_the_quarter_turn():
+    """60 x 100 typed the tall way round is turned a quarter turn, and a
+    corner spillaway turns with it: the report names it as MEASURED and
+    says where it was drawn.  Before this no test had a corner spillaway
+    at all, so the corner half of the turn table was never read."""
+    script = ['Yes', 'Corner', 'BottomLeft', 20.0,  # one corner spillaway
+              'No', 'No', '4-3']
+    vm = run([None, 'Coversize', 'Rectangle', None, 60.0, 100.0,
+              'Yes', '90', 'Yes'] + script, 'turn/corner-spill')
+    w, l = cover_size(vm)
+    assert abs(w - 100.0) < 1e-9 and abs(l - 60.0) < 1e-9, (w, l)
+    txt = [d[1] for d in drawn(vm, 'TEXT', 'SPA-NOTES')]
+    assert 'SPILLWAY BOTTOMLEFT (DRAWN TOPLEFT)' in txt, txt
+    assert hinge_labels(vm), "no hinge drawn"
+    # the same spillaway on a spa that is NOT turned keeps its name
+    vm = run([None, 'Coversize', 'Rectangle', None, 100.0, 60.0,
+              'Yes', '90', 'Yes'] + script, 'turn/corner-spill-straight')
+    txt = [d[1] for d in drawn(vm, 'TEXT', 'SPA-NOTES')]
+    assert 'SPILLWAY BOTTOMLEFT' in txt, txt
 
 
 if __name__ == '__main__':

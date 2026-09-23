@@ -723,6 +723,96 @@ def test_chained_adoption():
           " forward to the next stamp")
 
 
+def test_a_space_split_answer_is_read_back_together():
+    """At the click-or-type prompt the spacebar is Enter, so 4'-6 1/2"
+    typed there arrives as TWO answers -- 4'-6, then 1/2".  v3.8 adopted
+    the tail as a value of its own, and the next click stamped HALF AN
+    INCH where 4'-6 1/2" was meant.  The VM does not split on a space,
+    so each case scripts the pieces the spacebar makes.  A tail is read
+    back together with the answer before it, and the run says why."""
+    half = FULL + '\\S1/2;}'
+    cases = [
+        (["4'-6", '1/2"'], f"{MID}4'-6{half}\""),      # 4'-6 1/2"
+        (["4'", '4-1/2'], f"{MID}4'-4{half}\""),       # 4' 4-1/2
+        (["4'4", '1/2'], f"{MID}4'-4{half}\""),        # 4'4 1/2
+        (['52', '1/2'], f'{MID}52{half}"'),             # 52 1/2
+        (["4'", '4', '1/2'], f"{MID}4'-4{half}\""),    # 4' 4 1/2
+    ]
+    for parts, want in cases:
+        vm = newvm()
+        run(vm, [(0.0, 0.0), '34"'] + parts + [FAR, None], str(parts))
+        t = stamps(vm)
+        assert [x[1] for x in t] == ['34"', want], (parts, t)
+        said = ' '.join(vm.printed)
+        assert 'A space ends the answer at this prompt' in said, said
+    # the message names the spelling that is one answer anywhere
+    vm = newvm()
+    run(vm, [(0.0, 0.0), '34"', "4'-6", '1/2"', None], 'hint')
+    said = ' '.join(vm.printed)
+    assert ("read together as 4'-6 1/2\".  Type 4'-6-1/2\" to give it"
+            in said), said
+    # ...and how to get the tail ALONE, for the drafter who did mean
+    # 4'-6 and then half an inch by itself: the same answer once more,
+    # which is never the tail of the join it just made
+    assert 'or 1/2" again to take it on its own' in said, said
+    zero_half = f'{MID}0{half}"'
+    for parts in (["4'-6", '1/2"', '1/2"'], ["4'", '6', '6'],
+                  ["4'", '4-1/2', '4-1/2'], ['52', '1/2', '1/2']):
+        vm = newvm()
+        run(vm, [(0.0, 0.0), '34"'] + parts + [FAR, None], str(parts))
+        t = [x[1] for x in stamps(vm)]
+        alone = {'1/2"': zero_half, '1/2': zero_half, '6': '6"',
+                 '4-1/2': f'{MID}4{half}"'}[parts[-1]]
+        assert t == ['34"', alone], (parts, t)
+        joins = [x for x in vm.printed if 'A space ends the answer' in x]
+        assert len(joins) == 1, (parts, joins)
+    print("ok  space split  -> a tail the spacebar cut off is read back"
+          " with the answer before it; typed again, it stands alone")
+
+
+def test_a_second_typed_answer_that_is_not_a_tail_is_its_own():
+    """Only a tail is joined.  A change of mind, a value closed by its
+    inch mark, one that already has its fraction, a letter, or a click
+    in between: each second answer is taken as it stands."""
+    zero_half = f'{MID}0{FULL}\\S1/2;}}"'
+    cases = [
+        (['34', '36', FAR], '36"'),                     # a change of mind
+        (['34"', '1/2"', FAR], zero_half),               # closed by its "
+        (["4'-6-1/2", '1/4', FAR], f'{MID}0{FULL}\\S1/4;}}"'),
+        (['A', '1/2', FAR], zero_half),                  # a letter first
+        (["4'-6", FAR, '1/2"', FAR], None),              # a click between
+    ]
+    # a RULER pick between the two is a click too: it adopts a row, and
+    # what was typed before it is no longer an answer left open.  The
+    # ruler is the one drawn round 4'-6" (432 eighths, in feet)
+    spine, box, rows = probe_ruler(432, True)
+    cases.append((["4'-6", (spine, rows[-1][1]), '1/2"', FAR], zero_half))
+    for parts, want in cases:
+        vm = newvm()
+        run(vm, [(0.0, 0.0), '34"'] + parts + [None], str(parts))
+        t = [x[1] for x in stamps(vm)]
+        if want is None:
+            assert t == ['34"', "4'-6\"", zero_half], (parts, t)
+        else:
+            assert t == ['34"', want], (parts, t)
+        assert not any('A space ends the answer' in p for p in vm.printed), \
+            (parts, vm.printed)
+    print("ok  not a tail   -> a second typed answer of its own is adopted"
+          " as it stands")
+
+
+def test_the_first_prompt_teaches_the_dashed_spelling():
+    """The first prompt reads a whole line, so a space works there -- but
+    what it TEACHES is typed next at a prompt where a space is Enter.
+    It shows the spelling that is one answer at both."""
+    vm = newvm()
+    run(vm, [(0.0, 0.0), '34"', None], 'first prompt')
+    first = [p for p, _ in vm.prompts if p.lstrip().startswith('Text -')]
+    assert first and "4'-4-1/2\"" in first[0], vm.prompts
+    assert "4'-4 1/2" not in first[0], first[0]
+    print("ok  first prompt -> shows 4'-4-1/2\", not the spaced spelling")
+
+
 def test_reprompts_on_malformed_typed_text():
     vm = newvm()
     run(vm, [(0.0, 0.0), 'not a measurement', '34"', None], 'bad first')
@@ -863,6 +953,9 @@ if __name__ == '__main__':
     test_typed_text_at_the_unified_prompt_is_adopted()
     test_a_lazy_answer_is_stamped_canonically_and_echoed()
     test_chained_adoption()
+    test_a_space_split_answer_is_read_back_together()
+    test_a_second_typed_answer_that_is_not_a_tail_is_its_own()
+    test_the_first_prompt_teaches_the_dashed_spelling()
     test_reprompts_on_malformed_typed_text()
     test_no_clicks()
     test_undo_group_wraps_the_run()

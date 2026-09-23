@@ -117,6 +117,24 @@ def rowsrc(rows):
         for nm, ds in rows)
 
 
+#: ABHD as the build defines it -- a c: function -- counting its calls,
+#: and noting what it was handed and how many undo groups were still open
+#: when it started.  A call is the only way in: the command processor does
+#: not know AutoLISP commands, so (command "_.ABHD") in AutoCAD is Unknown
+#: command, and a test that looked for that string in vm.commands passed
+#: over a handoff that never started anything.
+ABHD_STUB = """
+(defun c:ABHD ()
+  (setq *abhd-ran* (1+ (cond (*abhd-ran*) (0)))
+        *abhd-saw* *preselect*
+        *abhd-undo* (test:undo-groups)))"""
+lispvm.BUILTINS[Sym('test:undo-groups')] = lambda vm, a: vm.undo_groups
+
+
+def abhd_ran(vm):
+    return vm.globals.get(Sym('*abhd-ran*')) or 0
+
+
 def fresh(pre=''):
     vm = VM()
     lispvm.BUILTINS[Sym('vl-cmdf')] = lispvm.BUILTINS[Sym('command')]
@@ -138,7 +156,7 @@ def run(rows, method="Auto", answer="No", with_abhd=False,
     command's OWN sheet reader in place and feeds it those lines."""
     vm = fresh(pre)
     if with_abhd:
-        vm.loads('(defun c:ABHD () nil)')
+        vm.loads(ABHD_STUB)
     if csv is None:
         # the sheet reader itself is Excel COM and file I/O, neither of
         # which is what most of these tests are about; the rows go in
@@ -486,17 +504,31 @@ def test_abhd_handoff():
     rows = [("1", tapes(120.0, -60.0)), ("2", tapes(300.0, -40.0)),
             ("3", tapes(200.0, -150.0))]
     vm = run(rows, answer="Yes", with_abhd=True)
-    check("ABHD is started", ['_.ABHD'] in vm.commands)
-    ss = vm.globals.get(Sym('*preselect*'))
+    check("ABHD is started -- its c: function, called once",
+          abhd_ran(vm) == 1)
+    check("and never sent to the command processor, which does not know it",
+          not any(c and str(c[0]).upper().lstrip('._') == 'ABHD'
+                  for c in vm.commands))
+    ss = vm.globals.get(Sym('*abhd-saw*'))
     check("with exactly this run's three points pre-selected",
           ss is not None and len(ss) - 1 == 3)
+    check("after ABCDEF's own undo group was closed",
+          vm.globals.get(Sym('*abhd-undo*')) == 0)
 
     vm = run(rows, answer="No", with_abhd=True)
-    check("answering No starts nothing", ['_.ABHD'] not in vm.commands)
+    check("answering No starts nothing", abhd_ran(vm) == 0)
 
     vm = run(rows, answer="Yes", with_abhd=False)
-    check("ABHD not loaded: nothing is started",
-          ['_.ABHD'] not in vm.commands)
+    check("ABHD not loaded: nothing is started, and it says so",
+          'ABHD is not loaded' in said(vm)
+          and not any(c and str(c[0]).upper().lstrip('._') == 'ABHD'
+                      for c in vm.commands))
+
+    vm = run(rows, answer="Yes", with_abhd=True,
+             post='(setvar "PICKFIRST" 0)')
+    check("PICKFIRST off: ABHD still starts, told nothing can be handed over",
+          abhd_ran(vm) == 1 and 'PICKFIRST is off' in said(vm)
+          and vm.globals.get(Sym('*abhd-saw*')) is None)
 
 
 def test_the_view_reset_survives_its_own_catch():
@@ -809,8 +841,8 @@ def test_a_second_import_hands_abhd_only_its_own_points():
              '(entmake (list \'(0 . "SEQEND") \'(8 . "POINTS")))')
     rows = [("1", tapes(120.0, -60.0)), ("2", tapes(300.0, -40.0))]
     vm = run(rows, answer="Yes", with_abhd=True, pre=prior)
-    ss = vm.globals.get(Sym('*preselect*'))
-    check("ABHD is started", ['_.ABHD'] in vm.commands)
+    ss = vm.globals.get(Sym('*abhd-saw*'))
+    check("ABHD is started", abhd_ran(vm) == 1)
     check("with this run's two points only, not the earlier three",
           ss is not None and len(ss) - 1 == 2, )
 

@@ -46,8 +46,15 @@ never modified.
    layer.
 
 The whole run is one undo group -- a single `U` removes every bead.
-Esc mid-run cleans up the temporary chains and restores `OSMODE`,
-`PEDITACCEPT` and `CMDECHO`.
+Its own offsets run with OFFSET's `Erase` off and the gap type at
+extend (`OFFSETERASE` 0, `OFFSETGAPTYPE` 0), whatever an OFFSET of the
+drafter's last left in the registry: with `Erase=Yes` each working
+chain vanished as it was offset, and the step lines the wall beads
+are cut at went with them. Both are put back afterwards. Esc mid-run
+cleans up the temporary chains, closes the undo group and restores
+`OSMODE`, `PEDITACCEPT`, `OFFSETERASE`, `OFFSETGAPTYPE` and `CMDECHO`
+-- all of it from globals, since the build pushes the error mode and
+its handler then sees no locals.
 
 ## Install & run
 
@@ -59,7 +66,7 @@ Esc mid-run cleans up the temporary chains and restores `OSMODE`,
 | Command | What it does |
 | --- | --- |
 | `AUTOBEAD` | Bead the selected pool lines |
-| `TUTORIALAUTOBEAD` | Guided walkthrough -- `[Read/Demo/Both] <Read>`: a written rundown of every step and check, a live demo on a sample pool it draws for you, or both |
+| `TUTORIALAUTOBEAD` | Guided walkthrough -- `[Checks/Demo/Both] <Both>`: a written rundown of every step and check, a live demo on a sample pool it draws for you, or both (`Read`, the old name for `Checks`, still works typed in full) |
 | `AUTOBEADVER` | Print the loaded version and the current settings |
 
 ## Tunables
@@ -97,9 +104,20 @@ At the top of `AUTOBEAD.lsp` (the `AUTOBEAD SETTINGS` block):
   of failing silently -- clicking farther from the pool line usually
   fixes it.
 * The tutorial demo's cleanup (`Erase the demo pool and its bead?
-  [Yes/No] <Yes>`) erases **everything on the bead layer**, not just
-  the demo's own bead -- run it in a drawing without real beads, or
-  answer `No` and erase by hand.
+  [Yes/No] <Yes>`) erases only what the demo drew -- everything after
+  the mark it takes before its first line -- so beads already in the
+  drawing stay. Anything it could not erase (a locked layer) is
+  counted and said. Esc at any of the demo's questions takes the demo
+  back down the same way, and so does a failure inside the demo's bead
+  build (only the build's own handler runs then, so it does it). The
+  demo is built round the WCS point you pick, so it lands where you
+  clicked under any UCS.
+* What a run (or the demo) counts as its own is every MAIN entity
+  drawn after the mark it took. A drawing that ends in an attributed
+  block -- a survey point -- or a heavy polyline is safe: that
+  entity's ATTRIBs, VERTEXes and SEQEND are never read as chains to
+  bead, nor as demo geometry to erase (they were, and the refused
+  erase was reported as a locked layer).
 * Requires the Visual LISP engine, which ships with full AutoCAD.
   AutoCAD LT has no LISP engine and cannot run this file.
 
@@ -119,4 +137,8 @@ twin, and `python3 tests/test_shared.py` still loads it with
 everything else. The step routines' hand-off *to* AUTOBEAD --
 the geometry and clicked treads `CORNERSTP`/`HEMISTEP`/`NORMIESTEP`
 pass it -- is covered from their side by
-`tests/test_cornerstp_geometry.py`.
+`tests/test_cornerstp_geometry.py`. `python3 tests/test_fix_steps.py`
+models what the VM does not: the pushed error mode's reset (the
+handler seeing globals only), an OFFSET that makes a bead, ERASE, a
+moved UCS and a locked layer -- for the handler, the OFFSET settings,
+a bead failure inside a step routine, and the tutorial demo.

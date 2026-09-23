@@ -2036,7 +2036,7 @@ print("   the leader carries the note out of the pool, whichever corner")
 # ----------------------------------------------------------------------
 # the undo group is the command's own
 # ----------------------------------------------------------------------
-print("== U1. the undo flag is a local of the run, not a global shared with the demo ==")
+print("== U1. the undo flag is the run's own, not a global shared with the demo ==")
 from lispvm import Sym  # noqa: E402
 # the last scenario's VM is a clean run: nothing open, nothing pushed
 assert vm.undo_groups == 0 and vm.error_mode_depth == 0, \

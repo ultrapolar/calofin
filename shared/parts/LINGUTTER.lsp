@@ -117,11 +117,13 @@
 ;;;       dimensions in any other style.  Name a layer in
 ;;;       lg:*keeplayers* to spare it even inside the highlight.
 ;;;
-;;;    3. PADDLE.  The new perimeter is handed over as a pickfirst
-;;;       selection and PADDLE pads its concave features.  Handed, not
-;;;       hunted: PADDLE's own auto-detect reads the WHOLE drawing for
-;;;       its largest closed loop, which after a scoped gut may well be
-;;;       a title block border rather than the pool.
+;;;    3. PADDLE.  The new perimeter is handed to PADDLE in
+;;;       *calofin-handoff*, which PADDLE reads before its own pickfirst
+;;;       probe, so no PICKFIRST setting is needed, and PADDLE pads its
+;;;       concave features.  Handed, not hunted: PADDLE's own
+;;;       auto-detect reads the WHOLE drawing for its largest closed
+;;;       loop, which after a scoped gut may well be a title block
+;;;       border rather than the pool.
 ;;;
 ;;;  LINGUTTER erases a great deal of what you highlight, and does so
 ;;;  straight through -- no confirmation asked, just the report of
@@ -229,7 +231,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.11")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.12")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -1711,11 +1713,26 @@
 
 ;;; -------------------- handing over to PADDLE --------------------------
 
-;; Hand PERIM over as a pickfirst selection rather than letting PADDLE
-;; hunt for it: PADDLE auto-detects the largest closed loop in the WHOLE
-;; drawing, and LINGUTTER only ever gutted the highlighted area -- a
-;; title block border still standing outside it is a bigger loop than
-;; the pool.  Highlighted, PADDLE pads what we drew and asks nothing.
+;; What LINGUTTER hands PADDLE -- see lg:paddle.  Declared here, where it
+;; is used; PADDLE, AUTODIM and TYDRN read and clear the same global.
+(setq *calofin-handoff* nil)
+
+;; Hand PERIM over rather than letting PADDLE hunt for it: PADDLE
+;; auto-detects the largest closed loop in the WHOLE drawing, and
+;; LINGUTTER only ever gutted the highlighted area -- a title block
+;; border still standing outside it is a bigger loop than the pool.
+;; Handed it, PADDLE pads what we drew and asks nothing.
+;;
+;; It goes over in *calofin-handoff*, which PADDLE reads before its own
+;; pickfirst probe and clears.  It used to go as a pickfirst set, which
+;; ssget "_I" reads only with PICKFIRST at 1: a drafter who works at 0
+;; got PADDLE's perimeter prompt, and an Enter there auto-detected the
+;; title block border -- the very guess this handoff exists to prevent.
+;; The global borrows no setting of the drafter's.  The clear after the
+;; call keeps a PADDLE old enough not to read it (before v1.17, say a
+;; pinned dated twin) from leaving a stale set behind -- but that PADDLE
+;; gets nothing and asks for its own perimeter, so answer that prompt
+;; with a pick, not Enter.  The bundle ships the two in step.
 ;;
 ;; PADDLE is its own file, so it may not be in this session.  When it is
 ;; not, the gut has still happened and saying so beats dying on an
@@ -1729,9 +1746,10 @@
        (progn
          (setq ss (ssadd))
          (ssadd perim ss)
-         (sssetfirst nil ss)))
+         (setq *calofin-handoff* (list "PADDLE" ss))))
      (princ "\nLINGUTTER: handing the new perimeter to PADDLE.")
-     (c:PADDLE))
+     (c:PADDLE)
+     (setq *calofin-handoff* nil))
     (t
      (princ (strcat "\nLINGUTTER: PADDLE is not loaded, so no pads were"
                     " placed.  APPLOAD PADDLE.lsp (or the shared"

@@ -22,8 +22,12 @@ SQUAREUP measures the angle instead.
 1. **Highlight the work** — everything that has to turn together: the
    outline, the bead track, the survey points, their number labels, the
    notes. Enter takes the whole drawing, which is what a freshly
-   imported survey usually is. A selection made before the command was
-   typed is used as it stands.
+   imported survey usually is -- the whole of the space being drawn
+   in, that is: model space from the Model tab or from inside a
+   layout's viewport, so a title block and its viewports on the sheet
+   are left out (ROTATE would skip them anyway, and the count would
+   say they turned). A selection made before the command was typed is
+   used as it stands.
 2. **Select the perimeter** — the one outline that says which way is
    along. A single polyline, or the loose lines and arcs a traced
    perimeter comes in as. Only curve types are offered, so a stray

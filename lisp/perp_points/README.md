@@ -180,7 +180,7 @@ in the middle. The prompt's words do not change; what it takes does:
 | At the length prompt | What happens |
 | --- | --- |
 | click a ruler row | that value is the length for this point, and the ruler re-grades round it for the next |
-| type a length | read as `DIMSTAMP` reads -- `44`, `44.5`, `44 1/2`, `4'4.5`, `4'-4 1/2"` -- and kept exactly as typed (`44.3` stays `44.3`; only the ruler rounds to the eighth). Feet typed put the ruler in the feet family until plain inches are typed |
+| type a length | read as `DIMSTAMP` reads -- `44`, `44.5`, `44-1/2`, `4'4.5`, `4'-4-1/2"` -- and kept exactly as typed (`44.3` stays `44.3`; only the ruler rounds to the eighth). A fraction is dashed: the spacebar is Enter at this prompt, so `44 1/2` would enter 44 here and hand the 1/2 to the next point. Feet typed put the ruler in the feet family until plain inches are typed |
 | Enter | the last length again, as it always was |
 | click empty space | the first of two points to measure the length between -- what `getdist` always offered here |
 | `B`, `U`, `M` | unchanged: Back, its synonym, and Max where a boundary is ahead |
@@ -237,8 +237,10 @@ the other, and only PERPPTS asks how the points are joined:
 * The whole run is one UNDO group -- a single `U` reverses everything,
   the width resizes included. Esc or an error restores every system
   variable changed (`OSMODE`, `CMDECHO`, `PDMODE`, `CLAYER`, the `CE*`
-  creation defaults and the current dimension style), erases the
-  temporary guides and closes the group.
+  creation defaults, `PLINETYPE`, `PLINEWID` and the current dimension
+  style), erases the temporary guides and closes the group.
+* Every offset course is drawn as a hairline lightweight polyline,
+  whatever width `PLINE` was last left at in the drawing.
 * A resize the drawing will not take -- a locked, frozen or
   switched-off layer -- stops the command before the first round,
   where nothing has been drawn yet. At a round it does not: the line is

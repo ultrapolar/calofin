@@ -19,6 +19,11 @@ Three kinds of check, all runnable without AutoCAD:
   old perimeter is erased only after the new geometry is placed, that
   no prompt fires after the name, and that an anchor-span mismatch is
   shouted about but never silently rescaled.
+* The two things the stub AutoCAD models on top: MOVE and ERASE passing
+  over a locked layer's objects without a word (a swap that only half
+  happened is refused up front, or caught after the move, and never
+  reported whole), and a UCS turned to follow the pool (the stock comes
+  in square to the World axes and lands on its anchor).
 
 Usage:  python3 tests/test_stockcover.py
 """
@@ -310,6 +315,20 @@ class Fake:
         self.said = []
         self.insert_broken = False
         self.ref_pts = {}       # block ref -> anchor points inside it
+        self.unerasable = set() # entities ERASE skips for its own reasons
+        self.piece_layer = None # layer the exploded stock pieces land on
+
+    def locked(self, e):
+        lay = None
+        for g in self.vm.entdata.get(e, []):
+            if isinstance(g, Dot) and g.a == 8:
+                lay = g.b
+        rec = self.vm.tablerecs.get("LAYER", {}).get((lay or "").upper())
+        if rec is None:
+            return False
+        flags = [g.b for g in self.vm.recdata[rec]
+                 if isinstance(g, Dot) and g.a == 70]
+        return bool(flags and flags[0] & 4)
 
     def told(self, text):
         return any(text in s for s in self.said)
@@ -350,10 +369,15 @@ class Fake:
         elif c == "_.SCALE":
             self.scale(self.live(a[1]), a[3], float(a[4]))
         elif c == "_.MOVE":
-            self.move(self.live(a[1]), a[3], a[4])
+            # MOVE and ERASE pass over a locked layer's objects without
+            # a word under CMDECHO 0 -- modelled, or the tests could not
+            # see a swap that only half happened
+            self.move([e for e in self.live(a[1]) if not self.locked(e)],
+                      a[3], a[4])
         elif c == "_.ERASE":
             for e in self.live(a[1]):
-                vm.deleted.add(e)
+                if not self.locked(e) and e not in self.unerasable:
+                    vm.deleted.add(e)
         elif c == "_.-PURGE":
             self.purged.append(a[2])
         return NIL
@@ -385,8 +409,10 @@ class Fake:
         b = self.bbox[e]
         self.vm.deleted.add(e)
         mid = (b[0] + b[2]) / 2.0
-        self.make([b[0], b[1], mid, b[3]])      # two halves, same union
-        self.make([mid, b[1], b[2], b[3]])
+        for half in ([b[0], b[1], mid, b[3]], [mid, b[1], b[2], b[3]]):
+            h = self.make(half)                 # two halves, same union
+            if self.piece_layer:
+                self.vm.entdata[h] = [Dot(8, self.piece_layer)]
         for x, y in self.ref_pts.pop(e, []):    # the file's anchor POINTs
             self.make_point(x, y)
 
@@ -443,7 +469,10 @@ def build(files=None, stock=None, env=None, selection=None):
             if item[0] == "pt":
                 ss.append(fake.make_point(item[1], item[2]))
             else:
-                ss.append(fake.make(list(item[0]) + list(item[1])))
+                e = fake.make(list(item[0]) + list(item[1]))
+                if len(item) > 2:               # ((min) (max) "LAYER")
+                    vm.entdata[e] = [Dot(8, item[2])]
+                ss.append(e)
         return ss
     reg("ssget", _ssget)
 
@@ -730,11 +759,271 @@ def runtime():
     check("every sysvar is back where it started", not diff, diff)
 
 
+def lock_layer(vm, name):
+    """A locked layer in the drawing, where tblsearch will find it."""
+    vm.loads('(entmake (list (cons 0 "LAYER") (cons 100 "AcDbSymbolTableRecord")'
+             ' (cons 100 "AcDbLayerTableRecord") (cons 2 "%s") (cons 70 4)'
+             ' (cons 62 7) (cons 6 "Continuous")))' % name)
+
+
+def locked_layers():
+    """A swap that could only half happen used to be reported whole.
+    ERASE and MOVE pass over a locked layer's objects without a word
+    under CMDECHO 0, and the done line counted the highlight as "out"
+    whatever ERASE did."""
+    sel = [((450.0, 275.0), (550.0, 325.0), "POOL"),
+           ("pt", 450.0, 275.0), ("pt", 550.0, 325.0)]
+    stock = {"5M_Tech.dwg": {"box": ((-50.0, -25.0), (50.0, 25.0)),
+                             "pts": [(-50.0, -25.0), (50.0, 25.0)]}}
+
+    print("locked -- a perimeter on a locked layer is refused up front")
+    vm, fake = build(stock=stock, selection=sel, files=["5M_Tech.dwg"])
+    lock_layer(vm, "POOL")
+    before = dict(vm.sysvars)
+    run(vm, ["5M"])
+    check("it names the layer to unlock", fake.told("Unlock POOL first"),
+          fake.said)
+    check("nothing was inserted", "_.-INSERT" not in cmd_names(vm))
+    check("no name was asked for a swap that cannot happen",
+          not vm.prompts, vm.prompts)
+    check("never 'placed on the anchor'",
+          not fake.told("placed on the anchor"), fake.said)
+    check("no undo group opened", fake.undo == [], fake.undo)
+    check("sysvars untouched", vm.sysvars == before)
+
+    print("locked -- a locked CURRENT layer is refused up front too")
+    # -INSERT lands on a locked current layer, then EXPLODE and MOVE
+    # refuse it: the cover stayed at 0,0 while ERASE took the perimeter
+    sel2 = [((450.0, 275.0), (550.0, 325.0), "POOL"),
+            ("pt", 450.0, 275.0), ("pt", 550.0, 325.0)]
+    vm, fake = build(stock=stock, selection=sel2, files=["5M_Tech.dwg"])
+    lock_layer(vm, "MINE")
+    vm.sysvars["CLAYER"] = "MINE"
+    run(vm, ["5M"])
+    check("it names the current layer", fake.told("Unlock MINE first"),
+          fake.said)
+    check("nothing was inserted or erased",
+          "_.-INSERT" not in cmd_names(vm) and "_.ERASE" not in cmd_names(vm))
+
+    print("locked -- stock pieces landing on a locked layer are not"
+          " reported placed, and the old perimeter stays")
+    vm, fake = build(stock=stock, selection=sel, files=["5M_Tech.dwg"])
+    lock_layer(vm, "COVER")
+    fake.piece_layer = "COVER"
+    run(vm, ["5M"])
+    old = [e for e in fake.bbox if fake.vm.entdata.get(e) == [Dot(8, "POOL")]]
+    check("the old perimeter was NOT erased",
+          old and all(e not in vm.deleted for e in old))
+    check("no ERASE was issued", "_.ERASE" not in cmd_names(vm))
+    check("never 'placed on the anchor'",
+          not fake.told("placed on the anchor"), fake.said)
+    check("it says the stock did not all move, and names the layer",
+          fake.told("did NOT all move onto the anchor")
+          and fake.told("locked layer(s) COVER"), fake.said)
+    check("and points at U", fake.told("one U rolls this back"), fake.said)
+    check("the undo group still closed", fake.undo == ["_Begin", "_End"],
+          fake.undo)
+
+    print("locked -- the done line counts what ERASE really took")
+    vm, fake = build(stock=stock, selection=sel, files=["5M_Tech.dwg"])
+    real = fake.command
+
+    def refuse_first(vm, a):
+        # ERASE passes over one highlighted object for reasons of its own
+        if a and a[0] == "_.ERASE":
+            fake.unerasable.add(a[1][1])
+        return real(vm, a)
+    lispvm.BUILTINS[Sym("command")] = refuse_first
+    try:
+        run(vm, ["5M"])
+    finally:
+        lispvm.BUILTINS[Sym("command")] = real
+    check("2 out, not the 3 handed to ERASE",
+          fake.told("object(s) in, 2 out."), fake.said)
+    check("and the one left behind is said",
+          fake.told("1 highlighted object(s) could NOT be erased"), fake.said)
+
+
+def rotated_ucs():
+    """Under a UCS turned to follow the pool, -INSERT's 0.0 rotation is
+    read in the UCS and the anchors went to MOVE as World points: the
+    stock came in turned, its span stopped matching, and the drafter was
+    told they had named the wrong stock drawing."""
+    import math
+    th = math.pi / 2.0                       # UCS turned 90 degrees
+    ox, oy = 1000.0, 2000.0                  # and moved off the origin
+
+    def rot(x, y, a):
+        c, s_ = round(math.cos(a)), round(math.sin(a))
+        return x * c - y * s_, x * s_ + y * c
+
+    def trans(vm, a):
+        p, frm, to = a[0], a[1], a[2]
+        disp = len(a) > 3 and a[3] is not NIL
+        x, y = p[0], p[1]
+        z = p[2] if len(p) > 2 else 0.0
+        if frm == 0 and to == 1:             # World -> UCS
+            if not disp:
+                x, y = x - ox, y - oy
+            x, y = rot(x, y, -th)
+        elif frm == 1 and to == 0:           # UCS -> World
+            x, y = rot(x, y, th)
+            if not disp:
+                x, y = x + ox, y + oy
+        return [float(x), float(y), float(z)]
+
+    sel = [((450.0, 275.0), (550.0, 325.0)),
+           ("pt", 450.0, 275.0), ("pt", 550.0, 325.0)]
+    stock = {"5M_Tech.dwg": {"box": ((-50.0, -25.0), (50.0, 25.0)),
+                             "pts": [(-50.0, -25.0), (50.0, 25.0)]}}
+    vm, fake = build(stock=stock, selection=sel, files=["5M_Tech.dwg"])
+    # put back, not deleted: the VM has a trans of its own, and a later
+    # run in this file that reaches MOVE needs it
+    saved_trans = lispvm.BUILTINS.get(Sym("trans"))
+    saved_rotate = lispvm.BUILTINS.get(Sym("vla-rotate"))
+    lispvm.BUILTINS[Sym("trans")] = trans
+    frame = {}                               # ref -> (ox, oy, angle)
+
+    def rbox(b, bx, by, a):
+        xs, ys = [], []
+        for x, y in ((b[0], b[1]), (b[2], b[3])):
+            rx, ry = rot(x - bx, y - by, a)
+            xs.append(rx + bx)
+            ys.append(ry + by)
+        return [min(xs), min(ys), max(xs), max(ys)]
+
+    real_read = fake.read
+
+    def read(path, bname):
+        # the -INSERT: point (0,0,0) and rotation 0.0 are UCS values
+        ref = real_read(path, bname)
+        b = fake.bbox[ref]
+        fake.bbox[ref] = rbox([b[0] + ox, b[1] + oy, b[2] + ox, b[3] + oy],
+                              ox, oy, th)
+        frame[ref] = (ox, oy, th)
+        vm.entdata[ref] = [Dot(0, "INSERT"), Dot(10, [ox, oy, 0.0]),
+                           Dot(50, th)]
+        return ref
+    fake.read = read
+
+    def vla_rotate(vm, a):
+        obj, base, ang = a[0], a[1], a[2]
+        if isinstance(base, list) and base and isinstance(base[0], list):
+            base = base[0]
+        fake.bbox[obj] = rbox(fake.bbox[obj], base[0], base[1], ang)
+        fx, fy, fa = frame[obj]
+        nx, ny = rot(fx - base[0], fy - base[1], ang)
+        frame[obj] = (nx + base[0], ny + base[1], fa + ang)
+        vm.entdata[obj] = [Dot(0, "INSERT"),
+                           Dot(10, [frame[obj][0], frame[obj][1], 0.0]),
+                           Dot(50, frame[obj][2])]
+        fake.rotated = True
+        return NIL
+    lispvm.BUILTINS[Sym("vla-rotate")] = vla_rotate
+
+    real_explode = fake.explode
+
+    def explode(e):
+        # the anchor POINTs come out where the reference has them
+        fx, fy, fa = frame.get(e, (0.0, 0.0, 0.0))
+        fake.ref_pts[e] = [tuple(v + o for v, o in zip(rot(x, y, fa),
+                                                       (fx, fy)))
+                           for x, y in fake.ref_pts.get(e, [])]
+        real_explode(e)
+    fake.explode = explode
+
+    def move(ents, frm, to):
+        # MOVE reads its two points in the UCS
+        w0 = trans(vm, [frm, 1, 0])
+        w1 = trans(vm, [to, 1, 0])
+        for e in ents:
+            b = fake.bbox[e]
+            dx, dy = w1[0] - w0[0], w1[1] - w0[1]
+            fake.bbox[e] = [b[0] + dx, b[1] + dy, b[2] + dx, b[3] + dy]
+    fake.move = move
+
+    print("UCS -- a turned UCS places the stock square and on the anchor")
+    try:
+        run(vm, ["5M"])
+    finally:
+        for name, fn in (("trans", saved_trans), ("vla-rotate", saved_rotate)):
+            if fn is None:
+                lispvm.BUILTINS.pop(Sym(name), None)
+            else:
+                lispvm.BUILTINS[Sym(name)] = fn
+    check("no 'wrong drawing' warning for the right drawing",
+          not fake.told("ANCHORS DO NOT AGREE"), fake.said)
+    placed = [e for e in fake.bbox if e not in vm.deleted
+              and not fake.vm.entdata[e]]
+    eq("the stock lands square on the highlighted perimeter",
+       fake.union(placed), [450.0, 275.0, 550.0, 325.0])
+    check("and says so", fake.told("placed on the anchor"), fake.said)
+    check("the turn was undone as a World-axis rotation of the reference",
+          getattr(fake, "rotated", False))
+
+
+def insert_places_nothing():
+    """-INSERT can define the block and still place no reference.  Then
+    (entlast) is the drafter's own last object, and it used to be handed
+    to the squaring turn and to EXPLODE: a rotated block of theirs came
+    back at 0 degrees and in pieces, and the pieces -- new since the
+    mark -- were taken for the stock and moved onto the anchor."""
+    sel = [((450.0, 275.0), (550.0, 325.0)),
+           ("pt", 450.0, 275.0), ("pt", 550.0, 325.0)]
+    stock = {"5M_Tech.dwg": {"box": ((-50.0, -25.0), (50.0, 25.0)),
+                             "pts": [(-50.0, -25.0), (50.0, 25.0)]}}
+    vm, fake = build(stock=stock, selection=sel, files=["5M_Tech.dwg"])
+    theirs = []
+    real_ssget = lispvm.BUILTINS[Sym("ssget")]
+
+    def ssget(vm, a):
+        # the highlight, and then the drafter's own turned block is the
+        # last object in the drawing when the insert runs
+        ss = real_ssget(vm, a)
+        e = fake.make([0.0, 0.0, 10.0, 10.0])
+        vm.entdata[e] = [Dot(0, "INSERT"), Dot(10, [5.0, 5.0, 0.0]),
+                         Dot(50, 0.5)]
+        theirs.append(e)
+        return ss
+    lispvm.BUILTINS[Sym("ssget")] = ssget
+
+    def insert(spec):
+        # the block is defined, but no reference is placed
+        bname = spec.partition("=")[0]
+        fake.blocks.add(bname.upper())
+        vm.tables.setdefault("BLOCK", set()).add(bname)
+    fake.insert = insert
+    turned = []
+    lispvm.BUILTINS[Sym("vla-rotate")] = \
+        lambda vm, a: (turned.append(a[0]), NIL)[1]
+
+    print("insert -- a -INSERT that placed nothing touches nothing of theirs")
+    run(vm, ["5M"])
+    mine = theirs[0]
+    check("the drafter's block was not turned", mine not in turned, turned)
+    check("nor exploded", "_.EXPLODE" not in cmd_names(vm)
+          and mine not in vm.deleted, cmd_names(vm))
+    check("nothing was moved as though it were the stock",
+          "_.MOVE" not in cmd_names(vm), cmd_names(vm))
+    check("and it says the stock brought nothing in",
+          fake.told("brought nothing in"), fake.said)
+    check("the old perimeter is left standing",
+          "_.ERASE" not in cmd_names(vm), cmd_names(vm))
+
+
 def main():
     structural()
     resolution()
     companions()
     runtime()
+    saved = dict(lispvm.BUILTINS)
+    try:
+        locked_layers()
+        rotated_ucs()
+        insert_places_nothing()
+    finally:
+        lispvm.BUILTINS.clear()
+        lispvm.BUILTINS.update(saved)
     print()
     if failures:
         print(f"{len(failures)} FAILURE(S): " + ", ".join(failures))

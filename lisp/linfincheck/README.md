@@ -61,10 +61,15 @@ for exactly those three checks, standalone.
    → `Blue Granite`. A field that held nothing else comes back blank,
    and a real pattern name is never touched. A Fiberglass Step in the
    drawing means the liner must *not* carry a Step, otherwise drawn
-   steps mean it must.
+   steps mean it must. A field the drawing will not let it write (its
+   attribute on a locked layer) is reported as `NEEDS WIPING, could
+   not write it`, never as wiped.
 8. **Title block border** — the outer drawing on the `border` layer
    must be 58'-8" × 45'-3 5/8" or a scaled-**up** multiple; smaller is
-   flagged as "should not be SCALED DOWN for Liners".
+   flagged as "should not be SCALED DOWN for Liners". With no border in
+   the highlight, the border layer in the space you are working in is
+   read frame by frame: two sheets' borders are two borders, and the
+   one around (or nearest) the checked drawing is the one measured.
 
 Every rule, and the exact numbers behind it, is spelled out in the
 file's own header comment and in `TUTORIALLINFINCHECK` (below) — both
@@ -88,6 +93,20 @@ with what the code actually does.
 | `TUTORIALLINFINCHECK` | Teaches the tool — see below. |
 
 A single `U` undoes an entire `LINFINCHECK` run, including the report.
+
+`LINFINSCAN`'s Enter (no highlight) scans the whole of the space you
+are working in -- model space from the Model tab or a layout viewport,
+the sheet itself only from paper space -- never every layout at once.
+
+**Locked layers.** LINFINCHECK offers to unlock the selection's locked
+layers for the run and re-locks them at the end (or on Esc). Answer No
+and it still reviews those items, but never claims a change the layer
+refused: a stray dimension point is reported `NOT ATTACHED, layer
+locked, NOT moved` without the Move/Keep/Pick question, a detached arc
+`NOT ATTACHED - layer locked`, a refused Merge `could NOT merge -
+layer locked`, and a flag (a No answer, a wrong Step Attachment, a
+height dimension that disagrees with WallHt) `layer locked, NOT
+coloured` instead of red.
 
 ## Tunables
 

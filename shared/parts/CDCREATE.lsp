@@ -72,7 +72,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cdcreate-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *cdcreate-version* "v1.6")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -299,7 +299,7 @@
 (defun c:CDCREATE ( / *error* olderr odim
                       ss i en ed typ ends pairs skipped plines dimmed
                       already havestyle undo-open pre new made gone lays
-                      p1 p2 )
+                      stuck slays p1 p2 )
 
   ;; -- restore drawing state on error / Esc.  The user's settings come
   ;;    back FIRST so nothing below can skip them; a dimension command
@@ -395,7 +395,7 @@
 
           ;; -- 4. one aligned dim per line, on the line, and then the
           ;;       line itself goes: the tie is the dimension now
-          (setq made 0 gone 0 lays nil)
+          (setq made 0 gone 0 lays nil stuck 0 slays nil)
           (foreach pr pairs
             (setq en  (car    pr)
                   p1  (cadr   pr)
@@ -422,12 +422,21 @@
                 (setq made (1+ made))
                 ;; only a line that really did get its dimension is
                 ;; erased -- a dim AutoCAD refused to draw leaves its
-                ;; line in the drawing to be dealt with
+                ;; line in the drawing to be dealt with.  And only a
+                ;; line entdel really erased is counted: on a locked
+                ;; layer it answers nil and the line stays, and the
+                ;; drafter was being told it had gone while it sat
+                ;; live under its new dimension
                 (if (and cdc:*erase* (entget en))
-                  (progn (entdel en)
-                         (setq gone (1+ gone))
-                         (if (not (member (cadddr pr) lays))
-                           (setq lays (cons (cadddr pr) lays))))))))
+                  (if (entdel en)
+                    (progn
+                      (setq gone (1+ gone))
+                      (if (not (member (cadddr pr) lays))
+                        (setq lays (cons (cadddr pr) lays))))
+                    (progn
+                      (setq stuck (1+ stuck))
+                      (if (not (member (cadddr pr) slays))
+                        (setq slays (cons (cadddr pr) slays)))))))))
 
           ;; -- 5. put the drawing back the way it was
           (cdc:restyle odim)
@@ -445,6 +454,15 @@
                            (if (= gone 1) "" "s") " erased (layer"
                            (if (= 1 (length lays)) " " "s ")
                            (cdc:names (reverse lays)) ").")))
+          (if (> stuck 0)
+            (princ (strcat "\n** " (itoa stuck) " dimensioned line"
+                           (if (= stuck 1) "" "s")
+                           " could NOT be erased (layer"
+                           (if (= 1 (length slays)) " " "s ")
+                           (cdc:names (reverse slays))
+                           " locked?) -- still in the drawing under"
+                           " the new dimension"
+                           (if (= stuck 1) "" "s") ".")))
           (if (> already 0)
             (princ (strcat "\n" (itoa already) " line"
                            (if (= already 1) "" "s")

@@ -33,14 +33,17 @@
 ;;;     midpoint and the new end, then recolored (magenta by default).
 ;;;
 ;;;  Everything runs inside one UNDO group; a single U reverts every
-;;;  change CHECK made. Tunables are just below.
+;;;  change CHECK made. A dimension or arc on a LOCKED layer cannot be
+;;;  changed: one that needs a fix is named and counted apart in the
+;;;  summary ("NOT shifted"), never passed as clean. Tunables are just
+;;;  below.
 ;;; ------------------------------------------------------------------
 
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.10")  ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.11")  ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -155,6 +158,16 @@
                        (7 . "white") (8 . "grey"))))
   (if p (cdr p) (strcat "colour " (itoa aci))))
 
+(defun cfchk:locked-p (ent / lay rec)
+  ;; T when ent sits on a LOCKED layer.  entmod answers nil there and
+  ;; changes nothing, and a nil from a fix reads as "nothing needed
+  ;; fixing" -- so a stray point on a locked DIMS layer, the usual
+  ;; state of a finished sheet, was counted checked and clean.  The
+  ;; fixers ask this first and answer 'refused instead.
+  (setq lay (cdr (assoc 8 (entget ent)))
+        rec (if lay (tblsearch "LAYER" lay)))
+  (and rec (= 4 (logand 4 (cdr (assoc 70 rec))))))
+
 (defun cfchk:set-color (ent color / ed old)
   (setq ed  (entget ent)
         old (assoc 62 ed))
@@ -229,7 +242,9 @@
 
 (defun cfchk:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed)
   ;; re-fit the arc through its fixed end, its old midpoint and the
-  ;; target point; returns T on success
+  ;; target point; returns T on success, 'refused when the arc is on a
+  ;; locked layer (or entmod turns the write down), nil when no arc
+  ;; fits
   (if (and (> (distance target fixed) *cfchk-same-pt*)
            (setq c (cal:circumcenter fixed mid target)))
     (progn
@@ -246,8 +261,9 @@
       (setq ed (entget ent))
       (foreach pair (list (cons 10 c) (cons 40 r) (cons 50 a1) (cons 51 a2))
         (setq ed (subst pair (assoc (car pair) ed) ed)))
-      (if (entmod ed)
-        (progn (entupd ent) T)))))
+      (if (and (not (cfchk:locked-p ent)) (entmod ed))
+        (progn (entupd ent) T)
+        'refused))))
 
 ;; --- audit 1: dimension attachment ---------------------------------
 
@@ -296,7 +312,8 @@
 (defun cfchk:fix-defpoint (ent gcode cands anchors
                            / ed pt near anch dnear danch sugg dsug)
   ;; shift one definition point onto the closest object when it is
-  ;; not already on one; returns the shift distance, nil if untouched.
+  ;; not already on one; returns the shift distance, nil when it needed
+  ;; no shift, 'refused when it did and its layer would not take it.
   ;; A point another dimension also measures to is an ANCHOR and is
   ;; never shifted; an anchor nearer than any object is where a stray
   ;; point goes.
@@ -318,8 +335,10 @@
            (near
             (setq sugg (cadr near)  dsug dnear)))
          (if (and sugg (> dsug *cfchk-tol*))
-           (if (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
-             dsug)))))))
+           (if (and (not (cfchk:locked-p ent))
+                    (entmod (subst (cons gcode sugg) (assoc gcode ed) ed)))
+             dsug
+             'refused)))))))
 
 (defun cfchk:check-dim (ent cands anchors / ed dtype p13 p14 d1 d2)
   (setq ed    (entget ent)
@@ -330,24 +349,39 @@
             p14 (cdr (assoc 14 ed))
             d1  (cfchk:fix-defpoint ent 13 cands anchors)
             d2  (cfchk:fix-defpoint ent 14 cands anchors))
-      (if (or d1 d2)
-        (progn
-          (cfchk:make-xline p13 p14)        ; through the ORIGINAL points
-          (cfchk:set-color ent *cfchk-dim-color*)
-          (entupd ent)
-          (princ (strcat "\n  Dimension " (cdr (assoc 5 ed)) ":"
-                         (if d1 (strcat " point 1 shifted " (cfchk:dist d1)) "")
-                         (if d2 (strcat " point 2 shifted " (cfchk:dist d2)) "")
-                         " onto the nearest object or anchor; recolored "
-                         (cfchk:color-name *cfchk-dim-color*) "."))
-          'fixed)
-        'ok))
+      (cond
+        ;; a stray point CHECK could not move is a fault it found, not a
+        ;; clean dimension: named here and counted apart in the summary
+        ((or (eq d1 'refused) (eq d2 'refused))
+         (princ (strcat "\n  Dimension " (cdr (assoc 5 ed))
+                        ": a definition point is off every object, but layer "
+                        (cond ((cdr (assoc 8 ed))) ("0")) " is locked - NOT shifted."))
+         'locked)
+        ((or d1 d2)
+         (cfchk:make-xline p13 p14)        ; through the ORIGINAL points
+         (cfchk:set-color ent *cfchk-dim-color*)
+         (entupd ent)
+         (princ (strcat "\n  Dimension " (cdr (assoc 5 ed)) ":"
+                        (if d1 (strcat " point 1 shifted " (cfchk:dist d1)) "")
+                        (if d2 (strcat " point 2 shifted " (cfchk:dist d2)) "")
+                        " onto the nearest object or anchor; recolored "
+                        (cfchk:color-name *cfchk-dim-color*) "."))
+         'fixed)
+        (t 'ok)))
     'skipped))
 
 ;; --- audit 2: arc endpoint attachment ------------------------------
 
+(defun cfchk:snap-end (ent which other mid p target / r)
+  ;; re-fit the arc so its end lands on target: the snap distance when
+  ;; it did, 'refused when the arc's layer is locked, nil when no arc fits
+  (setq r (cfchk:rebuild-arc ent which other mid target))
+  (cond ((eq r 'refused) 'refused)
+        (r (distance p target))))
+
 (defun cfchk:fix-arc-end (ent which cands / p other mid near ends target)
-  ;; returns the snap distance when the endpoint was moved, else nil
+  ;; returns the snap distance when the endpoint was moved, 'refused
+  ;; when it needed moving and its layer is locked, else nil
   (setq mid   (vlax-curve-getPointAtDist
                 ent
                 (/ (vlax-curve-getDistAtParam ent (vlax-curve-getEndParam ent)) 2.0))
@@ -371,14 +405,12 @@
         nil)                                ; ...and at one of its ends: OK
        (t                                   ; ...but mid-object: closest end of that object
         (setq target (cfchk:closest-of p ends))
-        (if (cfchk:rebuild-arc ent which other mid target)
-          (distance p target)))))
+        (cfchk:snap-end ent which other mid p target))))
     (t                                      ; floating: closest end anywhere,
      (setq target (cfchk:nearest-end p ent cands))
      (if (or (null target) (< (distance target other) *cfchk-same-pt*))
        (setq target (cadr near)))           ; else closest point on closest object
-     (if (cfchk:rebuild-arc ent which other mid target)
-       (distance p target)))))
+     (cfchk:snap-end ent which other mid p target))))
 
 (defun cfchk:check-arc (ent cands / ed d1 d2)
   (setq ed (entget ent))
@@ -386,22 +418,27 @@
     (progn
       (setq d1 (cfchk:fix-arc-end ent 'start cands)
             d2 (cfchk:fix-arc-end ent 'end cands))
-      (if (or d1 d2)
-        (progn
-          (cfchk:set-color ent *cfchk-arc-color*)
-          (princ (strcat "\n  Arc " (cdr (assoc 5 ed)) ":"
-                         (if d1 (strcat " start snapped " (cfchk:dist d1)) "")
-                         (if d2 (strcat " end snapped " (cfchk:dist d2)) "")
-                         " to nearest object end; recolored "
-                         (cfchk:color-name *cfchk-arc-color*) "."))
-          'fixed)
-        'ok))
+      (cond
+        ((or (eq d1 'refused) (eq d2 'refused))
+         (princ (strcat "\n  Arc " (cdr (assoc 5 ed))
+                        ": an end is not at the end of any object, but layer "
+                        (cond ((cdr (assoc 8 ed))) ("0")) " is locked - NOT snapped."))
+         'locked)
+        ((or d1 d2)
+         (cfchk:set-color ent *cfchk-arc-color*)
+         (princ (strcat "\n  Arc " (cdr (assoc 5 ed)) ":"
+                        (if d1 (strcat " start snapped " (cfchk:dist d1)) "")
+                        (if d2 (strcat " end snapped " (cfchk:dist d2)) "")
+                        " to nearest object end; recolored "
+                        (cfchk:color-name *cfchk-arc-color*) "."))
+         'fixed)
+        (t 'ok)))
     'skipped))
 
 ;; --- command -------------------------------------------------------
 
 (defun c:CHECK ( / *error* oldecho undo-open ss i e et cands dims arcs res
-                   anchors ndf ndo nds naf nao nas)
+                   anchors ndf ndo nds ndl naf nao nas nal)
   (defun *error* (msg)
     (if undo-open
       (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
@@ -425,7 +462,7 @@
      (prompt "\nNothing selected - CHECK cancelled."))
     (t
      (setq cands nil dims nil arcs nil i 0
-           ndf 0 ndo 0 nds 0 naf 0 nao 0 nas 0)
+           ndf 0 ndo 0 nds 0 ndl 0 naf 0 nao 0 nas 0 nal 0)
      (repeat (sslength ss)
        (setq e  (ssname ss i)
              i  (1+ i)
@@ -465,11 +502,13 @@
           (setq res (cfchk:check-dim e cands anchors))
           (cond ((eq res 'fixed)   (setq ndf (1+ ndf)))
                 ((eq res 'skipped) (setq nds (1+ nds)))
+                ((eq res 'locked)  (setq ndl (1+ ndl)))
                 (t                 (setq ndo (1+ ndo)))))
         (foreach e arcs
           (setq res (cfchk:check-arc e cands))
           (cond ((eq res 'fixed)   (setq naf (1+ naf)))
                 ((eq res 'skipped) (setq nas (1+ nas)))
+                ((eq res 'locked)  (setq nal (1+ nal)))
                 (t                 (setq nao (1+ nao)))))
         ;; closed only if one was opened -- the same guard the handler
         ;; above makes.  With undo recording off (UNDOCTL bit 1 clear)
@@ -484,21 +523,32 @@
         (princ (strcat "\n--- CHECK complete (attachment tolerance "
                        (rtos *cfchk-tol* *cfchk-dist-mode* *cfchk-tol-prec*)
                        ") ---"
-                       "\nDimensions: " (itoa (+ ndf ndo)) " checked, "
+                       "\nDimensions: " (itoa (+ ndf ndo ndl)) " checked, "
                        (itoa ndf) " shifted onto nearest object ("
                        (cfchk:color-name *cfchk-dim-color*) ")"
+                       (if (> ndl 0)
+                         (strcat ", " (itoa ndl)
+                                 " stray on a locked layer - NOT shifted")
+                         "")
                        (if (> nds 0)
                          (strcat ", " (itoa nds) " unsupported type skipped")
                          "")
-                       "\nArcs: " (itoa (+ naf nao)) " checked, "
+                       "\nArcs: " (itoa (+ naf nao nal)) " checked, "
                        (itoa naf) " with endpoint(s) snapped ("
                        (cfchk:color-name *cfchk-arc-color*) ")"
+                       (if (> nal 0)
+                         (strcat ", " (itoa nal)
+                                 " loose on a locked layer - NOT snapped")
+                         "")
                        (if (> nas 0)
                          (strcat ", " (itoa nas) " non-planar skipped")
                          "")
                        (if (> ndf 0)
                          (strcat "\nConstruction lines through the shifted dimensions' points are on layer "
                                  *cfchk-constr-layer* ".")
+                         "")
+                       (if (> (+ ndl nal) 0)
+                         "\nUnlock those layers and run CHECK again to fix them."
                          "")
                        "\nOne UNDO reverts everything CHECK changed."))))))
   (if lzd:end (lzd:end "CHECK"))

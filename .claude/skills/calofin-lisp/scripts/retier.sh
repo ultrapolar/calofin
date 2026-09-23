@@ -22,8 +22,26 @@ run () {
   "$@" || { echo "   ^ FAILED"; fail=1; }
 }
 
+# gen_knobs FIRST: it reads every tool's tunables block and writes the
+# catalog INTO lisp/lazpanel/LAZPANEL.lsp -- a lisp/ file -- so it has
+# to land before the mirror and the releases read LAZPANEL.  Run after
+# them, as it once was, a knob edit left LAZPANEL's twin and its REV
+# stale in the same run that announced every tier current.
+panel=lisp/lazpanel/LAZPANEL.lsp
+before=$(cksum < "$panel")
+run python3 tools/gen_knobs.py
+knobs_moved=0
+[ "$(cksum < "$panel")" != "$before" ] && knobs_moved=1
+
 if [ $# -gt 0 ]; then
   for t in "$@"; do run python3 tools/mirror_shared.py "$t"; done
+  # the catalog moved, so LAZPANEL's twin did too, whatever was named
+  if [ "$knobs_moved" = 1 ]; then
+    case " $* " in
+      *" LAZPANEL "*) ;;
+      *) run python3 tools/mirror_shared.py LAZPANEL ;;
+    esac
+  fi
 else
   run python3 tools/mirror_shared.py
 fi
@@ -37,7 +55,6 @@ run python3 tools/build_shared_bundle.py
 # nothing they read has moved, so running them unconditionally is
 # cheaper than working out whether this edit touched a caption, a knob,
 # a chart table or a featured glyph.
-run python3 tools/gen_knobs.py
 run python3 tools/gen_ui_data.py
 run python3 tools/gen_ui_charts.py
 run python3 tools/gen_ribbon_icons.py

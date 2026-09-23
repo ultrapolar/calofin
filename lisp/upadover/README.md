@@ -212,6 +212,11 @@ At the top of the file, between the version banner and the first
   covered whole.** A slot narrower than 36" and the closing seam of a
   whole loop both hit it. The run says how much it left, in feet and
   inches; nothing is quietly doubled up or quietly missed.
+- **It works in the space you are drawing in.** From inside a layout's
+  viewport that is model space, not the sheet: the survey points a
+  typed number is looked up among, and the space the pads go into, are
+  both the model space the perimeter was picked in. A title block's
+  numbered point on the sheet is never mistaken for the pool's.
 - Everything one run inserts is a single undo step. Esc at any prompt
   closes the undo group and puts `CMDECHO` back; `OSMODE` is never
   touched, so the drafter's snaps are exactly as they left them.

@@ -15,7 +15,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lintxtchk-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *lintxtchk-version* "v1.7")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 ;;; ======================================================================
@@ -127,7 +127,12 @@
         (progn
           (command "_.UNDO" "_Begin")
           (setq undo-open T)))
-      (setq startx (car pt)
+      ;; the pick is a UCS point and entmake takes WORLD ones: without
+      ;; the trans, a drawing whose UCS origin sits on a pool corner got
+      ;; its checklist that far from the click.  The column itself is
+      ;; laid out along the world axes, as it always was.
+      (setq pt     (trans pt 1 0)
+            startx (car pt)
             y      (cadr pt)
             z      (if (caddr pt) (caddr pt) 0.0))
       (foreach item ltc:*items*

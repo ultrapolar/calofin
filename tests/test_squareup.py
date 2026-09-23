@@ -510,6 +510,65 @@ check("everything in the drawing was handed to ROTATE",
 check("so the label turned too", abs(math.degrees(
     grp(vm.entdata[es[1]], 50))) < 1e-9)
 
+print("squareup -- Enter takes the space being drawn in, not the sheet")
+# A title block on Layout1, on a locked VIEWPORT layer.  A bare "_X"
+# swept it in: ROTATE skips an object outside the current space, yet
+# the done line counted it turned and the locked layer was reported
+# freed for a turn it was never part of.
+vm = fresh()
+es = tilted_pool(vm, 6.0)
+layer(vm, 'VIEWPORT', LOCKED)
+vm.loads('(entmake (list \'(0 . "LINE") \'(8 . "VIEWPORT") \'(410 . "Layout1")'
+         ' \'(10 0.0 0.0 0.0) \'(11 400.0 0.0 0.0)))')
+sheet = ents(vm)[-1]
+vm.run('c:SQUAREUP', [None, None, [es[0]], 'Wall'])
+handed = rotate_cmd(vm)[1][1:] if rotate_cmd(vm) else []
+check("the sheet's line was not handed to ROTATE", sheet not in handed,
+      repr(handed))
+check("the done line counts the model space objects only",
+      said(vm, "SQUAREUP done: %d object(s) turned" % len(es)),
+      repr(vm.printed))
+check("no locked layer reported freed for the turn",
+      not said(vm, "locked or frozen layer(s) were freed"), repr(vm.printed))
+check("VIEWPORT stays locked", layer_flags(vm, 'VIEWPORT') == LOCKED)
+
+print("squareup -- Enter from paper space takes that layout")
+vm = fresh()
+es = tilted_pool(vm, 6.0)
+vm.loads('(entmake (list \'(0 . "LINE") \'(8 . "POOL") \'(410 . "Layout1")'
+         ' \'(10 0.0 0.0 0.0) (list 11 %r %r 0.0)))' % turn((400.0, 0.0), 6.0))
+sheet = ents(vm)[-1]
+vm.sysvars['CTAB'], vm.sysvars['CVPORT'] = 'Layout1', 1
+vm.run('c:SQUAREUP', [None, None, [sheet], 'Wall'])
+handed = rotate_cmd(vm)[1][1:] if rotate_cmd(vm) else []
+check("only the layout's own objects were swept", handed == [sheet],
+      repr(handed))
+
+print("squareup -- Enter from inside a layout's viewport takes model space")
+# The case the (410 . CTAB) sweep gets wrong: on Layout1 CTAB names the
+# sheet, but a drafter working through the viewport is drawing in model
+# space.  The two cases above both run with CTAB at "Model", where
+# CTAB and "Model" are the same answer, so only this one tells them
+# apart.
+vm = fresh()
+es = tilted_pool(vm, 6.0)
+vm.loads('(entmake (list \'(0 . "LINE") \'(8 . "POOL") \'(410 . "Layout1")'
+         ' \'(10 0.0 0.0 0.0) (list 11 %r %r 0.0)))' % turn((400.0, 0.0), 6.0))
+sheet = ents(vm)[-1]
+vm.sysvars.update({'TILEMODE': 0, 'CTAB': 'Layout1', 'CVPORT': 2})
+try:
+    vm.run('c:SQUAREUP', [None, None, [es[0]], 'Wall'])
+except LispError as e:
+    # a sweep of the sheet leaves the picked wall outside the highlight,
+    # and the run stops to ask whether to turn it anyway
+    print('    (the run asked more than it should: %s)'
+          % str(e).splitlines()[0][:90])
+handed = rotate_cmd(vm)[1][1:] if rotate_cmd(vm) else []
+check("the model space pool was handed to ROTATE, all of it",
+      len(handed) == len(es) and all(e in handed for e in es),
+      repr(handed))
+check("and the sheet's line was not", sheet not in handed, repr(handed))
+
 print("squareup -- a highlight already made is taken without asking")
 vm = fresh()
 es = tilted_pool(vm, 6.0)

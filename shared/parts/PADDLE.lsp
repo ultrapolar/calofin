@@ -81,7 +81,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.16")
+(setq *paddle-version* "v1.17")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -977,6 +977,23 @@
                    (mapcar '(lambda (p) (list 10 (car p) (cadr p))) pts)))
   (entlast))
 
+;; The space the drafter is drawing in: model space from the Model tab
+;; and from inside a layout's viewport, the layout's paper only when it
+;; is the paper that is active.  CTAB and the active layout both name
+;; the LAYOUT from inside a viewport, so the sweeps below read the
+;; sheet and found no perimeter and no arrows there, while the pads
+;; were inserted into paper space over a model-space pool.  Every sweep
+;; and every insert goes through these two, so they cannot disagree.
+;; (vla-get-ModelSpace is reached only inside a viewport; everywhere
+;; else the active layout's block already is the right space.)
+(defun paddle--tab ()
+  (if (= 1 (getvar "CVPORT")) (getvar "CTAB") "Model"))
+
+(defun paddle--space (doc)
+  (if (and (= 0 (getvar "TILEMODE")) (/= 1 (getvar "CVPORT")))
+      (vla-get-ModelSpace doc)
+      (vla-get-Block (vla-get-ActiveLayout doc))))
+
 ;; PADDLE's own marks and nobody else's: every run clears the gap layer
 ;; and re-marks whatever is still open, so an arrow does not outlive
 ;; the gap it pointed at when the drafter closes one by hand.  Returns
@@ -984,7 +1001,7 @@
 (defun paddle--clear-arrows ( / ss i n)
   (setq n 0)
   (if (setq ss (ssget "_X" (list (cons 8 *paddle-gap-layer*)
-                                 (cons 410 (getvar "CTAB")))))
+                                 (cons 410 (paddle--tab)))))
       (progn
         (setq i 0)
         (repeat (sslength ss)
@@ -1033,7 +1050,7 @@
   open)
 
 ;; --------------------------- selection -----------------------------
-;; Turns a selection set (or the whole current tab when SS is nil) into
+;; Turns a selection set (or the whole current space when SS is nil) into
 ;; (loops opens): the closed perimeter loops, as vertex lists, and the
 ;; open chains that would not close, as segments.  Auto-detect keeps
 ;; only the largest loop.  Every segment carries the entity it came off
@@ -1045,7 +1062,7 @@
   (setq auto (not ss))
   (if auto
       (setq ss (ssget "_X" (list '(0 . "LWPOLYLINE,POLYLINE,LINE,ARC")
-                                 (cons 410 (getvar "CTAB"))))))
+                                 (cons 410 (paddle--tab))))))
   (if ss
       (progn
         (setq i 0)
@@ -1083,6 +1100,36 @@
                     (setq loops (list best))))))
         (list loops opens))))
 
+;; ---------------------- a handed-over perimeter ---------------------
+;; AUTODIM, LINGUTTER and TYLERDRONESUITE hand PADDLE the perimeter they
+;; already hold through this global, not as a pickfirst set.  The
+;; pickfirst route needs PICKFIRST at 1, so AUTODIM and the suite
+;; switched it on round the call -- and an Esc inside PADDLE runs only
+;; PADDLE's own handler, so a drafter who works with it at 0 was left
+;; at 1 with nothing said.  LINGUTTER never switched it on, and at 0 its
+;; handoff went missing and PADDLE fell back to guessing the perimeter.
+;; The global borrows no setting of the drafter's.  It holds (NAME
+;; SELECTION), is read only by the command NAME, and is cleared at the
+;; read whoever it was for -- and by the handler, for a failure before
+;; the read -- so a handoff can never outlive the call it was made for.
+(setq *calofin-handoff* nil)
+
+;; The handed-over selection, narrowed to the entity TYPES PADDLE's own
+;; (ssget "_I") filter takes and to what is still in the drawing, or
+;; nil when nothing was handed to PADDLE.
+(defun paddle--handed (types / h ss i e)
+  (setq h                 *calofin-handoff*
+        *calofin-handoff* nil)
+  (if (and (listp h) (= (car h) "PADDLE") (cadr h))
+      (progn
+        (setq ss (ssadd) i 0)
+        (repeat (sslength (cadr h))
+          (setq e (ssname (cadr h) i)
+                i (1+ i))
+          (if (and (entget e) (wcmatch (cdr (assoc 0 (entget e))) types))
+              (ssadd e ss)))
+        (if (< 0 (sslength ss)) ss))))
+
 ;; ---------------------------- command ------------------------------
 (defun c:PADDLE (/ *error* doc space mark-open padsize blkname ss res perims
                    opens vts allpads delta ndodge ncorner narc ofrad otrim
@@ -1097,6 +1144,7 @@
     (if ofrad (setvar "FILLETRAD" ofrad))
     (if otrim (setvar "TRIMMODE" otrim))
     (if oecho (setvar "CMDECHO" oecho))
+    (setq *calofin-handoff* nil)     ; one never read goes with the run
     ;; close only the mark THIS run opened: an Esc at the perimeter
     ;; prompt comes before StartUndoMark, and closing a mark nothing
     ;; opened throws -- from inside the handler, where nothing catches
@@ -1111,7 +1159,7 @@
   (if lzd:begin (lzd:begin "PADDLE" *paddle-version*))
 
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
-        space (vla-get-Block (vla-get-ActiveLayout doc)))
+        space (paddle--space doc))
 
   (princ (strcat "\nPADDLE " *paddle-version*))
   (princ (strcat "\nPADDLE - " (paddle--in *paddle-padsize*)
@@ -1121,13 +1169,15 @@
   (setq padsize *paddle-padsize*
         blkname *paddle-blkname*)
 
-  ;; A pickfirst selection is taken as-is.  LINGUTTER hands its freshly
-  ;; drawn perimeter over that way, and a user who highlighted the
-  ;; outline before typing PADDLE meant the same thing.  It matters
-  ;; because auto-detect reads the WHOLE drawing for its largest closed
-  ;; loop -- being handed the loop beats guessing at it beside a title
-  ;; block border.
-  (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+  ;; A perimeter handed over by another command (paddle--handed above),
+  ;; else a pickfirst selection, is taken as-is.  LINGUTTER and AUTODIM
+  ;; hand theirs over, and a user who highlighted the outline before
+  ;; typing PADDLE meant the same thing.  It matters because auto-detect
+  ;; reads the WHOLE drawing for its largest closed loop -- being handed
+  ;; the loop beats guessing at it beside a title block border.
+  (setq ss (paddle--handed "LWPOLYLINE,POLYLINE,LINE,ARC"))
+  (if (null ss)
+      (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC")))))
   (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
       (progn
@@ -1352,7 +1402,7 @@
     (princ))
   (if lzd:begin (lzd:begin "TUTORIALPADDLE" *paddle-version*))
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
-        space (vla-get-Block (vla-get-ActiveLayout doc)))
+        space (paddle--space doc))
   (vla-StartUndoMark doc)
   (setq mark-open T)
   (princ (strcat "\n=== PADDLE TUTORIAL " *paddle-version* " ==="))

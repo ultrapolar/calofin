@@ -358,6 +358,28 @@ check("...labelled with the prompt it answered",
       any("north-east corner" in (g(e, 1) or "") for e in picks),
       [g(e, 1) for e in picks])
 
+# ...and that is how a TOOL's clicks get there: through lzd:ask, which
+# every input already reaches (check_lazdiag), not through a lzd:pt no
+# tool ever called -- which left every real report's picks layer empty
+# while the lines above, calling lzd:pt by hand, stayed green
+vm = newvm()
+vm.loads('(lzd:begin "SPA" "v1.4")')
+vm.loads('(lzd:ask "\\nBase point: " (list 10.0 20.0 0.0))')
+vm.loads('(entmakex (list \'(0 . "LINE") \'(8 . "SPA") \'(10 0.0 0.0 0.0) \'(11 5.0 5.0 0.0)))')
+vm.loads('(setq e (entlast))')
+vm.loads('(lzd:ask "\\nSelect the wall: " (list e (list 3.0 3.0 0.0)))')
+vm.loads('(lzd:ask "\\nWidth: " 60.0)')
+vm.loads('(lzd:ask "\\nStep numbers: " (list 1 3))')
+failing_run(vm, "SPA", "v1.4")
+ents = entities(sections(pairs(only_file(vm)[1]))["ENTITIES"])
+picks = [g(e, 1) for e in ents if g(e, 8) == "CALOFIN-PICKS" and g(e, 0) == "TEXT"]
+check("a getpoint answer recorded by lzd:ask is a labelled pick",
+      any("Base point" in (t or "") for t in picks), picks)
+check("...and so is an entsel's pick point",
+      any("Select the wall" in (t or "") for t in picks), picks)
+check("...but a distance or a list of whole numbers is not a click",
+      len(picks) == 2, picks)
+
 print("a selection is the other half of the geometry")
 
 vm = newvm()
@@ -1109,6 +1131,86 @@ failing_run(vm)
 path, body = only_file(vm)
 check("ordinary inputs say so, in words",
       "nothing stands out" in body and "ODD  " not in body)
+
+print("a command run INSIDE another is part of that run")
+#: XYPLOT and ABCDEF hand over to ABHD, the tutorials run their tool's
+#: scan, AUTODIM and LINGUTTER finish with PADDLE -- each a (c:INNER)
+#: called as a function from inside the outer command.  The inner
+#: begin used to log the outer run "ok" before it had finished and
+#: file a failure in the inner one under a command nobody typed, with
+#: none of the outer answers, so the report could not be replayed.
+NEST = '''
+(defun c:OUTX ( / *error* v)
+  (defun *error* (msg) (if lzd:report (lzd:report "OUTX" "v1.0" msg)) (princ))
+  (if lzd:begin (lzd:begin "OUTX" "v1.0"))
+  (setq v (getreal "Outer width: "))
+  (if lzd:ask (lzd:ask "Outer width: " v) v)
+  (c:INNX)
+  (if lzd:end (lzd:end "OUTX"))
+  (princ))
+(defun c:INNX ( / *error* v)
+  (defun *error* (msg) (if lzd:report (lzd:report "INNX" "v9.9" msg)) (princ))
+  (if lzd:begin (lzd:begin "INNX" "v9.9"))
+  (setq v (getreal "Inner depth: "))
+  (if lzd:ask (lzd:ask "Inner depth: " v) v)
+  (if (= v 13.0) (car 1))
+  (if lzd:end (lzd:end "INNX"))
+  (princ))
+'''
+vm = newvm()
+vm.loads(NEST)
+vm.run("c:OUTX", [40.0, 12.0])
+recs = records(vm)
+check("a clean nested run is ONE ok line, for the command typed",
+      len(recs) == 1 and "ok" in recs[0] and "OUTX" in recs[0]
+      and "INNX" not in recs[0], recs)
+check("...and the context is dropped when the OUTER command ends",
+      vm.loads("lzd:*tool*") is None and vm.loads("lzd:*inner*") is None)
+
+vm = newvm()
+vm.loads(NEST)
+vm.handle_errors = True
+try:
+    vm.run("c:OUTX", [40.0, 13.0])
+except Exception:
+    pass
+recs = records(vm)
+path, body = only_file(vm)
+check("a failure inside is filed under the command the drafter typed",
+      base(path).startswith("OUTX-v1.0-error-"), base(path))
+check("...the inner command is named in the report",
+      re.search(r"failed inside\s+INNX v9\.9, which OUTX ran", body), body[:600])
+check("...and the transcript holds the OUTER answers too, so it replays",
+      "Outer width:" in body and "Inner depth:" in body)
+check("the log has one line for the run, a FAIL, and no early ok",
+      [r for r in recs if "  ok " in r] == []
+      and len([r for r in recs if "FAIL" in r and "OUTX" in r]) == 1, recs)
+
+def esc(v):
+    raise LispError("Function cancelled", v)
+
+
+vm = newvm()
+vm.loads(NEST)
+vm.handle_errors = True
+try:
+    vm.run("c:OUTX", [40.0, esc])
+except Exception:
+    pass
+recs = records(vm)
+check("Esc inside the inner command is the outer run quitting, once",
+      len(recs) == 1 and "quit" in recs[0] and "OUTX" in recs[0], recs)
+check("...and writes no report", dxfs(vm) == {}, sorted(dxfs(vm)))
+
+vm = newvm()
+vm.loads(NEST)
+vm.loads('(lzd:begin "OLDX" "v0.1")')      # a run that never reached its end
+vm.run("c:INNX", [12.0])
+recs = records(vm)
+check("a context left standing by an EARLIER command is still that "
+      "run's ok, not a nest",
+      len(recs) == 2 and "OLDX" in recs[0] and "INNX" in recs[1]
+      and vm.loads("lzd:*inner*") is None, recs)
 
 if failures:
     print("\n%d LAZDIAG check(s) FAILED" % len(failures))

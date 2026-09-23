@@ -10,7 +10,8 @@ all: check test
 
 help:
 	@echo "make check        tiers in step + generated tiers current + static checks"
-	@echo "                  (including: every command reports its failures, gives"
+	@echo "                  (including: every command reports its failures, every"
+	@echo "                  error handler reaches its end in its error mode, gives"
 	@echo "                  the drafter their object snaps back, and every"
 	@echo "                  generated dialog fits the screen)"
 	@echo "make verify       just the generated-file checks (mirror/releases/bundle/palette/ribbon icons)"
@@ -27,6 +28,7 @@ check:
 	$(PY) tools/check_scope.py
 	$(PY) tools/check_back.py
 	$(PY) tools/check_lazdiag.py
+	$(PY) tools/check_handlers.py
 	$(PY) tools/check_osnap.py
 	$(PY) tools/check_color.py
 	$(PY) tools/check_perf.py

@@ -240,7 +240,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v2.5")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v2.6")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -640,6 +640,45 @@
 ;; ---- entity -> segment extraction ----------------------------------
 ;; A segment is (startPt endPt bulge), 2D points.
 
+;; ---- the entity's own plane ----------------------------------------
+;; An ARC, CIRCLE or polyline keeps its numbers in its OWN plane -- the
+;; OCS its 210 names -- not the world's.  Flat work carries no 210, or
+;; (0 0 1), and passes through untouched.  One on the underside of the
+;; plane, (0 0 -1), is what exploding a mirrored block or some survey
+;; exporters leave: every X is the other way round, so read raw the
+;; outline lands mirrored through the Y axis, and the "not drawn in the
+;; world plane" warning never fires because the plane IS the world's.
+;; So the plane is read once per entity (nil when flat), each end is
+;; taken to world through it, and each bulge turns the other way when
+;; the plane is seen from below.  A genuinely tilted plane is still only
+;; flattened here -- that one is warned about where it is read.
+(defun cab:ocs-n (ed / nz)
+  (setq nz (cdr (assoc 210 ed)))
+  (if (and nz (not (equal nz '(0.0 0.0 1.0) 1.0e-10))) nz))
+
+;; SEGS as read in EN's plane NZ at elevation Z, taken to the world's.
+(defun cab:segs-w (segs en nz z)
+  (if nz
+    (mapcar '(lambda (s)
+               (list (cal:2d (trans (list (car (car s)) (cadr (car s)) z)
+                                   en 0))
+                     (cal:2d (trans (list (car (cadr s)) (cadr (cadr s)) z)
+                                   en 0))
+                     (if (< (caddr nz) 0.0) (- (caddr s)) (caddr s))))
+            segs)
+    segs))
+
+;; Where a survey point sits, in the world's numbers.  A block's (or a
+;; TEXT's) insertion point is kept in its own plane just as an ARC's
+;; centre is, so an ab_pt inserted from below, (0 0 -1), read raw lands
+;; mirrored through the Y axis - off the outline it was shot on, with
+;; nothing said.  A POINT's 10 is in world numbers already and is left
+;; alone, as is anything flat.
+(defun cab:ins-w (ed)
+  (if (and (/= (cdr (assoc 0 ed)) "POINT") (cab:ocs-n ed))
+    (trans (cdr (assoc 10 ed)) (cdr (assoc -1 ed)) 0)
+    (cdr (assoc 10 ed))))
+
 (defun cab:lw-segs (ed / pts bls item segs n closed)
   ;; collect (10) vertices and their (42) bulges, in order
   (setq pts nil bls nil)
@@ -661,17 +700,25 @@
                (< (cal:dist (last pts) (car pts)) *CAB-CHAIN-FUZZ*)))
     (if (>= (cal:dist (last pts) (car pts)) *CAB-CHAIN-FUZZ*)
       (setq segs (cons (list (last pts) (car pts) (last bls)) segs))))
-  (reverse segs))
+  (cab:segs-w (reverse segs) (cdr (assoc -1 ed)) (cab:ocs-n ed)
+             (cond ((cdr (assoc 38 ed))) (0.0))))
 
-(defun cab:pl-segs (en / ed sub pts bls segs n closed)
+(defun cab:pl-segs (en / ed sub pts bls segs n closed nz z)
   ;; heavy (old-style) 2D POLYLINE: walk its VERTEX sub-entities
   (setq ed (entget en)
         closed (= 1 (logand 1 (cdr (assoc 70 ed))))
+        ;; a 3D polyline or mesh (bits 8, 16) keeps world numbers
+        nz     (if (= 0 (logand 24 (cdr (assoc 70 ed)))) (cab:ocs-n ed))
+        z      (cond ((caddr (cdr (assoc 10 ed)))) (0.0))
         pts nil bls nil
         sub (entnext en))
   (while (and sub (= "VERTEX" (cdr (assoc 0 (setq ed (entget sub))))))
-    ;; skip spline/fit control vertices (flag bits 1 and 16)
-    (if (= 0 (logand 17 (cond ((cdr (assoc 70 ed))) (0))))
+    ;; skip the spline FRAME points (flag 16) only: they are the
+    ;; control net, off the curve.  A curve-fit extra vertex (flag 1)
+    ;; is ON the curve -- PEDIT Fit joins an arc pair there -- and
+    ;; dropping it while keeping its neighbours' bulges read arcs that
+    ;; do not follow the outline
+    (if (= 0 (logand 16 (cond ((cdr (assoc 70 ed))) (0))))
       (setq pts (cons (cal:2d (cdr (assoc 10 ed))) pts)
             bls (cons (cond ((cdr (assoc 42 ed))) (0.0)) bls)))
     (setq sub (entnext sub)))
@@ -681,11 +728,13 @@
           n    (1+ n)))
   (if (and closed (> (length pts) 2))
     (setq segs (cons (list (last pts) (car pts) (last bls)) segs)))
-  (reverse segs))
+  (cab:segs-w (reverse segs) en nz z))
 
-(defun cab:ent-segs (en / ed typ c r a1 a2 delta)
+(defun cab:ent-segs (en / ed typ c r a1 a2 delta nz z)
   (setq ed  (entget en)
-        typ (cdr (assoc 0 ed)))
+        typ (cdr (assoc 0 ed))
+        nz  (cab:ocs-n ed)
+        z   (cond ((caddr (cdr (assoc 10 ed)))) (0.0)))
   (cond
     ((= typ "LINE")
      (list (list (cal:2d (cdr (assoc 10 ed)))
@@ -700,18 +749,22 @@
      (if (< delta 1.0e-10) (setq delta (* 2.0 pi)))
      ;; a full-circle arc cannot be one bulged segment (its bulge is
      ;; infinite): hand back two semicircles instead
-     (if (> delta (- (* 2.0 pi) 1.0e-9))
-       (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
-             (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
-       (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0))))))
+     (cab:segs-w
+       (if (> delta (- (* 2.0 pi) 1.0e-9))
+         (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
+               (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
+         (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0)))))
+       en nz z))
     ;; a CIRCLE is a legitimate pool perimeter (round spa): two
     ;; semicircles, so the chaining and fitting code sees a normal
     ;; closed loop instead of reporting a gap
     ((= typ "CIRCLE")
      (setq c (cal:2d (cdr (assoc 10 ed)))
            r (cdr (assoc 40 ed)))
-     (list (list (polar c 0.0 r) (polar c pi r) 1.0)
-           (list (polar c pi r) (polar c 0.0 r) 1.0)))
+     (cab:segs-w
+       (list (list (polar c 0.0 r) (polar c pi r) 1.0)
+             (list (polar c pi r) (polar c 0.0 r) 1.0))
+       en nz z))
     ((= typ "LWPOLYLINE") (cab:lw-segs ed))
     ((= typ "POLYLINE") (cab:pl-segs en))
     (T nil)))
@@ -1403,7 +1456,7 @@
              (progn
                (setq nm (cab:block-number en))
                (if (not (cab:moved-p nm))
-                 (setq out (cons (list (cal:2d (cdr (assoc 10 ed)))
+                 (setq out (cons (list (cal:2d (cab:ins-w ed))
                                        (if (and nm (/= nm "")) nm "?"))
                                  out))))))
           ((= typ "POINT")
@@ -2157,8 +2210,8 @@
 
 ;; Erase only CABHD's own objects on a layer; anything the user drew
 ;; there is left alone.  Returns how many went.
-(defun cab:purge-mine (name / ss i n en)
-  (setq n 0)
+(defun cab:purge-mine (name / ss i n en mine stuck ed flags)
+  (setq n 0 stuck 0 mine nil)
   (if (tblsearch "LAYER" name)
     (progn
       (setq ss (ssget "_X" (list (cons 8 name))))
@@ -2168,8 +2221,27 @@
           (repeat (sslength ss)
             (setq en (ssname ss i))
             (if (assoc -3 (entget en '("CABHD")))
-              (progn (entdel en) (setq n (1+ n))))
-            (setq i (1+ i)))))))
+              (setq mine (cons en mine)))
+            (setq i (1+ i)))))
+      ;; entdel answers nil on a locked layer and erases nothing, and
+      ;; this layer can be the drafter's own, locked on purpose.  So the
+      ;; lock is lifted for the erase and put back after it, and only an
+      ;; erase that took is counted: counting the attempts said
+      ;; "cleared" over markers still on screen, and the next run wrote
+      ;; its own markers over them
+      (if mine
+        (progn
+          (setq ed    (entget (tblobjname "LAYER" name))
+                flags (cond ((cdr (assoc 70 ed))) (0)))
+          (if (= 4 (logand 4 flags))
+            (entmod (subst (cons 70 (- flags 4)) (assoc 70 ed) ed)))
+          (foreach en mine
+            (if (entdel en) (setq n (1+ n)) (setq stuck (1+ stuck))))
+          (if (= 4 (logand 4 flags)) (entmod ed))
+          (if (> stuck 0)
+            (princ (strcat "\nCABHD: " (itoa stuck)
+                           " of its own object(s) on layer " name
+                           " could not be erased - NOT removed.")))))))
   n)
 
 ;; Make sure the DASHED linetype exists (pure entmake, no command
@@ -2813,10 +2885,23 @@
         ;; no keyword typed: give them a click, and fall back to the
         ;; default above
         (progn
-          (setq sel (entsel (strcat "\n  Pick the outline to keep (or Enter for "
-                                    dflt "): ")))
-          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
-          (if lzd:watch (lzd:watch sel) sel)
+          ;; entsel answers nil for Enter AND for a click that landed
+          ;; between the thin preview lines; ERRNO 7 tells them apart.
+          ;; Without asking again, a near-miss quietly kept the default
+          ;; and erased the fit they reached for.  ERRNO is sticky, so
+          ;; it is cleared before each pick it is read after
+          (setq sel 'RETRY)
+          (while (eq sel 'RETRY)
+            (vl-catch-all-apply 'setvar (list "ERRNO" 0))
+            (setq sel (entsel (strcat "\n  Pick the outline to keep (or Enter for "
+                                      dflt "): ")))
+            (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
+            (if lzd:watch (lzd:watch sel) sel)
+            (if (and (null sel) (= 7 (getvar "ERRNO")))
+              (progn
+                (princ (strcat "\n  (nothing there - click one of the"
+                               " outlines, or press Enter for " dflt ")"))
+                (setq sel 'RETRY))))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -3145,7 +3230,9 @@
            (if (cab:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
-               (setq wp1 (cal:2d wp1) best nil bd nil)
+               ;; a UCS click against walls held in world numbers:
+               ;; untranslated, a moved UCS removed some other wall
+               (setq wp1 (cal:2d (trans wp1 1 0)) best nil bd nil)
                (foreach w cab-walls
                  (setq d (cab:seg-dist wp1 (list (car w) (cadr w) 0.0)))
                  (if (or (null bd) (< d bd)) (setq best w bd d)))
@@ -3562,7 +3649,11 @@
                 ext (cdr (assoc 210 ed))
                 i   (1+ i))
           ;; geometry drawn in a tilted UCS reads back in its own plane,
-          ;; so a flat 2D fit of it would be wrong - count and warn
+          ;; so a flat 2D fit of it would be wrong - count and warn.  The
+          ;; plane seen from below, (0 0 -1), is no tilt: the outline's
+          ;; ends (cab:ent-segs) and a point block's insertion (cab:ins-w)
+          ;; are both taken to world, so it is neither warned about nor
+          ;; mirrored
           (if (and ext (< (abs (caddr ext)) 0.999)) (setq nocs (1+ nocs)))
           (cond
             ;; survey points stored as block references (e.g. "ab_pt"):
@@ -3572,7 +3663,7 @@
             ;; blocks are never mistaken for perimeter geometry.
             ((and (= typ "INSERT")
                   (= (strcase (cdr (assoc 2 ed))) (strcase *CAB-POINT-BLOCK*)))
-             (cab:add-point (cal:2d (cdr (assoc 10 ed)))
+             (cab:add-point (cal:2d (cab:ins-w ed))
                             (cab:block-number en)))
             ;; curve types we cannot fit, sitting on the POOL layer: count
             ;; them so the user gets told what to do, instead of a
@@ -3595,7 +3686,7 @@
              (cab:add-point (cal:2d (cdr (assoc 10 ed))) nil))
             ;; any other block dropped on the POINTS layer -> a point too
             ((and (= typ "INSERT") (= lay (strcase *CAB-POINT-LAYER*)))
-             (cab:add-point (cal:2d (cdr (assoc 10 ed)))
+             (cab:add-point (cal:2d (cab:ins-w ed))
                             (cab:block-number en)))))
         (setq cab-allpts (reverse cab-allpts)      ; selection order
               dall       (if pts (cal:dedupe pts *CAB-EXACT-EPS*)))

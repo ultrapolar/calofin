@@ -27,7 +27,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "091526 REV14")
+(setq tut:*version* "092226 REV15")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -100,7 +100,10 @@
     "    it only if the spa measured out of round.  A RECTANGLE offers"
     "    the width back as the length, so Enter makes it square."
     "    Any measurement may be typed in MILLIMETRES with the unit on"
-    "    the number -- 600mm, 1524 MM -- and is converted to inches."
+    "    the number -- 600mm, 1524mm -- and is converted to inches."
+    "    No space before the mm: the spacebar is Enter at a distance"
+    "    prompt, so 300 mm would hand in 300 INCHES.  (Past 30 ft is"
+    "    refused as longer than any spa, and asked again.)"
     "6.  Rectangle corners.  ARE ALL FOUR THE SAME? <Yes> comes first:"
     "    Yes asks ONE round for all four, No asks A, B, C and D one at"
     "    a time.  Either way the question is the Treatment one --"
@@ -476,7 +479,7 @@
 
 ;;; -------------------- the command ------------------------------------
 
-(defun c:TUTORIALSPA ( / *error* undo-open what)
+(defun c:TUTORIALSPA ( / *error* what)
 
   (defun *error* (msg)
     (if (and msg
@@ -484,17 +487,28 @@
         (princ (strcat "\nTUTORIALSPA error: " msg)))
     (cal:sysrestore)
     (cal:dimstyrestore)
-    (if undo-open (setq undo-open (cal:undoend)))
+    ;; the flag is a global because the mode is pushed below: AutoCAD
+    ;; resets the evaluator before this handler runs, and a local of
+    ;; the command read nil here -- an Esc in the demo left its undo
+    ;; group open.  See spa:undobegin in SPA.LSP.
+    (if tut:*undo-open* (setq tut:*undo-open* (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "TUTORIALSPA" tut:*version* msg))
     (princ))
   (if lzd:begin (lzd:begin "TUTORIALSPA" tut:*version*))
 
+  ;; before the push, and on both branches: a flag an earlier run left
+  ;; standing must never let this run close a group it did not open
+  (setq tut:*undo-open* nil)
+  ;; Both branches fall through to the one lzd:end below the if.  Each
+  ;; used to end the command in its own (princ), so a clean run never
+  ;; closed its LAZDIAG context: the next TUTORIALSPA appended to it,
+  ;; and a failure there filed the previous run's answers and drawing
+  ;; as its own -- and the clean run was never logged at all.
   (if (null spa:*version*)
       (progn
         (princ "\nLoad SPA.LSP first -- the tutorial drives its own drawing")
-        (princ "\nfunctions, so it cannot run without it.")
-        (princ))
+        (princ "\nfunctions, so it cannot run without it."))
       (progn
         (if *push-error-using-command* (*push-error-using-command*))
         (princ (strcat "\nSPA " spa:*version* " -- tutorial " tut:*version*))
@@ -508,17 +522,18 @@
         (cal:syssave (spa:sysvars))
         (cal:dimstysave)
         (setvar "CMDECHO" 0)
-        (setq undo-open (cal:undobegin))
+        (setq tut:*undo-open* (cal:undobegin))
         (setvar "LUNITS" 4)
         (if (member what '("Checks" "Both"))
             (progn (tut:checklist) (tut:sheet)))
         (if (member what '("Demo" "Both"))
             (tut:demo))
-        (if undo-open (setq undo-open (cal:undoend)))
+        (if tut:*undo-open* (setq tut:*undo-open* (cal:undoend)))
         (cal:sysrestore)
         (cal:dimstyrestore)
-        (if *pop-error-mode* (*pop-error-mode*))
-        (princ))))
+        (if *pop-error-mode* (*pop-error-mode*))))
+  (if lzd:end (lzd:end "TUTORIALSPA"))
+  (princ))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

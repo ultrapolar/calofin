@@ -184,7 +184,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cleardim-version* "v3.2")   ; announced on load; release_lisp.py
+(setq *cleardim-version* "v3.3")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -2081,11 +2081,23 @@
 
 ;;; -------------------- asking -----------------------------------------
 
+;; The space the drafter is working in, as group 410 names it: the
+;; layout only on the paper itself.  Inside a layout viewport CTAB
+;; still names the layout while every pick lands in model space, and a
+;; sweep of CTAB there took the viewport and the title block, found no
+;; dimension in them and said there was nothing to do over a drawing
+;; full of dims.
+(defun cd:space ()
+  (if (and (= 0 (getvar "TILEMODE")) (= 1 (getvar "CVPORT")))
+    (getvar "CTAB")
+    "Model"))
+
 ;; The one question either command puts: which part of the drawing to
-;; work on.  Enter takes the whole of model space, which is the answer
-;; nearly every run wants; a selection is for a sheet with more than one
-;; drawing on it.  Returns the selection set, or nil when the drawing
-;; holds no dimension at all.
+;; work on.  Enter takes the whole of the space the drafter is working
+;; in -- model space, from the Model tab or a layout viewport -- which
+;; is the answer nearly every run wants; a selection is for a sheet with
+;; more than one drawing on it.  Returns the selection set, or nil when
+;; the drawing holds no dimension at all.
 (defun cd:asksel (what / msg ss)
   ;; whatever the drafter had already picked before typing the command
   (setq ss (ssget "_I"))
@@ -2098,15 +2110,14 @@
       (setq ss (ssget))
       (if lzd:watch (lzd:watch ss) ss)
       (if lzd:ask (lzd:ask msg ss) ss)))
-  ;; Enter: everything in the space the drafter is looking at.  CTAB is
-  ;; "Model" in model space and the layout's name in a layout, so a run
-  ;; started on a sheet does not drag model-space geometry in as ink --
-  ;; and a drawing whose entities carry no space group at all still
-  ;; answers the plain sweep underneath
+  ;; Enter: everything in the space the drafter is working in
+  ;; (cd:space), so a run started on the paper does not drag model-space
+  ;; geometry in as ink, and one started in a viewport does not take the
+  ;; sheet for the drawing -- and a drawing whose entities carry no space
+  ;; group at all still answers the plain sweep underneath
   (if (null ss)
     (progn
-      (setq ss (ssget "_X"
-                      (list (cons 410 (cond ((getvar "CTAB")) ("Model"))))))
+      (setq ss (ssget "_X" (list (cons 410 (cd:space)))))
       (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss)
     (progn

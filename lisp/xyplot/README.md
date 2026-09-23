@@ -26,7 +26,9 @@ read as name, X, Y in the first three columns — which is the shape everyone
 writes anyway.
 
 Values are architectural feet-inches or plain decimal inches, negatives
-included: `12'-3 1/2"`, `-4'-0"`, `37.25`, `3 1/2"` all read. Positive X is
+included: `12'-3 1/2"`, `-4'-0"`, `37.25`, `3 1/2"` all read, and so does
+`0`, the origin itself. A cell holding no digit at all - a lone `-`, the
+usual "not measured" - is left blank and the row is skipped. Positive X is
 to the right and positive Y is up, from the origin you picked.
 
 The feet-inch parser is `ABCDEF`'s, repairs and all (`O`/`I` for `0`/`1`,
@@ -106,7 +108,8 @@ error costs the most and says the least.
 The run ends by offering to fit the pool perimeter straight away: answer
 `Yes` and **graph 1's** points are pre-selected and `ABHD` starts on them.
 (Loaded on its own rather than as part of the calofin build, `XYPLOT.lsp`
-says so and leaves the points ready instead.)
+says so and leaves the points ready instead. With `PICKFIRST` off nothing
+can be pre-selected, and it says that too: `ABHD` asks for the points.)
 
 ## Verification
 
@@ -115,8 +118,9 @@ actual LISP in the repo's AutoLISP VM (`tests/lispvm.py`) — the whole
 command, prompts to report — and checks the coordinate arithmetic, the
 chain building (including points sharing a value, which is where a
 `vl-sort` would have silently dropped one), the two graphs' separation, the
-layer split between them, the ABHD handoff, and the undo bracket with
-recording both on and off:
+layer split between them, the sheet's own reader on a real `.csv` (the
+origin and the negative offsets included), the ABHD handoff, and the undo
+bracket with recording both on and off:
 
 ```
 python3 tests/test_xyplot.py

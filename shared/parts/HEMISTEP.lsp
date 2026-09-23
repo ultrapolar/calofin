@@ -145,9 +145,12 @@
 ;;;   the last answer, drawn down a strip near the right edge of the
 ;;;   view, graded like a tape with the last answer ringed.  Click a
 ;;;   row and that is the answer; type one and it reads as DIMSTAMP
-;;;   reads (24, 24.5, 24 1/8, 2', 1'4-1/2", kept exactly as typed);
-;;;   click empty space and it is the first of two points to measure
-;;;   between, as getdist always offered.  Enter, Back and Same mean
+;;;   reads (24, 24.5, 24-1/8, 2', 1'4-1/2", kept exactly as typed --
+;;;   dash a fraction, since the spacebar is Enter at a prompt that
+;;;   also takes a click: 24 1/8 enters 24, and the 1/8 answers the
+;;;   question after it without a word); click empty space and it is
+;;;   the first of two points to measure between, as getdist always
+;;;   offered.  Enter, Back and Same mean
 ;;;   what they always did, and the prompt's wording is unchanged, so
 ;;;   a form answers it exactly as before.  The ruler is scratch on
 ;;;   the current layer: down again before the width prompt (which
@@ -315,7 +318,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.24") ; printed on load and at command start so a
+(setq *hs-version* "v3.25") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -638,19 +641,63 @@
 
 ;;; --------------------------- bead helpers -----------------------------
 
-;; The step numbers typed at a prompt - "1 3 4", "1,3,4" and "1, 3 and 4"
-;; all read the same.  Anything that is not a digit separates.
-(defun hs-numlist (str / out tok i c)
-  (setq out '() tok "" i 0)
-  (while (<= i (strlen str))
-    (setq c (if (< i (strlen str)) (substr str (1+ i) 1) " "))
-    (if (and (>= (ascii c) 48) (<= (ascii c) 57))
-      (setq tok (strcat tok c))
+;; The step numbers typed at a prompt, in the order typed: "1 3 4",
+;; "1,3,4" and "1, 3 and 4" all read the same, and "1-3" is steps 1, 2
+;; and 3 -- the range spelling PERPPTS's segment prompt takes, so a
+;; drafter used to it types it here too.  Every non-digit used to be a
+;; separator, which read 1-3 as steps 1 and 3 and left step 2 bare
+;; without a word.  Spaces and commas separate and "and" is a
+;; separator word; anything else -- another word, a backwards range, a
+;; stray dash -- makes the whole answer unreadable, and nil comes back
+;; so the question is asked again rather than beading a guess.
+(defun hs-numlist (str / toks tok i c out r a b bad)
+  (setq toks '() tok "" i 1)
+  (while (<= i (1+ (strlen str)))
+    (setq c (if (<= i (strlen str)) (substr str i 1) " "))
+    (if (or (= c " ") (= c ","))
       (progn
-        (if (/= tok "") (setq out (cons (atoi tok) out)))
-        (setq tok "")))
+        (if (/= tok "") (setq toks (cons tok toks)))
+        (setq tok ""))
+      (setq tok (strcat tok c)))
     (setq i (1+ i)))
-  (reverse out))
+  (setq out '() bad nil)
+  (foreach tok (reverse toks)
+    (cond
+      ((= (strcase tok) "AND") nil)
+      ((setq r (hs-numrange tok))
+       (setq a (car r) b (cadr r))
+       (while (<= a b)
+         (if (not (member a out)) (setq out (cons a out)))
+         (setq a (1+ a))))
+      (T (setq bad T))))
+  (if bad nil (reverse out)))
+
+;; One token of that answer as (FROM TO): "3" is (3 3), "1-3" is (1 3).
+;; nil for anything else, a range that runs backwards included.  Each
+;; end is three digits at most: no run draws a thousand steps, and a
+;; slip like 1-100000 was expanded one step at a time against every
+;; step already read -- billions of comparisons, in a loop Esc does not
+;; reliably break.  Refused here, it is asked again like any answer the
+;; reader cannot read.
+(defun hs-numrange (tok / p lft rgt)
+  (setq p (vl-string-search "-" tok))
+  (if p
+    (setq lft (substr tok 1 p)
+          rgt (substr tok (+ p 2)))
+    (setq lft tok
+          rgt tok))
+  (if (and (hs-digits-p lft) (hs-digits-p rgt)
+           (<= (strlen lft) 3) (<= (strlen rgt) 3)
+           (<= (atoi lft) (atoi rgt)))
+    (list (atoi lft) (atoi rgt))))
+
+;; T when S is one or more of 0-9 and nothing else.
+(defun hs-digits-p (s / i ok)
+  (setq ok (> (strlen s) 0) i 1)
+  (while (and ok (<= i (strlen s)))
+    (if (not (cal:len-digit-p (substr s i 1))) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
 
 ;; The tread line of every step that was committed, as
 ;; (step-number . ename).  A step's log record carries its entities
@@ -672,11 +719,14 @@
   out)
 
 ;; The step numbers on offer, as "1, 2, 3" - so the numbers prompt can
-;; be answered without scrolling back through the run.
+;; be answered without scrolling back through the run.  PAIRS is the
+;; (step-number . tread) list, or a plain list of step numbers -- the
+;; readback of what an answer was taken to mean.
 (defun hs-numsay (pairs / out pr)
   (setq out "")
   (foreach pr pairs
-    (setq out (strcat out (if (= out "") "" ", ") (itoa (car pr)))))
+    (setq out (strcat out (if (= out "") "" ", ")
+                      (itoa (if (numberp pr) pr (car pr))))))
   out)
 
 ;; Midpoint (WCS) of a LINE entity.
@@ -977,10 +1027,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -1022,6 +1076,14 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The shared step settings, in the order the ruler reads them -- each
@@ -1052,7 +1114,7 @@
                       wallA wallB lastwid kx fx
                       tlist srt treads pv drops dd jx tcount ptop
                       px py totrun totdrop td cnrs pfo pgap fsteps fkey
-                      wnoun bstep s hstep rl rr dflt)
+                      wnoun bstep bmiss s hstep rl rr dflt)
 
   (defun *error* (msg)
     (hs-fclear)                     ; both exits clear the form store
@@ -1835,9 +1897,9 @@
                (progn
                  (princ (strcat "\n  Steps drawn: " (hs-numsay btreads)))
                  ;; ...and this one, as the string the prompt would
-                 ;; have taken: "1 3 5".  Anything that is not a string
-                 ;; is no answer at all rather than one the number
-                 ;; reader would have to guess at
+                 ;; have taken: "1 3 5" or "1-3".  Anything that is not
+                 ;; a string is no answer at all rather than one the
+                 ;; number reader would have to guess at
                  (if (hs-fhas 'beadnums)
                    (progn (setq s (hs-ftake 'beadnums))
                           (if (/= (type s) 'STR) (setq s "")))
@@ -1849,16 +1911,43 @@
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 2))
                    (progn
-                     (setq bnums (hs-numlist s))
-                     (setq bnums (vl-remove-if-not
+                     (setq bnums (hs-numlist s)
+                           bmiss (vl-remove-if
+                                   '(lambda (k) (assoc k btreads)) bnums)
+                           bnums (vl-remove-if-not
                                    '(lambda (k) (assoc k btreads)) bnums))
-                     (if (null bnums)
+                     ;; the steps taken are read back, and a number this
+                     ;; run did not draw is named -- both used to be
+                     ;; dropped without a word
+                     (if bmiss
+                       (princ (strcat "\n  Not drawn in this run, left out:"
+                                      " step " (hs-numsay bmiss) ".")))
+                     (if bnums
                        (progn
-                         (princ (strcat "\n  No step numbers recognized -"
-                                        " beading every side wall full"
-                                        " length."))
-                         (setq bside "All")))
-                     (setq bstep 4))))))
+                         (princ (strcat "\n  Beading the side walls of step "
+                                        (hs-numsay bnums) "."))
+                         (setq bstep 4))
+                       ;; nothing here names a step drawn.  This used to
+                       ;; switch to All and bead EVERY side wall -- the
+                       ;; opposite of the Some just given -- so the
+                       ;; numbers are asked again (a sheet's answer falls
+                       ;; through to the prompt the same way), and B
+                       ;; steps back to the question above them.  Numbers
+                       ;; read but none of them drawn (bmiss, named just
+                       ;; above) are said apart from an answer the reader
+                       ;; could not read at all ("1 thru 3"), which is a
+                       ;; spelling to fix, not a step that is missing
+                       (princ (strcat (cond
+                                        ((= s "")
+                                         "\n  No step numbers given")
+                                        (bmiss
+                                         (strcat "\n  \"" s "\" names no"
+                                                 " step drawn here"))
+                                        (T
+                                         (strcat "\n  \"" s "\" could not"
+                                                 " be read as step numbers")))
+                                      " - type step numbers like 1 3"
+                                      " or 1-3, or B to go back."))))))))
             ((= bstep 4)
              (initget "Back Undo")
              (setq bdir (getpoint "\nClick the side to bead toward [Back]: "))
@@ -1883,6 +1972,12 @@
                       (ssadd (ssname ss i) bss)
                       (setq i (1+ i)))
                     (autobead-ensure-layer *autobead-layer*)
+                    ;; the store is spent -- the three bead keys were
+                    ;; taken above -- and is cleared BEFORE the hand-off:
+                    ;; a failure in the build runs only the build's
+                    ;; handler and never comes back here, and a key it
+                    ;; left standing answered the next typed run
+                    (hs-fclear)
                     (autobead-build
                       bss bdir
                       bside

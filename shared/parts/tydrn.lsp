@@ -41,7 +41,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.9")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -138,6 +138,32 @@
         (setq i (1+ i)))))
   result)
 
+;; The selection TYLERDRONESUITE hands this stage, through a global
+;; rather than a pickfirst set: the pickfirst route needs PICKFIRST at
+;; 1, and switching it on round a stage left a drafter who works at 0
+;; at 1 whenever a stage failed or was Esc'd (see the suite's header).
+;; It holds (NAME SELECTION), is read only by the command NAME, and is
+;; cleared at the read whoever it was for -- and by the handler, for a
+;; failure before the read -- so it never outlives the call it was made
+;; for.  PADDLE reads the same global the same way.
+(setq *calofin-handoff* nil)
+
+;; The handed-over selection narrowed to TYPES (the filter this
+;; command's own (ssget "_I") uses) and to what is still in the
+;; drawing, or nil when nothing was handed to TYDRN.
+(defun tydrn:handed (types / h ss i e)
+  (setq h                 *calofin-handoff*
+        *calofin-handoff* nil)
+  (if (and (listp h) (= (car h) "TYDRN") (cadr h))
+    (progn
+      (setq ss (ssadd) i 0)
+      (repeat (sslength (cadr h))
+        (setq e (ssname (cadr h) i)
+              i (1+ i))
+        (if (and (entget e) (wcmatch (cdr (assoc 0 (entget e))) types))
+          (ssadd e ss)))
+      (if (< 0 (sslength ss)) ss))))
+
 ;; ---------------------------------------------------------------
 ;; Main command
 ;; ---------------------------------------------------------------
@@ -158,6 +184,7 @@
     ;; mark close below -- a throw inside *error* is uncatchable
     (if unlocked (vl-catch-all-apply 'tydrn:relock-layers (list unlocked)))
     (setq unlocked nil)
+    (setq *calofin-handoff* nil)     ; one never read goes with the run
     (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -180,7 +207,9 @@
   ;; ------------------------------------------------------------
   ;; 1. Text: highlighted selection, else prompt, Enter = all text
   ;; ------------------------------------------------------------
-  (setq ss-text (ssget "_I" '((0 . "TEXT"))))
+  (setq ss-text (tydrn:handed "TEXT"))
+  (if (null ss-text)
+    (setq ss-text (ssget "_I" '((0 . "TEXT")))))
   (if lzd:watch (lzd:watch ss-text) ss-text)
   (if (null ss-text)
     (progn
@@ -290,8 +319,10 @@
 ;;; PADDLE the perimeter - and AutoCAD clears the pickfirst set the
 ;;; moment a command consumes it, so run by hand the trace has to be
 ;;; highlighted once per stage.  Here it is highlighted once in total:
-;;; the set is read at the start and put back with sssetfirst before
-;;; each stage, so every stage opens with exactly what the operator
+;;; the set is read at the start and handed to each stage in
+;;; *calofin-handoff*, which the stage reads where it would have read
+;;; the pickfirst set (tydrn:handed, and PADDLE's and AUTODIM's own
+;;; copies of it), so every stage opens with exactly what the operator
 ;;; picked and takes from it whatever its own filter takes.
 ;;; Highlight nothing and the suite asks once, up front; press Enter
 ;;; there and each stage asks on its own, exactly as it does alone.
@@ -301,17 +332,22 @@
 ;;; reason for the order.  It is what let AUTODIM, when it was in this
 ;;; list, open with the pads PADDLE had just dropped (its filter takes
 ;;; INSERTs for exactly those), and it is what any stage put into
-;;; *tydrn-suite* after another gets for free.
+;;; *tydrn-suite* after another gets for free -- as long as it reads
+;;; *calofin-handoff*, as TYDRN, PADDLE and AUTODIM do; one that does
+;;; not simply asks for its own selection.
 ;;;
 ;;; CDIM IS HANDED A CLEARED SELECTION.  It works over the drawing's
 ;;; dimensioning, which is in nobody's original highlight; typed by
 ;;; hand it starts with nothing selected too, so clearing is what keeps
 ;;; it behaving the way its operator knows it.
 ;;;
-;;; PICKFIRST is forced to 1 for the run and put back afterwards.  With
-;;; it at 0 sssetfirst still highlights but ssget "_I" reads nothing, and
-;;; the handoff would go quietly missing - the one failure mode worth
-;;; spending a sysvar to rule out.
+;;; PICKFIRST IS NOT TOUCHED.  The set used to go over as a pickfirst
+;;; set, with PICKFIRST forced to 1 round the stages because at 0
+;;; sssetfirst still highlights but ssget "_I" reads nothing.  But an
+;;; Esc inside a stage runs only that stage's handler (below), so the
+;;; restore never ran and a drafter who works at 0 was left at 1 for
+;;; good, with nothing said.  The handoff global needs no setting of
+;;; theirs, and a stage clears it itself.
 ;;;
 ;;; EACH STAGE KEEPS ITS OWN UNDO GROUP, so three U's back the suite
 ;;; out, one per stage.  That is deliberate, and it is XYPLOT's
@@ -346,10 +382,10 @@
 ;;; (On that path the stage's own *error* handler is the one AutoCAD
 ;;; calls - the innermost binding wins, and each stage declares its own
 ;;; as a local, STANDARDS section 5 - so the stage cleans up after
-;;; itself and this command's PICKFIRST restore does not run: it is
-;;; left at 1, the factory default, which is the cost of letting each
-;;; stage keep its own cleanup.  Esc at the suite's OWN prompt, where
-;;; no stage is running, does reach the handler below.)
+;;; itself, the handoff included, and this command's handler does not
+;;; run.  That is why the suite borrows nothing it would have to put
+;;; back.  Esc at the suite's OWN prompt, where no stage is running,
+;;; does reach the handler below.)
 ;;;
 ;;; THE CHECK COVERS THE CALOFIN STAGES AND NOT CDIM, on purpose.
 ;;; boundp can only see commands AutoLISP defined; an in-house command
@@ -423,8 +459,10 @@
 ;; A stage is free to erase what it replaces, and an erased ename in a
 ;; set is not something AutoCAD will hand to the next command -- so the
 ;; set is rebuilt from what survives, every time, rather than kept.
-;; nil when nothing survives, which is what sssetfirst wants for
-;; "clear it".
+;; nil when nothing survives: it becomes the set half of
+;; *calofin-handoff*, and a nil set there is what the stage readers
+;; (tydrn:handed, paddle--handed, ad:handed) treat as "nothing handed",
+;; so the stage asks for its own selection instead of acting on a dead one.
 (defun tydrn:live-ss (lst / ss e)
   (setq ss (ssadd))
   (foreach e lst
@@ -432,17 +470,16 @@
   (if (< 0 (sslength ss)) ss))
 
 ;; The handler is LOCAL to the command (STANDARDS section 5), as every
-;; other handler in this file is: PICKFIRST is the one thing the suite
-;; itself changes, and oldpick is reached through dynamic scope.  It
-;; runs for an Esc at the suite's own selection prompt; inside a stage
-;; the stage's own handler is the innermost one and this never sees it
-;; (see the header).
-(defun c:TYLERDRONESUITE ( / *error* oldpick missing nm step carry mark
-                            stages)
+;; other handler in this file is.  The suite changes no setting of the
+;; drafter's, so all it has to put right is a handoff no stage read.
+;; It runs for an Esc at the suite's own selection prompt; inside a
+;; stage the stage's own handler is the innermost one and this never
+;; sees it (see the header) -- which is why the handoff is a global
+;; the stage clears itself, and not a PICKFIRST borrow this would
+;; have to put back.
+(defun c:TYLERDRONESUITE ( / *error* missing nm step carry mark stages)
   (defun *error* (msg)
-    ;; the sysvar comes back FIRST so nothing below can skip it
-    (if oldpick (setvar "PICKFIRST" oldpick))
-    (setq oldpick nil)
+    (setq *calofin-handoff* nil)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTYLERDRONESUITE error: " msg)))
@@ -474,12 +511,6 @@
       (princ "\n  well is not undone to get at one that did not.  Esc in")
       (princ "\n  any stage stops the suite there.")
 
-      ;; PICKFIRST at 0 would let sssetfirst highlight while ssget "_I"
-      ;; read nothing, and the handoff would go quietly missing.  Put
-      ;; back below, and by the error handler if Esc gets here first.
-      (setq oldpick (getvar "PICKFIRST"))
-      (setvar "PICKFIRST" 1)
-
       ;; What the operator highlighted before typing the command.  If
       ;; that is nothing, ask once here rather than three times over.
       (setq carry (tydrn:ss->list (cadr (ssgetfirst))))
@@ -494,12 +525,17 @@
         (setq step (1+ step))
         (princ (strcat "\n\n--- " (itoa step) " of " (itoa (length stages))
                        ": " nm " ---"))
-        ;; Hand this stage the highlight -- or, for the finisher,
-        ;; clear it: CDIM works on the dimensions AUTODIM has just
-        ;; made, which are in nobody's original pick.
-        (sssetfirst nil (if (member nm *tydrn-suite*)
-                          (tydrn:live-ss carry)
-                          nil))
+        ;; Hand this stage the highlight through *calofin-handoff*
+        ;; (see tydrn:handed) -- or, for the finisher, nothing: CDIM
+        ;; works on the dimensions AUTODIM has just made, which are in
+        ;; nobody's original pick.  The pickfirst set is cleared either
+        ;; way, so nothing is left gripped for a stage's own commands
+        ;; to act on, and so CDIM starts with nothing selected, as it
+        ;; does when it is typed.
+        (sssetfirst nil nil)
+        (setq *calofin-handoff*
+              (if (member nm *tydrn-suite*)
+                (list (strcase nm) (tydrn:live-ss carry))))
         (setq mark (entlast))
         ;; NOT (command)/(vl-cmdf): the command processor does not know
         ;; AutoLISP commands (typing works only through the command
@@ -519,14 +555,13 @@
            (princ "\n  (queued on the command line - it runs as the suite closes)")
            (vla-SendCommand (vla-get-ActiveDocument (vlax-get-acad-object))
                             (strcat nm " "))))
+        (setq *calofin-handoff* nil)    ; a stage that never read it
         ;; Grow the carried set by what this stage drew, so the next
         ;; one sees it.  Only worth doing while a calofin stage is
         ;; still to come -- the finisher gets a cleared selection.
         (if (member nm *tydrn-suite*)
           (setq carry (append carry (tydrn:since mark)))))
 
-      (setvar "PICKFIRST" oldpick)
-      (setq oldpick nil)
       (princ (strcat "\n\nTYLERDRONESUITE done - all "
                      (itoa (length stages)) " stages ran."))))
   (if lzd:end (lzd:end "TYLERDRONESUITE"))

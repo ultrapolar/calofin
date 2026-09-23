@@ -27,7 +27,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.10")
+(setq *tutcperp-version* "v0.11")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -91,7 +91,7 @@
 
 (defun c:TUTORIALCPERPPTS (/ *error* tutc:say tutc:pause tutc:track
                              tutc:finish tutc:round
-                             os ce pd plt undoOpen ents mode ans p sz z
+                             os ce pd plt plw undoOpen ents mode ans p sz z
                              w1 w2 w3 crv tot n i dd q d tg nrm
                              lens base np basePts newPts tangs e s)
 
@@ -111,6 +111,7 @@
     (if pd  (setvar "PDMODE"    pd))
     (if os  (setvar "OSMODE"    os))
     (if plt (setvar "PLINETYPE" plt))
+    (if plw (setvar "PLINEWID"  plw))
     (if ce  (setvar "CMDECHO"   ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
@@ -166,6 +167,7 @@
         ce  (getvar "CMDECHO")
         pd  (getvar "PDMODE")
         plt (getvar "PLINETYPE")
+        plw (getvar "PLINEWID")
         ents '())
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -336,6 +338,9 @@
       (if (null sz) (setq sz 100.0))
       (setvar "OSMODE" 0)
       (setvar "PLINETYPE" 2)
+      ;; PLINE starts at the width the drawing last used; the demo shows
+      ;; what CPERPPTS draws, which is a hairline
+      (if (and plw (/= plw 0.0)) (setvar "PLINEWID" 0.0))
       (if (member pd '(0 1)) (setvar "PDMODE" 3))
       (setq z (caddr p))
 

@@ -278,7 +278,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.22")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.23")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -695,12 +695,15 @@
 ;; --- small helpers -------------------------------------------------
 
 (defun lfc:set-color (ent color / ed old)
+  ;; T when the colour went in.  entmod answers nil on a LOCKED layer
+  ;; and changes nothing, so a caller that goes on to say "flagged
+  ;; (red)" has to ask first, or the report claims a mark nobody sees
   (setq ed  (entget ent)
         old (assoc 62 ed))
-  (entmod (if old
-            (subst (cons 62 color) old ed)
-            (append ed (list (cons 62 color)))))
-  (entupd ent))
+  (if (entmod (if old
+                (subst (cons 62 color) old ed)
+                (append ed (list (cons 62 color)))))
+    (progn (entupd ent) T)))
 
 (defun lfc:make-xline (p1 p2 / len)
   ;; infinite construction line through p1-p2 on the check layer,
@@ -903,6 +906,58 @@
                    (list (max (car hi) (caadr bb)) (max (cadr hi) (cadadr bb)))
                    (list (caadr bb) (cadadr bb)))))))
   (if (and lo hi) (list lo hi)))
+
+;; The border when the highlight held none.  Every entity on the
+;; border layer in the space the drafter is working in, grouped into
+;; separate frames -- boxes that touch are one frame, so four lines
+;; meeting at their corners still measure as one -- and the frame that
+;; holds, or else sits nearest, the centre of the checked drawing is
+;; the one measured.  The union of every sheet's border in a drawing
+;; with two sheets is a box no sheet has, and it was reported
+;; STRETCHED out of proportion over two correct borders.  Returns
+;; (box . number-of-frames), nil when there is no border at all.
+(defun lfc:border-fallback (minx miny maxx maxy / ss i bb boxes merged grown
+                                                  rest m again cx cy best
+                                                  bestd d dx dy)
+  (setq ss    (ssget "_X" (list (cons 8 *lfc-border-layer*)
+                                (cons 410 (lfc:space))))
+        i     0
+        boxes nil)
+  (if ss
+    (repeat (sslength ss)
+      (if (setq bb (cal:bbox-ent (ssname ss i)))
+        (setq boxes (cons (list (list (caar bb) (cadar bb))
+                                (list (caadr bb) (cadadr bb)))
+                          boxes)))
+      (setq i (1+ i))))
+  ;; merge until a whole pass joins nothing: a box grown by one merge
+  ;; can reach one it did not touch before
+  (setq again T)
+  (while again
+    (setq again nil merged nil)
+    (foreach bb boxes
+      (setq grown bb rest nil)
+      (foreach m merged
+        (if (lfc:boxes-touch grown m *lfc-same-pt*)
+          (setq grown (list (list (min (caar grown) (caar m))
+                                  (min (cadar grown) (cadar m)))
+                            (list (max (caadr grown) (caadr m))
+                                  (max (cadadr grown) (cadadr m))))
+                again T)
+          (setq rest (cons m rest))))
+      (setq merged (cons grown rest)))
+    (setq boxes merged))
+  (if minx
+    (setq cx (* 0.5 (+ minx maxx))
+          cy (* 0.5 (+ miny maxy))))
+  (foreach bb boxes
+    ;; distance from the centre to the box, 0 when it is inside
+    (setq dx (if cx (max (- (caar bb) cx) 0.0 (- cx (caadr bb))) 0.0)
+          dy (if cy (max (- (cadar bb) cy) 0.0 (- cy (cadadr bb))) 0.0)
+          d  (sqrt (+ (* dx dx) (* dy dy))))
+    (if (or (null bestd) (< d bestd))
+      (setq best bb bestd d)))
+  (if best (cons best (length boxes))))
 
 (defun lfc:border-verdict (bb / bw bh sw sh sc)
   ;; measure the border against the nominal sheet. Returns the report
@@ -1262,7 +1317,10 @@
 
 (defun lfc:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed pair)
   ;; re-fit the arc through its fixed end, its old midpoint and the
-  ;; target point; returns T on success
+  ;; target point; returns T on success, nil when no arc fits (the
+  ;; points are collinear), and 'refused when one fits but the write
+  ;; is turned down -- a LOCKED layer, which is no reason to tell the
+  ;; drafter their arc was "collinear" and then call it attached
   (if (and (> (distance target fixed) *lfc-same-pt*)
            (setq c (cal:circumcenter fixed mid target)))
     (progn
@@ -1280,7 +1338,8 @@
       (foreach pair (list (cons 10 c) (cons 40 r) (cons 50 a1) (cons 51 a2))
         (setq ed (subst pair (assoc (car pair) ed) ed)))
       (if (entmod ed)
-        (progn (entupd ent) T)))))
+        (progn (entupd ent) T)
+        'refused))))
 
 (defun lfc:move-arc-end (ent which target / mid other)
   ;; re-fit the arc so the chosen endpoint lands on target (WCS)
@@ -1320,13 +1379,19 @@
               (cal:axis-pt a1 u (max lena s2)))))))
 
 (defun lfc:merge-lines (la lb info / ed)
-  ;; stretch la's LINE over the union of both, delete lb's LINE
+  ;; stretch la's LINE over the union of both, delete lb's LINE; T when
+  ;; that happened.  lb goes only once la has really been stretched: a
+  ;; LOCKED layer refuses the entmod, and erasing lb then would lose
+  ;; the length it carried -- and "merged" would be reported over two
+  ;; lines still standing
   (setq ed (entget (lfc:seg-ent la))
         ed (subst (cons 10 (nth 3 info)) (assoc 10 ed) ed)
         ed (subst (cons 11 (nth 4 info)) (assoc 11 ed) ed))
-  (entmod ed)
-  (entupd (lfc:seg-ent la))
-  (entdel (lfc:seg-ent lb)))
+  (if (entmod ed)
+    (progn
+      (entupd (lfc:seg-ent la))
+      (entdel (lfc:seg-ent lb))
+      T)))
 
 (defun lfc:whole-line-p (s / ed)
   ;; T when the segment IS its owner entity - only whole LINEs can be
@@ -1844,12 +1909,17 @@
     (setq s (substr s 1 (1- n))))
   s)
 
-(defun lfc:wipe-attribs (ent tags words / e ed val new n out)
+(defun lfc:wipe-attribs (ent tags words / e ed val new n out refused)
   ;; take the bad words out of the listed attribute values.  Only the
   ;; bad phrase goes: a label, a real pattern name, anything else the
-  ;; field said is still there afterwards.  Returns
-  ;; ((tag . what-it-reads-now) ...) for every field touched.
-  (setq n 0 out nil)
+  ;; field said is still there afterwards.  Returns (DONE REFUSED):
+  ;; DONE is ((tag . what-it-reads-now) ...) for every field wiped,
+  ;; REFUSED the tags whose write was turned down.  entmod answers nil
+  ;; on a LOCKED layer and changes nothing -- and an ATTRIB's layer is
+  ;; never in the selection, so the unlock offer never names it.
+  ;; Counting those as wiped put "WIPED" in the report over a sheet
+  ;; that still read "Not Supplied".
+  (setq n 0 out nil refused nil)
   (if (= 1 (cdr (assoc 66 (entget ent))))
     (progn
       (setq e (entnext ent))
@@ -1858,15 +1928,18 @@
           (progn
             (setq val (cdr (assoc 1 ed))
                   new (lfc:strip-badwords val words))
-            (if (/= new val)
-              (progn
-                (entmod (subst (cons 1 new) (assoc 1 ed) ed))
-                (entupd e)
-                (setq n (1+ n))))
-            (setq out (cons (cons (cdr (assoc 2 ed)) new) out))))
+            (cond
+              ((= new val)
+               (setq out (cons (cons (cdr (assoc 2 ed)) new) out)))
+              ((entmod (subst (cons 1 new) (assoc 1 ed) ed))
+               (entupd e)
+               (setq n   (1+ n)
+                     out (cons (cons (cdr (assoc 2 ed)) new) out)))
+              (t
+               (setq refused (cons (cdr (assoc 2 ed)) refused))))))
         (setq e (entnext e)))))
   (if (> n 0) (entupd ent))
-  (reverse out))
+  (list (reverse out) (reverse refused)))
 
 (defun lfc:ins-attrib-deep (ent tag / val s)
   ;; the tag's value on the INSERT, or on a block nested inside it
@@ -2397,7 +2470,9 @@
   ;; line.
   ;; Returns (original final how) when the point was looked at, where
   ;; how is 'auto / 'user / 'kept / 'anchor; nil when the point was
-  ;; already fine.
+  ;; already fine.  how is 'locked when the point is off its object but
+  ;; the dimension's layer refused the write: nothing can be moved, so
+  ;; nothing is asked, and a fourth element says how far off it is.
   (setq ed (entget ent)
         pt (cdr (assoc gcode ed)))
   (if pt
@@ -2424,11 +2499,22 @@
             (setq sugg anch  dsug danch  what "the shared anchor point"))
            (near
             (setq sugg (cadr near)  dsug dnear  what "the nearest object")))
-         (if (and sugg (> dsug *lfc-tol*))
-           (progn
-             ;; show the suggestion in place, but keep the original spot
-             ;; marked so both are on screen while the question is asked
-             (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
+         (cond
+           ((not (and sugg (> dsug *lfc-tol*))) nil)
+           ;; show the suggestion in place, but keep the original spot
+           ;; marked so both are on screen while the question is asked.
+           ;; A LOCKED layer refuses that write, and then every answer
+           ;; to Move/Keep/Pick would be a claim about a point that
+           ;; never moved -- the report used to say "moved onto the
+           ;; nearest object" over a dimension still off by the same
+           ;; amount.  Say what is wrong and leave it.
+           ((not (entmod (subst (cons gcode sugg) (assoc gcode ed) ed)))
+            (princ (strcat "\n  " label " is NOT ATTACHED - " what " is "
+                           (lfc:dist dsug) " away, but the dimension's"
+                           " layer is locked: NOT moved."))
+            (list pt pt 'locked
+                  (strcat label " off by " (lfc:dist dsug))))
+           (t
              (entupd ent)
              (princ (strcat "\n  " label " is not on any object - " what
                             " is " (lfc:dist dsug) " away."))
@@ -2460,10 +2546,12 @@
 
 (defun lfc:review-dim (ent cands anchors num total / ed dtype h sty p13 p14
                                               r1 r2 looked moved kept held
-                                              ok note meas assocnote fcol)
+                                              lockd ok note meas assocnote fcol
+                                              painted)
   ;; interactive review of one dimension.
   ;; Returns (handle ok-flag report-note moved-point-count measurement
-  ;; anchor-held-point-count).
+  ;; anchor-held-point-count locked-point-count painted), painted T when
+  ;; a flagged dimension really took the flag colour.
   (setq ed    (entget ent)
         h     (cdr (assoc 5 ed))
         sty   (lfc:dim-style ent)
@@ -2485,9 +2573,12 @@
   ;; a point held at a shared anchor was looked at and deliberately not
   ;; touched - it is neither a move nor a Keep answer, so it is counted
   ;; on its own and kept out of both tallies
+  ;; A point on a locked layer that could not be moved is neither: it
+  ;; is still off, and says so in the report line on its own.
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
         held   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'anchor)) looked)
-        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept anchor)))
+        lockd  (vl-remove-if-not '(lambda (x) (eq (caddr x) 'locked)) looked)
+        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept anchor locked)))
                              looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
   ;; only when something actually moved is there an old position worth
@@ -2502,15 +2593,19 @@
   (redraw ent 4)
   (redraw)
   (if (member ok '(back skip))
-    (list h ok nil (length moved) meas (length held))  ; navigation: caller handles it
+    (list h ok nil (length moved) meas (length held) (length lockd) nil)  ; navigation: caller handles it
     (progn
       (setq ok (eq ok 'yes)
             fcol (cal:ink *lfc-flag-color* 'flag))
       (setq note (strcat
-                   (if ok
-                     "OK"
-                     (strcat "FLAGGED to fix ("
-                             (lfc:color-name fcol) ")"))
+                   (cond
+                     (ok "OK")
+                     ;; the red is the flag: on a locked layer it does
+                     ;; not go on, and the line must not say it did
+                     ((setq painted (lfc:set-color ent fcol))
+                      (strcat "FLAGGED to fix ("
+                              (lfc:color-name fcol) ")"))
+                     (t "FLAGGED to fix - layer locked, NOT coloured"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -2523,9 +2618,14 @@
                      (strcat " - " (itoa (length held))
                              " point(s) held at a shared anchor")
                      "")
+                   (if lockd
+                     (strcat " - "
+                             (lfc:join (mapcar 'cadddr lockd) ", ")
+                             " - NOT ATTACHED, layer locked, NOT moved")
+                     "")
                    (if assocnote assocnote "")))
-      (if (not ok) (lfc:set-color ent fcol))
-      (list h ok note (length moved) meas (length held)))))
+      (list h ok note (length moved) meas (length held) (length lockd)
+            painted))))
 
 ;; --- arc review ----------------------------------------------------
 
@@ -2569,20 +2669,28 @@
   (entmod ed)
   (entupd ent))
 
-(defun lfc:review-arc-end (ent which label cands / p target st ans final how)
+(defun lfc:review-arc-end (ent which label cands / p target st ans final how
+                                                  res)
   ;; audits one arc endpoint: a detached end is snapped where it looks
   ;; like it belongs, then you choose - Move (take it), Keep (put the
   ;; arc back exactly as drawn) or Pick your own spot.
   ;; Returns (original final how) when the end was looked at, where how
-  ;; is 'auto / 'user / 'kept; nil when the end was already fine.
+  ;; is 'auto / 'user / 'kept, or 'locked when the arc's layer refused
+  ;; the re-fit and nothing was asked; nil when the end was already fine.
   (setq p      (if (eq which 'start)
                  (vlax-curve-getStartPoint ent)
                  (vlax-curve-getEndPoint ent))
         target (lfc:arc-end-target ent which cands)
         st     (lfc:arc-state ent))
   (cond
+    ((and target
+          (eq 'refused (setq res (lfc:move-arc-end ent which target))))
+     (princ (strcat "\n  " label " is NOT ATTACHED - the nearest object end is "
+                    (lfc:dist (distance p target)) " away, but the arc's"
+                    " layer is locked: NOT moved."))
+     (list p p 'locked))
     (target
-     (if (lfc:move-arc-end ent which target)
+     (if res
        (progn
          (princ (strcat "\n  " label " is not attached to an object end - nearest is "
                         (lfc:dist (distance p target)) " away."))
@@ -2601,7 +2709,7 @@
                            (lfc:ptstr final) " - the arc is unchanged.")))
            (t
             (setq ans (trans ans 1 0))
-            (if (lfc:move-arc-end ent which ans)
+            (if (eq T (lfc:move-arc-end ent which ans))
               (progn
                 (setq final ans
                       how   'user)
@@ -2624,16 +2732,18 @@
        nil
        (progn
          (setq ans (trans ans 1 0))
-         (if (lfc:move-arc-end ent which ans)
+         (if (eq T (lfc:move-arc-end ent which ans))
            (list p ans 'user)
            (progn
-             (princ "\n  Could not re-fit the arc through that spot (collinear?); unchanged.")
+             (princ "\n  Could not re-fit the arc through that spot (collinear or layer locked?); unchanged.")
              nil)))))
     (t nil)))
 
-(defun lfc:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note acol)
+(defun lfc:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept
+                                              lockd note acol)
   ;; interactive review of one arc's endpoints.
-  ;; Returns (handle untouched-flag report-note moved-point-count).
+  ;; Returns (handle untouched-flag report-note moved-point-count
+  ;; locked-endpoint-count).
   (setq ed     (entget ent)
         h      (cdr (assoc 5 ed))
         planar (lfc:planar-arc-p ed))
@@ -2648,12 +2758,20 @@
   (redraw ent 4)
   (redraw)
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
-        moved  (vl-remove-if '(lambda (x) (eq (caddr x) 'kept)) looked)
+        lockd  (vl-remove-if-not '(lambda (x) (eq (caddr x) 'locked)) looked)
+        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept locked)))
+                             looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
   (setq acol (cal:ink *lfc-arc-color* 'arc))
   (if moved (lfc:set-color ent acol))
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
+               ;; a detached end on a locked layer is a finding, not
+               ;; "endpoints OK": nothing was asked because nothing
+               ;; could be written
+               (lockd (strcat (itoa (length lockd))
+                              " endpoint(s) NOT ATTACHED - layer locked,"
+                              " NOT moved"))
                ((and moved kept)
                 (strcat (itoa (length moved)) " endpoint(s) moved ("
                         (lfc:color-name acol) "), "
@@ -2664,16 +2782,17 @@
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
-  (list h (null moved) note (length moved)))
+  (list h (null moved) note (length moved) (length lockd)))
 
 ;; --- overlapping line review ---------------------------------------
 
 (defun lfc:review-olap (la lb num total / info ea eb h1 h2 lay1 lay2 label
-                                           ans mergeable kinds ocol)
+                                           ans mergeable kinds ocol ok1 ok2)
   ;; interactive review of one overlapping segment pair.
   ;; Returns nil when the pair no longer overlaps (an earlier merge
   ;; absorbed it); otherwise (label report-note action ents...) where
-  ;; action is merged / flagged / left and ents keep their cyan.
+  ;; action is merged / flagged / left / locked (a Merge the layer
+  ;; refused) and ents keep their cyan.
   (setq ea (lfc:seg-ent la)
         eb (lfc:seg-ent lb))
   (if (and (entget ea) (entget eb) (setq info (lfc:overlap-info la lb)))
@@ -2719,8 +2838,13 @@
       (redraw)
       (setq ocol (cal:ink *lfc-olap-color* 'olap))
       (cond
+        ((and (= ans "Merge") (not (lfc:merge-lines la lb info)))
+         ;; the lines share a layer (or Merge was never offered), so
+         ;; one refusal is the pair's: both are left exactly as drawn
+         (princ "\n  Could NOT merge - the layer is locked; both lines left as drawn.")
+         (list label "could NOT merge - layer locked, left as drawn"
+               'locked))
         ((= ans "Merge")
-         (lfc:merge-lines la lb info)
          (lfc:set-color ea ocol)
          (princ (strcat "\n  Merged into one line ("
                         (lfc:color-name ocol) ")."))
@@ -2729,18 +2853,27 @@
                        (lfc:color-name ocol) ")")
                'merged ea))
         ((= ans "Flag")
-         (lfc:set-color ea ocol)
-         (lfc:set-color eb ocol)
-         (princ (strcat "\n  Flagged to fix ("
-                        (lfc:color-name ocol) ")."))
+         ;; the colour IS the flag; a locked layer refuses it, and the
+         ;; line says which of the two did not take it
+         (setq ok1 (lfc:set-color ea ocol)
+               ok2 (lfc:set-color eb ocol))
+         (princ (if (and ok1 ok2)
+                  (strcat "\n  Flagged to fix (" (lfc:color-name ocol) ").")
+                  "\n  Flagged to fix - but a locked layer refused the colour."))
          (list label
                (strcat
                  (if (lfc:whole-line-p la)
                    (if (= (strcase lay1) (strcase lay2))
-                     "flagged to fix ("
-                     "different layers - flagged to fix (")
-                   "polyline edge - flagged to fix (")
-                 (lfc:color-name ocol) ")")
+                     "flagged to fix"
+                     "different layers - flagged to fix")
+                   "polyline edge - flagged to fix")
+                 (cond
+                   ((and ok1 ok2) (strcat " (" (lfc:color-name ocol) ")"))
+                   ((or ok1 ok2)
+                    (strcat " (" (lfc:color-name ocol) ") - "
+                            (if ok1 h2 h1)
+                            " on a locked layer, NOT coloured"))
+                   (t " - layer locked, NOT coloured")))
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -2753,10 +2886,12 @@
                       saved keep res n total lines ans
                       anchors anchheld
                       ndok ndflag ndmoved ndanch naok namoved nasnap
-                      nomerged noflag noleft
+                      nomerged noflag noleft ndlock dimlock nalock nolock
+                      dimnc ndnc
                       sgroups scand svgroups pgroups g1 g2 stepsp svmode
                       satts attwrong attundec liners linerbadw linernostep bad w bn bh bp
                       linerstep linerfg fgstep badtags linerwiped wiped kept
+                      nowipe linernowipe painted attnc hdimnc
                       bgroups beadneed beadok beadmiss beadss beadbbs gbb
                       stepsum linersum rowtol sty g b l pair hdr
                       htsum stepht wallht wallraw tins tpat tss
@@ -2766,6 +2901,7 @@
                       laylist locked relock lay tlist tbest cx cy tvals s d
                       dlines skiprest bordbb bordsum
                       minx miny maxx maxy bb m dhdr right dimlay units carried cmv
+                      bordfb
                       ed col)
 
   (defun *error* (msg)
@@ -2776,13 +2912,20 @@
     ;; (a colour on a layer the user declined to unlock is in saved
     ;; too) used to skip the close and the CMDECHO restore below, and
     ;; a throw inside *error* is the one error nothing catches.
+    ;; The re-lock has a catch of its own: sharing one with the colour
+    ;; restore meant any throw in a set-color skipped it and left the
+    ;; drafter's layer unlocked with nothing said.  It still runs
+    ;; AFTER the colours, because a layer locked first would refuse
+    ;; every colour on it and leave those items grey.
     (vl-catch-all-apply
       '(lambda ()
          (foreach pair saved
            (if (and (not (member (car pair) keep)) (entget (car pair)))
              (lfc:set-color (car pair) (cdr pair))))
-         (foreach l relock (lfc:set-layer-lock l T))
          (redraw))
+      nil)
+    (vl-catch-all-apply
+      '(lambda () (foreach l relock (lfc:set-layer-lock l T)))
       nil)
     (if undo-open
       (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
@@ -2808,7 +2951,8 @@
      (setq cands nil dims nil arcs nil lns nil blks nil segs nil
            saved nil keep nil lines nil i 0
            ndok 0 ndflag 0 ndmoved 0 ndanch 0 naok 0 namoved 0 nasnap 0
-           nomerged 0 noflag 0 noleft 0)
+           nomerged 0 noflag 0 noleft 0 ndlock 0 nalock 0 nolock 0
+           dimlock nil dimnc nil)
      (repeat (sslength ss)
        (setq e  (ssname ss i)
              i  (1+ i)
@@ -2947,6 +3091,11 @@
           (if (> (nth 5 res) 0)
             (setq anchheld (cons (cons e (nth 5 res))
                                  (vl-remove (assoc e anchheld) anchheld))))
+          ;; ...and so are points a locked layer would not let move:
+          ;; they are still off when Back sends the dimension round again
+          (if (> (nth 6 res) 0)
+            (setq dimlock (cons (cons e (nth 6 res))
+                                (vl-remove (assoc e dimlock) dimlock))))
           (cond
             ((eq (cadr res) 'skip)
              (lfc:set-color e grey)
@@ -2980,7 +3129,8 @@
                                            (vl-remove (assoc e1 carried)
                                                       carried))))
                      (setq dlines (cdr dlines))))
-                 (setq keep (vl-remove e1 keep))
+                 (setq keep  (vl-remove e1 keep)
+                       dimnc (vl-remove (assoc e1 dimnc) dimnc))
                  (lfc:set-color e1 grey)
                  (princ "\n  Stepping back one dimension."))
                (princ "\n  Already at the first dimension."))
@@ -2990,7 +3140,11 @@
                (progn (setq ndok (1+ ndok))
                       (lfc:set-color e grey))
                (progn (setq ndflag (1+ ndflag))
-                      (setq keep (cons e keep))))
+                      (setq keep (cons e keep))
+                      ;; a flag its locked layer would not take: counted
+                      ;; as flagged, never as coloured
+                      (if (not (nth 7 res))
+                        (setq dimnc (cons (cons e 1) dimnc)))))
              (setq sty (lfc:dim-style e))
              ;; moves this dim collected on an earlier pass, before a
              ;; Back sent us round again -- they are real and belong
@@ -3012,6 +3166,8 @@
                                 dlines))))
           (setq n (1+ n)))
         (foreach pair anchheld (setq ndanch (+ ndanch (cdr pair))))
+        (foreach pair dimlock (setq ndlock (+ ndlock (cdr pair))))
+        (setq ndnc (length dimnc))
         (if skiprest
           (setq lines (cons (strcat "Dimensions: " (itoa (- total (length dlines)))
                                     " left UNREVIEWED (skipped by user)")
@@ -3029,11 +3185,15 @@
           (lfc:set-color e (cdr (assoc e saved)))
           (setq res (lfc:review-arc e cands n total))
           (setq nasnap (+ nasnap (cadddr res)))
-          (if (cadr res)
-            (progn (setq naok (1+ naok))
-                   (lfc:set-color e grey))
-            (progn (setq namoved (1+ namoved))
-                   (setq keep (cons e keep))))           ; moved: stays magenta
+          (cond
+            ;; detached, but its layer is locked: not OK and not moved
+            ((> (nth 4 res) 0) (setq nalock (1+ nalock)))
+            ((cadr res)
+             (setq naok (1+ naok))
+             (lfc:set-color e grey))
+            (t
+             (setq namoved (1+ namoved))
+             (setq keep (cons e keep))))                ; moved: stays magenta
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
 
         ;; --- overlapping lines, one pair at a time ------------------
@@ -3053,8 +3213,10 @@
             ((null res)                       ; absorbed by an earlier merge
              (lfc:unstage e1 keep grey)
              (lfc:unstage e2 keep grey))
-            ((eq (caddr res) 'left)
-             (setq noleft (1+ noleft))
+            ((member (caddr res) '(left locked))
+             (if (eq (caddr res) 'left)
+               (setq noleft (1+ noleft))
+               (setq nolock (1+ nolock)))
              (lfc:unstage e1 keep grey)
              (lfc:unstage e2 keep grey)
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
@@ -3077,6 +3239,7 @@
               svmode   nil
               satts    nil
               attwrong nil
+              attnc    nil
               attundec nil
               bgroups  nil)
         ;; a staircase side view reads as two step patterns at right
@@ -3179,11 +3342,16 @@
                                           lines)))
                       (progn
                         (setq attwrong T)
-                        (lfc:set-color b (cal:ink *lfc-flag-color* 'flag))
                         (setq keep (cons b keep))
+                        ;; the red IS the flag; a locked layer refuses it
+                        (setq painted (lfc:set-color b (cal:ink *lfc-flag-color* 'flag)))
+                        (if (not painted) (setq attnc T))
                         (setq lines (cons (strcat "Step Attachment "
                                                   (cdr (assoc 5 (entget b)))
-                                                  ": WRONG ONE - flagged to fix (red)")
+                                                  ": WRONG ONE - flagged to fix"
+                                                  (if painted
+                                                    " (red)"
+                                                    " - layer locked, NOT coloured"))
                                           lines))))
                     ;; every option still showing = nobody picked one,
                     ;; so the drawing has to ask the question instead
@@ -3367,31 +3535,42 @@
         ;; mark it red automatically and keep it red
         (if (and htbad hdim)
           (progn
-            (lfc:set-color hdim (cal:ink *lfc-flag-color* 'flag))
+            ;; marked red only when the colour went in: a locked
+            ;; layer refuses it and the line says so
+            (setq painted (lfc:set-color hdim (cal:ink *lfc-flag-color* 'flag))
+                  hdimnc  (not painted))
             (if (not (member hdim keep)) (setq keep (cons hdim keep)))
             (princ (strcat "\n  Side view height dimension "
                            (cdr (assoc 5 (entget hdim)))
                            " disagrees with " *lfc-wallht-tag*
-                           " - marked red."))
+                           (if painted
+                             " - marked red."
+                             " - its layer is locked, NOT marked.")))
             (setq lines (cons (strcat "Height dim "
                                       (cdr (assoc 5 (entget hdim)))
                                       " states " (rtos dimht)
                                       " but " *lfc-wallht-tag* " is '"
-                                      wallraw "' - MISMATCH, marked red")
+                                      wallraw "' - MISMATCH"
+                                      (if painted
+                                        ", marked red"
+                                        ", layer locked - NOT marked"))
                               lines))))
         ;; a dimension whose text was overridden to disagree with
         ;; the geometry it spans is wrong too
         (if (and hdim dimht stepht
                  (> (abs (- dimht stepht)) *lfc-height-tol*))
           (progn
-            (lfc:set-color hdim (cal:ink *lfc-flag-color* 'flag))
+            (setq painted (lfc:set-color hdim (cal:ink *lfc-flag-color* 'flag)))
             (if (not (member hdim keep)) (setq keep (cons hdim keep)))
             (setq lines (cons (strcat "Height dim "
                                       (cdr (assoc 5 (entget hdim)))
                                       " states " (rtos dimht)
                                       " but the side view is drawn "
                                       (rtos stepht)
-                                      " tall - MISMATCH, marked red")
+                                      " tall - MISMATCH"
+                                      (if painted
+                                        ", marked red"
+                                        ", layer locked - NOT marked"))
                               lines))))
         (setq htsum
           (cond
@@ -3434,7 +3613,9 @@
             (t
              (strcat "steps rise " (rtos htval) " but WallHt is '" wallraw
                      "' (" (rtos wallht) ") - MISMATCH"
-                     (if hdim ", dimension marked red" ", look at it")))))
+                     (cond ((null hdim) ", look at it")
+                           (hdimnc ", dimension on a locked layer - NOT marked")
+                           (t ", dimension marked red"))))))
         (if htsum (princ (strcat "\n  Wall height: " htsum)))
 
         ;; --- Tech Title Date ------------------------------------------
@@ -3477,6 +3658,7 @@
               linerstep   nil
               linerfg     nil
               linerwiped  0
+              linernowipe 0
               fgstep      (lfc:fgstep-src ss blks))
         (if fgstep
           (princ (strcat "\n--- Fiberglass Step found in the highlighted area: "
@@ -3507,26 +3689,45 @@
                 ;; leave the rest of the field alone, then say which
                 ;; fields went and what each one reads now
                 (badtags
-                 (setq wiped (lfc:wipe-attribs b badtags *lfc-badwords*)
-                       kept  (mapcar '(lambda (w)
-                                        (strcat (car w) " now reads '"
-                                                (cdr w) "'"))
-                                     (vl-remove-if
-                                       '(lambda (w) (= (cdr w) ""))
-                                       wiped)))
-                 (setq linerwiped (+ linerwiped (length badtags)))
-                 (princ (strcat "\n  '" bn "': wiped "
-                                (lfc:join bad " & ") " out of "
-                                (lfc:join badtags ", ") "."))
-                 (setq lines (cons (strcat "Liner Material (" bn ") " bh " at "
-                                           (lfc:ptstr bp) ": "
-                                           (lfc:join badtags ", ")
-                                           " carried " (lfc:join bad " & ")
-                                           " - WIPED"
-                                           (if kept
-                                             (strcat ", " (lfc:join kept ", "))
-                                             " clean"))
-                                   lines)))
+                 (setq wiped  (lfc:wipe-attribs b badtags *lfc-badwords*)
+                       nowipe (cadr wiped)
+                       wiped  (car wiped)
+                       kept   (mapcar '(lambda (w)
+                                         (strcat (car w) " now reads '"
+                                                 (cdr w) "'"))
+                                      (vl-remove-if
+                                        '(lambda (w) (= (cdr w) ""))
+                                        wiped)))
+                 ;; only a field that really changed counts as wiped; one
+                 ;; the drawing refused is still on the sheet and says so
+                 (setq linerwiped  (+ linerwiped (length wiped))
+                       linernowipe (+ linernowipe (length nowipe)))
+                 (if wiped
+                   (progn
+                     (princ (strcat "\n  '" bn "': wiped "
+                                    (lfc:join bad " & ") " out of "
+                                    (lfc:join (mapcar 'car wiped) ", ") "."))
+                     (setq lines (cons (strcat "Liner Material (" bn ") " bh " at "
+                                               (lfc:ptstr bp) ": "
+                                               (lfc:join (mapcar 'car wiped) ", ")
+                                               " carried " (lfc:join bad " & ")
+                                               " - WIPED"
+                                               (if kept
+                                                 (strcat ", " (lfc:join kept ", "))
+                                                 " clean"))
+                                       lines))))
+                 (if nowipe
+                   (progn
+                     (princ (strcat "\n  '" bn "': could NOT wipe "
+                                    (lfc:join nowipe ", ")
+                                    " - the drawing refused the write (locked layer?)."))
+                     (setq lines (cons (strcat "Liner Material (" bn ") " bh " at "
+                                               (lfc:ptstr bp) ": "
+                                               (lfc:join nowipe ", ")
+                                               " carries " (lfc:join bad " & ")
+                                               " - NEEDS WIPING, could not write it"
+                                               " (locked layer?)")
+                                       lines)))))
                 ;; the word sits in the block's own text, not in a field
                 ;; we can clear - report it and leave it alone
                 (bad
@@ -3576,11 +3777,16 @@
         ;; --- title block border size --------------------------------
         ;; the whole title block is normally in the selection; fall
         ;; back to the drawing when the border was not highlighted
-        (setq bordbb (lfc:border-box ss))
+        (setq bordbb (lfc:border-box ss) bordfb nil)
         (if (null bordbb)
-          (setq bordbb (lfc:border-box
-                         (ssget "_X" (list (cons 8 *lfc-border-layer*))))))
+          (setq bordfb (lfc:border-fallback minx miny maxx maxy)
+                bordbb (car bordfb)))
         (setq bordsum (lfc:border-verdict bordbb))
+        (if (and bordfb (> (cdr bordfb) 1))
+          (setq bordsum (strcat bordsum " (" (itoa (cdr bordfb))
+                                " separate borders on layer '"
+                                *lfc-border-layer*
+                                "' - measured the one nearest the checked drawing)")))
         (princ (strcat "\n--- Border: " bordsum " ---"))
 
         ;; --- one-line verdicts for steps & liner --------------------
@@ -3598,6 +3804,8 @@
                          (cond ((null svmode) "")
                                ((null satts)
                                 "; Step Attachment block MISSING - add one")
+                               ((and attwrong attnc)
+                                "; Step Attachment flagged WRONG - layer locked, NOT coloured")
                                (attwrong
                                 "; Step Attachment flagged WRONG (red)")
                                (t "; Step Attachment confirmed"))
@@ -3627,6 +3835,11 @@
                              (strcat "; word " (lfc:join linerbadw " & ")
                                      " found - review")
                              ""))
+                         (if (> linernowipe 0)
+                           (strcat "; NEEDS WIPING: " (itoa linernowipe)
+                                   " pattern field(s) could not be written"
+                                   " (locked layer?)")
+                           "")
                          (if linernostep
                            "; steps drawn but liner MISSING its Step"
                            "")
@@ -3647,24 +3860,40 @@
             (cons (strcat "Dimensions checked: " (itoa (length dims))
                           " (correct: " (itoa ndok)
                           ", flagged to fix: " (itoa ndflag)
+                          (if (> ndnc 0)
+                            (strcat " - " (itoa ndnc)
+                                    " NOT coloured, layer locked")
+                            "")
                           ", points adjusted: " (itoa ndmoved)
                           (if (> ndanch 0)
                             (strcat ", held at a shared anchor: " (itoa ndanch))
                             "")
+                          (if (> ndlock 0)
+                            (strcat ", NOT moved (layer locked): " (itoa ndlock))
+                            "")
                           ")")
-                  (> ndflag 0))
+                  (or (> ndflag 0) (> ndlock 0)))
             (cons (strcat "Arcs checked: " (itoa (length arcs))
                           " (OK: " (itoa naok)
                           ", with endpoints moved: " (itoa namoved)
-                          ", endpoints moved in total: " (itoa nasnap) ")")
-                  (> namoved 0))
+                          ", endpoints moved in total: " (itoa nasnap)
+                          (if (> nalock 0)
+                            (strcat ", detached but layer locked: " (itoa nalock))
+                            "")
+                          ")")
+                  (or (> namoved 0) (> nalock 0)))
             (cons (strcat "Overlapping line pairs: " (itoa (length olaps))
                           (if olaps
                             (strcat " (merged: " (itoa nomerged)
                                     ", flagged: " (itoa noflag)
-                                    ", left as drawn: " (itoa noleft) ")")
+                                    ", left as drawn: " (itoa noleft)
+                                    (if (> nolock 0)
+                                      (strcat ", could NOT merge (layer locked): "
+                                              (itoa nolock))
+                                      "")
+                                    ")")
                             " - none found"))
-                  (> noflag 0))))
+                  (or (> noflag 0) (> nolock 0)))))
         (setq dimlay (lfc:dimlayer-verdict dims)
               units  (lfc:audit-units ss))
         (foreach l (caddr units)
@@ -3704,6 +3933,10 @@
                        "\nDimensions: " (itoa (length dims)) " checked, "
                        (itoa ndok) " correct, "
                        (itoa ndflag) " flagged to fix (red)"
+                       (if (> ndnc 0)
+                         (strcat " - " (itoa ndnc)
+                                 " of them NOT coloured (layer locked)")
+                         "")
                        (if (> ndmoved 0)
                          (strcat ", " (itoa ndmoved) " point(s) adjusted")
                          "")
@@ -3711,14 +3944,26 @@
                          (strcat ", " (itoa ndanch)
                                  " point(s) held at a shared anchor")
                          "")
+                       (if (> ndlock 0)
+                         (strcat ", " (itoa ndlock)
+                                 " point(s) NOT moved (layer locked)")
+                         "")
                        "\nArcs: " (itoa (length arcs)) " checked, "
                        (itoa namoved) " with endpoint(s) moved ("
                        (itoa nasnap) " endpoint(s), magenta)"
+                       (if (> nalock 0)
+                         (strcat ", " (itoa nalock)
+                                 " detached but NOT moved (layer locked)")
+                         "")
                        "\nOverlapping lines: " (itoa (length olaps)) " pair(s) found"
                        (if olaps
                          (strcat ", " (itoa nomerged) " merged, "
                                  (itoa noflag) " flagged (cyan), "
-                                 (itoa noleft) " left as drawn")
+                                 (itoa noleft) " left as drawn"
+                                 (if (> nolock 0)
+                                   (strcat ", " (itoa nolock)
+                                           " could NOT be merged (layer locked)")
+                                   ""))
                          "")
                        "\nSteps: " stepsum
                        (if htsum (strcat "\nWall height: " htsum) "")
@@ -3743,6 +3988,14 @@
 ;;  except writing the report. Use it as a quick pre-flight, or when
 ;;  you want the findings without touching a released sheet.
 
+;; The space the drafter is working in, as group 410 names it: the
+;; layout only on the paper itself.  Inside a layout viewport CTAB
+;; still names the layout while every pick lands in model space.
+(defun lfc:space ()
+  (if (and (= 0 (getvar "TILEMODE")) (= 1 (getvar "CVPORT")))
+    (getvar "CTAB")
+    "Model"))
+
 (defun c:LINFINSCAN () (lfc:scan nil))
 
 (defun c:LITELINFINSCAN () (lfc:scan T))
@@ -3750,7 +4003,32 @@
 ;; The read-only scan.  lite = T skips the DIMCHECK-style pass - no
 ;; dimension, arc or overlap audit and no DIMENSION AUDIT column -
 ;; for a drawing DIMCHECK already went over.
-(defun lfc:scan (lite / *error* oldecho name ss i e et ed sty meas cands dims arcs
+(defun lfc:scan (lite / *error* oldecho name)
+  (setq name (if lite "LITELINFINSCAN" "LINFINSCAN"))
+  (defun *error* (msg)
+    (if oldecho (setvar "CMDECHO" oldecho))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\n" name " error: " msg)))
+    (if lzd:report (lzd:report "LINFINCHECK" *lfc-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LINFINCHECK" *lfc-version*))
+  ;; saved here rather than inside the scan, so this handler holds the
+  ;; drafter's value whatever prompt an Esc lands on
+  (setq oldecho (getvar "CMDECHO"))
+  (lfc:scan-core lite)
+  (if lzd:end (lzd:end "LINFINCHECK"))
+  (princ))
+
+;; The scan itself, with no *error* of its own.  TUTORIALLINFINCHECK
+;; runs it inside its own undo group, and when it called c:LINFINSCAN
+;; instead, an Esc at the highlight prompt ran only the scan's handler:
+;; the tutorial's group stayed open, so the drafter's next U swallowed
+;; their own later work, and CMDECHO stayed 0.  Called bare, the
+;; caller's handler is the one that runs.  Its CMDECHO save is named
+;; scanecho, not oldecho, because the handler that runs is the
+;; CALLER'S and reads oldecho dynamically -- a local of that name in
+;; here would hand it the 0 the tutorial had already set.
+(defun lfc:scan-core (lite / scanecho name ss i e et ed sty meas cands dims arcs
                      plns segs
                      blks lines olaps pr sgroups scand svgroups pgroups
                      g g1 g2 rest svbb stepht satts liners fgstep linerstep
@@ -3760,18 +4038,9 @@
                      htval htbad htsum stepsum linersum bad wnd
                      datesum dateraw datebad
                      nd ndbad na nabad ndanch anchors q dq held m hdr dhdr l badtags dimlay units
-                     bordbb bordsum attundec
+                     bordbb bordsum bordfb attundec
                      minx miny maxx maxy p13 p14 near s b w)
-
   (setq name (if lite "LITELINFINSCAN" "LINFINSCAN"))
-  (defun *error* (msg)
-    (if oldecho (setvar "CMDECHO" oldecho))
-    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-      (princ (strcat "\n" name " error: " msg)))
-    (if lzd:report (lzd:report "LINFINCHECK" *lfc-version* msg))
-    (princ))
-  (if lzd:begin (lzd:begin "LINFINCHECK" *lfc-version*))
-
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
   (if lzd:watch (lzd:watch ss) ss)
@@ -3781,11 +4050,15 @@
                       " (Enter = whole drawing): "))
       (setq ss (ssget))
       (if lzd:watch (lzd:watch ss) ss)))
-  (if (null ss) (setq ss (ssget "_X")))
+  ;; Enter = the whole of the space the drafter is working in.  A bare
+  ;; "_X" took every layout's paper-space ink as well: border lines and
+  ;; sheet dimensions joined the candidates, and a paper-space line
+  ;; crossing a stray model point passed that point as attached.
+  (if (null ss) (setq ss (ssget "_X" (list (cons 410 (lfc:space))))))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
     (t
-     (setq oldecho (getvar "CMDECHO"))
+     (setq scanecho (getvar "CMDECHO"))
      (setvar "CMDECHO" 0)
      (setq i 0 nd 0 ndbad 0 na 0 nabad 0 ndanch 0)
      (repeat (sslength ss)
@@ -4114,11 +4387,16 @@
                         (if (and (null wnd) (not (and fgstep linerstep))) " - OK" "")))))
 
      ;; --- title block border size
-     (setq bordbb (lfc:border-box ss))
+     (setq bordbb (lfc:border-box ss) bordfb nil)
      (if (null bordbb)
-       (setq bordbb (lfc:border-box
-                      (ssget "_X" (list (cons 8 *lfc-border-layer*))))))
+       (setq bordfb (lfc:border-fallback minx miny maxx maxy)
+             bordbb (car bordfb)))
      (setq bordsum (lfc:border-verdict bordbb))
+     (if (and bordfb (> (cdr bordfb) 1))
+       (setq bordsum (strcat bordsum " (" (itoa (cdr bordfb))
+                             " separate borders on layer '"
+                             *lfc-border-layer*
+                             "' - measured the one nearest the checked drawing)")))
 
      ;; --- report (the only thing the scan writes) --------------------
      (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
@@ -4169,7 +4447,7 @@
                                  ""))
                        hdr dhdr (reverse lines) lite
                        minx miny maxx maxy)
-     (setvar "CMDECHO" oldecho)
+     (setvar "CMDECHO" scanecho)
      (princ (strcat "\n--- " name " complete (read-only) ---"
                     (if lite
                       "\nLite: dimensions, arcs and overlaps were not audited."
@@ -4186,7 +4464,6 @@
                     (if datesum (strcat "\nDate: " datesum) "")
                     "\nReport written on layer " *lfc-report-layer*
                     "; nothing else was changed."))))
-  (if lzd:end (lzd:end "LINFINCHECK"))
   (princ))
 
 
@@ -4340,7 +4617,7 @@
   (setvar "OSMODE" old)
   (entlast))
 
-(defun lfc:tut-demo (/ org ox oy made e ss2 i)
+(defun lfc:tut-demo (/ org ox oy made e ss2 i rmark nx)
   (princ "\n\n--- DEMO: a practice drawing with faults planted in it ---")
   (setq org (getpoint "\n  Pick an empty spot for the practice drawing: "))
   (if lzd:ask (lzd:ask "\n  Pick an empty spot for the practice drawing: " org) org)
@@ -4451,18 +4728,32 @@
             (strcat "LINFINSCAN will ask you to highlight - window the practice\n"
                     "  drawing (or press Enter for the whole drawing). The report\n"
                     "  lands to the right of whatever you highlight."))
-          (c:LINFINSCAN)))
+          ;; the scan's body, not c:LINFINSCAN: this tutorial's handler
+          ;; has to stay the innermost one, so an Esc at the highlight
+          ;; still closes the undo group and puts CMDECHO back
+          (setq rmark (entlast))
+          (lfc:scan-core nil)))
       (if (cal:ask-yn "\n  Erase the practice drawing now?" "Yes")
         (progn
           (setq i 0)
           (repeat (sslength ss2)
             (if (entget (ssname ss2 i)) (entdel (ssname ss2 i)))
             (setq i (1+ i)))
-          (setq ss2 (ssget "_X" (list (cons 8 *lfc-report-layer*))))
-          (if ss2
+          ;; ...and the report the scan wrote for it, and nothing
+          ;; older: the report layer is where EVERY scan in the drawing
+          ;; writes, and sweeping it whole took the drafter's own
+          ;; reports down with the practice one, under "Practice
+          ;; drawing erased."  What this run added is what follows
+          ;; RMARK, the last entity before the scan
+          (if rmark
             (progn
-              (setq i 0)
-              (repeat (sslength ss2) (entdel (ssname ss2 i)) (setq i (1+ i)))))
+              (setq e (entnext rmark))
+              (while e
+                (setq nx (entnext e))
+                (if (= (strcase (cdr (assoc 8 (entget e))))
+                       (strcase *lfc-report-layer*))
+                  (entdel e))
+                (setq e nx))))
           (princ "\n  Practice drawing erased."))
         (princ "\n  Left in place - one U removes the whole tutorial."))
       (princ))))

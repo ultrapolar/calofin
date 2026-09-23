@@ -138,7 +138,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v3.5")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.6")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -3756,8 +3756,8 @@
   en)
 
 ;; Erase only FITABHD's own objects on a layer.  Returns how many went.
-(defun fit:purge-mine (name / ss i n en)
-  (setq n 0)
+(defun fit:purge-mine (name / ss i n en mine stuck ed flags)
+  (setq n 0 stuck 0 mine nil)
   (if (tblsearch "LAYER" name)
     (progn
       (setq ss (ssget "_X" (list (cons 8 name))))
@@ -3767,8 +3767,27 @@
           (repeat (sslength ss)
             (setq en (ssname ss i))
             (if (assoc -3 (entget en '("FITABHD")))
-              (progn (entdel en) (setq n (1+ n))))
-            (setq i (1+ i)))))))
+              (setq mine (cons en mine)))
+            (setq i (1+ i)))))
+      ;; entdel answers nil on a locked layer and erases nothing, and
+      ;; this layer can be the drafter's own, locked on purpose.  So the
+      ;; lock is lifted for the erase and put back after it, and only an
+      ;; erase that took is counted: counting the attempts said
+      ;; "cleared" over markers still on screen, and the next run wrote
+      ;; its own markers over them
+      (if mine
+        (progn
+          (setq ed    (entget (tblobjname "LAYER" name))
+                flags (cond ((cdr (assoc 70 ed))) (0)))
+          (if (= 4 (logand 4 flags))
+            (entmod (subst (cons 70 (- flags 4)) (assoc 70 ed) ed)))
+          (foreach en mine
+            (if (entdel en) (setq n (1+ n)) (setq stuck (1+ stuck))))
+          (if (= 4 (logand 4 flags)) (entmod ed))
+          (if (> stuck 0)
+            (princ (strcat "\nFITABHD: " (itoa stuck)
+                           " of its own object(s) on layer " name
+                           " could not be erased - NOT removed.")))))))
   n)
 
 ;; verts: list of (pt bulge) in order, closed.  COL is an AutoCAD
@@ -3872,6 +3891,19 @@
       (setq nm (cdr p))))
   (if nm nm "?"))
 
+;; Where a survey point sits, in the world's numbers.  A block's
+;; insertion point is kept in its own plane, so an ab_pt inserted
+;; from below, (0 0 -1), read raw lands mirrored through the Y axis -
+;; off the outline it was shot on, with nothing said.  A POINT's 10
+;; is in world numbers already and is left alone, as is anything
+;; flat.
+(defun fit:ins-w (ed / nz)
+  (setq nz (cdr (assoc 210 ed)))
+  (if (and nz (/= (cdr (assoc 0 ed)) "POINT")
+           (not (equal nz '(0.0 0.0 1.0) 1.0e-10)))
+    (trans (cdr (assoc 10 ed)) (cdr (assoc -1 ed)) 0)
+    (cdr (assoc 10 ed))))
+
 ;; Sort the selection into survey points; anything else is counted and
 ;; ignored - the TYPE is the guide here, not drawn geometry.
 (defun fit:gather (ss / i en ed lay typ nskip)
@@ -3885,13 +3917,12 @@
     (cond
       ((and (= typ "INSERT")
             (= (strcase (cdr (assoc 2 ed))) (strcase fit:*point-block*)))
-       (fit:add-point (cal:2d (cdr (assoc 10 ed)))
+       (fit:add-point (cal:2d (fit:ins-w ed))
                       (cal:block-number en fit:*pt-tag*)))
       ((and (= lay (strcase fit:*point-layer*)) (= typ "POINT"))
        (fit:add-point (cal:2d (cdr (assoc 10 ed))) nil))
       ((and (= typ "INSERT") (= lay (strcase fit:*point-layer*)))
-       (fit:add-point (cal:2d (cdr (assoc 10 ed))
-                      )
+       (fit:add-point (cal:2d (fit:ins-w ed))
                       (cal:block-number en fit:*pt-tag*)))
       (T (setq nskip (1+ nskip)))))
   (if (> nskip 0)
@@ -4425,10 +4456,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -4470,6 +4505,14 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The ruler standing beside one of those prompts -- RUN STATE, not a
@@ -4485,12 +4528,25 @@
 ;; The scratch layer the rows are drawn on, made if it is missing.  A
 ;; layer of its own is what lets a drafter turn the ruler off without
 ;; turning anything of the fit off with it.
-(defun fit:rulerlayer ()
+;; LOCKED is not left alone: entmake draws onto a locked layer but
+;; entdel refuses there, so every ruler drawn stayed in the drawing
+;; for good and each redraw added another copy -- and LAYISO's
+;; lock-and-fade locks this layer with everything else.  It is
+;; calofin scratch, so it is unlocked, said once, and left unlocked.
+(defun fit:rulerlayer ( / ed fl)
   (if (not (tblsearch "LAYER" fit:*ruler-layer*))
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 fit:*ruler-layer*) '(70 . 0) '(62 . 7)
-                   (cons 6 "CONTINUOUS"))))
+                   (cons 6 "CONTINUOUS")))
+    (progn
+      (setq ed (entget (tblobjname "LAYER" fit:*ruler-layer*))
+            fl (cdr (assoc 70 ed)))
+      (if (and fl (= 4 (logand 4 fl))
+               (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed)))
+        (princ (strcat "\nFITABHD: layer " fit:*ruler-layer*
+                       " was locked - unlocked so the ruler can be"
+                       " taken down again.")))))
   fit:*ruler-layer*)
 
 ;; Take the ruler down -- the one call *error* and the clean exit both
@@ -4692,7 +4748,7 @@
 ;; then draws the whole bottom square to the leg's own frame.
 (defun fit:bottom (res / legs pick leg best bd lg d step go db sb so bo
                         v w lay pts lines ln p1w p2w h1 h2 w1 w2 mid
-                        redo out)
+                        redo out wpk)
   (setq legs (fit:legs res) redo T out nil)
   (while redo
    (setq redo nil)
@@ -4710,9 +4766,14 @@
      (princ "\nFITABHD: no deep end picked - no bottom drawn."))
     (T
      (progn
-      (setq best nil bd nil)
+      ;; the click is in the current UCS and the legs are world numbers
+      ;; off the survey, so it is taken to world first - under a moved
+      ;; UCS the raw numbers sat nearer the OTHER end, and the whole
+      ;; bottom went in back to front under a "hopper drawn" line
+      (setq best nil bd nil
+            wpk  (cal:2d (trans pick 1 0)))
       (foreach lg legs
-        (setq d (cal:dist (cal:2d pick) (car lg)))
+        (setq d (cal:dist wpk (car lg)))
         (if (or (null bd) (< d bd)) (setq best lg bd d)))
       (setq leg best
             w   (- (nth 4 leg) (nth 3 leg))

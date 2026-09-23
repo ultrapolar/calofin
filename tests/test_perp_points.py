@@ -2422,7 +2422,7 @@ def main():
     test_cperppts_limits_at_or_meets_the_boundary_in_the_vm()
     test_both_routines_ask_the_new_questions_in_the_same_words()
     test_perppts_walks_its_chains_back()
-    test_perppts_pops_the_error_mode_on_every_exit()
+    test_perppts_leaves_the_error_mode_alone_on_every_exit()
     print("\nall tests passed")
     test_the_length_ruler_hands_a_row_in_as_the_length()
     test_the_length_ruler_is_down_between_rounds()
@@ -2480,12 +2480,14 @@ def test_perppts_walks_its_chains_back():
     print("  PERPPTS walks its width, join and style questions back")
 
 
-def test_perppts_pops_the_error_mode_on_every_exit():
-    """PERPPTS pushes AutoCAD's error mode so its handler may drain a
-    pending command.  Until v0.11 it popped that mode only from the
-    handler, so every CLEAN run left it stacked for the session -- and a
-    stacked mode refuses command-s inside every later handler.  The pop
-    lives in perp:finish now, which both exits call."""
+def test_perppts_leaves_the_error_mode_alone_on_every_exit():
+    """PERPPTS used to push AutoCAD's error mode so its handler could
+    drain a pending command -- and under a push AutoCAD resets the
+    evaluator before *error* runs, so the handler's call to its LOCAL
+    perp:finish was a call to nothing (tests/test_fix_perp.py models
+    that).  From v0.24 neither routine pushes: both exits leave the
+    mode exactly as they found it, and neither pops what it never
+    pushed."""
     vm, pl = run_perppts([CLICK, 5] + BOW + ["Straight", WIDTH_OK, "No",
                                              "STandard"])
     assert vm.error_mode_depth == 0 and vm.error_mode_underflow == 0, \
@@ -2514,11 +2516,13 @@ def test_perppts_pops_the_error_mode_on_every_exit():
         (vm.error_mode_depth, vm.error_mode_underflow)
     assert vm.sysvars['OSMODE'] == 4133 and vm.sysvars['CMDECHO'] == 1, \
         vm.sysvars
-    # CPERPPTS carries the same finish helper; the pop sits in it too
-    code = open(os.path.join(LISP_DIR, "cperp_points.lsp")).read()
-    fin = code[code.index("(defun cperp:finish"):code.index("(defun *error*")]
-    assert "(*pop-error-mode*)" in fin, "cperp:finish does not pop the mode"
-    print("PERPPTS/CPERPPTS: the error mode is popped on every exit")
+    # CPERPPTS carries the same finish helper, and pushes nothing either
+    for name in ("perp_points.lsp", "cperp_points.lsp"):
+        code = strip_comments(open(os.path.join(LISP_DIR, name)).read())
+        assert "*push-error-using-command*" not in code \
+            and "*pop-error-mode*" not in code, \
+            "%s touches the error mode" % name
+    print("PERPPTS/CPERPPTS: the error mode is left alone on every exit")
 
 
 # --- the length ruler ---------------------------------------------------

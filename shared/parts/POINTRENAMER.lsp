@@ -61,7 +61,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *pointrenamer-version* "v1.5")
+(setq *pointrenamer-version* "v1.6")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob the tool has, all of them here.
@@ -140,10 +140,13 @@
 ;; distance here: 6.0 is six inches.
 (setq ptr:*band* 6.0)
 
-;; Which way round the FIRST run of a session offers, on the same
-;; footing as the band.  Spelled exactly as the keywords are, because
-;; this string IS the offered default: "Clockwise" or
-;; "COunterclockwise", nothing else.
+;; Which way round the FIRST run of a session offers: "Clockwise" or
+;; "Counterclockwise", in any case, or CW / CCW.  It is on the same
+;; footing as the band.  It is read into the keyword's own spelling
+;; before it is offered, because a knob of "Counterclockwise" once
+;; matched nothing downstream and the survey was renumbered clockwise
+;; under a prompt showing <Counterclockwise>.  Anything else is
+;; offered as Clockwise, the shipped value.
 (setq ptr:*dir* "Clockwise")
 
 ;; The number the count starts at, offered at every run.  Unlike the
@@ -239,19 +242,29 @@
 ;; Distance as every prompt and report writes it.
 (defun ptr:dstr (d) (rtos d ptr:*dist-mode* ptr:*dist-prec*))
 
+;; A direction in any spelling -- either word in any case, or CW / CCW
+;; -- as the keyword the rest of the command compares against, or nil
+;; when it names neither.  The one place a direction is normalized: the
+;; sweep tests (= ... "COunterclockwise"), so a "Counterclockwise" or a
+;; "ccw" that slipped past here read as clockwise without a word.
+(defun ptr:dircanon (s / u)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (cond ((member u '("COUNTERCLOCKWISE" "CCW")) "COunterclockwise")
+        ((member u '("CLOCKWISE" "CW")) "Clockwise")))
+
 ;; Which way round.  CW and CCW ride along ALL-CAPS and hidden, so they
 ;; must be typed in full and cannot steal a canonical hotkey; they are
-;; normalized HERE, never downstream.  Returns the canonical keyword or
-;; CAL-BACK.
+;; normalized HERE, never downstream.  DFLT is offered as given, so the
+;; caller hands it over already through ptr:dircanon.  Returns the
+;; canonical keyword or CAL-BACK.
 (defun ptr:askdir (dflt / v)
   (setq v (cal:askkw "Number the points which way around?"
                      "Clockwise COunterclockwise CW CCW"
                      "Clockwise/COunterclockwise"
                      dflt T))
   (cond ((eq v 'CAL-BACK) v)
-        ((= v "CW") "Clockwise")
-        ((= v "CCW") "COunterclockwise")
-        (t v)))
+        ((ptr:dircanon v))
+        (t "Clockwise")))
 
 ;; The band, as a distance.  A band is always needed, so there is no NA
 ;; here: Enter takes the remembered answer.  initget 6 rejects zero and
@@ -649,13 +662,24 @@
   (if (and (null cand) (= nany 1)) (setq cand lastc))
   (list (reverse pts) nskip cand))
 
+;; The space being worked in, as the 410 group of what sits in it.
+;; CTAB names the LAYOUT even when the drafter has double-clicked into
+;; one of its viewports and is working on model space through it, and
+;; model-space entities carry 410 "Model" -- so a sweep filtered on CTAB
+;; from inside a viewport saw paper space only: the clash warning never
+;; fired and Enter = whole drawing found no points at all.  CVPORT is 1
+;; only while paper space itself is active.
+(defun ptr:space-tab ()
+  (if (= 1 (getvar "CVPORT")) (getvar "CTAB") "Model"))
+
 ;; How many point blocks OUTSIDE the renamed set already carry a number
 ;; in [first, last] -- the collision the renumber cannot see, said out
-;; loud instead of found at the next callout.  Only the current tab is
-;; swept: a Layout1 detail reusing the numbers is not a clash.
+;; loud instead of found at the next callout.  Only the space being
+;; worked in is swept: a Layout1 detail reusing the numbers is not a
+;; clash.
 (defun ptr:clash-count (renamed first lastn / ss i en ed att nm v n)
   (setq n 0
-        ss (ssget "_X" (list '(0 . "INSERT") (cons 410 (getvar "CTAB")))))
+        ss (ssget "_X" (list '(0 . "INSERT") (cons 410 (ptr:space-tab)))))
   (if ss
     (progn
       (setq i 0)
@@ -781,14 +805,14 @@
            (princ "\nHighlight the area to renumber (Enter = whole drawing): ")
            (setq ss (ssget ptr:*filter*))
            (if lzd:watch (lzd:watch ss) ss)))
-       ;; "whole drawing" is the tab you are looking at, the same scope
-       ;; the clash check sweeps and the same one COVERCHECK and XFTCONV
-       ;; use for this prompt: renumbering points in a layout you cannot
-       ;; see -- and which the clash check would not even warn about --
-       ;; is never what Enter was meant to say
+       ;; "whole drawing" is the space you are working in, the same
+       ;; scope the clash check sweeps: renumbering points in a layout
+       ;; you cannot see -- and which the clash check would not even
+       ;; warn about -- is never what Enter was meant to say.  Model
+       ;; space from inside a layout viewport is model space
        (if (null ss)
          (setq ss (ssget "_X" (append ptr:*filter*
-                                      (list (cons 410 (getvar "CTAB")))))))
+                                      (list (cons 410 (ptr:space-tab)))))))
        (cond
          ((null ss)
           (princ "\nNothing to renumber - no points or polylines in the drawing.")
@@ -841,7 +865,11 @@
          ((null res))                   ; initget 1 makes this unreachable
                                         ; at the command line; re-ask
          (t
-          (setq start (ptr:measure res tab)
+          ;; the pick is in the current UCS and the perimeter table is
+          ;; built from entget, which is world: measured raw under a
+          ;; moved UCS the count started that far round the outline,
+          ;; with no far-pick note when the shifted spot still landed on it
+          (setq start (ptr:measure (trans res 1 0) tab)
                 s0    (cdr start))
           (if (> (car start) ptr:*far-pick*)
             (princ (strcat "\nNote: the pick sits " (ptr:dstr (car start))
@@ -850,7 +878,13 @@
           (setq step 4))))
       ;; ---- 4. which way round ------------------------------------
       ((= step 4)
-       (setq res (ptr:askdir (if ptr:*dir-now* ptr:*dir-now* ptr:*dir*)))
+       ;; the knob is a LAZTUNE string, and an override arrives after
+       ;; load, so it is read into the keyword's spelling HERE, where it
+       ;; is used -- what the bracket shows is then what Enter does
+       (setq res (ptr:askdir
+                   (cond ((ptr:dircanon (if ptr:*dir-now* ptr:*dir-now*
+                                          ptr:*dir*)))
+                         ("Clockwise"))))
        (cond
          ((eq res 'CAL-BACK) (setq step 3))
          (t (setq ptr:*dir-now* res

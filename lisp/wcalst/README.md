@@ -115,6 +115,14 @@ entire band became the "stair section", every dart was dropped and the
 summary read a bottom line 0.00% off. The window clips it to the part
 you drew the box round.
 
+The window is read in the UCS it was drawn in: a box drawn under a
+moved or turned UCS is square to that UCS, so the segments are taken
+into it for the test (as the side pick is taken out of it). Compared
+raw, a moved UCS made every window catch nothing, and the stairs were
+cut full of darts under a clean-looking summary. A window that still
+catches no far-side line is said in the report, so it cannot pass for
+one that did its job.
+
 A windowed section is developed as **one rigid piece**: the whole
 outline path is rotated by the chord of the straightened side across
 the section and anchored where the section begins. Treads come out

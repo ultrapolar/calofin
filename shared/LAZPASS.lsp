@@ -101,7 +101,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v2.5")
+(setq cal:*version* "v2.6")
 
 
 ;;  WHAT IS LOADED, AND AT WHICH VERSION.  Every tool reports its own
@@ -451,11 +451,12 @@
 
 ;; A per-ROLE override a drafter has set through CALSET's Itemcolors
 ;; menu: CalofinInk-<ROLE> in the profile, or nil when none is set for
-;; this role.  One profile key per role, rather than one packed
-;; setting parsed by hand, so what CALSET writes is exactly what
-;; getint already validated -- nothing downstream re-parses a typed
-;; string.  Works for any role, fade/guide/dim/hi included, though
-;; today only the item-type roles below are reachable from CALSET.
+;; this role -- or when what is set is not a colour.  CALSET and LAZSET
+;; both refuse anything but 1-255 now (lzp:aci-p), but an older CALSET
+;; stored whatever atoi made of the typed text, so "300" or "-3" can
+;; still be sitting in a profile; read as no override, it never reaches
+;; grdraw or entmod.  Works for any role, fade/guide/dim/hi included,
+;; though today only the item-type roles below are reachable from CALSET.
 (defun cal:inkoverride (role / q v)
   (setq q (assoc role '((fade . "FADE") (guide . "GUIDE") (dim . "DIM")
                          (hi . "HI") (flag . "FLAG") (arc . "ARC")
@@ -465,7 +466,8 @@
   (if q
     (progn
       (setq v (cal:setting (strcat "CalofinInk-" (cdr q)) ""))
-      (if (/= v "") (atoi v)))))
+      (if (/= v "") (setq v (atoi v)))
+      (if (and (numberp v) (< 0 v 256)) v))))
 
 ;;  THE INK TABLE.  A colour knob set to 'auto asks for the ACI that
 ;;  suits the background it will be seen against; a knob set to a
@@ -1085,10 +1087,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -1369,28 +1375,39 @@
     ((eq tier 'eighth) (* base 0.35))
     (T base)))                     ; 'current and 'jump
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;; A ruler stroke from (X1 Y1) to (X2 Y2) on LAY in ACI colour COL.
 (defun cal:ruler-line (x1 y1 x2 y2 lay col)
   (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity") (cons 8 lay)
                   (cons 62 col) '(100 . "AcDbLine")
-                  (cons 10 (list x1 y1 0.0))
-                  (cons 11 (list x2 y2 0.0)))))
+                  (cons 10 (trans (list x1 y1 0.0) 1 0))
+                  (cons 11 (trans (list x2 y2 0.0) 1 0)))))
 
 ;; The ring that marks the current row.
 (defun cal:ruler-ring (x y r lay col)
   (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity") (cons 8 lay)
                   (cons 62 col) '(100 . "AcDbCircle")
-                  (cons 10 (list x y 0.0)) (cons 40 r))))
+                  (cons 10 (trans (list x y 0.0) 1 0)) (cons 40 r))))
 
 ;; A ruler label: one unwrapped MTEXT of height HGT at PT in the
 ;; current text style, attached top left (ATT 1) or top right (3) so
-;; it grows away from the spine.
+;; it grows away from the spine, and running along the UCS X axis
+;; (group 11, a WORLD direction) so it reads level in a plan view of
+;; that UCS.
 (defun cal:ruler-label (pt hgt str lay col att)
   (entmakex (list '(0 . "MTEXT") '(100 . "AcDbEntity") (cons 8 lay)
                   (cons 62 col) '(100 . "AcDbMText")
-                  (cons 10 (list (car pt) (cadr pt) 0.0))
+                  (cons 10 (trans (list (car pt) (cadr pt) 0.0) 1 0))
                   (cons 40 hgt) '(41 . 0.0) (cons 71 att) '(72 . 5)
-                  (cons 1 str) '(50 . 0.0) '(73 . 1) '(44 . 1.0))))
+                  (cons 1 str) (cons 11 (trans '(1.0 0.0 0.0) 1 0 T))
+                  '(73 . 1) '(44 . 1.0))))
 
 ;; Draw the ruler down its strip of the current view round
 ;; TOTAL-EIGHTHS, in the HASFEET family, on layer LAY, sized and
@@ -1479,8 +1496,22 @@
 ;; and the hint flag are kept, since neither is about what is drawn; the
 ;; ladder is not, since it is what the next prompt asks for and the next
 ;; prompt says so itself.
-(defun cal:ruler-off (state / e)
-  (foreach e (nth 2 state) (if (and e (entget e)) (entdel e)))
+;;
+;; entdel refuses on a locked layer, and it refuses quietly -- so a
+;; ruler that would not come down stayed in the drawing, and every
+;; redraw added another.  The tools unlock their own ruler layer before
+;; drawing on it; this is the line that says so if one gets through
+;; anyway (the step routines draw on the current layer), once per
+;; take-down, naming the layer the rows are left on.
+(defun cal:ruler-off (state / e left)
+  (setq left 0)
+  (foreach e (nth 2 state)
+    (if (and e (entget e) (not (entdel e))) (setq left (1+ left))))
+  (if (> left 0)
+    (princ (strcat "
+  " (itoa left) " ruler item(s) could not be"
+                   " erased - layer " (vl-princ-to-string (nth 5 state))
+                   " is locked.  Unlock it and ERASE them.")))
   (list nil (nth 1 state) nil nil nil (nth 5 state) (nth 6 state)
         (nth 7 state) nil))
 
@@ -1539,7 +1570,7 @@
 ;; this function held, would outlive the Esc.  The caller keeps the
 ;; state between prompts and takes the ruler down with cal:ruler-off
 ;; before a prompt that does not take it and on every way out.
-(defun cal:ask-len (prompt kws state reader / pk v out done)
+(defun cal:ask-len (prompt kws state reader / pk v out done toks)
   (setq done nil out nil)
   (while (not done)
     (if kws (initget 128 kws) (initget 128))
@@ -1554,6 +1585,18 @@
          ;; dash as the separator in 4-1/2 and would read -5 as 5
          ((= (substr (vl-string-trim " \t" pk) 1 1) "-")
           (princ "\nA length must be more than zero."))
+         ;; a fraction with nothing in front of it is almost always the
+         ;; tail of 44 1/2 typed with a space -- which this prompt, a
+         ;; getpoint, took as Enter after 44 -- landing on the NEXT
+         ;; question.  Taken, it was half an inch there, and nothing
+         ;; said so.  Refused, the drafter sees what happened and can
+         ;; still give half an inch as 0-1/2 or .5
+         ((and (= 1 (length (setq toks (cal:len-split
+                                          (vl-string-trim " \t\"'" pk)))))
+               (vl-string-search "/" (car toks)))
+          (princ (strcat "\n\"" pk "\" on its own?  A space ends the answer"
+                         " at this prompt - type 44-1/2, or 0-1/2 for half"
+                         " an inch.")))
          ((setq v (cal:parse-len pk))
           (if (> (car v) 0.0)
             (progn
@@ -1943,7 +1986,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.4")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.5")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -1989,6 +2032,8 @@
 (setq lzd:*step* nil)      ; the last breadcrumb
 (setq lzd:*watch* nil)     ; enames the tool registered as its input
 (setq lzd:*pts* nil)       ; (label . point) for every point picked
+(setq lzd:*inner* nil)     ; ((TOOL . VER) ...) of commands begun INSIDE
+                           ; this run, innermost first -- lzd:begin
 (setq lzd:*inside* nil)    ; the reporter is running -- refuse re-entry
 (setq lzd:*last* nil)      ; the last report, for LAZDIAG to write again
 (setq lzd:*lastfile* nil)  ; where it went, nil if it could not be written
@@ -2083,6 +2128,29 @@
 ;;   transcript that does span two runs of one tool says so rather than
 ;;   running them together.
 (defun lzd:begin (tool ver)
+  (cond
+    ;; ...unless the run standing is still GOING: a command that runs
+    ;; another as a function -- XYPLOT and ABCDEF handing over to ABHD,
+    ;; a tutorial running its tool's scan, AUTODIM finishing with PADDLE
+    ;; -- begins that one from inside its own run.  Dropped, the outer
+    ;; run was logged "ok" before it had finished, and a failure in the
+    ;; inner one was filed under a command the drafter never typed, with
+    ;; none of the answers that led to it, so the report could not be
+    ;; replayed.  Joined, the transcript runs on across the hand-over and
+    ;; the inner command is remembered by name (lzd:*inner*) for its end
+    ;; and its report to find.
+    ((lzd:nested-p tool)
+     (if (not (lzd:inner-p tool))
+       (setq lzd:*inner* (cons (cons (strcase (lzd:str tool)) ver)
+                               lzd:*inner*)))
+     (lzd:say (strcat "--- " (lzd:str tool)
+                      (if ver (strcat " " (lzd:str ver)) "")
+                      " started inside " lzd:*tool*)))
+    (t (lzd:begin-1 tool ver)))
+  tool)
+
+;; lzd:begin for a run that is not joining another.
+(defun lzd:begin-1 (tool ver)
   ;; A context still standing when a DIFFERENT tool begins belongs to a
   ;; run that finished without failing -- lzd:report and lzd:end both
   ;; clear it -- so this is where that run gets its "ok" line.  The
@@ -2092,18 +2160,61 @@
   (if (and lzd:*tool* (not (lzd:mine-p tool)))
     (lzd:log "ok" nil nil))
   (if (not (lzd:mine-p tool))
-    (setq lzd:*tool*    (lzd:str tool)
-          lzd:*started* (cal:datestr)
-          lzd:*mark*    (entlast)
-          lzd:*log*     nil
-          lzd:*answers* nil
-          lzd:*step*    nil
-          lzd:*watch*   nil
-          lzd:*pts*     nil))
+    (progn
+      (setq lzd:*tool*    (lzd:str tool)
+            lzd:*started* (cal:datestr)
+            lzd:*mark*    (entlast)
+            lzd:*log*     nil
+            lzd:*answers* nil
+            lzd:*step*    nil
+            lzd:*watch*   nil
+            lzd:*pts*     nil
+            lzd:*inner*   nil)
+      ;; ERRNO is sticky: AutoCAD sets it on a failed call and nothing
+      ;; clears it, so the code a report printed could be a missed pick
+      ;; from a command an hour ago, sending whoever read it after a
+      ;; failure this run never had.  Cleared here, a run's report can
+      ;; only show one of its own.  Only when it holds a code: a begin
+      ;; is the top of every command, and one that writes a sysvar it
+      ;; had no need to move is one more thing a run changes behind the
+      ;; drafter.  Under a catch, because nothing in lzd: may throw.
+      (if (not (member (getvar "ERRNO") '(nil 0)))
+        (vl-catch-all-apply 'setvar (list "ERRNO" 0)))))
   (setq lzd:*ver* ver)
   (lzd:say (strcat "--- " (lzd:str tool) " started"
-                   (if ver (strcat " " (lzd:str ver)) "")))
-  tool)
+                   (if ver (strcat " " (lzd:str ver)) ""))))
+
+;; The commands AutoCAD has running, uppercased, as a list: CMDNAMES
+;; reads "XYPLOT" while that command runs -- a (c:ABHD) it calls as a
+;; function adds nothing -- "XYPLOT'ZOOM" inside a transparent one, and
+;; "" at the command line.
+(defun lzd:cmdnames ( / s i out)
+  (setq s (getvar "CMDNAMES") out nil)
+  (if (= (type s) 'STR)
+    (progn
+      (setq s (strcase s))
+      (while (setq i (vl-string-search "'" s))
+        (setq out (cons (substr s 1 i) out)
+              s   (substr s (+ i 2))))
+      (setq out (cons s out))))
+  (vl-remove "" out))
+
+;; T when TOOL is beginning INSIDE the run that is standing rather than
+;; after it.  From here the two look alike -- a run that finished
+;; without reaching its lzd:end leaves its context standing too -- and
+;; what tells them apart is AutoCAD's own CMDNAMES, which still names
+;; the outer command while it runs and has let go of it once it has
+;; returned.  Where CMDNAMES cannot say (a command begun under another
+;; name than the one typed), this answers nil and the run standing is
+;; taken as finished, which is what every begin did before.
+(defun lzd:nested-p (tool)
+  (and lzd:*tool* tool (not (lzd:mine-p tool))
+       (member (strcase lzd:*tool*) (lzd:cmdnames))
+       T))
+
+;; The (TOOL . VER) entry of a command begun inside this run, or nil.
+(defun lzd:inner-p (tool)
+  (and tool lzd:*inner* (assoc (strcase (lzd:str tool)) lzd:*inner*)))
 
 ;; There is deliberately no lazy "open a context on the first prompt"
 ;; here.  One mechanism opens a context -- lzd:begin, at the top of a
@@ -2119,11 +2230,18 @@
 ;; Through lzd:mine-p, so "is this my context" is decided in ONE place
 ;; and case-insensitively -- a tool that ended a context it did not own
 ;; would throw away the prompts of the run still going on around it.
-(defun lzd:end (tool)
-  (if (and lzd:*tool* (or (null tool) (lzd:mine-p tool)))
-    (lzd:log "ok" nil nil))
-  (if (or (null tool) (null lzd:*tool*) (lzd:mine-p tool))
-    (lzd:disown))
+(defun lzd:end (tool / in)
+  (cond
+    ;; a command begun inside this run has finished: the run it was
+    ;; called from goes on, and gets its line when IT ends
+    ((setq in (lzd:inner-p tool))
+     (setq lzd:*inner* (vl-remove in lzd:*inner*))
+     (lzd:say (strcat "--- " (lzd:str tool) " finished")))
+    (t
+     (if (and lzd:*tool* (or (null tool) (lzd:mine-p tool)))
+       (lzd:log "ok" nil nil))
+     (if (or (null tool) (null lzd:*tool*) (lzd:mine-p tool))
+       (lzd:disown))))
   nil)
 
 ;; One line of transcript.  The list is NEWEST first, so capping it is
@@ -2200,6 +2318,17 @@
   (lzd:say (strcat "  ? " (lzd:str prompt)
                    "   -> " (lzd:enc answer)))
   (setq lzd:*answers* (cons (cons (lzd:str prompt) answer) lzd:*answers*))
+  ;; A CLICK is also a labelled point on the report's CALOFIN-PICKS
+  ;; layer.  Every input reaches this line -- check_lazdiag sees to that
+  ;; -- so this is the one place that can say so for all of them: lzd:pt
+  ;; had no caller at all, and every report carried an empty picks layer
+  ;; and "picked points 0" under a header promising each click labelled.
+  ;; A getpoint answer is 2 or 3 REALS; an entsel one is (ename point).
+  (cond
+    ((lzd:clickp answer) (lzd:pt prompt answer))
+    ((and (listp answer) (= (type (car answer)) 'ENAME)
+          (lzd:clickp (cadr answer)))
+     (lzd:pt prompt (cadr answer))))
   (if (> (length lzd:*answers*) lzd:*max-log*)
     (setq lzd:*answers* (lzd:firstn lzd:*answers* lzd:*max-log*)))
   answer)
@@ -2242,10 +2371,24 @@
 
 ;; A point the user picked, with the prompt it answered.  These are
 ;; drawn into the report as labelled points: for half the tools here the
-;; picks ARE the geometry that caused the failure.
-(defun lzd:pt (label p)
+;; picks ARE the geometry that caused the failure.  Kept in WORLD, as
+;; the copied geometry is, and translated NOW, while the UCS it was
+;; picked in is still the current one; P itself goes back untouched.
+;; lzd:ask calls it for every answer that is a click, so no tool has to;
+;; the transcript keeps the answer as given (UCS), and THE DRAWING's
+;; UCSORG / UCSXDIR lines say how to read it.
+(defun lzd:clickp (v)
+  (and (listp v) (<= 2 (length v) 3)
+       (vl-every 'numberp v)
+       (vl-some '(lambda (x) (= (type x) 'REAL)) v)))
+
+(defun lzd:pt (label p / w)
   (if (and p (listp p) (numberp (car p)))
-    (setq lzd:*pts* (cons (cons (lzd:str label) p) lzd:*pts*)))
+    (progn
+      (setq w (vl-catch-all-apply 'trans (list p 1 0)))
+      (setq lzd:*pts* (cons (cons (lzd:str label)
+                                  (if (vl-catch-all-error-p w) p w))
+                            lzd:*pts*))))
   p)
 
 ;;; -------------------- gathering the geometry --------------------------
@@ -2814,7 +2957,8 @@
       (lzd:pair "message" msg)
       (lzd:pair "last step" (if lzd:*step* lzd:*step*
                                 "(none - it failed before the first prompt)"))
-      (lzd:pair "ERRNO" (getvar "ERRNO"))
+      (lzd:pair "ERRNO" (strcat (lzd:str (getvar "ERRNO"))
+                                "  (the last one set since this run began)"))
       (lzd:pair "CMDNAMES" (getvar "CMDNAMES"))
       (lzd:pair "LASTPROMPT" (getvar "LASTPROMPT"))
       ""
@@ -2829,6 +2973,21 @@
       (lzd:pair "DIMSCALE" (getvar "DIMSCALE"))
       (lzd:pair "CMDECHO" (getvar "CMDECHO"))
       (lzd:pair "UNDOCTL" (getvar "UNDOCTL"))
+      ;; The frame the clicks were answered in.  A pick is a UCS point
+      ;; and the geometry copied below is World, so without these a
+      ;; failure under a UCS on a pool corner arrives with its clicks
+      ;; a thousand units off the drawing and nothing to say why --
+      ;; and a sweep run from a layout viewport looks like one that
+      ;; found nothing.
+      (lzd:pair "WORLDUCS" (getvar "WORLDUCS"))
+      (lzd:pair "UCSORG" (lzd:enc (getvar "UCSORG")))
+      (lzd:pair "UCSXDIR" (lzd:enc (getvar "UCSXDIR")))
+      (lzd:pair "CTAB" (getvar "CTAB"))
+      (lzd:pair "TILEMODE" (getvar "TILEMODE"))
+      (lzd:pair "CVPORT" (getvar "CVPORT"))
+      (lzd:pair "AUNITS" (getvar "AUNITS"))
+      (lzd:pair "ANGBASE" (getvar "ANGBASE"))
+      (lzd:pair "ANGDIR" (getvar "ANGDIR"))
       ""
       "GEOMETRY COPIED INTO THIS FILE"
       (lzd:pair "entities" (strcat (itoa nents)
@@ -2854,6 +3013,18 @@
       "  the prompt it died at, which is the question a line number"
       "  would have answered."
       ""))
+  ;; a failure in a command this run called: named, right under the
+  ;; command it is filed as (lzd:report-1)
+  (if lzd:*inner*
+    (setq out (append (lzd:firstn out 4)
+                      (list (lzd:pair "failed inside"
+                                      (strcat (lzd:str (car (car lzd:*inner*)))
+                                              (if (cdr (car lzd:*inner*))
+                                                (strcat " " (lzd:str (cdr (car lzd:*inner*))))
+                                                "")
+                                              ", which " (lzd:str tool)
+                                              " ran")))
+                      (cdr (cdr (cdr (cdr out)))))))
   (setq out (append out (lzd:oddities)))
   (setq out (append out (list "" "THE RUN, PROMPT BY PROMPT")))
   (setq out (append out
@@ -3033,15 +3204,25 @@
   (strcat "calofin-" (itoa (fix (/ dd 10000))) "-"
           (cal:zeropad2 (rem (fix (/ dd 100)) 100)) ".log"))
 
+;; An environment string that names a folder, or nil.  EMPTY is nil
+;; too, the same rule lzd:addcand keeps for CalofinErrorDir: there is
+;; no unsetenv, so (setenv "CalofinLogDir" "") is how anybody undoes
+;; the setenv LAZLOG tells them to type -- and taken as a folder, ""
+;; put every run's log line into a bare file name in whatever folder
+;; AutoCAD's working directory happened to be that day.
+(defun lzd:envdir (name / u)
+  (setq u (getenv name))
+  (if (and u (= (type u) 'STR) (/= (vl-string-trim " \t" u) "")) u))
+
 ;; Where the log lives: a calofin folder beside the profile if there is
 ;; one, else wherever a report would go.  Its own folder on purpose --
 ;; Downloads is for the one file you send, and a log that accumulated
 ;; there would be mistaken for one of them every month.
 (defun lzd:logfolder ( / u)
   (cond
-    ((setq u (getenv "CalofinLogDir")) u)
-    ((setq u (getenv "USERPROFILE")) (strcat u "\\" lzd:*logdir*))
-    ((setq u (getenv "LOCALAPPDATA")) (strcat u "\\" lzd:*logdir*))
+    ((lzd:envdir "CalofinLogDir"))
+    ((setq u (lzd:envdir "USERPROFILE")) (strcat u "\\" lzd:*logdir*))
+    ((setq u (lzd:envdir "LOCALAPPDATA")) (strcat u "\\" lzd:*logdir*))
     ((car (lzd:candidates)))))
 
 ;; The month's file, rolled when it has outgrown lzd:*logmax*.  A log
@@ -3206,10 +3387,19 @@
 
 (defun lzd:disown ()
   (setq lzd:*tool* nil lzd:*ver* nil lzd:*log* nil lzd:*answers* nil
-        lzd:*step* nil lzd:*watch* nil lzd:*pts* nil lzd:*mark* nil)
+        lzd:*step* nil lzd:*watch* nil lzd:*pts* nil lzd:*mark* nil
+        lzd:*inner* nil)
   nil)
 
 (defun lzd:report-1 (tool ver msg / prims name path)
+  ;; A failure in a command this run called is this run's failure: an
+  ;; error runs only the innermost handler and then ends everything, so
+  ;; the command the drafter typed has failed too.  Filed under THAT
+  ;; one, at its version -- the transcript holds its answers as well as
+  ;; the inner command's, so it replays from where the drafter began --
+  ;; and the inner command is named on a line of its own.
+  (if (lzd:inner-p tool)
+    (setq tool lzd:*tool* ver lzd:*ver*))
   (if (not (lzd:mine-p tool)) (lzd:disown))
   (setq prims (lzd:build-prims tool ver msg)
         name  (lzd:filename tool ver)
@@ -3230,7 +3420,8 @@
     ;; same prompt is the clearest thing anybody ever says about a
     ;; question that cannot be answered.
     ((lzd:cancel-p msg)
-     (if (lzd:mine-p tool) (lzd:log "quit" nil nil))
+     ;; an Esc inside a command this run called ends this run too
+     (if (or (lzd:mine-p tool) (lzd:inner-p tool)) (lzd:log "quit" nil nil))
      ;; disown, NOT lzd:end -- end logs an "ok" of its own, and a run
      ;; the drafter backed out of would have gone into the log twice,
      ;; once as the quit it was and once as a clean run it was not
@@ -3277,6 +3468,11 @@
   (if (null p)
     (progn (princ "\n[calofin] Nothing placed.") nil)
     (progn
+      ;; the click is in the CURRENT UCS and entmakex takes WORLD
+      ;; numbers: under a UCS on a pool corner the untranslated pick
+      ;; put the report back onto the drawing it was told to keep clear
+      ;; of.  Translated once, and the lines step down in World.
+      (setq p (trans p 1 0))
       (cal:ensure-layer lzd:*errlayer* 1)
       (setq h (/ (getvar "VIEWSIZE") 90.0))
       (if (or (null h) (<= h 0.0)) (setq h 1.0))
@@ -3567,7 +3763,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092226 REV40")
+(setq pool:*version* "092226 REV41")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -3995,9 +4191,11 @@
 (setq pool:*valnotes*    nil)             ; validation problems, for the report
 (setq pool:*giveask*     nil)             ; T = mark held/failed rows "Given"
                                           ; this run (pool:askgiven); read by
-                                          ; pool:report, cleared by pool:givendone
+                                          ; pool:report, cleared by pool:givereset
 (setq pool:*giventxts*   nil)             ; (ename . target) per Given mark
                                           ; drawn this run, for pool:givendone
+(setq pool:*undo-open*   nil)             ; T = c:POOL's own undo group is open;
+                                          ; reset at the top of every run
 (setq pool:*formrun*     nil)             ; T = pool:*form* was non-empty when
                                           ; this run started -- a fully filled
                                           ; sheet draws with NO questions at
@@ -4397,10 +4595,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -4442,17 +4644,38 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The scratch layer the rows are drawn on, made if it is missing.  A
 ;; layer of its own is what lets a drafter turn the ruler off without
-;; turning anything of the pool off with it.
-(defun pool:rulerlayer ()
+;; turning anything of the pool off with it, so OFF and FROZEN are left
+;; the way they are found.  LOCKED is not: entmake draws onto a locked
+;; layer but entdel refuses there, so every ruler drawn stayed in the
+;; drawing for good and each redraw added another copy -- and LAYISO's
+;; lock-and-fade locks this layer with everything else.  It is calofin
+;; scratch, so it is unlocked, said once, and left unlocked.
+(defun pool:rulerlayer ( / ed fl)
   (if (not (tblsearch "LAYER" pool:*ruler-layer*))
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 pool:*ruler-layer*) '(70 . 0) '(62 . 7)
-                   (cons 6 "CONTINUOUS"))))
+                   (cons 6 "CONTINUOUS")))
+    (progn
+      (setq ed (entget (tblobjname "LAYER" pool:*ruler-layer*))
+            fl (cdr (assoc 70 ed)))
+      (if (and fl (= 4 (logand 4 fl))
+               (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed)))
+        (princ (strcat "\nPOOL: layer " pool:*ruler-layer*
+                       " was locked - unlocked so the ruler can be"
+                       " taken down again.")))))
   pool:*ruler-layer*)
 
 ;; Take the ruler down -- the one call *error* and the clean exit both
@@ -5079,9 +5302,12 @@
   ;; asked.  Only a real measurement is taken: every caller here range
   ;; checks what it gets and none of them can do anything with nil, so
   ;; an NA in the store falls through to the keyboard (having been
-  ;; consumed, so it cannot come back round again).
+  ;; consumed, so it cannot come back round again).  So does zero or
+  ;; less, which the typed prompt refuses: the callers check only D
+  ;; against C, so a sheet that wrote C as -3'4" (an elevation) and D
+  ;; as -10" drew a wall standing above the waterline without a word.
   (setq k (pool:fkeyof msg))
-  (if (and k (pool:fhas k) (numberp (setq v (pool:ftake k))))
+  (if (and k (pool:fhas k) (numberp (setq v (pool:ftake k))) (> v 0.0))
       v
       (progn
         (setq cols (mapcar 'pool:getcol ents))
@@ -7400,6 +7626,16 @@
            "Mark the dimension(s) that could not be held at their original value as \"Given\""
            "No" nil))))
 
+;; The Given opt-in and the marks it drew, forgotten.  pool:givendone
+;; does this when it finishes, but an Esc at its pick never gets there:
+;; left set, the next POOL -- or the report TUTORIALPOOL and POOLDEMO
+;; draw through pool:report -- put Given marks on rows nobody had asked
+;; about, and offered to flip the dead run's marks.  So c:POOL calls it
+;; at both ends too, and the two sheets that draw with POOL's report
+;; call it before they start.
+(defun pool:givereset ()
+  (setq pool:*giveask* nil pool:*giventxts* nil))
+
 ;; A row earns a Given mark once the drafter has opted in: any row
 ;; already flagged red by the fit, or -- cross dims carry no red flag
 ;; of their own -- a cross-dimension row's label ("X " / "CROSS ").
@@ -7431,21 +7667,33 @@
 ;; "best of both" without asking the format up front for every one.
 ;; A pick that lands on anything else is named and ignored, never an
 ;; error, and clears pool:*giveask*/*giventxts* either way so the next
-;; run starts clean.
-(defun pool:givendone ( / sel en)
+;; run starts clean.  A click on empty space is said and asked again:
+;; entsel answers it with the same nil as Enter, and ERRNO 7 is the
+;; only difference -- read as Enter, a click just beside a mark's text
+;; ended the loop and cleared the list, and the marks not yet flipped
+;; could then only be retyped by hand.
+(defun pool:givendone ( / sel en done)
   (if pool:*giventxts*
       (progn
         (princ (strcat "\n" (itoa (length pool:*giventxts*))
                        " dimension(s) marked Given."))
-        (while (setq sel
-                 ((lambda (v) (if lzd:ask (lzd:ask "Select a Given dimension to switch ft-in/in (Enter when done)" v) v))
-                   (entsel
-                     "\nSelect a Given dimension to switch ft-in/in (Enter when done): ")))
-          (setq en (car sel))
-          (if (assoc en pool:*giventxts*)
-              (pool:flipgiven en)
-              (princ "\n  Not a Given mark from this run -- ignored.")))))
-  (setq pool:*giveask* nil pool:*giventxts* nil)
+        (while (not done)
+          (setvar "ERRNO" 0)
+          (setq sel (entsel
+                      "\nSelect a Given dimension to switch ft-in/in (Enter when done): "))
+          (if lzd:ask (lzd:ask "\nSelect a Given dimension to switch ft-in/in (Enter when done): " sel) sel)
+          (if lzd:watch (lzd:watch sel) sel)
+          (cond
+            (sel
+             (setq en (car sel))
+             (if (assoc en pool:*giventxts*)
+                 (pool:flipgiven en)
+                 (princ "\n  Not a Given mark from this run -- ignored.")))
+            ((= 7 (getvar "ERRNO"))
+             (princ (strcat "\n  Nothing there - click the dimension text,"
+                            " or press Enter when done.")))
+            (T (setq done T))))))
+  (pool:givereset)
   (princ))
 
 ;; Returns the table's box as (xr ytop y0) so the caller can hang the
@@ -12175,7 +12423,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOL ( / *error* undo-open ptype base pstep)
+(defun c:POOL ( / *error* ptype base pstep)
 
   (defun *error* (msg)
     (if (and msg
@@ -12200,17 +12448,28 @@
     ;; next pool with no bottom and never asks why
     (pool:fclear)
     (setq pool:*nobottom* nil pool:*hasbottom* nil pool:*formrun* nil)
-    (if undo-open (setq undo-open (cal:undoend)))
+    ;; an Esc at the Given-dimension pick never reaches pool:givendone
+    (pool:givereset)
+    ;; the undo flag is a GLOBAL (see pool:undobegin): after the pushed
+    ;; mode resets the evaluator, a local of c:POOL reads nil in here
+    (if pool:*undo-open* (setq pool:*undo-open* (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "POOL" pool:*version* msg))
     (princ))
   (if lzd:begin (lzd:begin "POOL" pool:*version*))
+
+  ;; nothing is open yet: a flag an earlier run left set must not let
+  ;; this run's handler close somebody else's undo group
+  (setq pool:*undo-open* nil)
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
   (if *push-error-using-command* (*push-error-using-command*))
 
   (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER" "AUNITS" "ANGBASE" "ANGDIR"))
+  ;; last run's Given opt-in and marks, if it died before
+  ;; pool:givendone cleared them
+  (pool:givereset)
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil
         ;; a fresh run, so a fresh ruler: the hint is said once a run,
@@ -12226,7 +12485,7 @@
         pool:*ftin* (member (cdr (assoc "LUNITS" cal:*sysold*)) '(3 4))
         pool:*formrun* (if pool:*form* t nil))
   (setvar "CMDECHO" 0)
-  (setq undo-open (cal:undobegin))
+  (setq pool:*undo-open* (cal:undobegin))
   ;; architectural units while prompting so every distance can be
   ;; typed as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -12310,7 +12569,7 @@
 
   ;; ------------------------------------------------ finish
   (command "_.ZOOM" "_Extents")
-  (if undo-open (setq undo-open (cal:undoend)))
+  (if pool:*undo-open* (setq pool:*undo-open* (cal:undoend)))
   (cal:sysrestore)
   (pool:fclear)
   (pool:rulerkill)
@@ -12397,7 +12656,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq pooldemo:*version* "092226 REV09")
+(setq pooldemo:*version* "092226 REV10")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -12719,27 +12978,42 @@
   (if lzd:end (lzd:end "POOLDEMO"))
   (princ))
 
-(defun pooldemo:run ( / *error* undo-open cells k org)
+;; T while this run's own undo group is open.  A GLOBAL, and this
+;; file's own: pooldemo:run pushes the error mode so its handler may
+;; (command), and AutoCAD resets the evaluator before that handler
+;; runs, so a local of the run reads nil in it -- an Esc or a failure
+;; mid-sheet left the group open and the drafter's next edits went
+;; into it.  Reset at the top
+;; of every run, so a flag a dead run left set can never close a group
+;; this run did not open (the fault the shared pool:*undogrp* had).
+(setq pooldemo:*undo-open* nil)
 
-  ;; the handler lives where the group is opened, so the flag it reads
-  ;; is this run's own local -- it used to be pool:*undogrp*, shared
-  ;; with POOL and the tutorial
+(defun pooldemo:run ( / *error* cells k org)
+
+  ;; the handler lives where the group is opened, and reads only
+  ;; globals: after the pushed mode's reset nothing local survives
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nPOOLDEMO error: " msg)))
     (cal:sysrestore)
-    (if undo-open (setq undo-open (cal:undoend)))
+    (if pooldemo:*undo-open* (setq pooldemo:*undo-open* (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "POOLDEMO" pooldemo:*version* msg))
     (princ))
   (if lzd:begin (lzd:begin "POOLDEMO" pooldemo:*version*))
 
+  (setq pooldemo:*undo-open* nil)
   (if *push-error-using-command* (*push-error-using-command*))
   (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER" "AUNITS" "ANGBASE" "ANGDIR"))
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil)
+  ;; this run calls pool:report directly, and pool:report reads
+  ;; pool:*giveask*: a POOL cut short at its Given-dimension pick left
+  ;; it set, and this sheet's report drew Given marks nobody asked for.
+  ;; Guarded, since a POOL.LSP older than this file has no such helper
+  (if pool:givereset (pool:givereset))
   (setvar "CMDECHO" 0)
-  (setq undo-open (cal:undobegin))
+  (setq pooldemo:*undo-open* (cal:undobegin))
   (setvar "OSMODE" 0)
   (setvar "LUNITS" 4)
   ;; POOL's rotated dimensions type their angle: zero, east, CCW
@@ -12769,7 +13043,7 @@
     (setq k (1+ k)))
 
   (command "_.ZOOM" "_Extents")
-  (if undo-open (setq undo-open (cal:undoend)))
+  (if pooldemo:*undo-open* (setq pooldemo:*undo-open* (cal:undoend)))
   (cal:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
   (princ (strcat "\nPOOLDEMO complete -- " (itoa (length cells))
@@ -12830,7 +13104,7 @@
 ;;;      TUTORIALPOOL_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
 
-(setq tutorial:*version* "092226 REV09")
+(setq tutorial:*version* "092226 REV10")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -13159,28 +13433,42 @@
   (if lzd:end (lzd:end "TUTORIALPOOL"))
   (princ))
 
-(defun tutorial:run ( / *error* undo-open topics textonly k org going fn)
+;; T while this run's own undo group is open.  A GLOBAL, and this
+;; file's own: tutorial:run pushes the error mode so its handler may
+;; (command), and AutoCAD resets the evaluator before that handler
+;; runs, so a local of the run reads nil in it -- an Esc left the group
+;; open and the drafter's next edits went into it.  Reset at the top
+;; of every run, so a flag a dead run left set can never close a group
+;; this run did not open (the fault the shared pool:*undogrp* had).
+(setq tutorial:*undo-open* nil)
 
-  ;; the handler lives where the group is opened, so the flag it reads
-  ;; is this run's own local -- it used to be pool:*undogrp*, shared
-  ;; with POOL and the demo
+(defun tutorial:run ( / *error* topics textonly k org going fn)
+
+  ;; the handler lives where the group is opened, and reads only
+  ;; globals: after the pushed mode's reset nothing local survives
   (defun *error* (msg)
     (if (and msg
              (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
         (princ (strcat "\nTUTORIALPOOL error: " msg)))
     (cal:sysrestore)
-    (if undo-open (setq undo-open (cal:undoend)))
+    (if tutorial:*undo-open* (setq tutorial:*undo-open* (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "TUTORIALPOOL" tutorial:*version* msg))
     (princ))
   (if lzd:begin (lzd:begin "TUTORIALPOOL" tutorial:*version*))
 
+  (setq tutorial:*undo-open* nil)
   (if *push-error-using-command* (*push-error-using-command*))
   (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER" "AUNITS" "ANGBASE" "ANGDIR"))
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil)
+  ;; this run calls pool:report directly, and pool:report reads
+  ;; pool:*giveask*: a POOL cut short at its Given-dimension pick left
+  ;; it set, and this sheet's report drew Given marks nobody asked for.
+  ;; Guarded, since a POOL.LSP older than this file has no such helper
+  (if pool:givereset (pool:givereset))
   (setvar "CMDECHO" 0)
-  (setq undo-open (cal:undobegin))
+  (setq tutorial:*undo-open* (cal:undobegin))
   (setvar "OSMODE" 0)
   (setvar "LUNITS" 4)
   ;; POOL's rotated dimensions type their angle: zero, east, CCW
@@ -13214,7 +13502,7 @@
     (setq k (1+ k)))
 
   (command "_.ZOOM" "_Extents")
-  (if undo-open (setq undo-open (cal:undoend)))
+  (if tutorial:*undo-open* (setq tutorial:*undo-open* (cal:undoend)))
   (cal:sysrestore)
   (if *pop-error-mode* (*pop-error-mode*))
   (if lzd:end (lzd:end "TUTORIALPOOL"))
@@ -13303,7 +13591,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.12")
+(setq *poolside-version* "v1.13")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -13396,6 +13684,9 @@
 ;;;  at a depth is the likeliest way out of the question, and a ruler
 ;;;  left standing is scratch in somebody's drawing.
 (setq psd:*ruler* nil)
+;;  T while c:POOLSIDE's own undo group is open.  A global for the same
+;;  reason, and reset at the top of every run -- see psd:undobegin.
+(setq psd:*undo-open* nil)
 
 ;;; -------------------- small vector helpers ---------------------------
 ;;; Copies of the CALOFIN-LIB originals (STANDARDS.md section 4); the
@@ -13490,10 +13781,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -13535,17 +13830,38 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The scratch layer the rows are drawn on, made if it is missing.  A
 ;; layer of its own is what lets a drafter turn the ruler off without
-;; turning anything of the section off with it.
-(defun psd:rulerlayer ()
+;; turning anything of the section off with it, so OFF and FROZEN are left
+;; the way they are found.  LOCKED is not: entmake draws onto a locked
+;; layer but entdel refuses there, so every ruler drawn stayed in the
+;; drawing for good and each redraw added another copy -- and LAYISO's
+;; lock-and-fade locks this layer with everything else.  It is calofin
+;; scratch, so it is unlocked, said once, and left unlocked.
+(defun psd:rulerlayer ( / ed fl)
   (if (not (tblsearch "LAYER" psd:*ruler-layer*))
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 psd:*ruler-layer*) '(70 . 0) '(62 . 7)
-                   (cons 6 "CONTINUOUS"))))
+                   (cons 6 "CONTINUOUS")))
+    (progn
+      (setq ed (entget (tblobjname "LAYER" psd:*ruler-layer*))
+            fl (cdr (assoc 70 ed)))
+      (if (and fl (= 4 (logand 4 fl))
+               (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed)))
+        (princ (strcat "\nPOOLSIDE: layer " psd:*ruler-layer*
+                       " was locked - unlocked so the ruler can be"
+                       " taken down again.")))))
   psd:*ruler-layer*)
 
 ;; Take the ruler down -- the one call *error* and the clean exit both
@@ -14051,7 +14367,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOLSIDE ( / *error* undo-open style base total doff th chain pv ans
+(defun c:POOLSIDE ( / *error* style base total doff th chain pv ans
                       wh dp c2 runs cv fixed sta segs mir sgn i s p q
                       maxd ydim odl xc xd xb y m fv bdflt mdflt)
 
@@ -14064,12 +14380,18 @@
     ;; nothing to put DIMSTYLE back to: POOLSIDE never switches it
     (psd:pvkill)
     (psd:rulerkill)
-    (if undo-open (setq undo-open (cal:undoend)))
+    ;; the undo flag is a GLOBAL (see psd:undobegin): after the pushed
+    ;; mode resets the evaluator, a local of c:POOLSIDE reads nil here
+    (if psd:*undo-open* (setq psd:*undo-open* (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (psd:fclear)                        ; both exits clear the form store
     (if lzd:report (lzd:report "POOLSIDE" *poolside-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "POOLSIDE" *poolside-version*))
+
+  ;; nothing is open yet: a flag an earlier run left set must not let
+  ;; this run's handler close somebody else's undo group
+  (setq psd:*undo-open* nil)
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
@@ -14081,7 +14403,7 @@
   (setq psd:*valnotes* nil
         psd:*ruler* nil)
   (setvar "CMDECHO" 0)
-  (setq undo-open (cal:undobegin))
+  (setq psd:*undo-open* (cal:undobegin))
   ;; architectural units while prompting so every distance can be typed
   ;; as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -14243,7 +14565,7 @@
   (princ (strcat "  C " (rtos wh) "  D " (rtos dp)))
   (if (= style "SHallow") (princ (strcat "  C2 " (rtos c2))))
 
-  (if undo-open (setq undo-open (cal:undoend)))
+  (if psd:*undo-open* (setq psd:*undo-open* (cal:undoend)))
   (cal:sysrestore)
   (psd:rulerkill)
   (if *pop-error-mode* (*pop-error-mode*))
@@ -14387,7 +14709,7 @@
 
 (vl-load-com)
 
-(setq *lazside-version* "v1.1")
+(setq *lazside-version* "v1.2")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -15363,6 +15685,12 @@
           (lzv:recall-save (lzv:recall-slot))
           (setq out (lzv:form) done T))
          (t (setq done T))))))
+  ;; the dialog's run ends with the dialog.  What the command does with
+  ;; the answer -- runs POOL off the form, launches the tool picked -- is
+  ;; a run of its own: left standing, this one was JOINED by it (the
+  ;; command is still what CMDNAMES names), and a failure in the tool
+  ;; was filed under a dialog no report can replay
+  (if lzd:end (lzd:end "LAZSIDE"))
   out)
 
 ;;; -------------------- commands ----------------------------------------
@@ -15615,8 +15943,13 @@
 ;;;
 ;;;  Distances may be typed in the current drawing units, e.g. 6'10-1/2"
 ;;;  as well as plain inches -- or in MILLIMETRES by putting the unit on
-;;;  the number: 600mm, 1524 MM.  Object snaps stay live, so a distance
-;;;  can still be picked off existing geometry instead of typed.
+;;;  the number, touching it: 600mm, 1524mm.  No space: the spacebar is
+;;;  Enter at a distance prompt, so "300 mm" would hand in 300 INCHES
+;;;  and leave the "mm" to answer the next question (one over 30 ft, a
+;;;  spaced "1524 mm" among them, is refused as longer than any spa,
+;;;  typed or off the form, and asked again).  Object snaps stay
+;;;  live, so a distance can still be picked off existing geometry
+;;;  instead of typed.
 ;;;
 ;;;  Each outline is drawn as ONE CLOSED POLYLINE, so the cover and the
 ;;;  water's edge are each a single bounded entity: one click selects
@@ -15642,7 +15975,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092226 REV31")
+(setq spa:*version* "092226 REV32")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -16526,10 +16859,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -16571,17 +16908,38 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The scratch layer the rows are drawn on, made if it is missing.  A
 ;; layer of its own is what lets a drafter turn the ruler off without
 ;; turning anything of the spa off with it.
-(defun spa:rulerlayer ()
+;; LOCKED is not left alone: entmake draws onto a locked layer but
+;; entdel refuses there, so every ruler drawn stayed in the drawing
+;; for good and each redraw added another copy -- and LAYISO's
+;; lock-and-fade locks this layer with everything else.  It is
+;; calofin scratch, so it is unlocked, said once, and left unlocked.
+(defun spa:rulerlayer ( / ed fl)
   (if (not (tblsearch "LAYER" spa:*ruler-layer*))
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 spa:*ruler-layer*) '(70 . 0) '(62 . 7)
-                   (cons 6 "CONTINUOUS"))))
+                   (cons 6 "CONTINUOUS")))
+    (progn
+      (setq ed (entget (tblobjname "LAYER" spa:*ruler-layer*))
+            fl (cdr (assoc 70 ed)))
+      (if (and fl (= 4 (logand 4 fl))
+               (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed)))
+        (princ (strcat "\nSPA: layer " spa:*ruler-layer*
+                       " was locked - unlocked so the ruler can be"
+                       " taken down again.")))))
   spa:*ruler-layer*)
 
 ;; Take the ruler down -- the one call *error* and the clean exit both
@@ -16670,10 +17028,14 @@
 (defun spa:fclear () (setq spa:*form* nil))
 
 ;; Could V have been typed at a spa:asks prompt of this KIND?  A number
-;; above zero -- every kind's initget refuses zero and negatives -- or
-;; nil, NA, anywhere but on a REQ question, which offers no NA.
+;; above zero -- every kind's initget refuses zero and negatives -- and
+;; no longer than any spa (spa:toobig, which spa:asks refuses, and
+;; which says so), or nil, NA, anywhere but on a REQ question, which
+;; offers no NA.
 (defun spa:fok (kind v)
-  (if (null v) (not (eq kind 'REQ)) (and (numberp v) (> v 0))))
+  (if (null v)
+      (not (eq kind 'REQ))
+      (and (numberp v) (> v 0) (not (spa:toobig v)))))
 
 ;; V as the question would spell it, or nil when the question does not
 ;; accept it at all -- so a form answer the prompt would reject falls
@@ -16816,6 +17178,7 @@
       ((and back (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'CAL-BACK))
       ((and (not (eq kind 'REQ)) (= (type v) 'STR) (= v "NA")) (setq out 'SPA-NA))
       ((and (null v) (eq kind 'SUG)) (setq out dflt))   ; Enter took it
+      ((spa:toobig (spa:dval v)))                       ; said why; again
       ((setq out (spa:dval v)))
       (t (princ "\nNot a measurement -- type inches, 6'10\", or 600mm."))))
   (cal:osdown)
@@ -16833,8 +17196,14 @@
     (if (= u (strcase w)) (setq out w)))
   out)
 
-;; Millimetres, typed with the unit on the number: 600mm, 600 MM,
+;; Millimetres, typed with the unit on the number: 600mm, 600MM,
 ;; 1524.5mm.  The drawing is in inches, so the value is converted.
+;; The unit has to TOUCH the number: the spacebar is Enter at getdist
+;; and getpoint, so "600 mm" hands in 600 inches and the "mm" answers
+;; whatever is asked next.  Nothing that reaches here can carry a space
+;; -- its callers are the typed prompts and the ruler's typed answer,
+;; and the SPA form's boxes are read by LAZSPA with distof, which does
+;; not know mm at all -- so the trim below is defensive only.
 ;; Returns the distance in inches, or nil when the text is not that --
 ;; which is how the callers tell a mm answer from a typo.
 ;;
@@ -16857,6 +17226,30 @@
 (defun spa:dval (v)
   (cond ((= (type v) 'STR) (spa:mmval v))
         (t v)))
+
+;; A measurement no spa has, refused with the spelling that was likely
+;; meant.  The usual way to type one is millimetres with a space before
+;; the unit: "1524 mm" is cut at the space and comes back as 1524
+;; INCHES -- a 127-ft side taken without a word -- while the "mm" is
+;; left over to answer the next question.  30 ft is past any spa or
+;; swim spa, so it is a sanity bound, not a shop setting.  T when V was
+;; refused (the caller asks again), nil for anything else.
+;;
+;; The FORM takes are read through it too (spa:fok, spa:askdf, a
+;; corner's size, the round diameter): checked at the prompts only, a
+;; sheet carrying 1524 -- millimetres typed into a box that reads
+;; inches -- drew a 127-ft spa the same number typed would have been
+;; refused as.  There it is said out loud as well, because the drafter
+;; filled that box in: a question asked again with no reason given
+;; looks like the form lost it, and the hint is right for the prompt
+;; that follows, where 1524mm does work.
+(defun spa:toobig (v)
+  (if (and (numberp v) (> v 360.0))
+      (progn
+        (princ (strcat "\nThat is " (rtos v) " -- longer than any spa."
+                       "  Millimetres go with the unit touching the"
+                       " number, no space: 1524mm."))
+        T)))
 
 ;; A typed distance prompt that follows the repo's Back convention: a
 ;; getdist DOES take keywords, so Back (and its unlisted synonym Undo)
@@ -16903,6 +17296,7 @@
           ((and (null v) dflt) (setq out dflt))
           ((null v)
            (princ "\nA size is required - type it, or click a ruler row."))
+          ((spa:toobig v))
           (t (setq out v))))
       (progn
         ;; 128 = arbitrary input, so a mm answer reaches us as text
@@ -16916,6 +17310,7 @@
            (setq out 'CAL-BACK))
           ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
           ((and (null v) dflt) (setq out dflt))
+          ((spa:toobig (spa:dval v)))
           ((setq out (spa:dval v)))
           (t (princ "\nNot a measurement -- type inches, 6'10\", or 600mm."))))))
   (cal:osdown)
@@ -16924,14 +17319,16 @@
 ;; The typed-distance question a form can answer, for the keyed
 ;; distances asked OUTSIDE the measurement sequences (the cover lap).
 ;; Same consume-once contract as the keyword wrapper above: only a
-;; measurement the prompt itself would accept -- a positive number --
-;; is taken, and anything else (an NA, a keyword, a wrong type) is
-;; consumed and the question is asked as always.
+;; measurement the prompt itself would accept -- a positive number, no
+;; longer than any spa -- is taken, and anything else (an NA, a
+;; keyword, a wrong type, a 1524) is consumed and the question is asked
+;; as always.
 (defun spa:askdf (key msg xkw dflt back / v)
   (if (and (spa:fhas key)
            (setq v (spa:ftake key))
            (numberp v)
-           (> v 0.0))
+           (> v 0.0)
+           (not (spa:toobig v)))
       v
       (spa:askd msg xkw dflt back nil)))
 
@@ -17924,12 +18321,25 @@
 ;; The offer is recorded whether or not it read anything: skipping it,
 ;; or picking a block with no tags on it, is an answer, and asking again
 ;; later is the same question a second time.
-(defun spa:readblock ( / sel ed bn att v got)
+(defun spa:readblock ( / sel ed bn att v got done)
   (setq spa:*blockasked* t)
   (cal:osup)
-  (setq sel (entsel "\nSelect the Spa Cover Details block <Enter to skip>: "))
-  (if lzd:ask (lzd:ask "\nSelect the Spa Cover Details block <Enter to skip>: " sel) sel)
-  (if lzd:watch (lzd:watch sel) sel)
+  ;; entsel answers nil for Enter AND for a click that hit nothing, and
+  ;; a miss taken for the skip spent the one offer this run makes: the
+  ;; GRADE went unread and a Thermo-Light cover was drawn as a Standard
+  ;; one, with nothing said.  ERRNO 7 tells the two apart.  It is
+  ;; sticky, so it is cleared before each pick and read straight after;
+  ;; the clear is wrapped because an engine that makes ERRNO read-only
+  ;; would otherwise kill the command at its first prompt.
+  (while (not done)
+    (vl-catch-all-apply 'setvar (list "ERRNO" 0))
+    (setq sel (entsel "\nSelect the Spa Cover Details block <Enter to skip>: "))
+    (if lzd:ask (lzd:ask "\nSelect the Spa Cover Details block <Enter to skip>: " sel) sel)
+    (if lzd:watch (lzd:watch sel) sel)
+    (if (and (null sel) (= 7 (getvar "ERRNO")))
+        (princ (strcat "\nNothing there - click the Spa Cover Details"
+                       " block, or press Enter to skip."))
+        (setq done t)))
   (cal:osdown)
   (if sel
       (progn
@@ -18545,8 +18955,6 @@
        ;; treatment -- a radius is not a cut face
        (setq dsz (if (or (null dfltsz) (<= dfltsz 0.0) (/= ty dflty))
                      nil dfltsz)
-             ;; the form's size stands in the same way -- once; the
-             ;; too-large loop below re-asks at the keyboard
              ;; the LADDER this size is picked from: a radius and a
              ;; diagonal face are both read off the order sheet in
              ;; quarter feet, so the rungs stand whether or not corner
@@ -18554,7 +18962,14 @@
              ;; last corner are not what the next corner wants
              lad (if (= ty "Radius") spa:*radius-ladder*
                      spa:*cutface-ladder*)
-             sz (if fsz fsz
+             ;; the form's size stands in the same way -- once; the
+             ;; too-large loop below re-asks at the keyboard.  One
+             ;; longer than any spa is refused first, as spa:askd would
+             ;; refuse it typed, and said HERE, beside the size prompt
+             ;; it goes to: at the take it would be said ahead of a
+             ;; treatment question, or for a Square that uses no size
+             sz (if (and fsz (not (spa:toobig fsz)))
+                    fsz
                     (spa:askd (spa:cornersizemsg ty label) nil dsz t lad))
              fsz nil)
        ;; Back at the size re-asks the type, its previous question
@@ -19312,11 +19727,13 @@
   ;; were measured -- the Outofround branch -- and is only PEEKED at
   ;; here: the sequence below is what consumes it.  A stored numeric B
   ;; alone is the diameter itself, consumed now.  A (b . nil) is an NA:
-  ;; consumed, and the diameter is prompted for as always.
+  ;; consumed, and the diameter is prompted for as always -- as is a
+  ;; B the prompt would refuse, a diameter longer than any spa included.
   (setq bov (cond ((spa:fhas 'a) "Outofround")
                   ((and (spa:fhas 'b)
                         (numberp (setq bov (spa:ftake 'b)))
-                        (> bov 0.0))
+                        (> bov 0.0)
+                        (not (spa:toobig bov)))
                    bov)
                   (t (spa:askd "Overall diameter" "Outofround" nil nil
                                 nil))))
@@ -19500,7 +19917,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:SPA ( / *error* undo-open stype base sstep)
+(defun c:SPA ( / *error* stype base sstep)
 
   (defun *error* (msg)
     (if (and msg
@@ -19515,12 +19932,17 @@
     (spa:fclear)
     (spa:pvkill)
     (spa:rulerkill)
-    (if undo-open (setq undo-open (cal:undoend)))
+    ;; a global, not a local: this handler runs with the stack unwound
+    ;; (the mode pushed below), so a local of c:SPA reads nil here
+    (if spa:*undo-open* (setq spa:*undo-open* (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "SPA" spa:*version* msg))
     (princ))
   (if lzd:begin (lzd:begin "SPA" spa:*version*))
 
+  ;; before the push: a flag some earlier run left standing must never
+  ;; let this run's handler close an undo group it did not open
+  (setq spa:*undo-open* nil)
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
   (if *push-error-using-command* (*push-error-using-command*))
@@ -19541,7 +19963,7 @@
         spa:*taper* nil
         spa:*blockasked* nil)
   (setvar "CMDECHO" 0)
-  (setq undo-open (cal:undobegin))
+  (setq spa:*undo-open* (cal:undobegin))
   ;; architectural units while prompting so every distance can be typed
   ;; as 6'10", 6'-10-1/2" or 6'10.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -19643,7 +20065,7 @@
 
   ;; ------------------------------------------------ finish
   (command "_.ZOOM" "_Extents")
-  (if undo-open (setq undo-open (cal:undoend)))
+  (if spa:*undo-open* (setq spa:*undo-open* (cal:undoend)))
   (cal:sysrestore)
   (cal:dimstyrestore)
   (spa:fclear)
@@ -19707,7 +20129,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "091526 REV14")
+(setq tut:*version* "092226 REV15")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -19780,7 +20202,10 @@
     "    it only if the spa measured out of round.  A RECTANGLE offers"
     "    the width back as the length, so Enter makes it square."
     "    Any measurement may be typed in MILLIMETRES with the unit on"
-    "    the number -- 600mm, 1524 MM -- and is converted to inches."
+    "    the number -- 600mm, 1524mm -- and is converted to inches."
+    "    No space before the mm: the spacebar is Enter at a distance"
+    "    prompt, so 300 mm would hand in 300 INCHES.  (Past 30 ft is"
+    "    refused as longer than any spa, and asked again.)"
     "6.  Rectangle corners.  ARE ALL FOUR THE SAME? <Yes> comes first:"
     "    Yes asks ONE round for all four, No asks A, B, C and D one at"
     "    a time.  Either way the question is the Treatment one --"
@@ -20156,7 +20581,7 @@
 
 ;;; -------------------- the command ------------------------------------
 
-(defun c:TUTORIALSPA ( / *error* undo-open what)
+(defun c:TUTORIALSPA ( / *error* what)
 
   (defun *error* (msg)
     (if (and msg
@@ -20164,17 +20589,28 @@
         (princ (strcat "\nTUTORIALSPA error: " msg)))
     (cal:sysrestore)
     (cal:dimstyrestore)
-    (if undo-open (setq undo-open (cal:undoend)))
+    ;; the flag is a global because the mode is pushed below: AutoCAD
+    ;; resets the evaluator before this handler runs, and a local of
+    ;; the command read nil here -- an Esc in the demo left its undo
+    ;; group open.  See spa:undobegin in SPA.LSP.
+    (if tut:*undo-open* (setq tut:*undo-open* (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "TUTORIALSPA" tut:*version* msg))
     (princ))
   (if lzd:begin (lzd:begin "TUTORIALSPA" tut:*version*))
 
+  ;; before the push, and on both branches: a flag an earlier run left
+  ;; standing must never let this run close a group it did not open
+  (setq tut:*undo-open* nil)
+  ;; Both branches fall through to the one lzd:end below the if.  Each
+  ;; used to end the command in its own (princ), so a clean run never
+  ;; closed its LAZDIAG context: the next TUTORIALSPA appended to it,
+  ;; and a failure there filed the previous run's answers and drawing
+  ;; as its own -- and the clean run was never logged at all.
   (if (null spa:*version*)
       (progn
         (princ "\nLoad SPA.LSP first -- the tutorial drives its own drawing")
-        (princ "\nfunctions, so it cannot run without it.")
-        (princ))
+        (princ "\nfunctions, so it cannot run without it."))
       (progn
         (if *push-error-using-command* (*push-error-using-command*))
         (princ (strcat "\nSPA " spa:*version* " -- tutorial " tut:*version*))
@@ -20188,17 +20624,18 @@
         (cal:syssave (spa:sysvars))
         (cal:dimstysave)
         (setvar "CMDECHO" 0)
-        (setq undo-open (cal:undobegin))
+        (setq tut:*undo-open* (cal:undobegin))
         (setvar "LUNITS" 4)
         (if (member what '("Checks" "Both"))
             (progn (tut:checklist) (tut:sheet)))
         (if (member what '("Demo" "Both"))
             (tut:demo))
-        (if undo-open (setq undo-open (cal:undoend)))
+        (if tut:*undo-open* (setq tut:*undo-open* (cal:undoend)))
         (cal:sysrestore)
         (cal:dimstyrestore)
-        (if *pop-error-mode* (*pop-error-mode*))
-        (princ))))
+        (if *pop-error-mode* (*pop-error-mode*))))
+  (if lzd:end (lzd:end "TUTORIALSPA"))
+  (princ))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
@@ -20448,7 +20885,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v9.3")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v9.4")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -21177,10 +21614,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -21222,17 +21663,38 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The scratch layer the rows are drawn on, made if it is missing.  A
 ;; layer of its own is what lets a drafter turn the ruler off without
 ;; turning anything of the pool off with it.
-(defun oasis:rulerlayer ()
+;; LOCKED is not left alone: entmake draws onto a locked layer but
+;; entdel refuses there, so every ruler drawn stayed in the drawing
+;; for good and each redraw added another copy -- and LAYISO's
+;; lock-and-fade locks this layer with everything else.  It is
+;; calofin scratch, so it is unlocked, said once, and left unlocked.
+(defun oasis:rulerlayer ( / ed fl)
   (if (not (tblsearch "LAYER" oasis:*ruler-layer*))
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 oasis:*ruler-layer*) '(70 . 0) '(62 . 7)
-                   (cons 6 "CONTINUOUS"))))
+                   (cons 6 "CONTINUOUS")))
+    (progn
+      (setq ed (entget (tblobjname "LAYER" oasis:*ruler-layer*))
+            fl (cdr (assoc 70 ed)))
+      (if (and fl (= 4 (logand 4 fl))
+               (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed)))
+        (princ (strcat "\nOASIS: layer " oasis:*ruler-layer*
+                       " was locked - unlocked so the ruler can be"
+                       " taken down again.")))))
   oasis:*ruler-layer*)
 
 ;; Take the ruler down -- the one call *error* and the clean exit both
@@ -23652,11 +24114,22 @@
 ;; out of the question, and a ruler left standing is scratch on a pool
 ;; that is otherwise finished.
 (setq oasis:*ruler*   nil)
+;; The live preview and the undo-group flag, module globals for the
+;; same reason: c:OASIS pushes the error mode, so its handler runs with
+;; the command's locals gone.  Both are reset at the top of every run.
+(setq oasis:*prev*      nil)
+(setq oasis:*undo-open* nil)
 
-(defun c:OASIS ( / *error* undo-open guard ans pos k steps v var base w h
-                   rl rt rr ftl ftr fbc fbr off cbase arcs ents nests prev
+(defun c:OASIS ( / *error* ans pos k steps v var base w h
+                   rl rt rr ftl ftr fbc fbr off cbase arcs ents nests
                    lt a nchk gotbot)
-  (defun *error* (msg)
+  ;; Everything this handler reads is a GLOBAL or its own.  The mode is
+  ;; pushed below, and under the push AutoCAD resets the evaluator
+  ;; before *error* runs: every local of c:OASIS reads nil here.  The
+  ;; preview and the undo flag were locals, so an Esc at a radius left
+  ;; the half-drawn preview on the drawing -- part of it on the real
+  ;; POOL layer, looking like work -- and the undo group open.
+  (defun *error* (msg / guard)
     ;; user settings come back FIRST so nothing below can skip them --
     ;; and that means FIRST, which this handler did not used to be.  It
     ;; opened with (cal:dimstyrestore), whose (command ...) is exactly
@@ -23676,18 +24149,20 @@
     (while (and (> (getvar "CMDACTIVE") 0) (< guard oasis:*cmdguard*))
       (command)
       (setq guard (1+ guard)))
-    ;; and only now, with nothing pending, the style -- it is read-only
-    ;; to setvar, so it is the one restore here that needs a command
+    ;; the style -- read-only to setvar, so it goes back through an
+    ;; ActiveX put, which drives no command and is legal in every error
+    ;; mode.  After the drain is harmless, no longer required
     (cal:dimstyrestore)
     ;; the preview is scaffolding, not a result -- it goes whether the run
     ;; finished or the user pressed Esc part-way through the questions.
     ;; So are the pool-bottom flow's numbered tangency marks, which are
     ;; put up by a defun this handler cannot see the locals of -- hence
     ;; oasis:*marks*.  Esc there left them on a finished pool.
-    (oasis:pv-clear prev)
+    (setq oasis:*prev* (oasis:pv-clear oasis:*prev*))
     (setq oasis:*marks* (oasis:pv-clear oasis:*marks*))
     (oasis:rulerkill)
-    (if undo-open (command "_.UNDO" "_End"))
+    (if oasis:*undo-open* (command "_.UNDO" "_End"))
+    (setq oasis:*undo-open* nil)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nOASIS error: " msg)))
@@ -23696,6 +24171,11 @@
     (princ))
   (if lzd:begin (lzd:begin "OASIS" *oasis-version*))
 
+  ;; before the push: what an earlier run left in these must never be
+  ;; taken for this run's -- an undo group it did not open, a preview
+  ;; that is not its own
+  (setq oasis:*undo-open* nil
+        oasis:*prev*      nil)
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
   ;; CMDACTIVE drain and the UNDO close above; harmless no-op guard on
   ;; older releases where it doesn't exist
@@ -23726,7 +24206,7 @@
      (if (= 1 (logand 1 (getvar "UNDOCTL")))
        (progn
          (command "_.UNDO" "_Begin")
-         (setq undo-open T)))
+         (setq oasis:*undo-open* T)))
      (cal:ensure-layer oasis:*poollayer* oasis:*poolcolor*)
      (cal:ensure-layer oasis:*guidelayer* oasis:*guidecolor*)
      (cal:ensure-layer oasis:*dimlayer* oasis:*dimcolor*)
@@ -23746,7 +24226,7 @@
      (while (progn (setq steps (oasis:steps ans))
                    (< pos (length steps)))
        (setq k    (nth pos steps)
-             prev (oasis:preview prev ans k)
+             oasis:*prev* (oasis:preview oasis:*prev* ans k)
              v    (oasis:askstep k ans))
        (if (eq v 'OASIS-BACK)
            (if (> pos 0)
@@ -23800,7 +24280,7 @@
      ;; the questions are over: nothing after this point is a form's to
      ;; answer, the pool-bottom flow at the end least of all
      (setq oasis:*fkey* nil)
-     (setq prev (oasis:pv-clear prev)
+     (setq oasis:*prev* (oasis:pv-clear oasis:*prev*)
            var  (oasis:variant ans) base (nth 1 ans)
            w    (nth 2 ans) h    (nth 3 ans)
            rl   (oasis:leftrad var (nth 3 ans) (nth 4 ans))
@@ -23813,8 +24293,8 @@
          (progn
            (princ (strcat "\nOASIS: those radii do not make a closed outline"
                           " -- nothing drawn."))
-           (if undo-open (command "_.UNDO" "_End"))
-           (setq undo-open nil)
+           (if oasis:*undo-open* (command "_.UNDO" "_End"))
+           (setq oasis:*undo-open* nil)
            (cal:sysrestore))
          (progn
            (cal:osdown)
@@ -23885,8 +24365,8 @@
            (cal:osdown)
            (cal:dimstyrestore)
 
-           (if undo-open (command "_.UNDO" "_End"))
-           (setq undo-open nil)
+           (if oasis:*undo-open* (command "_.UNDO" "_End"))
+           (setq oasis:*undo-open* nil)
            (cal:sysrestore)
            (foreach a gotbot (princ a))))))
   ;; whatever route the run took out, the store goes with it -- an
@@ -23894,6 +24374,14 @@
   (oasis:fclear)
   (setq oasis:*fkey* nil)
   (oasis:rulerkill)
+  ;; ...and so does the dim style snapshot.  The UCS refusal and the
+  ;; no-closed-outline exit used to leave it standing, and dimstysave
+  ;; will not overwrite a standing one: the NEXT run -- this tool's, or
+  ;; in the grouped build SPA's or OLAUTO's -- then put back the style
+  ;; that was current at the refusal, over the one the drafter had
+  ;; made current since.  Nothing on those exits moved the style, so
+  ;; here it only drops the snapshot; a property put, safe after _End.
+  (cal:dimstyrestore)
   ;; ...and so does the error mode pushed at the top: every quiet exit
   ;; and the drawn one come through here, and a mode left stacked
   ;; refuses command-s inside every later handler in the session
@@ -24015,7 +24503,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.9")
+(setq *abcdef-version* "v5.10")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -25390,29 +25878,61 @@
           (reverse rows))))))
 
 ;;; --------------------------------------------------------------------------
-;;;  Prompt helper: read a feet-inch dimension from the keyboard.
-;;; --------------------------------------------------------------------------
-
-;; With BACK non-nil, typing B (Back; Undo works too) returns the
-;; symbol CAL-BACK so the caller can re-open its previous question.
-;;; --------------------------------------------------------------------------
 ;;;  Asking
 ;;; --------------------------------------------------------------------------
 
-(defun abcdef:getdim (prompt back / s v)
+;; T when S is two or more bare numbers side by side, with no foot
+;; mark or dash to say which is feet: "20 6".  The sheet reader sums
+;; the tokens, so that answer was taken as 26" -- a frame a tenth the
+;; size of the 20'-6" the drafter most likely meant.
+(defun abcdef:wholes-apart-p (s / n tok)
+  (setq n 0)
+  (if (not (or (vl-string-search "'" s) (vl-string-search "-" s)))
+    (foreach tok (abcdef:tokens (abcdef:strip s "\""))
+      (if (not (vl-string-search "/" tok)) (setq n (1+ n)))))
+  (> n 1))
+
+;; With BACK non-nil, typing B (Back; Undo works too) returns the
+;; symbol CAL-BACK so the caller can re-open its previous question.
+(defun abcdef:getdim (prompt back / s v apart)
   (setq v nil)
   (while (null v)
     (setq s (getstring T (strcat "\n" prompt " (e.g. 20'-6\""
                                  (if back ", B = back" "") "): ")))
     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
+    ;; (getstring T) keeps the blanks round an answer.  Left on, a
+    ;; padded " 214" that the distance reader turned away fell to the
+    ;; sheet reader below, which refused it as a scan repair it never
+    ;; needed; trimmed, it is 214 whichever reader takes it
+    (setq s (cal:trim s))
     (cond
       ((and back (member (strcase s) '("B" "BACK" "U" "UNDO")))
        (setq v 'CAL-BACK))
       (T
-       (setq v (abcdef:ftin->in s nil))
-       (if (or (null v) (<= v 0.0))
-         (progn (princ "  ** enter a positive dimension, e.g. 20'-6\"")
-                (setq v nil))))))
+       ;; Read the way AutoCAD reads a typed distance first, so 214 is
+       ;; 214 inches.  The sheet reader's scan repairs used to get it
+       ;; first: they took a slash-less 214 for a 2/4 whose slash was
+       ;; scanned as a 1, and the frame was built half an inch wide
+       ;; with no word said.  A typed answer only a repair can read,
+       ;; or one that leaves feet and inches to a guess, is refused
+       ;; rather than guessed at, and every reading is echoed back so
+       ;; a misread shows at once.
+       (setq abcdef:*dirty* nil
+             apart nil
+             v (distof s 4))
+       (if (null v)
+         (if (abcdef:wholes-apart-p s)
+           (setq apart T)
+           (setq v (abcdef:ftin->in s nil))))
+       (cond
+         ((or apart (and v abcdef:*dirty*))
+          (princ (strcat "  ** \"" s "\" cannot be read as typed -"
+                         " enter it as e.g. 20'-6 1/2\" or 246.5"))
+          (setq v nil))
+         ((or (null v) (<= v 0.0))
+          (princ "  ** enter a positive dimension, e.g. 20'-6\"")
+          (setq v nil))
+         (T (princ (strcat "\n  read as " (abcdef:in->ftin v))))))))
   v)
 
 ;;; --------------------------------------------------------------------------
@@ -25514,6 +26034,14 @@
 ;; already here; APPLOADed on its own, abcdef.lsp has no business pretending
 ;; otherwise, so the absence is reported rather than discovered at the
 ;; command line.
+;;
+;; ABHD is its c: function, CALLED - never (command)/(vl-cmdf) "_.ABHD".
+;; The command processor does not know AutoLISP commands (typing ABHD works
+;; only through the command line's own c: fallback, which those skip), so
+;; that call answered Unknown command after this said ABHD was starting,
+;; and the points stayed gripped for whatever the drafter typed next.  The
+;; caller has closed ABCDEF's undo group before this runs: from here on
+;; ABHD's own handler is the one an Esc reaches, and ABCDEF's is not.
 (defun abcdef:to-abhd (ss / n)
   (setq n (if ss (sslength ss) 0))
   (cond
@@ -25527,10 +26055,18 @@
                     "\n  whole LAZPASS.lsp build), then run ABHD and"
                     "\n  window the points.")))
     (T
-     (princ (strcat "\n  Starting ABHD on the " (itoa n)
-                    " point(s) just plotted ..."))
-     (sssetfirst nil ss)
-     (vl-cmdf "_.ABHD"))))
+     ;; with PICKFIRST off a pre-selection cannot be handed over at all,
+     ;; so ABHD will ask for the points.  One line says so: a "starting
+     ;; on the points" line followed by one taking it back left the
+     ;; drafter unsure whether ABHD had them or not.
+     (if (= 0 (getvar "PICKFIRST"))
+       (princ (strcat "\n  Starting ABHD - PICKFIRST is off, so window the "
+                      (itoa n) " point(s) just plotted when it asks."))
+       (progn
+         (princ (strcat "\n  Starting ABHD on the " (itoa n)
+                        " point(s) just plotted ..."))
+         (sssetfirst nil ss)))
+     (c:ABHD))))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Main command
@@ -25543,7 +26079,7 @@
                     placed p
                     flag totn tots n3 swapcd tmp angs chk rstr rl
                     stage done mark ss rep line nby4 nby3 nby2 ndrop
-                    nlow path)
+                    nlow path fit)
   (vl-load-com)
   (princ (strcat "\nABCDEF " *abcdef-version*))
   ;; the plot is one undo group, so a cancelled run backs out with a
@@ -25910,15 +26446,21 @@
           (princ (strcat "\n\n  The " (itoa good)
                          " point(s) are ab_pt blocks on layer "
                          abcdef:*point-layer* ", numbered from the sheet."))
+          ;; the answer is only noted here: ABHD starts below, once the
+          ;; plot's undo group is closed
           (if (and (> good 0)
                    (= "Yes" (cal:askkw
                               "Fit a pool perimeter through these points now?"
                               "Yes No" "Yes/No" "Yes" nil)))
-            (abcdef:to-abhd ss)
+            (setq fit T)
             (princ "\n  Left as points - run ABHD (or CABHD) when ready."))
           (princ)))))))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
+  ;; ABHD runs after the group is closed, so the plot is one U and ABHD's
+  ;; fit another, and an Esc inside ABHD - which reaches ABHD's handler,
+  ;; not this command's - cannot leave ABCDEF's group standing open
+  (if fit (abcdef:to-abhd ss))
   (if lzd:end (lzd:end "ABCDEF"))
   (princ))
 
@@ -26352,7 +26894,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.19")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.20")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -29287,7 +29829,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.10")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -30219,22 +30761,58 @@
 ;;;  Prompt helper: read a feet-inch dimension from the keyboard.
 ;;; --------------------------------------------------------------------------
 
+;; T when S is two or more bare numbers side by side, with no foot
+;; mark or dash to say which is feet: "20 6".  The sheet reader sums
+;; the tokens, so that answer was taken as 26" -- a frame a tenth the
+;; size of the 20'-6" the drafter most likely meant.
+(defun altabcdef:wholes-apart-p (s / n tok)
+  (setq n 0)
+  (if (not (or (vl-string-search "'" s) (vl-string-search "-" s)))
+    (foreach tok (altabcdef:tokens (altabcdef:strip s "\""))
+      (if (not (vl-string-search "/" tok)) (setq n (1+ n)))))
+  (> n 1))
+
 ;; With BACK non-nil, typing B (Back; Undo works too) returns the
 ;; symbol AB-BACK so the caller can re-open its previous question.
-(defun altabcdef:getdim (prompt back / s v)
+(defun altabcdef:getdim (prompt back / s v apart)
   (setq v nil)
   (while (null v)
     (setq s (getstring T (strcat "\n" prompt " (e.g. 20'-6\""
                                  (if back ", B = back" "") "): ")))
     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") s) s)
+    ;; (getstring T) keeps the blanks round an answer.  Left on, a
+    ;; padded " 214" that the distance reader turned away fell to the
+    ;; sheet reader below, which refused it as a scan repair it never
+    ;; needed; trimmed, it is 214 whichever reader takes it
+    (setq s (cal:trim s))
     (cond
       ((and back (member (strcase s) '("B" "BACK" "U" "UNDO")))
        (setq v 'AB-BACK))
       (T
-       (setq v (altabcdef:ftin->in s nil))
-       (if (or (null v) (<= v 0.0))
-         (progn (princ "  ** enter a positive dimension, e.g. 20'-6\"")
-                (setq v nil))))))
+       ;; Read the way AutoCAD reads a typed distance first, so 214 is
+       ;; 214 inches.  The sheet reader's scan repairs used to get it
+       ;; first: they took a slash-less 214 for a 2/4 whose slash was
+       ;; scanned as a 1, and the frame was built half an inch wide
+       ;; with no word said.  A typed answer only a repair can read,
+       ;; or one that leaves feet and inches to a guess, is refused
+       ;; rather than guessed at, and every reading is echoed back so
+       ;; a misread shows at once.
+       (setq altabcdef:*dirty* nil
+             apart nil
+             v (distof s 4))
+       (if (null v)
+         (if (altabcdef:wholes-apart-p s)
+           (setq apart T)
+           (setq v (altabcdef:ftin->in s nil))))
+       (cond
+         ((or apart (and v altabcdef:*dirty*))
+          (princ (strcat "  ** \"" s "\" cannot be read as typed -"
+                         " enter it as e.g. 20'-6 1/2\" or 246.5"))
+          (setq v nil))
+         ((or (null v) (<= v 0.0))
+          (princ "  ** enter a positive dimension, e.g. 20'-6\"")
+          (setq v nil))
+         (T (princ (strcat "\n  read as " (altabcdef:in->ftin v))))))))
   v)
 
 ;;; --------------------------------------------------------------------------
@@ -31243,7 +31821,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "092226 REV24") ; announced on load.  The
+(setq pf:*version*      "092226 REV25") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -31421,6 +31999,45 @@
 ;; ---- entity -> segment extraction ----------------------------------
 ;; A segment is (startPt endPt bulge), 2D points.
 
+;; ---- the entity's own plane ----------------------------------------
+;; An ARC, CIRCLE or polyline keeps its numbers in its OWN plane -- the
+;; OCS its 210 names -- not the world's.  Flat work carries no 210, or
+;; (0 0 1), and passes through untouched.  One on the underside of the
+;; plane, (0 0 -1), is what exploding a mirrored block or some survey
+;; exporters leave: every X is the other way round, so read raw the
+;; outline lands mirrored through the Y axis, and the "not drawn in the
+;; world plane" warning never fires because the plane IS the world's.
+;; So the plane is read once per entity (nil when flat), each end is
+;; taken to world through it, and each bulge turns the other way when
+;; the plane is seen from below.  A genuinely tilted plane is still only
+;; flattened here -- that one is warned about where it is read.
+(defun pf:ocs-n (ed / nz)
+  (setq nz (cdr (assoc 210 ed)))
+  (if (and nz (not (equal nz '(0.0 0.0 1.0) 1.0e-10))) nz))
+
+;; SEGS as read in EN's plane NZ at elevation Z, taken to the world's.
+(defun pf:segs-w (segs en nz z)
+  (if nz
+    (mapcar '(lambda (s)
+               (list (cal:2d (trans (list (car (car s)) (cadr (car s)) z)
+                                   en 0))
+                     (cal:2d (trans (list (car (cadr s)) (cadr (cadr s)) z)
+                                   en 0))
+                     (if (< (caddr nz) 0.0) (- (caddr s)) (caddr s))))
+            segs)
+    segs))
+
+;; Where a survey point sits, in the world's numbers.  A block's (or a
+;; TEXT's) insertion point is kept in its own plane just as an ARC's
+;; centre is, so an ab_pt inserted from below, (0 0 -1), read raw lands
+;; mirrored through the Y axis - off the outline it was shot on, with
+;; nothing said.  A POINT's 10 is in world numbers already and is left
+;; alone, as is anything flat.
+(defun pf:ins-w (ed)
+  (if (and (/= (cdr (assoc 0 ed)) "POINT") (pf:ocs-n ed))
+    (trans (cdr (assoc 10 ed)) (cdr (assoc -1 ed)) 0)
+    (cdr (assoc 10 ed))))
+
 (defun pf:lw-segs (ed / pts bls item segs n closed)
   ;; collect (10) vertices and their (42) bulges, in order
   (setq pts nil bls nil)
@@ -31442,17 +32059,25 @@
                (< (cal:dist (last pts) (car pts)) *PF-CHAIN-FUZZ*)))
     (if (>= (cal:dist (last pts) (car pts)) *PF-CHAIN-FUZZ*)
       (setq segs (cons (list (last pts) (car pts) (last bls)) segs))))
-  (reverse segs))
+  (pf:segs-w (reverse segs) (cdr (assoc -1 ed)) (pf:ocs-n ed)
+             (cond ((cdr (assoc 38 ed))) (0.0))))
 
-(defun pf:pl-segs (en / ed sub pts bls segs n closed)
+(defun pf:pl-segs (en / ed sub pts bls segs n closed nz z)
   ;; heavy (old-style) 2D POLYLINE: walk its VERTEX sub-entities
   (setq ed (entget en)
         closed (= 1 (logand 1 (cdr (assoc 70 ed))))
+        ;; a 3D polyline or mesh (bits 8, 16) keeps world numbers
+        nz     (if (= 0 (logand 24 (cdr (assoc 70 ed)))) (pf:ocs-n ed))
+        z      (cond ((caddr (cdr (assoc 10 ed)))) (0.0))
         pts nil bls nil
         sub (entnext en))
   (while (and sub (= "VERTEX" (cdr (assoc 0 (setq ed (entget sub))))))
-    ;; skip spline/fit control vertices (flag bits 1 and 16)
-    (if (= 0 (logand 17 (cond ((cdr (assoc 70 ed))) (0))))
+    ;; skip the spline FRAME points (flag 16) only: they are the
+    ;; control net, off the curve.  A curve-fit extra vertex (flag 1)
+    ;; is ON the curve -- PEDIT Fit joins an arc pair there -- and
+    ;; dropping it while keeping its neighbours' bulges read arcs that
+    ;; do not follow the outline
+    (if (= 0 (logand 16 (cond ((cdr (assoc 70 ed))) (0))))
       (setq pts (cons (cal:2d (cdr (assoc 10 ed))) pts)
             bls (cons (cond ((cdr (assoc 42 ed))) (0.0)) bls)))
     (setq sub (entnext sub)))
@@ -31462,11 +32087,13 @@
           n    (1+ n)))
   (if (and closed (> (length pts) 2))
     (setq segs (cons (list (last pts) (car pts) (last bls)) segs)))
-  (reverse segs))
+  (pf:segs-w (reverse segs) en nz z))
 
-(defun pf:ent-segs (en / ed typ c r a1 a2 delta)
+(defun pf:ent-segs (en / ed typ c r a1 a2 delta nz z)
   (setq ed  (entget en)
-        typ (cdr (assoc 0 ed)))
+        typ (cdr (assoc 0 ed))
+        nz  (pf:ocs-n ed)
+        z   (cond ((caddr (cdr (assoc 10 ed)))) (0.0)))
   (cond
     ((= typ "LINE")
      (list (list (cal:2d (cdr (assoc 10 ed)))
@@ -31481,18 +32108,22 @@
      (if (< delta 1.0e-10) (setq delta (* 2.0 pi)))
      ;; a full-circle arc cannot be one bulged segment (its bulge is
      ;; infinite): hand back two semicircles instead
-     (if (> delta (- (* 2.0 pi) 1.0e-9))
-       (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
-             (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
-       (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0))))))
+     (pf:segs-w
+       (if (> delta (- (* 2.0 pi) 1.0e-9))
+         (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
+               (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
+         (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0)))))
+       en nz z))
     ;; a CIRCLE is a legitimate pool perimeter (round spa): two
     ;; semicircles, so the chaining and fitting code sees a normal
     ;; closed loop instead of reporting a gap
     ((= typ "CIRCLE")
      (setq c (cal:2d (cdr (assoc 10 ed)))
            r (cdr (assoc 40 ed)))
-     (list (list (polar c 0.0 r) (polar c pi r) 1.0)
-           (list (polar c pi r) (polar c 0.0 r) 1.0)))
+     (pf:segs-w
+       (list (list (polar c 0.0 r) (polar c pi r) 1.0)
+             (list (polar c pi r) (polar c 0.0 r) 1.0))
+       en nz z))
     ((= typ "LWPOLYLINE") (pf:lw-segs ed))
     ((= typ "POLYLINE") (pf:pl-segs en))
     (T nil)))
@@ -31951,7 +32582,7 @@
              (progn
                (setq nm (pf:block-number en))
                (if (not (pf:moved-p nm))
-                 (setq out (cons (list (cal:2d (cdr (assoc 10 ed)))
+                 (setq out (cons (list (cal:2d (pf:ins-w ed))
                                        (if (and nm (/= nm "")) nm "?"))
                                  out))))))
           ((= typ "POINT")
@@ -32674,9 +33305,14 @@
   (foreach en pf-temp
     (if (and en (entget en)) (entdel en)))
   ;; the length ruler is scaffolding too, and this is the one call
-  ;; every handler and every clean exit already makes
+  ;; every handler and every clean exit already makes.  Its STATE goes
+  ;; with it: taking the rows down keeps the style, the ft-in family and
+  ;; the hint-said flag, so without the reset a ruler colour retuned in
+  ;; LAZTUNE looked ignored until the drawing was reopened, and an
+  ;; inch drafter's next run labelled its rows in ft-in
   (pf:rulerkill)
-  (setq pf-temp nil))
+  (setq pf:*ruler* nil
+        pf-temp    nil))
 
 ;; Scaffolding removed early - when a Back re-opens the step that
 ;; drew it - rather than at command end.
@@ -32691,10 +33327,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -32736,6 +33376,14 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The ruler standing beside one of the hopper offsets -- RUN STATE,
@@ -32751,12 +33399,25 @@
 ;; The scratch layer the rows are drawn on, made if it is missing.  A
 ;; layer of its own is what lets a drafter turn the ruler off without
 ;; turning anything of the fit off with it.
-(defun pf:rulerlayer ()
+;; LOCKED is not left alone: entmake draws onto a locked layer but
+;; entdel refuses there, so every ruler drawn stayed in the drawing
+;; for good and each redraw added another copy -- and LAYISO's
+;; lock-and-fade locks this layer with everything else.  It is
+;; calofin scratch, so it is unlocked, said once, and left unlocked.
+(defun pf:rulerlayer ( / ed fl)
   (if (not (tblsearch "LAYER" *PF-RULER-LAYER*))
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 *PF-RULER-LAYER*) '(70 . 0) '(62 . 7)
-                   (cons 6 "CONTINUOUS"))))
+                   (cons 6 "CONTINUOUS")))
+    (progn
+      (setq ed (entget (tblobjname "LAYER" *PF-RULER-LAYER*))
+            fl (cdr (assoc 70 ed)))
+      (if (and fl (= 4 (logand 4 fl))
+               (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed)))
+        (princ (strcat "\nABHD: layer " *PF-RULER-LAYER*
+                       " was locked - unlocked so the ruler can be"
+                       " taken down again.")))))
   *PF-RULER-LAYER*)
 
 ;; This file's knobs, in the order the ruler reads them.
@@ -32809,8 +33470,8 @@
 
 ;; Erase only ABHD's own objects on a layer; anything the user drew
 ;; there is left alone.  Returns how many went.
-(defun pf:purge-mine (name / ss i n en)
-  (setq n 0)
+(defun pf:purge-mine (name / ss i n en mine stuck ed flags)
+  (setq n 0 stuck 0 mine nil)
   (if (tblsearch "LAYER" name)
     (progn
       (setq ss (ssget "_X" (list (cons 8 name))))
@@ -32820,8 +33481,27 @@
           (repeat (sslength ss)
             (setq en (ssname ss i))
             (if (assoc -3 (entget en '("ABHD")))
-              (progn (entdel en) (setq n (1+ n))))
-            (setq i (1+ i)))))))
+              (setq mine (cons en mine)))
+            (setq i (1+ i)))))
+      ;; entdel answers nil on a locked layer and erases nothing, and
+      ;; this layer can be the drafter's own, locked on purpose.  So the
+      ;; lock is lifted for the erase and put back after it, and only an
+      ;; erase that took is counted: counting the attempts said
+      ;; "cleared" over markers still on screen, and the next run wrote
+      ;; its own markers over them
+      (if mine
+        (progn
+          (setq ed    (entget (tblobjname "LAYER" name))
+                flags (cond ((cdr (assoc 70 ed))) (0)))
+          (if (= 4 (logand 4 flags))
+            (entmod (subst (cons 70 (- flags 4)) (assoc 70 ed) ed)))
+          (foreach en mine
+            (if (entdel en) (setq n (1+ n)) (setq stuck (1+ stuck))))
+          (if (= 4 (logand 4 flags)) (entmod ed))
+          (if (> stuck 0)
+            (princ (strcat "\nABHD: " (itoa stuck)
+                           " of its own object(s) on layer " name
+                           " could not be erased - NOT removed.")))))))
   n)
 
 ;; Make sure the DASHED linetype exists (pure entmake, no command
@@ -33385,17 +34065,36 @@
 (defun pf:compare (tour loop pts dpts tol allow simp
                    / prior vars v e ent lab st onv segs bad allbad first
                      i pick idx keep ce bb hgt sel picked keyed pr res
-                     tbl nfit defl kws word marks okeyed omit names)
+                     tbl nfit defl kws word marks okeyed omit names nums)
   (setq prior (pf:prior-fits))
   (cal:ensure-layer *PF-OUT-LAYER* *PF-OUT-COLOUR*)
   (setq tbl  (if simp *PF-SIMP-COMPARE* *PF-COMPARE*)
         nfit (length tbl)
         defl (if simp *PF-SIMP-DEFAULT-FIT* *PF-DEFAULT-FIT*)
         word (if simp "Five" "Three")
-        kws  "")
+        kws  ""
+        nums nil)
   (setq i 1)
-  (repeat nfit (setq kws (strcat kws (itoa i) " ") i (1+ i)))
+  (repeat nfit
+    (setq kws  (strcat kws (itoa i) " ")
+          nums (cons (itoa i) nums)
+          i    (1+ i)))
   (setq kws (strcat kws "All None Redo"))
+  ;; The default is a LAZTUNE knob, and LAZTUNE and LAZBACKUP put their
+  ;; values in AFTER the load-time check near the top of the file, so it
+  ;; is checked again here where it is used.  A "tight" or a "4" would
+  ;; otherwise make Enter keep no fit at all: every outline erased, no
+  ;; report, no bottom question, and nothing said.
+  (if (= (type defl) 'INT) (setq defl (itoa defl)))
+  (if (not (member defl nums))
+    (progn
+      (princ (strcat "\n  (the default-fit setting"
+                     (if (= (type defl) 'STR)
+                       (strcat " \"" defl "\"")
+                       "")
+                     " is not one of 1-" (itoa nfit)
+                     " - Enter keeps fit 2)"))
+      (setq defl "2")))
   ;; every candidate is judged against the distance the user typed (or,
   ;; in SIMPABHD, the one the table is read against), so "off the line"
   ;; means the same thing in every row
@@ -33531,10 +34230,23 @@
         ;; no keyword typed: give them a click, and fall back to the
         ;; standing default
         (progn
-          (setq sel (entsel (strcat "\n  Pick the outline to keep (or"
-                                    " Enter for " defl "): ")))
-          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
-          (if lzd:watch (lzd:watch sel) sel)
+          ;; entsel answers nil for Enter AND for a click that landed
+          ;; between the thin preview lines; ERRNO 7 tells them apart.
+          ;; Without asking again, a near-miss on fit 3 quietly kept the
+          ;; default and erased the one they reached for.  ERRNO is
+          ;; sticky, so it is cleared before each pick it is read after
+          (setq sel 'RETRY)
+          (while (eq sel 'RETRY)
+            (vl-catch-all-apply 'setvar (list "ERRNO" 0))
+            (setq sel (entsel (strcat "\n  Pick the outline to keep (or"
+                                      " Enter for " defl "): ")))
+            (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
+            (if lzd:watch (lzd:watch sel) sel)
+            (if (and (null sel) (= 7 (getvar "ERRNO")))
+              (progn
+                (princ (strcat "\n  (nothing there - click one of the"
+                               " outlines, or press Enter for " defl ")"))
+                (setq sel 'RETRY))))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -33572,7 +34284,16 @@
          (princ (strcat "\nAll " (strcase word T)
                         " erased - nothing was added to the drawing.")))
         (T
-         (setq idx (atoi pick) i 1)
+         (setq idx (atoi pick))
+         ;; a number no row carries would match nothing below, and the
+         ;; losers loop would then erase every fit - so it never gets
+         ;; that far unannounced
+         (if (not (member pick nums))
+           (progn
+             (princ (strcat "\n  (\"" pick "\" is not one of the "
+                            (strcase word T) " - keeping " defl ")"))
+             (setq pick defl idx (atoi defl))))
+         (setq i 1)
          (foreach v vars
            (if (= i idx)
              (setq keep v)
@@ -34897,7 +35618,9 @@
            (if (pf:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
-               (setq wp1 (cal:2d wp1) best nil bd nil)
+               ;; a UCS click against walls held in world numbers:
+               ;; untranslated, a moved UCS removed some other wall
+               (setq wp1 (cal:2d (trans wp1 1 0)) best nil bd nil)
                (foreach w pf-walls
                  (setq d (pf:seg-dist wp1 (list (car w) (cadr w) 0.0)))
                  (if (or (null bd) (< d bd)) (setq best w bd d)))
@@ -35375,7 +36098,11 @@
               ext (cdr (assoc 210 ed))
               i   (1+ i))
         ;; geometry drawn in a tilted UCS reads back in its own plane,
-        ;; so a flat 2D fit of it would be wrong - count and warn
+        ;; so a flat 2D fit of it would be wrong - count and warn.  The
+        ;; plane seen from below, (0 0 -1), is no tilt: the outline's
+        ;; ends (pf:ent-segs) and a point block's insertion (pf:ins-w)
+        ;; are both taken to world, so it is neither warned about nor
+        ;; mirrored
         (if (and ext (< (abs (caddr ext)) 0.999)) (setq nocs (1+ nocs)))
         (cond
           ;; survey points stored as block references (e.g. "ab_pt"):
@@ -35385,7 +36112,7 @@
           ;; blocks are never mistaken for perimeter geometry.
           ((and (= typ "INSERT")
                 (= (strcase (cdr (assoc 2 ed))) (strcase *PF-POINT-BLOCK*)))
-           (pf:add-point (cal:2d (cdr (assoc 10 ed)))
+           (pf:add-point (cal:2d (pf:ins-w ed))
                          (pf:block-number en)))
           ;; curve types we cannot fit, sitting on the POOL layer: count
           ;; them so the user gets told what to do, instead of a
@@ -35406,7 +36133,7 @@
            (pf:add-point (cal:2d (cdr (assoc 10 ed))) nil))
           ;; any other block dropped on the POINTS layer -> a point too
           ((and (= typ "INSERT") (= lay (strcase *PF-POINT-LAYER*)))
-           (pf:add-point (cal:2d (cdr (assoc 10 ed)))
+           (pf:add-point (cal:2d (pf:ins-w ed))
                          (pf:block-number en)))))
       (if (> nunsup 0)
         (princ (strcat "\n" cmd ": warning - " (itoa nunsup)
@@ -35877,7 +36604,7 @@
           ;; ab_pt blocks are survey points wherever they sit
           ((and (= typ "INSERT")
                 (= (strcase (cdr (assoc 2 ed))) (strcase *PF-POINT-BLOCK*)))
-           (pf:add-point (cal:2d (cdr (assoc 10 ed)))
+           (pf:add-point (cal:2d (pf:ins-w ed))
                          (pf:block-number en)))
           ;; a plain POINT counts on any layer here - the selection
           ;; is explicit, so there is no guessing involved
@@ -35886,7 +36613,7 @@
           ;; other blocks only count as points on the points layer
           ((= typ "INSERT")
            (if (= lay (strcase *PF-POINT-LAYER*))
-             (pf:add-point (cal:2d (cdr (assoc 10 ed)))
+             (pf:add-point (cal:2d (pf:ins-w ed))
                            (pf:block-number en))))
           ;; ABHD's own scaffolding and results must never be read
           ;; back as perimeter: miss rings, dashed markers, and an
@@ -35938,7 +36665,7 @@
                          ed  (entget en)
                          typ (cdr (assoc 0 ed))
                          i   (1+ i))
-                   (pf:add-point (cal:2d (cdr (assoc 10 ed)))
+                   (pf:add-point (cal:2d (pf:ins-w ed))
                                  (if (= typ "INSERT")
                                    (pf:block-number en))))))
              (setq dpts (if pts (cal:dedupe pts *PF-EXACT-EPS*))
@@ -36178,7 +36905,10 @@
       ;; runs a tutorial, got an empty tour.  pf:compare gates the same
       ;; layer for the same reason
       (cal:ensure-layer *PF-OUT-LAYER* *PF-OUT-COLOUR*)
-      (setq cp   (cal:2d cp)
+      ;; the click is in the drafter's UCS and the tour is entmade in
+      ;; world numbers - taken raw, a moved UCS drew it away from the spot
+      ;; that was picked for it
+      (setq cp   (cal:2d (trans cp 1 0))
             npt  0
             pf-nmoved 0
             tour (pf:tut-survey cp)
@@ -36452,7 +37182,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.10")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -36712,6 +37442,34 @@
 
 ;; ---- entity -> segment extraction ------------------------------------
 
+;; ---- the entity's own plane ----------------------------------------
+;; An ARC, CIRCLE or polyline keeps its numbers in its OWN plane -- the
+;; OCS its 210 names -- not the world's.  Flat work carries no 210, or
+;; (0 0 1), and passes through untouched.  One on the underside of the
+;; plane, (0 0 -1), is what exploding a mirrored block or some survey
+;; exporters leave: every X is the other way round, so read raw the
+;; outline lands mirrored through the Y axis, and the "not drawn in the
+;; world plane" warning never fires because the plane IS the world's.
+;; So the plane is read once per entity (nil when flat), each end is
+;; taken to world through it, and each bulge turns the other way when
+;; the plane is seen from below.  A genuinely tilted plane is still only
+;; flattened here -- that one is warned about where it is read.
+(defun acc:ocs-n (ed / nz)
+  (setq nz (cdr (assoc 210 ed)))
+  (if (and nz (not (equal nz '(0.0 0.0 1.0) 1.0e-10))) nz))
+
+;; SEGS as read in EN's plane NZ at elevation Z, taken to the world's.
+(defun acc:segs-w (segs en nz z)
+  (if nz
+    (mapcar '(lambda (s)
+               (list (cal:2d (trans (list (car (car s)) (cadr (car s)) z)
+                                   en 0))
+                     (cal:2d (trans (list (car (cadr s)) (cadr (cadr s)) z)
+                                   en 0))
+                     (if (< (caddr nz) 0.0) (- (caddr s)) (caddr s))))
+            segs)
+    segs))
+
 (defun acc:lw-segs (ed / pts bls item segs n closed)
   ;; collect (10) vertices and their (42) bulges, in order
   (setq pts nil bls nil)
@@ -36739,18 +37497,26 @@
   (if (and closed (> (length pts) 1)
            (>= (cal:dist (last pts) (car pts)) acc:*fuzz*))
     (setq segs (cons (list (last pts) (car pts) (last bls)) segs)))
-  (reverse segs))
+  (acc:segs-w (reverse segs) (cdr (assoc -1 ed)) (acc:ocs-n ed)
+             (cond ((cdr (assoc 38 ed))) (0.0))))
 
-(defun acc:pl-segs (en / ed sub pts bls segs n closed)
+(defun acc:pl-segs (en / ed sub pts bls segs n closed nz z)
   ;; heavy (old-style) 2D POLYLINE: walk its VERTEX sub-entities
   (setq ed     (entget en)
         closed (= 1 (logand 1 (cdr (assoc 70 ed))))
+        ;; a 3D polyline or mesh (bits 8, 16) keeps world numbers
+        nz     (if (= 0 (logand 24 (cdr (assoc 70 ed)))) (acc:ocs-n ed))
+        z      (cond ((caddr (cdr (assoc 10 ed)))) (0.0))
         pts    nil
         bls    nil
         sub    (entnext en))
   (while (and sub (= "VERTEX" (cdr (assoc 0 (setq ed (entget sub))))))
-    ;; skip spline/fit control vertices (flag bits 1 and 16)
-    (if (= 0 (logand 17 (cond ((cdr (assoc 70 ed))) (0))))
+    ;; skip the spline FRAME points (flag 16) only: they are the
+    ;; control net, off the curve.  A curve-fit extra vertex (flag 1)
+    ;; is ON the curve -- PEDIT Fit joins an arc pair there -- and
+    ;; dropping it while keeping its neighbours' bulges read arcs that
+    ;; do not follow the outline
+    (if (= 0 (logand 16 (cond ((cdr (assoc 70 ed))) (0))))
       (setq pts (cons (cal:2d (cdr (assoc 10 ed))) pts)
             bls (cons (cond ((cdr (assoc 42 ed))) (0.0)) bls)))
     (setq sub (entnext sub)))
@@ -36760,11 +37526,13 @@
           n    (1+ n)))
   (if (and closed (> (length pts) 1))
     (setq segs (cons (list (last pts) (car pts) (last bls)) segs)))
-  (reverse segs))
+  (acc:segs-w (reverse segs) en nz z))
 
-(defun acc:ent-segs (en / ed typ c r a1 a2 delta)
+(defun acc:ent-segs (en / ed typ c r a1 a2 delta nz z)
   (setq ed  (entget en)
-        typ (cdr (assoc 0 ed)))
+        typ (cdr (assoc 0 ed))
+        nz  (acc:ocs-n ed)
+        z   (cond ((caddr (cdr (assoc 10 ed)))) (0.0)))
   (cond
     ((= typ "LINE")
      (list (list (cal:2d (cdr (assoc 10 ed)))
@@ -36779,17 +37547,21 @@
      (if (< delta 1.0e-10) (setq delta (* 2.0 pi)))
      ;; a full-circle arc cannot be one bulged segment (its bulge is
      ;; infinite): hand back two semicircles instead
-     (if (> delta (- (* 2.0 pi) 1.0e-9))
-       (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
-             (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
-       (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0))))))
+     (acc:segs-w
+       (if (> delta (- (* 2.0 pi) 1.0e-9))
+         (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
+               (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
+         (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0)))))
+       en nz z))
     ;; a CIRCLE is a legitimate perimeter (round spa): two semicircles,
     ;; so the ring walk sees a normal closed loop instead of a gap
     ((= typ "CIRCLE")
      (setq c (cal:2d (cdr (assoc 10 ed)))
            r (cdr (assoc 40 ed)))
-     (list (list (polar c 0.0 r) (polar c pi r) 1.0)
-           (list (polar c pi r) (polar c 0.0 r) 1.0)))
+     (acc:segs-w
+       (list (list (polar c 0.0 r) (polar c pi r) 1.0)
+             (list (polar c pi r) (polar c 0.0 r) 1.0))
+       en nz z))
     ((= typ "LWPOLYLINE") (acc:lw-segs ed))
     ((= typ "POLYLINE") (acc:pl-segs en))
     (T nil)))
@@ -37290,8 +38062,8 @@
 
 ;; Erase this command's own objects of one KIND on a layer, leaving
 ;; anything the user drew there alone.  Returns how many went.
-(defun acc:purge (name kind / ss i n en)
-  (setq n 0)
+(defun acc:purge (name kind / ss i n en mine stuck ed flags)
+  (setq n 0 stuck 0 mine nil)
   (if (tblsearch "LAYER" name)
     (progn
       (setq ss (ssget "_X" (list (cons 8 name))))
@@ -37301,8 +38073,27 @@
           (repeat (sslength ss)
             (setq en (ssname ss i))
             (if (or (null kind) (= kind (acc:kind en)))
-              (progn (entdel en) (setq n (1+ n))))
-            (setq i (1+ i)))))))
+              (setq mine (cons en mine)))
+            (setq i (1+ i)))))
+      ;; entdel answers nil on a locked layer and erases nothing, and
+      ;; this layer can be the drafter's own, locked on purpose.  So the
+      ;; lock is lifted for the erase and put back after it, and only an
+      ;; erase that took is counted: counting the attempts said
+      ;; "cleared" over markers still on screen, and the next run wrote
+      ;; its own markers over them
+      (if mine
+        (progn
+          (setq ed    (entget (tblobjname "LAYER" name))
+                flags (cond ((cdr (assoc 70 ed))) (0)))
+          (if (= 4 (logand 4 flags))
+            (entmod (subst (cons 70 (- flags 4)) (assoc 70 ed) ed)))
+          (foreach en mine
+            (if (entdel en) (setq n (1+ n)) (setq stuck (1+ stuck))))
+          (if (= 4 (logand 4 flags)) (entmod ed))
+          (if (> stuck 0)
+            (princ (strcat "\nABCURCHECK: " (itoa stuck)
+                           " of its own object(s) on layer " name
+                           " could not be erased - NOT removed.")))))))
   n)
 
 ;; The declarations a previous run was told about, read back off the
@@ -37488,7 +38279,12 @@
                      (princ "\n  Stepping back one discontinuity."))
               (progn (princ "\n  Already at the first discontinuity.")
                      (setq p nil))))
-           (p (setq declared (cons (cal:2d p) declared)
+           ;; the click is in the current UCS and the joints it is
+           ;; matched against, and the ring drawn at it, are world
+           ;; numbers - so it goes to world first, or under a moved UCS
+           ;; the declaration claimed nothing and its ring landed
+           ;; somewhere else, to be read back wrong next run
+           (p (setq declared (cons (cal:2d (trans p 1 0)) declared)
                     added    (if added (1+ added) 1))))))
       ((= ans "Remove")
        (setq p T)
@@ -37499,7 +38295,7 @@
          (if (acc:back-kw p) (setq p nil))
          (if p
            (progn
-             (setq p (cal:2d p) best nil bd nil)
+             (setq p (cal:2d (trans p 1 0)) best nil bd nil)
              (foreach q declared
                (setq d (cal:dist p q))
                (if (and (<= d acc:*snap-dist*) (or (null bd) (< d bd)))
@@ -37758,7 +38554,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.8")
+(setq *abpcheck-version* "v1.9")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value ABPCHECK reads that someone might want to
@@ -37877,6 +38673,9 @@
 ;;;  END TUNABLES.  What follows is STATE, not settings: what one run
 ;;;  has to put back, and what the session remembers you answered.
 (setq abp:*asked*        nil)     ; the limit you last answered, this session
+(setq abp:*stuck*        0)       ; own objects a purge could NOT erase, so
+                                  ; ABPCHECKRESCUE never says "nothing left"
+                                  ; over objects still standing
 ;;; ======================================================================
 
 ;;; -------------------- generic helpers ----------------------------------
@@ -37962,6 +38761,45 @@
 
 ;;; -------------------- entity -> segments ------------------------------
 
+;; ---- the entity's own plane ----------------------------------------
+;; An ARC, CIRCLE or polyline keeps its numbers in its OWN plane -- the
+;; OCS its 210 names -- not the world's.  Flat work carries no 210, or
+;; (0 0 1), and passes through untouched.  One on the underside of the
+;; plane, (0 0 -1), is what exploding a mirrored block or some survey
+;; exporters leave: every X is the other way round, so read raw the
+;; outline lands mirrored through the Y axis, and the "not drawn in the
+;; world plane" warning never fires because the plane IS the world's.
+;; So the plane is read once per entity (nil when flat), each end is
+;; taken to world through it, and each bulge turns the other way when
+;; the plane is seen from below.  A genuinely tilted plane is still only
+;; flattened here -- that one is warned about where it is read.
+(defun abp:ocs-n (ed / nz)
+  (setq nz (cdr (assoc 210 ed)))
+  (if (and nz (not (equal nz '(0.0 0.0 1.0) 1.0e-10))) nz))
+
+;; SEGS as read in EN's plane NZ at elevation Z, taken to the world's.
+(defun abp:segs-w (segs en nz z)
+  (if nz
+    (mapcar '(lambda (s)
+               (list (cal:2d (trans (list (car (car s)) (cadr (car s)) z)
+                                   en 0))
+                     (cal:2d (trans (list (car (cadr s)) (cadr (cadr s)) z)
+                                   en 0))
+                     (if (< (caddr nz) 0.0) (- (caddr s)) (caddr s))))
+            segs)
+    segs))
+
+;; Where a survey point sits, in the world's numbers.  A block's (or a
+;; TEXT's) insertion point is kept in its own plane just as an ARC's
+;; centre is, so an ab_pt inserted from below, (0 0 -1), read raw lands
+;; mirrored through the Y axis - off the outline it was shot on, with
+;; nothing said.  A POINT's 10 is in world numbers already and is left
+;; alone, as is anything flat.
+(defun abp:ins-w (ed)
+  (if (and (/= (cdr (assoc 0 ed)) "POINT") (abp:ocs-n ed))
+    (trans (cdr (assoc 10 ed)) (cdr (assoc -1 ed)) 0)
+    (cdr (assoc 10 ed))))
+
 (defun abp:lw-segs (ed / pts bls item segs n closed)
   ;; collect (10) vertices and their (42) bulges, in order
   (setq pts nil bls nil)
@@ -37986,18 +38824,26 @@
            (> (length pts) 2)
            (> (cal:dist (last pts) (car pts)) abp:*exact-eps*))
     (setq segs (cons (list (last pts) (car pts) (last bls)) segs)))
-  (reverse segs))
+  (abp:segs-w (reverse segs) (cdr (assoc -1 ed)) (abp:ocs-n ed)
+             (cond ((cdr (assoc 38 ed))) (0.0))))
 
-(defun abp:pl-segs (en / ed sub pts bls segs n closed)
+(defun abp:pl-segs (en / ed sub pts bls segs n closed nz z)
   ;; heavy (old-style) 2D POLYLINE: walk its VERTEX sub-entities
   (setq ed     (entget en)
         closed (= 1 (logand 1 (cdr (assoc 70 ed))))
+        ;; a 3D polyline or mesh (bits 8, 16) keeps world numbers
+        nz     (if (= 0 (logand 24 (cdr (assoc 70 ed)))) (abp:ocs-n ed))
+        z      (cond ((caddr (cdr (assoc 10 ed)))) (0.0))
         pts    nil
         bls    nil
         sub    (entnext en))
   (while (and sub (= "VERTEX" (cdr (assoc 0 (setq ed (entget sub))))))
-    ;; skip spline/fit control vertices (flag bits 1 and 16)
-    (if (= 0 (logand 17 (cond ((cdr (assoc 70 ed))) (0))))
+    ;; skip the spline FRAME points (flag 16) only: they are the
+    ;; control net, off the curve.  A curve-fit extra vertex (flag 1)
+    ;; is ON the curve -- PEDIT Fit joins an arc pair there -- and
+    ;; dropping it while keeping its neighbours' bulges read arcs that
+    ;; do not follow the outline
+    (if (= 0 (logand 16 (cond ((cdr (assoc 70 ed))) (0))))
       (setq pts (cons (cal:2d (cdr (assoc 10 ed))) pts)
             bls (cons (cond ((cdr (assoc 42 ed))) (0.0)) bls)))
     (setq sub (entnext sub)))
@@ -38007,11 +38853,13 @@
           n    (1+ n)))
   (if (and closed (> (length pts) 2))
     (setq segs (cons (list (last pts) (car pts) (last bls)) segs)))
-  (reverse segs))
+  (abp:segs-w (reverse segs) en nz z))
 
-(defun abp:ent-segs (en / ed typ c r a1 a2 delta)
+(defun abp:ent-segs (en / ed typ c r a1 a2 delta nz z)
   (setq ed  (entget en)
-        typ (cdr (assoc 0 ed)))
+        typ (cdr (assoc 0 ed))
+        nz  (abp:ocs-n ed)
+        z   (cond ((caddr (cdr (assoc 10 ed)))) (0.0)))
   (cond
     ((= typ "LINE")
      (list (list (cal:2d (cdr (assoc 10 ed)))
@@ -38026,15 +38874,19 @@
      (if (< delta 1.0e-10) (setq delta (* 2.0 pi)))
      ;; a full-circle arc cannot be one bulged segment (its bulge is
      ;; infinite): hand back two semicircles instead
-     (if (> delta (- (* 2.0 pi) 1.0e-9))
-       (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
-             (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
-       (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0))))))
+     (abp:segs-w
+       (if (> delta (- (* 2.0 pi) 1.0e-9))
+         (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
+               (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
+         (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0)))))
+       en nz z))
     ((= typ "CIRCLE")
      (setq c (cal:2d (cdr (assoc 10 ed)))
            r (cdr (assoc 40 ed)))
-     (list (list (polar c 0.0 r) (polar c pi r) 1.0)
-           (list (polar c pi r) (polar c 0.0 r) 1.0)))
+     (abp:segs-w
+       (list (list (polar c 0.0 r) (polar c pi r) 1.0)
+             (list (polar c pi r) (polar c 0.0 r) 1.0))
+       en nz z))
     ((= typ "LWPOLYLINE") (abp:lw-segs ed))
     ((= typ "POLYLINE") (abp:pl-segs en))
     (T nil)))
@@ -38097,6 +38949,10 @@
                 (assoc -3 (entget en (list abp:*appid*))))
           (setq nmine (1+ nmine))
           (progn
+            ;; a tilt is counted and warned about; the plane seen from
+            ;; below, (0 0 -1), is no tilt - abp:ent-segs takes a line's
+            ;; numbers to world and abp:ins-w a point block's, so each
+            ;; is measured where it is drawn
             (if (and ext (< (abs (caddr ext)) abp:*plane-min*))
               (setq nocs (1+ nocs)))
             (cond
@@ -38106,7 +38962,7 @@
                        (strcase abp:*pt-block*)))
                (setq npt (1+ npt)
                      nm  (cal:block-number en abp:*pt-tag*)
-                     pts (cons (abp:pt (cdr (assoc 10 ed))
+                     pts (cons (abp:pt (abp:ins-w ed)
                                        (if (and nm (/= nm ""))
                                          nm
                                          (itoa npt)))
@@ -38122,7 +38978,7 @@
                (if (= lay (strcase abp:*pt-layer*))
                  (setq npt (1+ npt)
                        nm  (cal:block-number en abp:*pt-tag*)
-                       pts (cons (abp:pt (cdr (assoc 10 ed))
+                       pts (cons (abp:pt (abp:ins-w ed)
                                          (if (and nm (/= nm ""))
                                            nm
                                            (itoa npt)))
@@ -38337,8 +39193,8 @@
 
 ;; Erase only ABPCHECK's own objects on a layer; anything the user drew
 ;; there is left alone.  Returns how many went.
-(defun abp:purge-mine (name / ss i en n)
-  (setq n 0)
+(defun abp:purge-mine (name / ss i en n mine stuck ed flags)
+  (setq n 0 stuck 0 mine nil)
   (if (tblsearch "LAYER" name)
     (progn
       (setq ss (ssget "_X" (list (cons 8 name))))
@@ -38348,8 +39204,28 @@
           (repeat (sslength ss)
             (setq en (ssname ss i))
             (if (assoc -3 (entget en (list abp:*appid*)))
-              (progn (entdel en) (setq n (1+ n))))
-            (setq i (1+ i)))))))
+              (setq mine (cons en mine)))
+            (setq i (1+ i)))))
+      ;; entdel answers nil on a locked layer and erases nothing, and
+      ;; this layer can be the drafter's own, locked on purpose.  So the
+      ;; lock is lifted for the erase and put back after it, and only an
+      ;; erase that took is counted: counting the attempts said
+      ;; "cleared" over markers still on screen, and the next run wrote
+      ;; its own markers over them
+      (if mine
+        (progn
+          (setq ed    (entget (tblobjname "LAYER" name))
+                flags (cond ((cdr (assoc 70 ed))) (0)))
+          (if (= 4 (logand 4 flags))
+            (entmod (subst (cons 70 (- flags 4)) (assoc 70 ed) ed)))
+          (foreach en mine
+            (if (entdel en) (setq n (1+ n)) (setq stuck (1+ stuck))))
+          (if (= 4 (logand 4 flags)) (entmod ed))
+          (setq abp:*stuck* (+ abp:*stuck* stuck))
+          (if (> stuck 0)
+            (princ (strcat "\nABPCHECK: " (itoa stuck)
+                           " of its own object(s) on layer " name
+                           " could not be erased - NOT removed.")))))))
   n)
 
 ;; Ring every point that is too far off, on its own layer, so the
@@ -38490,12 +39366,16 @@
     (progn
       (command "_.UNDO" "_Begin")
       (setq undo-open T)))
-  (setq n (+ (abp:purge-mine abp:*miss-layer*)
+  (setq abp:*stuck* 0
+        n (+ (abp:purge-mine abp:*miss-layer*)
              (abp:purge-mine abp:*report-layer*)))
-  (if (> n 0)
-    (princ (strcat "\nABPCHECKRESCUE: " (itoa n)
-                   " ABPCHECK object(s) removed."))
-    (princ "\nABPCHECKRESCUE: nothing of ABPCHECK's left to remove."))
+  (cond
+    ((> n 0)
+     (princ (strcat "\nABPCHECKRESCUE: " (itoa n)
+                    " ABPCHECK object(s) removed.")))
+    ;; the purge has already named what it could not erase
+    ((= abp:*stuck* 0)
+     (princ "\nABPCHECKRESCUE: nothing of ABPCHECK's left to remove.")))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
@@ -40159,7 +41039,7 @@
 ;;; the same one.
 ;;; ======================================================================
 
-(setq *squareup-version* "v1.1")   ; announced on load; release_lisp.py
+(setq *squareup-version* "v1.2")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/
 
@@ -40742,6 +41622,16 @@
 
 ;;; -------------------- the run -----------------------------------------
 
+;; The space the drafter is drawing in: model space from the Model tab
+;; or from inside a layout's viewport, the layout itself only when its
+;; paper is active.  CTAB alone is wrong from a viewport.  Enter = the
+;; whole drawing sweeps only this: a bare "_X" pulled the title block
+;; and viewports in too, which ROTATE skips as not in the current
+;; space -- while the done line counted them turned and the locked
+;; VIEWPORT layer was reported freed for a turn it was never part of.
+(defun sq:space ()
+  (if (= 1 (getvar "CVPORT")) (getvar "CTAB") "Model"))
+
 (defun sq:run ( / work per read pts spans walls wall span pick chosen
                   turn about wpts tie)
 
@@ -40756,7 +41646,7 @@
       (setq work (ssget))
       (if lzd:watch (lzd:watch work) work)
       (if (null work)
-        (setq work (ssget "_X")))))
+        (setq work (ssget "_X" (list (cons 410 (sq:space))))))))
 
   (if (null work)
     (princ "\nSQUAREUP: there is nothing in this drawing to turn.")
@@ -41186,7 +42076,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v2.5")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v2.6")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -41586,6 +42476,45 @@
 ;; ---- entity -> segment extraction ----------------------------------
 ;; A segment is (startPt endPt bulge), 2D points.
 
+;; ---- the entity's own plane ----------------------------------------
+;; An ARC, CIRCLE or polyline keeps its numbers in its OWN plane -- the
+;; OCS its 210 names -- not the world's.  Flat work carries no 210, or
+;; (0 0 1), and passes through untouched.  One on the underside of the
+;; plane, (0 0 -1), is what exploding a mirrored block or some survey
+;; exporters leave: every X is the other way round, so read raw the
+;; outline lands mirrored through the Y axis, and the "not drawn in the
+;; world plane" warning never fires because the plane IS the world's.
+;; So the plane is read once per entity (nil when flat), each end is
+;; taken to world through it, and each bulge turns the other way when
+;; the plane is seen from below.  A genuinely tilted plane is still only
+;; flattened here -- that one is warned about where it is read.
+(defun cab:ocs-n (ed / nz)
+  (setq nz (cdr (assoc 210 ed)))
+  (if (and nz (not (equal nz '(0.0 0.0 1.0) 1.0e-10))) nz))
+
+;; SEGS as read in EN's plane NZ at elevation Z, taken to the world's.
+(defun cab:segs-w (segs en nz z)
+  (if nz
+    (mapcar '(lambda (s)
+               (list (cal:2d (trans (list (car (car s)) (cadr (car s)) z)
+                                   en 0))
+                     (cal:2d (trans (list (car (cadr s)) (cadr (cadr s)) z)
+                                   en 0))
+                     (if (< (caddr nz) 0.0) (- (caddr s)) (caddr s))))
+            segs)
+    segs))
+
+;; Where a survey point sits, in the world's numbers.  A block's (or a
+;; TEXT's) insertion point is kept in its own plane just as an ARC's
+;; centre is, so an ab_pt inserted from below, (0 0 -1), read raw lands
+;; mirrored through the Y axis - off the outline it was shot on, with
+;; nothing said.  A POINT's 10 is in world numbers already and is left
+;; alone, as is anything flat.
+(defun cab:ins-w (ed)
+  (if (and (/= (cdr (assoc 0 ed)) "POINT") (cab:ocs-n ed))
+    (trans (cdr (assoc 10 ed)) (cdr (assoc -1 ed)) 0)
+    (cdr (assoc 10 ed))))
+
 (defun cab:lw-segs (ed / pts bls item segs n closed)
   ;; collect (10) vertices and their (42) bulges, in order
   (setq pts nil bls nil)
@@ -41607,17 +42536,25 @@
                (< (cal:dist (last pts) (car pts)) *CAB-CHAIN-FUZZ*)))
     (if (>= (cal:dist (last pts) (car pts)) *CAB-CHAIN-FUZZ*)
       (setq segs (cons (list (last pts) (car pts) (last bls)) segs))))
-  (reverse segs))
+  (cab:segs-w (reverse segs) (cdr (assoc -1 ed)) (cab:ocs-n ed)
+             (cond ((cdr (assoc 38 ed))) (0.0))))
 
-(defun cab:pl-segs (en / ed sub pts bls segs n closed)
+(defun cab:pl-segs (en / ed sub pts bls segs n closed nz z)
   ;; heavy (old-style) 2D POLYLINE: walk its VERTEX sub-entities
   (setq ed (entget en)
         closed (= 1 (logand 1 (cdr (assoc 70 ed))))
+        ;; a 3D polyline or mesh (bits 8, 16) keeps world numbers
+        nz     (if (= 0 (logand 24 (cdr (assoc 70 ed)))) (cab:ocs-n ed))
+        z      (cond ((caddr (cdr (assoc 10 ed)))) (0.0))
         pts nil bls nil
         sub (entnext en))
   (while (and sub (= "VERTEX" (cdr (assoc 0 (setq ed (entget sub))))))
-    ;; skip spline/fit control vertices (flag bits 1 and 16)
-    (if (= 0 (logand 17 (cond ((cdr (assoc 70 ed))) (0))))
+    ;; skip the spline FRAME points (flag 16) only: they are the
+    ;; control net, off the curve.  A curve-fit extra vertex (flag 1)
+    ;; is ON the curve -- PEDIT Fit joins an arc pair there -- and
+    ;; dropping it while keeping its neighbours' bulges read arcs that
+    ;; do not follow the outline
+    (if (= 0 (logand 16 (cond ((cdr (assoc 70 ed))) (0))))
       (setq pts (cons (cal:2d (cdr (assoc 10 ed))) pts)
             bls (cons (cond ((cdr (assoc 42 ed))) (0.0)) bls)))
     (setq sub (entnext sub)))
@@ -41627,11 +42564,13 @@
           n    (1+ n)))
   (if (and closed (> (length pts) 2))
     (setq segs (cons (list (last pts) (car pts) (last bls)) segs)))
-  (reverse segs))
+  (cab:segs-w (reverse segs) en nz z))
 
-(defun cab:ent-segs (en / ed typ c r a1 a2 delta)
+(defun cab:ent-segs (en / ed typ c r a1 a2 delta nz z)
   (setq ed  (entget en)
-        typ (cdr (assoc 0 ed)))
+        typ (cdr (assoc 0 ed))
+        nz  (cab:ocs-n ed)
+        z   (cond ((caddr (cdr (assoc 10 ed)))) (0.0)))
   (cond
     ((= typ "LINE")
      (list (list (cal:2d (cdr (assoc 10 ed)))
@@ -41646,18 +42585,22 @@
      (if (< delta 1.0e-10) (setq delta (* 2.0 pi)))
      ;; a full-circle arc cannot be one bulged segment (its bulge is
      ;; infinite): hand back two semicircles instead
-     (if (> delta (- (* 2.0 pi) 1.0e-9))
-       (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
-             (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
-       (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0))))))
+     (cab:segs-w
+       (if (> delta (- (* 2.0 pi) 1.0e-9))
+         (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
+               (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
+         (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0)))))
+       en nz z))
     ;; a CIRCLE is a legitimate pool perimeter (round spa): two
     ;; semicircles, so the chaining and fitting code sees a normal
     ;; closed loop instead of reporting a gap
     ((= typ "CIRCLE")
      (setq c (cal:2d (cdr (assoc 10 ed)))
            r (cdr (assoc 40 ed)))
-     (list (list (polar c 0.0 r) (polar c pi r) 1.0)
-           (list (polar c pi r) (polar c 0.0 r) 1.0)))
+     (cab:segs-w
+       (list (list (polar c 0.0 r) (polar c pi r) 1.0)
+             (list (polar c pi r) (polar c 0.0 r) 1.0))
+       en nz z))
     ((= typ "LWPOLYLINE") (cab:lw-segs ed))
     ((= typ "POLYLINE") (cab:pl-segs en))
     (T nil)))
@@ -42349,7 +43292,7 @@
              (progn
                (setq nm (cab:block-number en))
                (if (not (cab:moved-p nm))
-                 (setq out (cons (list (cal:2d (cdr (assoc 10 ed)))
+                 (setq out (cons (list (cal:2d (cab:ins-w ed))
                                        (if (and nm (/= nm "")) nm "?"))
                                  out))))))
           ((= typ "POINT")
@@ -43103,8 +44046,8 @@
 
 ;; Erase only CABHD's own objects on a layer; anything the user drew
 ;; there is left alone.  Returns how many went.
-(defun cab:purge-mine (name / ss i n en)
-  (setq n 0)
+(defun cab:purge-mine (name / ss i n en mine stuck ed flags)
+  (setq n 0 stuck 0 mine nil)
   (if (tblsearch "LAYER" name)
     (progn
       (setq ss (ssget "_X" (list (cons 8 name))))
@@ -43114,8 +44057,27 @@
           (repeat (sslength ss)
             (setq en (ssname ss i))
             (if (assoc -3 (entget en '("CABHD")))
-              (progn (entdel en) (setq n (1+ n))))
-            (setq i (1+ i)))))))
+              (setq mine (cons en mine)))
+            (setq i (1+ i)))))
+      ;; entdel answers nil on a locked layer and erases nothing, and
+      ;; this layer can be the drafter's own, locked on purpose.  So the
+      ;; lock is lifted for the erase and put back after it, and only an
+      ;; erase that took is counted: counting the attempts said
+      ;; "cleared" over markers still on screen, and the next run wrote
+      ;; its own markers over them
+      (if mine
+        (progn
+          (setq ed    (entget (tblobjname "LAYER" name))
+                flags (cond ((cdr (assoc 70 ed))) (0)))
+          (if (= 4 (logand 4 flags))
+            (entmod (subst (cons 70 (- flags 4)) (assoc 70 ed) ed)))
+          (foreach en mine
+            (if (entdel en) (setq n (1+ n)) (setq stuck (1+ stuck))))
+          (if (= 4 (logand 4 flags)) (entmod ed))
+          (if (> stuck 0)
+            (princ (strcat "\nCABHD: " (itoa stuck)
+                           " of its own object(s) on layer " name
+                           " could not be erased - NOT removed.")))))))
   n)
 
 ;; Make sure the DASHED linetype exists (pure entmake, no command
@@ -43759,10 +44721,23 @@
         ;; no keyword typed: give them a click, and fall back to the
         ;; default above
         (progn
-          (setq sel (entsel (strcat "\n  Pick the outline to keep (or Enter for "
-                                    dflt "): ")))
-          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
-          (if lzd:watch (lzd:watch sel) sel)
+          ;; entsel answers nil for Enter AND for a click that landed
+          ;; between the thin preview lines; ERRNO 7 tells them apart.
+          ;; Without asking again, a near-miss quietly kept the default
+          ;; and erased the fit they reached for.  ERRNO is sticky, so
+          ;; it is cleared before each pick it is read after
+          (setq sel 'RETRY)
+          (while (eq sel 'RETRY)
+            (vl-catch-all-apply 'setvar (list "ERRNO" 0))
+            (setq sel (entsel (strcat "\n  Pick the outline to keep (or Enter for "
+                                      dflt "): ")))
+            (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
+            (if lzd:watch (lzd:watch sel) sel)
+            (if (and (null sel) (= 7 (getvar "ERRNO")))
+              (progn
+                (princ (strcat "\n  (nothing there - click one of the"
+                               " outlines, or press Enter for " dflt ")"))
+                (setq sel 'RETRY))))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -44091,7 +45066,9 @@
            (if (cab:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
-               (setq wp1 (cal:2d wp1) best nil bd nil)
+               ;; a UCS click against walls held in world numbers:
+               ;; untranslated, a moved UCS removed some other wall
+               (setq wp1 (cal:2d (trans wp1 1 0)) best nil bd nil)
                (foreach w cab-walls
                  (setq d (cab:seg-dist wp1 (list (car w) (cadr w) 0.0)))
                  (if (or (null bd) (< d bd)) (setq best w bd d)))
@@ -44508,7 +45485,11 @@
                 ext (cdr (assoc 210 ed))
                 i   (1+ i))
           ;; geometry drawn in a tilted UCS reads back in its own plane,
-          ;; so a flat 2D fit of it would be wrong - count and warn
+          ;; so a flat 2D fit of it would be wrong - count and warn.  The
+          ;; plane seen from below, (0 0 -1), is no tilt: the outline's
+          ;; ends (cab:ent-segs) and a point block's insertion (cab:ins-w)
+          ;; are both taken to world, so it is neither warned about nor
+          ;; mirrored
           (if (and ext (< (abs (caddr ext)) 0.999)) (setq nocs (1+ nocs)))
           (cond
             ;; survey points stored as block references (e.g. "ab_pt"):
@@ -44518,7 +45499,7 @@
             ;; blocks are never mistaken for perimeter geometry.
             ((and (= typ "INSERT")
                   (= (strcase (cdr (assoc 2 ed))) (strcase *CAB-POINT-BLOCK*)))
-             (cab:add-point (cal:2d (cdr (assoc 10 ed)))
+             (cab:add-point (cal:2d (cab:ins-w ed))
                             (cab:block-number en)))
             ;; curve types we cannot fit, sitting on the POOL layer: count
             ;; them so the user gets told what to do, instead of a
@@ -44541,7 +45522,7 @@
              (cab:add-point (cal:2d (cdr (assoc 10 ed))) nil))
             ;; any other block dropped on the POINTS layer -> a point too
             ((and (= typ "INSERT") (= lay (strcase *CAB-POINT-LAYER*)))
-             (cab:add-point (cal:2d (cdr (assoc 10 ed)))
+             (cab:add-point (cal:2d (cab:ins-w ed))
                             (cab:block-number en)))))
         (setq cab-allpts (reverse cab-allpts)      ; selection order
               dall       (if pts (cal:dedupe pts *CAB-EXACT-EPS*)))
@@ -44929,7 +45910,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *pointrenamer-version* "v1.5")
+(setq *pointrenamer-version* "v1.6")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob the tool has, all of them here.
@@ -45008,10 +45989,13 @@
 ;; distance here: 6.0 is six inches.
 (setq ptr:*band* 6.0)
 
-;; Which way round the FIRST run of a session offers, on the same
-;; footing as the band.  Spelled exactly as the keywords are, because
-;; this string IS the offered default: "Clockwise" or
-;; "COunterclockwise", nothing else.
+;; Which way round the FIRST run of a session offers: "Clockwise" or
+;; "Counterclockwise", in any case, or CW / CCW.  It is on the same
+;; footing as the band.  It is read into the keyword's own spelling
+;; before it is offered, because a knob of "Counterclockwise" once
+;; matched nothing downstream and the survey was renumbered clockwise
+;; under a prompt showing <Counterclockwise>.  Anything else is
+;; offered as Clockwise, the shipped value.
 (setq ptr:*dir* "Clockwise")
 
 ;; The number the count starts at, offered at every run.  Unlike the
@@ -45107,19 +46091,29 @@
 ;; Distance as every prompt and report writes it.
 (defun ptr:dstr (d) (rtos d ptr:*dist-mode* ptr:*dist-prec*))
 
+;; A direction in any spelling -- either word in any case, or CW / CCW
+;; -- as the keyword the rest of the command compares against, or nil
+;; when it names neither.  The one place a direction is normalized: the
+;; sweep tests (= ... "COunterclockwise"), so a "Counterclockwise" or a
+;; "ccw" that slipped past here read as clockwise without a word.
+(defun ptr:dircanon (s / u)
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (cond ((member u '("COUNTERCLOCKWISE" "CCW")) "COunterclockwise")
+        ((member u '("CLOCKWISE" "CW")) "Clockwise")))
+
 ;; Which way round.  CW and CCW ride along ALL-CAPS and hidden, so they
 ;; must be typed in full and cannot steal a canonical hotkey; they are
-;; normalized HERE, never downstream.  Returns the canonical keyword or
-;; CAL-BACK.
+;; normalized HERE, never downstream.  DFLT is offered as given, so the
+;; caller hands it over already through ptr:dircanon.  Returns the
+;; canonical keyword or CAL-BACK.
 (defun ptr:askdir (dflt / v)
   (setq v (cal:askkw "Number the points which way around?"
                      "Clockwise COunterclockwise CW CCW"
                      "Clockwise/COunterclockwise"
                      dflt T))
   (cond ((eq v 'CAL-BACK) v)
-        ((= v "CW") "Clockwise")
-        ((= v "CCW") "COunterclockwise")
-        (t v)))
+        ((ptr:dircanon v))
+        (t "Clockwise")))
 
 ;; The band, as a distance.  A band is always needed, so there is no NA
 ;; here: Enter takes the remembered answer.  initget 6 rejects zero and
@@ -45517,13 +46511,24 @@
   (if (and (null cand) (= nany 1)) (setq cand lastc))
   (list (reverse pts) nskip cand))
 
+;; The space being worked in, as the 410 group of what sits in it.
+;; CTAB names the LAYOUT even when the drafter has double-clicked into
+;; one of its viewports and is working on model space through it, and
+;; model-space entities carry 410 "Model" -- so a sweep filtered on CTAB
+;; from inside a viewport saw paper space only: the clash warning never
+;; fired and Enter = whole drawing found no points at all.  CVPORT is 1
+;; only while paper space itself is active.
+(defun ptr:space-tab ()
+  (if (= 1 (getvar "CVPORT")) (getvar "CTAB") "Model"))
+
 ;; How many point blocks OUTSIDE the renamed set already carry a number
 ;; in [first, last] -- the collision the renumber cannot see, said out
-;; loud instead of found at the next callout.  Only the current tab is
-;; swept: a Layout1 detail reusing the numbers is not a clash.
+;; loud instead of found at the next callout.  Only the space being
+;; worked in is swept: a Layout1 detail reusing the numbers is not a
+;; clash.
 (defun ptr:clash-count (renamed first lastn / ss i en ed att nm v n)
   (setq n 0
-        ss (ssget "_X" (list '(0 . "INSERT") (cons 410 (getvar "CTAB")))))
+        ss (ssget "_X" (list '(0 . "INSERT") (cons 410 (ptr:space-tab)))))
   (if ss
     (progn
       (setq i 0)
@@ -45649,14 +46654,14 @@
            (princ "\nHighlight the area to renumber (Enter = whole drawing): ")
            (setq ss (ssget ptr:*filter*))
            (if lzd:watch (lzd:watch ss) ss)))
-       ;; "whole drawing" is the tab you are looking at, the same scope
-       ;; the clash check sweeps and the same one COVERCHECK and XFTCONV
-       ;; use for this prompt: renumbering points in a layout you cannot
-       ;; see -- and which the clash check would not even warn about --
-       ;; is never what Enter was meant to say
+       ;; "whole drawing" is the space you are working in, the same
+       ;; scope the clash check sweeps: renumbering points in a layout
+       ;; you cannot see -- and which the clash check would not even
+       ;; warn about -- is never what Enter was meant to say.  Model
+       ;; space from inside a layout viewport is model space
        (if (null ss)
          (setq ss (ssget "_X" (append ptr:*filter*
-                                      (list (cons 410 (getvar "CTAB")))))))
+                                      (list (cons 410 (ptr:space-tab)))))))
        (cond
          ((null ss)
           (princ "\nNothing to renumber - no points or polylines in the drawing.")
@@ -45709,7 +46714,11 @@
          ((null res))                   ; initget 1 makes this unreachable
                                         ; at the command line; re-ask
          (t
-          (setq start (ptr:measure res tab)
+          ;; the pick is in the current UCS and the perimeter table is
+          ;; built from entget, which is world: measured raw under a
+          ;; moved UCS the count started that far round the outline,
+          ;; with no far-pick note when the shifted spot still landed on it
+          (setq start (ptr:measure (trans res 1 0) tab)
                 s0    (cdr start))
           (if (> (car start) ptr:*far-pick*)
             (princ (strcat "\nNote: the pick sits " (ptr:dstr (car start))
@@ -45718,7 +46727,13 @@
           (setq step 4))))
       ;; ---- 4. which way round ------------------------------------
       ((= step 4)
-       (setq res (ptr:askdir (if ptr:*dir-now* ptr:*dir-now* ptr:*dir*)))
+       ;; the knob is a LAZTUNE string, and an override arrives after
+       ;; load, so it is read into the keyword's spelling HERE, where it
+       ;; is used -- what the bracket shows is then what Enter does
+       (setq res (ptr:askdir
+                   (cond ((ptr:dircanon (if ptr:*dir-now* ptr:*dir-now*
+                                          ptr:*dir*)))
+                         ("Clockwise"))))
        (cond
          ((eq res 'CAL-BACK) (setq step 3))
          (t (setq ptr:*dir-now* res
@@ -45924,7 +46939,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *lobf-version* "v1.3")
+(setq *lobf-version* "v1.4")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value LOBF reads that someone might want to
@@ -46064,6 +47079,19 @@
 (defun lobf:pt (p nm) (list (car p) (cadr p) nm))
 (defun lobf:pt-name (q) (if (caddr q) (caddr q) "?"))
 
+;; Where a survey point sits, in the world's numbers.  A block's
+;; insertion point is kept in its own plane, so an ab_pt inserted
+;; from below, (0 0 -1), read raw lands mirrored through the Y axis -
+;; off the outline it was shot on, with nothing said.  A POINT's 10
+;; is in world numbers already and is left alone, as is anything
+;; flat.
+(defun lobf:ins-w (ed / nz)
+  (setq nz (cdr (assoc 210 ed)))
+  (if (and nz (/= (cdr (assoc 0 ed)) "POINT")
+           (not (equal nz '(0.0 0.0 1.0) 1.0e-10)))
+    (trans (cdr (assoc 10 ed)) (cdr (assoc -1 ed)) 0)
+    (cdr (assoc 10 ed))))
+
 ;; Every point in the selection: POINT entities and "ab_pt" blocks
 ;; wherever they sit, other blocks only on the points layer.  Returns
 ;; the deduped list; LOBF's own preview objects are never read back.
@@ -46088,7 +47116,7 @@
                      (strcase lobf:*pt-block*)))
              (setq npt (1+ npt)
                    nm  (cal:block-number en lobf:*pt-tag*)
-                   pts (cons (lobf:pt (cdr (assoc 10 ed))
+                   pts (cons (lobf:pt (lobf:ins-w ed)
                                       (if (and nm (/= nm "")) nm (itoa npt)))
                              pts)))
             ;; a plain POINT counts on any layer - the selection is
@@ -46101,7 +47129,7 @@
              (if (= lay (strcase lobf:*pt-layer*))
                (setq npt (1+ npt)
                      nm  (cal:block-number en lobf:*pt-tag*)
-                     pts (cons (lobf:pt (cdr (assoc 10 ed))
+                     pts (cons (lobf:pt (lobf:ins-w ed)
                                         (if (and nm (/= nm "")) nm (itoa npt)))
                                pts)))))))))
   (cal:dedupe (reverse pts) lobf:*exact-eps*))
@@ -46473,8 +47501,8 @@
 
 ;; Erase only LOBF's own objects on a layer; anything the user drew
 ;; there is left alone.  Returns how many went.  (abp:purge-mine.)
-(defun lobf:purge-mine (name / ss i en n)
-  (setq n 0)
+(defun lobf:purge-mine (name / ss i en n mine stuck ed flags)
+  (setq n 0 stuck 0 mine nil)
   (if (tblsearch "LAYER" name)
     (progn
       (setq ss (ssget "_X" (list (cons 8 name))))
@@ -46484,8 +47512,27 @@
           (repeat (sslength ss)
             (setq en (ssname ss i))
             (if (assoc -3 (entget en (list lobf:*appid*)))
-              (progn (entdel en) (setq n (1+ n))))
-            (setq i (1+ i)))))))
+              (setq mine (cons en mine)))
+            (setq i (1+ i)))))
+      ;; entdel answers nil on a locked layer and erases nothing, and
+      ;; this layer can be the drafter's own, locked on purpose.  So the
+      ;; lock is lifted for the erase and put back after it, and only an
+      ;; erase that took is counted: counting the attempts said
+      ;; "cleared" over markers still on screen, and the next run wrote
+      ;; its own markers over them
+      (if mine
+        (progn
+          (setq ed    (entget (tblobjname "LAYER" name))
+                flags (cond ((cdr (assoc 70 ed))) (0)))
+          (if (= 4 (logand 4 flags))
+            (entmod (subst (cons 70 (- flags 4)) (assoc 70 ed) ed)))
+          (foreach en mine
+            (if (entdel en) (setq n (1+ n)) (setq stuck (1+ stuck))))
+          (if (= 4 (logand 4 flags)) (entmod ed))
+          (if (> stuck 0)
+            (princ (strcat "\nLOBF: " (itoa stuck)
+                           " of its own object(s) on layer " name
+                           " could not be erased - NOT removed.")))))))
   n)
 
 (defun lobf:erase (en)
@@ -46526,10 +47573,23 @@
     ;; no keyword typed: give them a click, and fall back to the
     ;; default this run worked out
     (progn
-      (setq sel (entsel (strcat "\n  Pick the line to keep (or Enter for "
-                                dflt "): ")))
-      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
-      (if lzd:watch (lzd:watch sel) sel)
+      ;; entsel answers nil for Enter AND for a click that landed
+      ;; between the thin preview lines; ERRNO 7 tells them apart.
+      ;; Without asking again, a near-miss quietly kept the default
+      ;; and erased the fit they reached for.  ERRNO is sticky, so
+      ;; it is cleared before each pick it is read after
+      (setq sel 'RETRY)
+      (while (eq sel 'RETRY)
+        (vl-catch-all-apply 'setvar (list "ERRNO" 0))
+        (setq sel (entsel (strcat "\n  Pick the line to keep (or Enter for "
+                                  dflt "): ")))
+        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
+        (if lzd:watch (lzd:watch sel) sel)
+        (if (and (null sel) (= 7 (getvar "ERRNO")))
+          (progn
+            (princ (strcat "\n  (nothing there - click one of the"
+                           " lines, or press Enter for " dflt ")"))
+            (setq sel 'RETRY))))
       (if sel
         (progn
           (setq picked (car sel) i 1)
@@ -46921,7 +47981,7 @@
 ;;  this block, and nowhere else in the file.  Edit one and APPLOAD the
 ;;  file again; to try a value for one session, type the setq at the
 ;;  command line, because every knob is read when the command runs.
-(setq *ablobf-version*   "v1.4")     ; announced on load; release_lisp.py
+(setq *ablobf-version*   "v1.5")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *ABL-POOL-LAYER*   "POOL")     ; layer the kept run ends up on -
@@ -47438,6 +48498,19 @@
 ;; is what the fitter holds, and what a declaration made before the
 ;; selection is matched to once the selection is in hand.
 
+;; Where a survey point sits, in the world's numbers.  A block's
+;; insertion point is kept in its own plane, so an ab_pt inserted
+;; from below, (0 0 -1), read raw lands mirrored through the Y axis -
+;; off the outline it was shot on, with nothing said.  A POINT's 10
+;; is in world numbers already and is left alone, as is anything
+;; flat.
+(defun abl:ins-w (ed / nz)
+  (setq nz (cdr (assoc 210 ed)))
+  (if (and nz (/= (cdr (assoc 0 ed)) "POINT")
+           (not (equal nz '(0.0 0.0 1.0) 1.0e-10)))
+    (trans (cdr (assoc 10 ed)) (cdr (assoc -1 ed)) 0)
+    (cdr (assoc 10 ed))))
+
 ;; Every survey point in the DRAWING as a candidate, for the
 ;; declarations asked before the selection exists (step 4).  The
 ;; classifier is the selection's own: an ab_pt INSERT wherever it
@@ -47463,7 +48536,7 @@
                       (strcase *ABL-POINT-LAYER*)))
              (progn
                (setq nm (cal:block-number en *ABL-PT-TAG*))
-               (setq out (cons (list (cal:2d (cdr (assoc 10 ed)))
+               (setq out (cons (list (cal:2d (abl:ins-w ed))
                                      (if (and nm (/= nm "")) nm "?"))
                                out)))))
           ((= typ "POINT")
@@ -48076,8 +49149,8 @@
   en)
 
 ;; Erase only ABLOBF's own objects on a layer.  Returns how many went.
-(defun abl:purge-mine (name / ss i n en)
-  (setq n 0)
+(defun abl:purge-mine (name / ss i n en mine stuck ed flags)
+  (setq n 0 stuck 0 mine nil)
   (if (tblsearch "LAYER" name)
     (progn
       (setq ss (ssget "_X" (list (cons 8 name))))
@@ -48087,8 +49160,27 @@
           (repeat (sslength ss)
             (setq en (ssname ss i))
             (if (assoc -3 (entget en '("ABLOBF")))
-              (progn (entdel en) (setq n (1+ n))))
-            (setq i (1+ i)))))))
+              (setq mine (cons en mine)))
+            (setq i (1+ i)))))
+      ;; entdel answers nil on a locked layer and erases nothing, and
+      ;; this layer can be the drafter's own, locked on purpose.  So the
+      ;; lock is lifted for the erase and put back after it, and only an
+      ;; erase that took is counted: counting the attempts said
+      ;; "cleared" over markers still on screen, and the next run wrote
+      ;; its own markers over them
+      (if mine
+        (progn
+          (setq ed    (entget (tblobjname "LAYER" name))
+                flags (cond ((cdr (assoc 70 ed))) (0)))
+          (if (= 4 (logand 4 flags))
+            (entmod (subst (cons 70 (- flags 4)) (assoc 70 ed) ed)))
+          (foreach en mine
+            (if (entdel en) (setq n (1+ n)) (setq stuck (1+ stuck))))
+          (if (= 4 (logand 4 flags)) (entmod ed))
+          (if (> stuck 0)
+            (princ (strcat "\nABLOBF: " (itoa stuck)
+                           " of its own object(s) on layer " name
+                           " could not be erased - NOT removed.")))))))
   n)
 
 ;; Make sure the DASHED linetype exists (pure entmake).
@@ -48660,9 +49752,22 @@
       (if lzd:ask (lzd:ask "\n  Keep which fit - click one, or [1/2/3/All/None/Redo] <2>: " pick) pick)
       (if (null pick)
         (progn
-          (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
-          (if lzd:ask (lzd:ask "\n  Pick the outline to keep (or Enter for 2): " sel) sel)
-          (if lzd:watch (lzd:watch sel) sel)
+          ;; entsel answers nil for Enter AND for a click that landed
+          ;; between the thin preview lines; ERRNO 7 tells them apart.
+          ;; Without asking again, a near-miss quietly kept the default
+          ;; and erased the fit they reached for.  ERRNO is sticky, so
+          ;; it is cleared before each pick it is read after
+          (setq sel 'RETRY)
+          (while (eq sel 'RETRY)
+            (vl-catch-all-apply 'setvar (list "ERRNO" 0))
+            (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
+            (if lzd:ask (lzd:ask "\n  Pick the outline to keep (or Enter for 2): " sel) sel)
+            (if lzd:watch (lzd:watch sel) sel)
+            (if (and (null sel) (= 7 (getvar "ERRNO")))
+              (progn
+                (princ (strcat "\n  (nothing there - click one of the"
+                               " outlines, or press Enter for 2)"))
+                (setq sel 'RETRY))))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -48893,7 +49998,9 @@
            (if (abl:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
-               (setq wp1 (cal:2d wp1) best nil bd nil)
+               ;; a UCS click against walls held in world numbers:
+               ;; untranslated, a moved UCS removed some other wall
+               (setq wp1 (cal:2d (trans wp1 1 0)) best nil bd nil)
                (foreach w abl-walls
                  (setq d (abl:seg-dist wp1 (list (car w) (cadr w) 0.0)))
                  (if (or (null bd) (< d bd)) (setq best w bd d)))
@@ -49262,7 +50369,7 @@
             ;; the survey point block is ALWAYS a point, on any layer
             ((and (= typ "INSERT")
                   (= (strcase (cdr (assoc 2 ed))) (strcase *ABL-POINT-BLOCK*)))
-             (abl:add-point (cal:2d (cdr (assoc 10 ed)))
+             (abl:add-point (cal:2d (abl:ins-w ed))
                             (cal:block-number en *ABL-PT-TAG*)))
             ;; a plain POINT counts on ANY layer - the selection is
             ;; explicit, so there is no guessing involved
@@ -49270,7 +50377,7 @@
              (abl:add-point (cal:2d (cdr (assoc 10 ed))) nil))
             ;; any other block dropped on the POINTS layer -> a point
             ((and (= typ "INSERT") (= lay (strcase *ABL-POINT-LAYER*)))
-             (abl:add-point (cal:2d (cdr (assoc 10 ed)))
+             (abl:add-point (cal:2d (abl:ins-w ed))
                             (cal:block-number en *ABL-PT-TAG*)))))
         (if (> nocs 0)
           (princ (strcat "\nABLOBF: warning - " (itoa nocs)
@@ -49612,7 +50719,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.11"     ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.12"     ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -49677,12 +50784,23 @@
     (setq i (1+ i)))
   (reverse res))
 
-(defun autobead-newents (mark / e res)
-  ;; Every entity added to the database after 'mark' that is still alive.
+(defun autobead-newents (mark / e ed res)
+  ;; Every MAIN entity added to the database after 'mark' that is still
+  ;; alive.  entlast answers the last main entity, so when the drawing
+  ;; ends in an attributed block (a survey point) or a heavy polyline,
+  ;; entnext from that mark walks into the block's own ATTRIBs and
+  ;; SEQEND, or the polyline's VERTEXes -- the drafter's, not this
+  ;; run's.  They came back as new chains to bead and as demo geometry
+  ;; to erase, and entdel, which refuses a subentity, had them reported
+  ;; as objects on a locked layer.  A subentity goes with its parent, so
+  ;; it is never listed here on its own.
   (setq res '()
         e   (if mark (entnext mark) (entnext)))
   (while e
-    (if (entget e) (setq res (cons e res)))
+    (if (and (setq ed (entget e))
+             (not (member (cdr (assoc 0 ed))
+                          '("ATTRIB" "VERTEX" "SEQEND"))))
+      (setq res (cons e res)))
     (setq e (entnext e)))
   (reverse res))
 
@@ -49874,6 +50992,32 @@
               (autobead-newents mark)))
     pieces))
 
+;;; ---- run-time state -------------------------------------------------------
+;; Not settings: what a build has to put right if it dies.  (The rule
+;; above has three semicolons on purpose: it is where tools/knobs.py
+;; ends the SETTINGS block, so LAZTUNE never offers these as knobs.)
+;; They live here, not in autobead-build's locals, because the build
+;; pushes the error mode so its handler may drain a pending command
+;; with (command), and under a push AutoCAD resets the evaluator before
+;; *error* runs -- the handler sees globals only.  As locals they all
+;; read nil there, so a bead that failed or was cancelled part-way left
+;; OSMODE at 0, PEDITACCEPT at 1, CMDECHO off, its undo group open and
+;; its working copies in the drawing.  Every one is cleared at the top
+;; of each build, before the push, so nothing a dead run left behind is
+;; acted on.
+
+(setq autobead:*oldos* nil)      ; OSMODE the build muted
+(setq autobead:*oldpa* nil)      ; PEDITACCEPT
+(setq autobead:*oldoe* nil)      ; OFFSETERASE
+(setq autobead:*oldgt* nil)      ; OFFSETGAPTYPE
+(setq autobead:*oldcmd* nil)     ; CMDECHO
+(setq autobead:*temps* nil)      ; working copies / chains still standing
+(setq autobead:*undo-open* nil)  ; T while the build's undo group is open
+(setq autobead:*who* nil)        ; (tool version) a failure is filed under
+(setq autobead:*demo* nil)       ; (mark) while the tutorial demo is up
+(setq autobead:*demo-call* nil)  ; T from the demo's call until a build takes it
+(setq autobead:*in-demo* nil)    ; T in the build the demo called
+
 ;; ---- engine ----------------------------------------------------------------
 ;; Everything that touches the drawing lives here, so AUTOBEAD and the
 ;; tutorial exercise exactly the same code path.  sidewalls / treadpts come
@@ -49883,17 +51027,31 @@
 ;;   "None"          - no wall bead at all; only the step faces bead
 ;; skippts names step lines to leave unbeaded - one point on each, and the
 ;; step routines put the last step drawn there, since the line that closes
-;; a run has no riser to bead.  All points are WCS; nil nil nil beads
-;; everything.  Returns the number of bead objects created.
+;; a run has no riser to bead.  dirpt is the direction click as picked
+;; (current UCS -- OFFSET reads it that way); treadpts and skippts are
+;; WCS.  nil nil nil beads everything.  Returns the number of bead
+;; objects created.
 
 (defun autobead-build (ss dirpt sidewalls treadpts skippts
                        / *error* beadoff layname fuzz wallmode heldsteps
-                         oldcmd oldos oldpa temps undo-open
                          mark copies ss2 chains mark2 news
                          beadcount failcount c e i src dup drift
                          gaps g sp ep perimchains stepchains steplines
                          perimbeads bps pieces mp kept culled filtered
                          misses brks dirw hit p eobj)
+
+  ;; what the handler reads is cleared FIRST, before the push and before
+  ;; anything is moved: a run that died without its handler must not
+  ;; hand this one a group to close or settings to put back
+  (setq autobead:*oldos* nil autobead:*oldpa* nil autobead:*oldoe* nil
+        autobead:*oldgt* nil autobead:*oldcmd* nil
+        autobead:*temps* nil autobead:*undo-open* nil)
+  ;; ...and whether this is the tutorial demo's build is TAKEN here, not
+  ;; left standing: the demo sets the flag in the form that calls this,
+  ;; and it is spent on the way in, so a demo mark some earlier run left
+  ;; behind can never be swept by a step routine's failed bead
+  (setq autobead:*in-demo*   autobead:*demo-call*
+        autobead:*demo-call* nil)
 
   (setq beadoff *autobead-offset*
         layname *autobead-layer*
@@ -49912,58 +51070,95 @@
 
   ;; -- error handler: cancel stuck commands, purge temp geometry,
   ;;    restore system variables, close the undo group -------------------
+  ;; Everything it reads is one of the run-time globals above: under the
+  ;; push below AutoCAD resets the evaluator before this runs, and every
+  ;; local of this build reads nil in here.
   (defun *error* (msg)
     ;; the drafter's settings come back FIRST, ahead of the flush below.
     ;; autobead-flush is a bare (command) drain -- the one form up here
-    ;; that can throw -- and it used to sit in front of these two, so a
+    ;; that can throw -- and it used to sit in front of these, so a
     ;; drain that died left every object snap unticked and PEDITACCEPT
-    ;; at 1.  Two setvars of values this run captured itself cannot
-    ;; throw, so nothing is risked by putting them above it.
-    (if oldos (setvar "OSMODE" oldos))
-    (if oldpa (setvar "PEDITACCEPT" oldpa))
-    (autobead-flush)
+    ;; at 1.  Setvars of values this run captured itself cannot throw,
+    ;; so nothing is risked by putting them above it.
+    (if autobead:*oldos* (setvar "OSMODE" autobead:*oldos*))
+    (if autobead:*oldpa* (setvar "PEDITACCEPT" autobead:*oldpa*))
+    (if autobead:*oldoe* (setvar "OFFSETERASE" autobead:*oldoe*))
+    (if autobead:*oldgt* (setvar "OFFSETGAPTYPE" autobead:*oldgt*))
+    (setq autobead:*oldos* nil autobead:*oldpa* nil
+          autobead:*oldoe* nil autobead:*oldgt* nil)
+    ;; ...and under a catch, so a drain that throws cannot take the
+    ;; sweep, the undo close and the report below it down with it
+    (vl-catch-all-apply 'autobead-flush nil)
     ;; the error mode comes off HERE, after the last bare (command) and
     ;; before the first command-s: under a push AutoCAD refuses command-s
     ;; inside *error* with "INTERNAL error in FAIL", past any
     ;; vl-catch-all-apply, and the rest of the handler never runs
     (if *pop-error-mode* (*pop-error-mode*))
-    (foreach e temps
+    (foreach e autobead:*temps*
       (if (and e (entget e)) (entdel e)))
+    (setq autobead:*temps* nil)
     ;; only close a group that was actually opened -- an error thrown
     ;; before the _Begin below (a cancelled selection, a failed getvar)
     ;; used to run _End on nothing, which errors inside the handler
-    (if undo-open
+    (if autobead:*undo-open*
       (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
-    (setq undo-open nil)
-    (if oldcmd (setvar "CMDECHO" oldcmd))
+    (setq autobead:*undo-open* nil)
+    ;; a build the tutorial demo called takes the demo's sample pool
+    ;; down with it.  Only this handler runs when the build fails -- the
+    ;; demo's own never does -- so the pool used to be left standing on
+    ;; POOL-TUTORIAL, and its mark with it
+    (if autobead:*in-demo* (vl-catch-all-apply 'autobead-demo-sweep nil))
+    (setq autobead:*in-demo* nil)
+    (if autobead:*oldcmd* (setvar "CMDECHO" autobead:*oldcmd*))
+    (setq autobead:*oldcmd* nil)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nAUTOBEAD error: " msg)))
-    (if lzd:report (lzd:report "AUTOBEAD" *autobead-version* msg))
+    (if lzd:report (lzd:report (car autobead:*who*) (cadr autobead:*who*) msg))
     (princ))
-  (if lzd:begin (lzd:begin "AUTOBEAD" *autobead-version*))
+  ;; Whose run a failure in here belongs to.  CORNERSTP, HEMISTEP and
+  ;; NORMIESTEP call this as the tail of THEIR run, and a begin of its
+  ;; own logged that run 'ok', dropped its prompts and filed the failure
+  ;; as AUTOBEAD's, with none of the answers that led to it.  So a run
+  ;; already under way is joined, not replaced, and reported under its
+  ;; own name; c:AUTOBEAD has begun as AUTOBEAD by the time it calls.
+  (if (and lzd:begin (not lzd:*tool*))
+    (lzd:begin "AUTOBEAD" *autobead-version*))
+  (setq autobead:*who* (if lzd:*tool*
+                         (list lzd:*tool* lzd:*ver*)
+                         (list "AUTOBEAD" *autobead-version*)))
 
   ;; AutoCAD 2012+ requires this so *error* may call (command) - the
-  ;; autobead-flush drain and the UNDO close above; harmless no-op
-  ;; guard on older releases where it doesn't exist
+  ;; autobead-flush drain above; harmless no-op guard on older releases
+  ;; where it doesn't exist
   (if *push-error-using-command* (*push-error-using-command*))
 
-  (setq oldcmd (getvar "CMDECHO"))
+  (setq autobead:*oldcmd* (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
     (progn
       (command "_.UNDO" "_Begin")
-      (setq undo-open T)))
-  (setq oldos (getvar "OSMODE")
-        oldpa (getvar "PEDITACCEPT")
-        temps '()
+      (setq autobead:*undo-open* T)))
+  (setq autobead:*oldos* (getvar "OSMODE")
+        autobead:*oldpa* (getvar "PEDITACCEPT")
+        autobead:*oldoe* (getvar "OFFSETERASE")
+        autobead:*oldgt* (getvar "OFFSETGAPTYPE")
         beadcount 0)
 
   (autobead-ensure-layer layname)
   (setvar "OSMODE" 0)          ; keep osnaps out of the internal commands
   (setvar "PEDITACCEPT" 1)     ; auto-accept line/arc -> pline conversion
+  ;; OFFSET's own two settings are kept in the registry, so they are
+  ;; whatever the drafter last answered in an OFFSET of their own.
+  ;; Erase=Yes (OFFSETERASE 1) deleted each working chain as it was
+  ;; offset -- the step chains step 5 breaks the wall beads at were gone
+  ;; by then, so every wall bead ran on past its breaklines or went whole,
+  ;; and the report still counted the beads.  A fillet or chamfer gap type
+  ;; rounds off the corners this file promises are trimmed and extended.
+  (if autobead:*oldoe* (setvar "OFFSETERASE" 0))
+  (if autobead:*oldgt* (setvar "OFFSETGAPTYPE" 0))
 
   ;; 1) copy the selection in place so the originals are never touched
   (setq mark   (entlast)
@@ -49979,7 +51174,7 @@
         (setq copies (cons dup copies))))
     (setq i (1+ i)))
   (setq copies (reverse copies)
-        temps  copies)
+        autobead:*temps* copies)
 
   (cond
     ((null copies)
@@ -49987,7 +51182,7 @@
 
     (drift
      (foreach e copies (if (entget e) (entdel e)))
-     (setq temps '())
+     (setq autobead:*temps* '())
      (prompt (strcat "\nAborted: the working copies did not land on the"
                      " source geometry.\nNothing was drawn.")))
 
@@ -49998,7 +51193,7 @@
      (command "._pedit" "_multiple" ss2 "" "_join" fuzz "")
      (autobead-flush)
      (setq chains (autobead-newents mark)
-           temps  chains)
+           autobead:*temps* chains)
 
      ;; 3) classify: a chain whose BOTH endpoints land mid-span on other
      ;;    chains is a step line crossing the pool; the rest are walls
@@ -50098,7 +51293,7 @@
      ;; 6) discard the temporary chains
      (foreach c chains
        (if (entget c) (entdel c)))
-     (setq temps '())
+     (setq autobead:*temps* '())
 
      ;; 7) report -- including what was actually built, so a bead that
      ;;    lands in the wrong place can be diagnosed from the command line
@@ -50147,11 +51342,17 @@
                        " farther from the pool line.")))))
 
   ;; -- restore --------------------------------------------------------------
-  (setvar "PEDITACCEPT" oldpa)
-  (setvar "OSMODE" oldos)
-  (if undo-open (command "_.UNDO" "_End"))
-  (setq undo-open nil)
-  (setvar "CMDECHO" oldcmd)
+  (setvar "OSMODE" autobead:*oldos*)
+  (setvar "PEDITACCEPT" autobead:*oldpa*)
+  (if autobead:*oldoe* (setvar "OFFSETERASE" autobead:*oldoe*))
+  (if autobead:*oldgt* (setvar "OFFSETGAPTYPE" autobead:*oldgt*))
+  (setq autobead:*oldos* nil autobead:*oldpa* nil
+        autobead:*oldoe* nil autobead:*oldgt* nil)
+  (if autobead:*undo-open* (command "_.UNDO" "_End"))
+  (setq autobead:*undo-open* nil
+        autobead:*in-demo*   nil)
+  (setvar "CMDECHO" autobead:*oldcmd*)
+  (setq autobead:*oldcmd* nil)
   ;; the mode pushed at the top comes off on this exit too, not only in
   ;; the handler -- stacked, it refuses command-s inside every later
   ;; handler (AutoLISP reference, *push-error-using-command*)
@@ -50274,9 +51475,11 @@
 ;; ==========================================================================
 ;;; TUTORIALAUTOBEAD
 ;;; --------------------------------------------------------------------------
-;;; Two modes:
-;;;   Read - a written walkthrough: every step, every check, every setting
-;;;   Demo - draws a sample pool and beads it live, pausing at each stage
+;;; [Checks/Demo/Both] <Both>:
+;;;   Checks - a written walkthrough: every step, every check, every setting
+;;;   Demo   - draws a sample pool and beads it live, pausing at each stage
+;;;   Both   - the one, then the other.  Read, the old name for Checks,
+;;;            is still taken typed in full.
 ;;; ==========================================================================
 
 (defun autobead-pause (msg)
@@ -50403,8 +51606,25 @@
                   (cons 10 a)
                   (cons 11 b))))
 
+(defun autobead-demo-sweep ( / e left)
+  ;; Erase what the demo drew -- every entity after the mark it took
+  ;; before its first line, the sample pool and the build's beads alike,
+  ;; and nothing else.  The cleanup used to erase the whole Bead Track
+  ;; layer, which is where the drafter's own AUTOBEAD output lives, so a
+  ;; Yes (the default) at the demo's last question took every bead in
+  ;; the drawing with it and said only "Demo geometry erased."
+  ;; Returns how many it could NOT erase: entdel refuses on a locked
+  ;; layer, and the caller says so rather than claim the lot went.
+  (setq left 0)
+  (if autobead:*demo*
+    (foreach e (autobead-newents (car autobead:*demo*))
+      (vl-catch-all-apply 'entdel (list e))
+      (if (entget e) (setq left (1+ left)))))
+  (setq autobead:*demo* nil)
+  left)
+
 (defun autobead-tutorial-demo ( / base lay pts prev ents ss dirpt
-                                  x y made e )
+                                  x y made e left)
   (setq lay "POOL-TUTORIAL")
 
   (autobead-say
@@ -50413,7 +51633,7 @@
           "  A sample pool with two step lines will be drawn in your"
           "  drawing and beaded for real, using the same code AUTOBEAD"
           "  uses. It goes on a temporary layer and you will be offered"
-          "  a cleanup at the end. Undo (U) also removes all of it."))
+          "  a cleanup at the end."))
 
   (if (null (setq base ((lambda (v) (if lzd:ask (lzd:ask "\nPick an empty spot for the demo pool: " v) v))
                          (getpoint
@@ -50421,9 +51641,19 @@
     (progn (prompt "\nDemo cancelled.") (princ))
 
     (progn
+      ;; the pick is in the current UCS and entmake reads WCS.  Built
+      ;; from the raw numbers the pool landed somewhere else under a
+      ;; moved UCS, the zoom framed an empty patch, and the direction
+      ;; click was measured against lines that were not where the
+      ;; drafter saw them.  So the pool is built round the WCS point
+      ;; clicked -- the tread point handed to the build is WCS too.
+      (setq base (trans base 1 0))
       (autobead-demo-layer lay)
       (setq x (car base)
             y (cadr base))
+      ;; everything the demo draws comes after this mark, and it is all
+      ;; the cleanup (or an Esc, through the command's handler) takes
+      (setq autobead:*demo* (list (entlast)))
 
       ;; open-ended pool run: bottom wall, end wall, top wall, plus two
       ;; step lines crossing the pool near the end wall
@@ -50441,9 +51671,18 @@
           (autobead-demo-line (list (+ x 210.0) y 0.0)
                               (list (+ x 210.0) (+ y 144.0) 0.0) lay)))
 
+      ;; ZOOM reads UCS: the window is the four WCS corners round the
+      ;; pool as the current UCS sees them
+      (setq pts (mapcar '(lambda (p) (trans p 0 1))
+                        (list (list (- x 60.0) (- y 60.0) 0.0)
+                              (list (+ x 360.0) (- y 60.0) 0.0)
+                              (list (+ x 360.0) (+ y 204.0) 0.0)
+                              (list (- x 60.0) (+ y 204.0) 0.0))))
       (command "._zoom" "_window"
-               (list (- x 60.0) (- y 60.0))
-               (list (+ x 360.0) (+ y 204.0)))
+               (list (apply 'min (mapcar 'car pts))
+                     (apply 'min (mapcar 'cadr pts)))
+               (list (apply 'max (mapcar 'car pts))
+                     (apply 'max (mapcar 'cadr pts))))
 
       (autobead-pause
         (strcat "STEP 1 - the pool\n"
@@ -50489,9 +51728,15 @@
                     " bead survives only on the click's\n      side of"
                     " that line."))
 
-          (setq made (autobead-build ss dirpt "Some"
-                       (list (list (+ x 267.0) (+ y 72.0) 0.0))
-                       nil))
+          ;; the flag says to the build's handler "this is the demo's":
+          ;; if the build fails, that handler is the only one that runs,
+          ;; and it takes the sample pool down too.  The build spends
+          ;; the flag on entry, so it is set in the same form as the call
+          (setq made (progn
+                       (setq autobead:*demo-call* T)
+                       (autobead-build ss dirpt "Some"
+                         (list (list (+ x 267.0) (+ y 72.0) 0.0))
+                         nil)))
 
           (autobead-say
             (list ""
@@ -50513,16 +51758,35 @@
                      (getkword
                        "\nErase the demo pool and its bead? [Yes/No] <Yes>: ")))
         (progn
-          (foreach e ents (if (entget e) (entdel e)))
-          (if (setq ss (ssget "_X" (list (cons 8 *autobead-layer*))))
-            (command "._erase" ss ""))
-          (prompt "\nDemo geometry erased.")))
+          (setq left (autobead-demo-sweep))
+          (if (> left 0)
+            (prompt (strcat "\nDemo geometry erased, except " (itoa left)
+                            " object(s) on a locked layer - NOT erased."))
+            (prompt "\nDemo geometry erased."))))
+      ;; kept, or already swept: either way nothing is the handler's now
+      (setq autobead:*demo* nil)
       (prompt "\nTutorial complete. Type AUTOBEAD to use it for real.")
       (princ))))
 
 ;; ---- entry point -----------------------------------------------------------
 
-(defun c:TUTORIALAUTOBEAD ( / ans )
+(defun c:TUTORIALAUTOBEAD ( / *error* ans )
+  ;; An Esc at any of the demo's questions used to leave its sample pool
+  ;; standing on POOL-TUTORIAL with nothing said: the command had no
+  ;; handler.  This one takes the demo back down -- only what the demo
+  ;; drew, through the same sweep as its cleanup -- and opens no group
+  ;; and moves no setting, so there is nothing else to put back.  A
+  ;; failure inside the bead build itself is the build's handler's.
+  (defun *error* (msg)
+    (vl-catch-all-apply 'autobead-demo-sweep nil)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nTUTORIALAUTOBEAD error: " msg)))
+    (if lzd:report (lzd:report "TUTORIALAUTOBEAD" *autobead-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "TUTORIALAUTOBEAD" *autobead-version*))
+  ;; nothing a dead demo left behind is swept by this one
+  (setq autobead:*demo* nil)
   ;; the tutorial selector of STANDARDS section 3; the old Read stays
   ;; accepted typed in full, hidden
   (initget "Checks Demo Both READ")
@@ -50534,6 +51798,7 @@
   (if (= ans "READ") (setq ans "Checks"))
   (if (member ans '("Checks" "Both")) (autobead-tutorial-read))
   (if (member ans '("Demo" "Both")) (autobead-tutorial-demo))
+  (if lzd:end (lzd:end "TUTORIALAUTOBEAD"))
   (princ))
 
 ;; ---------------------------------------------------------------------------
@@ -50658,21 +51923,21 @@
 ;;;    one question more than the answer needs.  Back at the pad
 ;;;    question re-opens the floor dims one, so an answer given by
 ;;;    mistake is not a run wasted.
-;;;    Yes to pads hands PADDLE the step-1 plan as a pickfirst
-;;;    selection rather than letting it hunt for one: PADDLE
-;;;    auto-detects the largest closed loop in the WHOLE drawing, and a
-;;;    title block border is a bigger loop than the pool.  Handed the
-;;;    plan, it pads what was just dimensioned and asks nothing - it
+;;;    Yes to pads hands PADDLE the step-1 plan rather than letting
+;;;    it hunt for one: PADDLE auto-detects the largest closed loop in
+;;;    the WHOLE drawing, and a title block border is a bigger loop
+;;;    than the pool.  Handed the plan, it pads what was just
+;;;    dimensioned and asks nothing - it
 ;;;    keeps the lines, arcs and polylines out of what it is given, so
 ;;;    a plan drawn without any of those is the one case where it falls
 ;;;    back on its own selection prompt.
-;;;    PICKFIRST is switched on for the handoff and put back after -
-;;;    with it at 0, sssetfirst still highlights while PADDLE's
-;;;    (ssget "_I") reads nothing, and the handoff would go quietly
-;;;    missing.  (An Esc inside PADDLE is caught by PADDLE's own
-;;;    handler, which is the innermost one, so this command's never
-;;;    sees it and PICKFIRST is left switched on - AutoCAD's own
-;;;    default, and the state a drafter who never turned it off is in.)
+;;;    The plan goes over in the global *calofin-handoff*, which
+;;;    PADDLE reads before its own pickfirst probe and clears.  It used
+;;;    to go as a pickfirst set with PICKFIRST switched on round the
+;;;    call, and an Esc inside PADDLE is caught by PADDLE's own
+;;;    handler, the innermost one - so this command's restore never
+;;;    ran, and a drafter who works with PICKFIRST at 0 was left at 1
+;;;    for good.  The global borrows no setting of theirs.
 ;;;    The pads go in LAST, once the dims are placed and this command's
 ;;;    layer, dimension style, CMDECHO and undo group are back: PADDLE
 ;;;    is a command in its own right and must start from the drafter's
@@ -50801,7 +52066,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v2.3")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v2.4")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -51149,6 +52414,7 @@
 (setq ad:*dims*      nil    ; the places that already carry a dimension
       ad:*rads*      nil    ; the arcs that already carry a radius dim
       ad:*skipped*   0      ; how many dims this run left to what was there
+      ad:*stuck*     0      ; measuring lines this run could not erase
       ad:*curstyle*  nil    ; the dimension style in force right now
       ad:*homestyle* nil)   ; what to fall back on when a style is missing
 
@@ -51268,7 +52534,8 @@
 (defun ad:begin ()
   (setq ad:*homestyle* (getvar "DIMSTYLE")
         ad:*curstyle*  (getvar "DIMSTYLE")
-        ad:*skipped*   0)
+        ad:*skipped*   0
+        ad:*stuck*     0)
   (ad:dimscan))
 
 ;; T when a and b are the same point on the plan, within tol
@@ -51360,12 +52627,18 @@
   (setq ad:*skipped* (1+ ad:*skipped*))
   0)
 
-;; tell the user what the run left to the dims that were already there
+;; tell the user what the run left to the dims that were already there,
+;; and any measuring line it could not take away again (ad:scrapprobe)
 (defun ad:skipreport ()
   (if (> ad:*skipped* 0)
     (prompt (strcat "\n" (itoa ad:*skipped*)
                     " dimension(s) skipped - that place is dimensioned"
-                    " already."))))
+                    " already.")))
+  (if (> ad:*stuck* 0)
+    (prompt (strcat "\n" (itoa ad:*stuck*)
+                    " measuring line(s) could NOT be erased - they are"
+                    " still in the drawing.  Erase them before a floor"
+                    " dims run reads them as walls."))))
 
 ;; -------------------------------------------------- placing dimensions
 
@@ -51650,6 +52923,32 @@
 (defun ad:geomfilter ()
   (list (cons 0 ad:*geom-types*)))
 
+;; A selection another command hands AUTODIM - TYLERDRONESUITE's carried
+;; trace, when AUTODIM is put back in its list - through a global rather
+;; than a pickfirst set, because the pickfirst route needs PICKFIRST at
+;; 1 and a borrow of it cannot be put back once a nested command's own
+;; handler has taken an Esc.  It holds (NAME SELECTION), is read only by
+;; the command NAME, and is cleared at the read whoever it was for - and
+;; by the handler, for a failure before the read.  ad:paddle hands
+;; PADDLE the plan the same way.
+(setq *calofin-handoff* nil)
+
+;; The handed-over selection narrowed to ad:*geom-types* (the filter the
+;; pickfirst read uses) and to what is still in the drawing, or nil when
+;; nothing was handed to AUTODIM.
+(defun ad:handed ( / h ss i e)
+  (setq h                 *calofin-handoff*
+        *calofin-handoff* nil)
+  (if (and (listp h) (= (car h) "AUTODIM") (cadr h))
+    (progn
+      (setq ss (ssadd) i 0)
+      (repeat (sslength (cadr h))
+        (setq e (ssname (cadr h) i)
+              i (1+ i))
+        (if (and (entget e) (wcmatch (cdr (assoc 0 (entget e))) ad:*geom-types*))
+          (ssadd e ss)))
+      (if (< 0 (sslength ss)) ss))))
+
 ;; dxf filter for a stairs or side-view highlight - ad:*stair-types*
 (defun ad:stairfilter ()
   (list (cons 0 ad:*stair-types*)))
@@ -51671,6 +52970,41 @@
             i   (1+ i))))
   (reverse out))
 
+;; Erase EN - a measuring line or a dim this run drew - even where its
+;; layer is locked; T once it is gone.  The measuring lines carry no
+;; layer of their own, so with ad:*layer* nil they land on the current
+;; layer, and AutoCAD draws on a locked current layer but will not
+;; erase from one: a plain entdel refused without a word, and every
+;; side of the plan left its full-length probe line behind (a later
+;; floor dims run then read them as obstacles), while a Back left the
+;; dims it meant to roll back.  So a refused erase has the layer
+;; unlocked for that one entdel and locked again straight after.
+(defun ad:scrap (en / lay rec ed fl)
+  (if (and en (entget en))
+    (progn
+      (vl-catch-all-apply 'entdel (list en))
+      (if (entget en)
+        (progn
+          (setq lay (cdr (assoc 8 (entget en)))
+                rec (if lay (tblobjname "LAYER" lay))
+                ed  (if rec (entget rec))
+                fl  (cdr (assoc 70 ed)))
+          (if (and fl (= 4 (logand 4 fl)))
+            (progn
+              (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed))
+              (vl-catch-all-apply 'entdel (list en))
+              (setq ed (entget rec))
+              (entmod (subst (cons 70 fl) (assoc 70 ed) ed))))))))
+  (not (and en (entget en))))
+
+;; A measuring line that still will not go, its layer unlocked or not,
+;; is counted for the end-of-run report rather than dropped: left
+;; unsaid it is a stray full-length LINE across the drafter's plan, and
+;; the next floor dims run sweeps it in as an obstacle.
+(defun ad:scrapprobe (en)
+  (if (and en (not (ad:scrap en)))
+    (setq ad:*stuck* (1+ ad:*stuck*))))
+
 ;; T if nothing in objs (ad:ss-objs of the selection) lies between pt
 ;; and pt + dist along direction ang
 (defun ad:sideclear (pt ang dist eps objs / lin lobj rtn clear)
@@ -51691,7 +53025,7 @@
             objs (cdr objs))
       (if (and (not (vl-catch-all-error-p rtn)) rtn)
         (setq clear nil))))
-  (if lin (entdel lin))
+  (ad:scrapprobe lin)
   clear)
 
 ;; if segment p1-p2 lies on the perimeter of the highlighted geometry,
@@ -51951,7 +53285,7 @@
         (cond ((< (abs d) tol)                   (setq starton t))
               ((< (abs (- d len)) tol)           (setq endon t))
               ((and (> d tol) (< d (- len tol))) (setq ds (cons d ds)))))
-      (entdel lin)
+      (ad:scrapprobe lin)
       ;; sorted break points, near-coincident ones merged
       (setq chain (list p1)
             prev  0.0)
@@ -51983,13 +53317,19 @@
 ;; erase everything drawn after entity MARK (nil = an empty drawing) -
 ;; the rollback when a Back re-opens an earlier dimensioning step.  The
 ;; record of what is dimensioned is read again afterwards, so a dim
-;; this rolled back does not go on blocking its own place.
-(defun ad:eraseafter (mark / en nx)
-  (setq en (if mark (entnext mark) (entnext)))
+;; this rolled back does not go on blocking its own place.  Anything
+;; that would not go is SAID: a Back that quietly left its dims behind
+;; would have the step re-drawn on top of them.
+(defun ad:eraseafter (mark / en nx stuck)
+  (setq en    (if mark (entnext mark) (entnext))
+        stuck 0)
   (while en
     (setq nx (entnext en))
-    (if (entget en) (entdel en))
+    (if (not (ad:scrap en)) (setq stuck (1+ stuck)))
     (setq en nx))
+  (if (> stuck 0)
+    (prompt (strcat "\n" (itoa stuck) " object(s) from that step could NOT be"
+                    " erased - they are still in the drawing.")))
   (ad:dimscan))
 
 ;; prompt the user to draw one floor dims line and dimension it,
@@ -52046,27 +53386,34 @@
     ((eq out 'skip) nil)
     (T (car out))))
 
-;; Step 4's other branch.  Hand PADDLE the plan as a pickfirst
-;; selection rather than letting it hunt for one: PADDLE auto-detects
-;; the largest closed loop in the WHOLE drawing, and a title block
-;; border is a bigger loop than the pool.  Handed the plan, it pads
-;; what was just dimensioned and asks nothing - the same handoff
-;; LINGUTTER and TYLERDRONESUITE make.
+;; Step 4's other branch.  Hand PADDLE the plan rather than letting it
+;; hunt for one: PADDLE auto-detects the largest closed loop in the
+;; WHOLE drawing, and a title block border is a bigger loop than the
+;; pool.  Handed the plan, it pads what was just dimensioned and asks
+;; nothing - the same handoff LINGUTTER and TYLERDRONESUITE make.
+;;
+;; It goes over in *calofin-handoff* (see ad:handed), not as a
+;; pickfirst set.  That needed PICKFIRST at 1, so this run switched it
+;; on round the call - and an Esc inside PADDLE runs only PADDLE's own
+;; handler, so the restore never ran and a drafter who works at 0 was
+;; left at 1 for good, with nothing said.  PADDLE clears the global at
+;; the read and from its handler; the clear after the call keeps a
+;; PADDLE old enough not to read it (before v1.17, say a pinned dated
+;; twin) from leaving a stale set behind.  That PADDLE gets nothing,
+;; though, and asks for its own perimeter - answer it with a pick, not
+;; Enter, which auto-detects.  The bundle ships the two in step.
 ;;
 ;; PADDLE is its own file, so it may not be in this session: an unbound
 ;; c: symbol is nil, which is the test here.  When it is missing the
 ;; dims have still been placed, and saying so beats dying on an
 ;; undefined function.
-;;
-;; The caller switches PICKFIRST on and puts it back - with it at 0
-;; sssetfirst still highlights while PADDLE's (ssget "_I") reads
-;; nothing, and the handoff would go quietly missing.
 (defun ad:paddle (plan)
   (if c:PADDLE
     (progn
       (prompt "\nHanding the plan to PADDLE for the pads...")
-      (sssetfirst nil plan)
-      (c:PADDLE))
+      (setq *calofin-handoff* (list "PADDLE" plan))
+      (c:PADDLE)
+      (setq *calofin-handoff* nil))
     (prompt (strcat "\nPADDLE is not loaded, so no pads were placed - the"
                     " dimensions above are all this run did.  APPLOAD"
                     " PADDLE.lsp (or shared/LAZPASS.lsp, which is the whole"
@@ -52402,7 +53749,7 @@
   ;; never puts that question
   (list n nil))
 
-(defun c:AUTODIM (/ *error* oldcmd olddim oldlay oldpick plan risers res n
+(defun c:AUTODIM (/ *error* oldcmd olddim oldlay plan risers res n
                     all stage done pad undo-open)
   (defun *error* (msg)
     ;; only close a group that was actually opened - the handler is
@@ -52413,21 +53760,21 @@
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" olddim)))
     (if oldlay (setvar "CLAYER" oldlay))
     (if oldcmd (setvar "CMDECHO" oldcmd))
-    ;; only switched on for the PADDLE handoff, and nil the rest of the
-    ;; run - an Esc in that window is the one this puts back
-    (if oldpick (setvar "PICKFIRST" oldpick))
-    (setq oldpick nil)
+    (setq *calofin-handoff* nil)     ; one never read goes with the run
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (prompt (strcat "\nAutoDim error: " msg)))
     (if lzd:report (lzd:report "AUTODIM" *autodim-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "AUTODIM" *autodim-version*))
-  ;; a pickfirst selection if there is one, otherwise ask for it.  The
+  ;; a set handed over in *calofin-handoff* (ad:handed), else a
+  ;; pickfirst selection if there is one, otherwise ask for it.  The
   ;; probe sits OUTSIDE the loop below, as AUTOBEAD's does: a Back out
   ;; of step 2's question lands on the interactive highlight, never on
   ;; a re-probe of a pickfirst set the drafter has no way to change
   ;; from here.
-  (setq plan (ssget "_I" (ad:geomfilter)))
+  (setq plan (ad:handed))
+  (if (null plan)
+    (setq plan (ssget "_I" (ad:geomfilter))))
   (if lzd:watch (lzd:watch plan) plan)
   ;; Step 1 and step 2's question walk back into each other, as a two
   ;; stage chain - a step counter over a cond, the shape every other
@@ -52519,19 +53866,9 @@
       ;; The pads go in last of all, with this command's layer, style,
       ;; CMDECHO and undo group already back: PADDLE is a command in its
       ;; own right, it starts from the drafter's settings rather than
-      ;; this run's, and it opens an undo mark of its own.  The handoff
-      ;; also has to come after the last (command ...) above, which
-      ;; would clear the pickfirst set it puts up.
-      (if pad
-        (progn
-          ;; with PICKFIRST at 0 sssetfirst still highlights while
-          ;; PADDLE's (ssget "_I") reads nothing, and the handoff would
-          ;; go quietly missing
-          (setq oldpick (getvar "PICKFIRST"))
-          (setvar "PICKFIRST" 1)
-          (ad:paddle plan)
-          (setvar "PICKFIRST" oldpick)
-          (setq oldpick nil)))))
+      ;; this run's, and it opens an undo mark of its own.  No setting
+      ;; of the drafter's is borrowed for the handoff (see ad:paddle).
+      (if pad (ad:paddle plan))))
   (if lzd:end (lzd:end "AUTODIM"))
   (princ))
 
@@ -52753,7 +54090,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *bpcallout-version* "v1.10")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.11")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -52919,12 +54256,22 @@
                   (cons 10 (list (car ctr) (cadr ctr) 0.0))
                   (cons 40 bp:*radius*))))
 
-;; Write the callout text at P.
+;; How far the current UCS is turned from the world X axis, so the
+;; callout reads along the UCS the drafter is drawing in.  Taken off
+;; the UCS X axis moved into the world -- not off UCSXDIR run back into
+;; the UCS, which is (1 0 0) there however far the UCS is turned, so it
+;; would always answer zero.  0 in the world UCS.
+(defun bp:ucsang ( / v)
+  (setq v (trans '(1.0 0.0 0.0) 1 0 T))
+  (atan (cadr v) (car v)))
+
+;; Write the callout text at P, a WORLD point.
 (defun bp:draw-text (p str)
   (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
                   (cons 8 bp:*layer*) '(100 . "AcDbText")
                   (cons 10 (list (car p) (cadr p) 0.0))
                   (cons 40 bp:*text-hgt*)
+                  (cons 50 (bp:ucsang))
                   (cons 1 str))))
 
 ;;; -------------------- the command ------------------------------------
@@ -52933,7 +54280,7 @@
 ;; the whole call, so a local called "last" turns every (last ...) in
 ;; the body into "no function definition: LAST" at runtime.
 (defun c:BPCALLOUT (/ *error* undo-open cands pk hit ctr nm old picked names
-                      txtpt phrase lastpt)
+                      txtpt phrase lastpt u)
   ;; the rings and the callout are one undo group, so a run backed out
   ;; halfway takes one U rather than one per circle; the group is only
   ;; closed if it was opened (STANDARDS section 5)
@@ -52969,6 +54316,12 @@
   (while (setq pk ((lambda (v) (if lzd:ask (lzd:ask "\nClick a bad point (a ringed one un-rings it, Enter when done): " v) v))
                     (getpoint
                       "\nClick a bad point (a ringed one un-rings it, Enter when done): ")))
+    ;; a click answers in the UCS and the survey points are WORLD
+    ;; data, so the click is moved into the world before it is matched
+    ;; or ringed.  Untranslated, a UCS off the world origin missed
+    ;; every point and ringed the bare UCS numbers somewhere else,
+    ;; saying "ringed where clicked" over a ring nowhere near the click
+    (setq pk (trans pk 1 0))
     (setq hit (bp:nearest-point pk cands))
     (if hit
       (setq ctr (car hit) nm (cdr hit))
@@ -53010,9 +54363,18 @@
          (setq picked (reverse picked)          ; back to newest-first
                txtpt  'RETRY))
         (T
-         (if (null txtpt)                       ; Enter: tuck it beside
-           (setq txtpt (list (+ (car lastpt) bp:*text-gap*)
-                             (- (cadr lastpt) bp:*text-gap*))))
+         ;; Enter tucks it right of and below the last ring AS THE
+         ;; DRAFTER SEES IT: the step is taken in the UCS and the
+         ;; result moved into the world.  Stepped along world X and Y,
+         ;; a turned UCS set the callout on a diagonal off the ring,
+         ;; reading along the UCS but sitting somewhere else
+         (if (null txtpt)
+           (setq u     (trans lastpt 0 1)
+                 txtpt (trans (list (+ (car u) bp:*text-gap*)
+                                    (- (cadr u) bp:*text-gap*)
+                                    0.0)
+                              1 0))
+           (setq txtpt (trans txtpt 1 0)))      ; a click: UCS to world
          (bp:draw-text txtpt phrase)
          (princ (strcat "\nBPCALLOUT: " (itoa (length picked))
                         " point(s) ringed on layer " bp:*layer*
@@ -53090,7 +54452,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dronote-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *dronote-version* "v1.3")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -53184,6 +54546,15 @@
     (strcat dn:*header* "\\P" dn:*bullet* txt)
     (strcat dn:*bullet* txt)))
 
+;; How far the current UCS is turned from the world X axis, so a note
+;; reads along the UCS the drafter is drawing in.  Taken off the UCS X
+;; axis moved into the world -- not off UCSXDIR run back into the UCS,
+;; which is (1 0 0) there however far the UCS is turned, so it would
+;; always answer zero.  0 in the world UCS.
+(defun dn:ucsang ( / v)
+  (setq v (trans '(1.0 0.0 0.0) 1 0 T))
+  (atan (cadr v) (car v)))
+
 ;; entmake an MTEXT at INS reading STR, in the properties the shop's own
 ;; review notes carry: attached TOP LEFT at the point, dn:*style* at
 ;; dn:*text-hgt*, wrapped at dn:*text-width*, upright, its lines spaced
@@ -53191,7 +54562,8 @@
 ;; 250-char DXF chunks - MTEXT carries at most 250 characters in group
 ;; 1, and the header takes a fixed bite out of that, so a note
 ;; lengthened past it would otherwise lose everything past the first
-;; chunk.  Returns the new ename.
+;; chunk.  INS is a WORLD point, which is what entmake reads group 10
+;; as.  Returns the new ename.
 (defun dn:mtext (ins str / dxf)
   (setq dxf (list '(0 . "MTEXT") '(100 . "AcDbEntity")
                   (cons 8 dn:*layer*) '(100 . "AcDbMText")
@@ -53205,7 +54577,7 @@
   (entmakex (append dxf
                     (list (cons 1 str)
                           (cons 7 dn:*style*)
-                          '(50 . 0.0)        ; rotation
+                          (cons 50 (dn:ucsang)) ; upright in the UCS
                           '(73 . 1)          ; line spacing: at least
                           (cons 44 dn:*line-space*)))))
 
@@ -53270,7 +54642,12 @@
          (T
           (cal:ensure-layer dn:*layer* dn:*layer-color*)
           (dn:ensure-style dn:*style* dn:*style-font*)
-          (setq placed (cons (cons (dn:mtext (list (car pt) (cadr pt) 0.0)
+          ;; the click answers in the UCS and entmake wants the world:
+          ;; untranslated, a UCS off the world origin put the note that
+          ;; far from the click and still said "Note placed."
+          (setq placed (cons (cons (dn:mtext (trans (list (car pt) (cadr pt)
+                                                          0.0)
+                                                    1 0)
                                              (dn:written txt))
                                    txt)
                              placed)
@@ -53324,7 +54701,9 @@
 ;;; What it stamps is an MTEXT written the way this shop's dimension
 ;;; text already is: the TEXT layer, the Attributes style, 6" high,
 ;;; attached TOP LEFT at the point clicked, unwrapped, ByLayer colour,
-;;; no rotation.  Every one of those is a knob in the block below.
+;;; upright in the current UCS.  The layer, the style, the height and
+;;; the wrap are knobs in the block below; the attachment, the ByLayer
+;;; colour and the turn are not -- they are how the shop's text is.
 ;;;
 ;;; Beside it, a little vertical RULER appears -- a column of nearby
 ;;; values, each drawn as a tick and a label, graded like a real ruler:
@@ -53437,11 +54816,27 @@
 ;;;   4'4.5    4'-4 1/2"    4' 4-1/2    4'4 1/2    52.5    52 1/2
 ;;;
 ;;; all read, and the first four all mean 4'-4 1/2".  Anything not a
-;;; whole eighth is rounded to the nearest one.  What is STAMPED is
-;;; always the canonical spelling above, never the keystrokes: type
-;;; 4'4.5 and the line back reads "read as 4'-4 1/2"", which is
-;;; where a mis-typed value is caught by eye rather than in the
-;;; drawing.  Feet spelled means feet written, so 52.5 stays 52 1/2"
+;;; whole eighth is rounded to the nearest one.
+;;;
+;;; A SPACE is only read at the FIRST text prompt, which takes a whole
+;;; line.  The click-or-type prompt after it is a getpoint, and there
+;;; the spacebar is Enter: 4'-6 1/2" typed at it arrives as two
+;;; answers, 4'-6 and then 1/2", and the second used to be adopted on
+;;; its own -- the next click stamped half an inch where 4'-6 1/2" was
+;;; meant, and only two "read as" lines said so.  So the prompts teach
+;;; the dashed spelling, 4'-4-1/2", which is one answer anywhere; and a
+;;; typed answer that can only be the tail of the one typed just
+;;; before it, with no click between -- a bare fraction after a value
+;;; with none, or the inches after a bare 4' -- is read back together
+;;; with it and said so, not adopted as a value of its own.  Somebody
+;;; who did mean 4'-6 and then half an inch alone types 1/2" once more:
+;;; the same answer again is never the tail of the join it just made,
+;;; and the line that reports the join says so.
+;;;
+;;; What is STAMPED is always the canonical spelling above, never the
+;;; keystrokes: type 4'4.5 and the line back reads "read as 4'-4 1/2"",
+;;; which is where a mis-typed value is caught by eye rather than in
+;;; the drawing.  Feet spelled means feet written, so 52.5 stays 52 1/2"
 ;;; rather than becoming 4'-4 1/2".
 ;;;
 ;;; The ruler offers, around whatever the current value is, the four
@@ -53461,7 +54856,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.8")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.9")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -53979,6 +55374,24 @@
                      " so the stamps have a style to carry."))))
   name)
 
+;; A point in the current UCS as the WORLD point entmake wants.  Every
+;; point this tool draws at is a UCS one -- a click answers in the UCS,
+;; and the ruler is laid out from VIEWCTR, which is in the UCS too --
+;; and entmake reads group 10 as WORLD.  Without this a UCS moved off
+;; the world origin put every stamp that far from its click, and the
+;; ruler that far off the screen, while the run said "placed".
+(defun ds:wcs (x y)
+  (trans (list x y 0.0) 1 0))
+
+;; How far the current UCS is turned from the world X axis, so text
+;; reads along the UCS the drafter is drawing in.  Taken off the UCS X
+;; axis moved into the world -- not off UCSXDIR run back into the UCS,
+;; which is (1 0 0) there however far the UCS is turned, so it would
+;; always answer zero.  0 in the world UCS.
+(defun ds:ucsang ( / v)
+  (setq v (trans '(1.0 0.0 0.0) 1 0 T))
+  (atan (cadr v) (car v)))
+
 ;; One MTEXT, written the way the shop's dimension text is: the tool's
 ;; own style, unwrapped, upright, attached at PT by ATT -- 1 top left,
 ;; 3 top right, AutoCAD's own codes.  A stamp is always 1, the way the
@@ -53992,14 +55405,14 @@
   (entmakex
     (append dxf
             (list '(100 . "AcDbMText")
-                  (cons 10 (list (car pt) (cadr pt) 0.0))
+                  (cons 10 (ds:wcs (car pt) (cadr pt)))
                   (cons 40 hgt)
                   (cons 41 ds:*text-width*)   ; 0 = no wrap
                   (cons 71 att)               ; 1 top left, 3 top right
                   '(72 . 5)                   ; direction: by style
                   (cons 1 str)
                   (cons 7 ds:*style*)
-                  '(50 . 0.0)                 ; rotation
+                  (cons 50 (ds:ucsang))       ; upright in the UCS
                   '(73 . 1)                   ; line spacing: at least
                   (cons 44 ds:*line-space*)))))
 
@@ -54021,8 +55434,8 @@
                           (cons 8 lay))
                     (if col (list (cons 62 col)))
                     (list '(100 . "AcDbLine")
-                          (cons 10 (list x1 y1 0.0))
-                          (cons 11 (list x2 y2 0.0))))))
+                          (cons 10 (ds:wcs x1 y1))
+                          (cons 11 (ds:wcs x2 y2))))))
 
 ;; The ring that marks the current row, same layer and colour rule.
 (defun ds:ruler-ring (x y r lay col)
@@ -54030,7 +55443,7 @@
                           (cons 8 lay))
                     (if col (list (cons 62 col)))
                     (list '(100 . "AcDbCircle")
-                          (cons 10 (list x y 0.0))
+                          (cons 10 (ds:wcs x y))
                           (cons 40 r)))))
 
 ;; Draw the ruler down its strip of the CURRENT VIEW for the current
@@ -54164,15 +55577,59 @@
 ;; The very first text of a run: no default, no ruler yet -- nothing
 ;; exists to build one around.
 (defun ds:ask-first ()
-  (ds:ask-raw "\nText - 4'-4 1/2\", just 4'4.5, or a letter like A: "))
+  (ds:ask-raw "\nText - 4'-4-1/2\", just 4'4.5, or a letter like A: "))
+
+;; S with its inch mark taken off the end, however it was spelled --
+;; a double quote or two apostrophes -- and trimmed.
+(defun ds:no-inch-mark (s / n)
+  (setq s (vl-string-trim " \t" s)
+        n (strlen s))
+  (cond
+    ((and (>= n 2) (= (substr s (1- n) 2) "''")) (substr s 1 (- n 2)))
+    ((and (>= n 1) (= (substr s n 1) "\"")) (substr s 1 (1- n)))
+    (T s)))
+
+;; The one answer PREV and NEW were typed as, when NEW can only be the
+;; tail the spacebar cut off PREV -- nil when NEW is an answer of its
+;; own.  At a getpoint a space is Enter, so 4'-6 1/2" arrives as 4'-6
+;; and then 1/2", and 4' 4-1/2 as 4' and then 4-1/2.  PREV is the raw
+;; text of a typed answer with no click after it (nil otherwise), and
+;; it has to be a measurement left OPEN: no inch mark closing it and
+;; no fraction in it yet.  NEW has to be inches with no feet in it,
+;; and either a bare fraction under an inch or -- after a PREV that
+;; stops at its feet mark -- under a foot.  34 then 36 is somebody
+;; changing their mind, and is left to be exactly that.
+(defun ds:rejoin (prev new / p nb toks joined q)
+  (if prev
+    (progn
+      (setq p      (vl-string-trim " \t" prev)
+            nb     (ds:no-inch-mark new)
+            toks   (ds:split nb)
+            joined (strcat p " " (vl-string-trim " \t" new)))
+      (if (and (= p (ds:no-inch-mark p))
+               (not (vl-string-search "/" p))
+               (setq q (ds:parse p))
+               (not (eq (cadr q) 'letter))
+               (not (vl-string-search "'" nb))
+               (ds:inches nb)
+               (or (and (= 1 (length toks))
+                        (vl-string-search "/" (car toks))
+                        (< (ds:inches nb) 1.0))
+                   (and (= (substr p (strlen p) 1) "'")
+                        (< (ds:inches nb) 12.0)))
+               (ds:read joined))
+        joined))))
 
 ;; The second-and-later prompt: one click or one typed line does every
 ;; job.  Returns nil for Enter (done), (adopt TEXT) for a new current
-;; value picked off the ruler or typed fresh, or (stamp PT) for a
-;; point to stamp the CURRENT text at.  BOX and ROWS are the live
-;; ruler's hit-test data from ds:draw-ruler/ds:redraw-ruler; HASFEET is
-;; the current value's family, for formatting a ruler pick.
-(defun ds:next-action (box rows hasfeet / pk hitval canon)
+;; value picked off the ruler, (adopt TEXT TYPED) for one typed fresh
+;; -- TYPED being what was typed, for the next prompt's PREV -- or
+;; (stamp PT) for a point to stamp the CURRENT text at.  BOX and ROWS
+;; are the live ruler's hit-test data from ds:draw-ruler/
+;; ds:redraw-ruler; HASFEET is the current value's family, for
+;; formatting a ruler pick.  PREV is the text typed at the prompt just
+;; before this one when that was a typed answer, for ds:rejoin.
+(defun ds:next-action (box rows hasfeet prev / pk hitval canon joined)
   (initget 128)
   (setq pk (getpoint (strcat "\nClick to place text, click the ruler to"
                              " change it, or type new text (Enter when"
@@ -54181,14 +55638,31 @@
   (cond
     ((null pk) nil)
     ((= (type pk) 'STR)
-     (if (setq canon (ds:read pk))
-       (progn
-         (if (/= canon (vl-string-trim " \t" pk))
-           (princ (strcat "\n  read as " canon)))
-         (list 'adopt canon))
-       (progn
-         (ds:say-unread pk)
-         (ds:next-action box rows hasfeet))))
+     (cond
+       ;; the tail of the answer before it: read the two together and
+       ;; say why, since the drafter typed one value and the spacebar
+       ;; made it two.  And say how to get the tail ALONE, for the one
+       ;; who did mean 4'-6 and then half an inch by itself: the same
+       ;; answer again, which can never be the tail of the join it has
+       ;; just made: that join is closed by the fraction or inch mark it
+       ;; took, or no longer stops at its feet mark
+       ((setq joined (ds:rejoin prev pk))
+        (setq canon (ds:read joined))
+        (princ (strcat "\n  A space ends the answer at this prompt, so \""
+                       (vl-string-trim " \t" prev) "\" and \""
+                       (vl-string-trim " \t" pk) "\" came in as two -"
+                       " read together as " canon ".  Type "
+                       (vl-string-translate " " "-" canon)
+                       " to give it in one, or " (vl-string-trim " \t" pk)
+                       " again to take it on its own."))
+        (list 'adopt canon joined))
+       ((setq canon (ds:read pk))
+        (if (/= canon (vl-string-trim " \t" pk))
+          (princ (strcat "\n  read as " canon)))
+        (list 'adopt canon pk))
+       (T
+        (ds:say-unread pk)
+        (ds:next-action box rows hasfeet nil))))
     (T
      (setq hitval (ds:ruler-hit pk box rows))
      (if hitval
@@ -54201,7 +55675,7 @@
 ;; the whole call, so a local called "last" turns every (last ...) in
 ;; the body into "no function definition: LAST" at runtime.
 (defun c:DIMSTAMP (/ *error* undo-open pk lasttext count parsed
-                    rulerents rulerbox rulerrows action rr)
+                    rulerents rulerbox rulerrows action rr typed)
   (defun *error* (msg)
     (ds:erase-ents rulerents)
     (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -54219,7 +55693,8 @@
   (princ (strcat "\nDIMSTAMP " *dimstamp-version*
                  " - click a point, then give the text.  After that,"
                  " click to stamp again, click the ruler to change the"
-                 " value, or type a new one; Enter when done."))
+                 " value, or type a new one - dashed, 4'-6-1/2\", since a"
+                 " space there is Enter; Enter when done."))
   (setq count 0 rulerents nil)
   (setq pk (getpoint "\nClick a point to place text (Enter when done): "))
   (if lzd:ask (lzd:ask "\nClick a point to place text (Enter when done): " pk) pk)
@@ -54238,7 +55713,12 @@
           (princ (strcat " Next: " lasttext "."))))
       (setq rr (ds:redraw-ruler parsed rulerents)
             rulerents (car rr) rulerbox (cadr rr) rulerrows (caddr rr))
-      (while (setq action (ds:next-action rulerbox rulerrows (cadr parsed)))
+      (setq typed nil)
+      (while (setq action (ds:next-action rulerbox rulerrows (cadr parsed)
+                                          typed))
+        ;; what was typed, when this answer was typed: a click -- a
+        ;; stamp or a ruler pick -- ends any answer the spacebar split
+        (setq typed (caddr action))
         (cond
           ((= (car action) 'stamp)
            (cal:ensure-layer ds:*layer* ds:*layer-color*)
@@ -54399,6 +55879,12 @@
   (setq *chk:log* (reverse out))
 )
 
+;; T when a typed string means "go back a step" - getstring prompts
+;; cannot take initget keywords, so Back is typed like a note.
+(defun chk:back-word (s)
+  (member (strcase s) chk:*back-words*)
+)
+
 ;; Print an instruction/note to the command line and log it.
 (defun chk:note (msg)
   (princ (strcat chk:*note-echo* msg))
@@ -54450,7 +55936,7 @@
                                  " or press Enter): ")))
   (if lzd:ask (lzd:ask (getvar "LASTPROMPT") val) val)
   (cond
-    ((and back (cal:back-word-p val)) 'CHK-BACK)
+    ((and back (chk:back-word val)) 'CHK-BACK)
     ((= val "") (chk:log (strcat chk:*confirm-mark* item)) val)
     (T (chk:log (strcat chk:*confirm-mark* item chk:*val-sep* val)) val)
   )
@@ -55056,7 +56542,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cdcallout-version* "v1.11")  ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.12")  ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -55370,6 +56856,10 @@
 ;; the point it is, which is how the AB tools take both at one prompt
 ;; too.  A click takes the NEAREST - there is nothing else on that layer
 ;; to hit - and what was taken is read back before anything is drawn.
+;; The click answers in the UCS and the points are WORLD data, so it is
+;; moved into the world before it is measured against them: untranslated,
+;; a UCS off the world origin took whichever point sat nearest the bare
+;; UCS numbers rather than the one under the cursor.
 ;; Returns the point, 'CDO-BACK, or nil for Enter.
 (defun cdo:ask-pick (nm hits / ans best bd n d c)
   (initget 128)
@@ -55381,7 +56871,8 @@
     ((null ans) nil)
     ((and (not (listp ans)) (cal:back-word-p ans)) 'CDO-BACK)
     ((listp ans)
-     (setq best nil bd nil n 0)
+     (setq ans  (trans ans 1 0)
+           best nil bd nil n 0)
      (foreach c hits
        (setq n (1+ n)
              d (distance (list (car ans) (cadr ans) 0.0) (car c)))
@@ -55702,7 +57193,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cdcreate-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *cdcreate-version* "v1.6")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -55929,7 +57420,7 @@
 (defun c:CDCREATE ( / *error* olderr odim
                       ss i en ed typ ends pairs skipped plines dimmed
                       already havestyle undo-open pre new made gone lays
-                      p1 p2 )
+                      stuck slays p1 p2 )
 
   ;; -- restore drawing state on error / Esc.  The user's settings come
   ;;    back FIRST so nothing below can skip them; a dimension command
@@ -56025,7 +57516,7 @@
 
           ;; -- 4. one aligned dim per line, on the line, and then the
           ;;       line itself goes: the tie is the dimension now
-          (setq made 0 gone 0 lays nil)
+          (setq made 0 gone 0 lays nil stuck 0 slays nil)
           (foreach pr pairs
             (setq en  (car    pr)
                   p1  (cadr   pr)
@@ -56052,12 +57543,21 @@
                 (setq made (1+ made))
                 ;; only a line that really did get its dimension is
                 ;; erased -- a dim AutoCAD refused to draw leaves its
-                ;; line in the drawing to be dealt with
+                ;; line in the drawing to be dealt with.  And only a
+                ;; line entdel really erased is counted: on a locked
+                ;; layer it answers nil and the line stays, and the
+                ;; drafter was being told it had gone while it sat
+                ;; live under its new dimension
                 (if (and cdc:*erase* (entget en))
-                  (progn (entdel en)
-                         (setq gone (1+ gone))
-                         (if (not (member (cadddr pr) lays))
-                           (setq lays (cons (cadddr pr) lays))))))))
+                  (if (entdel en)
+                    (progn
+                      (setq gone (1+ gone))
+                      (if (not (member (cadddr pr) lays))
+                        (setq lays (cons (cadddr pr) lays))))
+                    (progn
+                      (setq stuck (1+ stuck))
+                      (if (not (member (cadddr pr) slays))
+                        (setq slays (cons (cadddr pr) slays)))))))))
 
           ;; -- 5. put the drawing back the way it was
           (cdc:restyle odim)
@@ -56075,6 +57575,15 @@
                            (if (= gone 1) "" "s") " erased (layer"
                            (if (= 1 (length lays)) " " "s ")
                            (cdc:names (reverse lays)) ").")))
+          (if (> stuck 0)
+            (princ (strcat "\n** " (itoa stuck) " dimensioned line"
+                           (if (= stuck 1) "" "s")
+                           " could NOT be erased (layer"
+                           (if (= 1 (length slays)) " " "s ")
+                           (cdc:names (reverse slays))
+                           " locked?) -- still in the drawing under"
+                           " the new dimension"
+                           (if (= stuck 1) "" "s") ".")))
           (if (> already 0)
             (princ (strcat "\n" (itoa already) " line"
                            (if (= already 1) "" "s")
@@ -56154,14 +57663,17 @@
 ;;;     midpoint and the new end, then recolored (magenta by default).
 ;;;
 ;;;  Everything runs inside one UNDO group; a single U reverts every
-;;;  change CHECK made. Tunables are just below.
+;;;  change CHECK made. A dimension or arc on a LOCKED layer cannot be
+;;;  changed: one that needs a fix is named and counted apart in the
+;;;  summary ("NOT shifted"), never passed as clean. Tunables are just
+;;;  below.
 ;;; ------------------------------------------------------------------
 
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.10")  ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.11")  ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -56276,6 +57788,16 @@
                        (7 . "white") (8 . "grey"))))
   (if p (cdr p) (strcat "colour " (itoa aci))))
 
+(defun cfchk:locked-p (ent / lay rec)
+  ;; T when ent sits on a LOCKED layer.  entmod answers nil there and
+  ;; changes nothing, and a nil from a fix reads as "nothing needed
+  ;; fixing" -- so a stray point on a locked DIMS layer, the usual
+  ;; state of a finished sheet, was counted checked and clean.  The
+  ;; fixers ask this first and answer 'refused instead.
+  (setq lay (cdr (assoc 8 (entget ent)))
+        rec (if lay (tblsearch "LAYER" lay)))
+  (and rec (= 4 (logand 4 (cdr (assoc 70 rec))))))
+
 (defun cfchk:set-color (ent color / ed old)
   (setq ed  (entget ent)
         old (assoc 62 ed))
@@ -56350,7 +57872,9 @@
 
 (defun cfchk:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed)
   ;; re-fit the arc through its fixed end, its old midpoint and the
-  ;; target point; returns T on success
+  ;; target point; returns T on success, 'refused when the arc is on a
+  ;; locked layer (or entmod turns the write down), nil when no arc
+  ;; fits
   (if (and (> (distance target fixed) *cfchk-same-pt*)
            (setq c (cal:circumcenter fixed mid target)))
     (progn
@@ -56367,8 +57891,9 @@
       (setq ed (entget ent))
       (foreach pair (list (cons 10 c) (cons 40 r) (cons 50 a1) (cons 51 a2))
         (setq ed (subst pair (assoc (car pair) ed) ed)))
-      (if (entmod ed)
-        (progn (entupd ent) T)))))
+      (if (and (not (cfchk:locked-p ent)) (entmod ed))
+        (progn (entupd ent) T)
+        'refused))))
 
 ;; --- audit 1: dimension attachment ---------------------------------
 
@@ -56417,7 +57942,8 @@
 (defun cfchk:fix-defpoint (ent gcode cands anchors
                            / ed pt near anch dnear danch sugg dsug)
   ;; shift one definition point onto the closest object when it is
-  ;; not already on one; returns the shift distance, nil if untouched.
+  ;; not already on one; returns the shift distance, nil when it needed
+  ;; no shift, 'refused when it did and its layer would not take it.
   ;; A point another dimension also measures to is an ANCHOR and is
   ;; never shifted; an anchor nearer than any object is where a stray
   ;; point goes.
@@ -56439,8 +57965,10 @@
            (near
             (setq sugg (cadr near)  dsug dnear)))
          (if (and sugg (> dsug *cfchk-tol*))
-           (if (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
-             dsug)))))))
+           (if (and (not (cfchk:locked-p ent))
+                    (entmod (subst (cons gcode sugg) (assoc gcode ed) ed)))
+             dsug
+             'refused)))))))
 
 (defun cfchk:check-dim (ent cands anchors / ed dtype p13 p14 d1 d2)
   (setq ed    (entget ent)
@@ -56451,24 +57979,39 @@
             p14 (cdr (assoc 14 ed))
             d1  (cfchk:fix-defpoint ent 13 cands anchors)
             d2  (cfchk:fix-defpoint ent 14 cands anchors))
-      (if (or d1 d2)
-        (progn
-          (cfchk:make-xline p13 p14)        ; through the ORIGINAL points
-          (cfchk:set-color ent *cfchk-dim-color*)
-          (entupd ent)
-          (princ (strcat "\n  Dimension " (cdr (assoc 5 ed)) ":"
-                         (if d1 (strcat " point 1 shifted " (cfchk:dist d1)) "")
-                         (if d2 (strcat " point 2 shifted " (cfchk:dist d2)) "")
-                         " onto the nearest object or anchor; recolored "
-                         (cfchk:color-name *cfchk-dim-color*) "."))
-          'fixed)
-        'ok))
+      (cond
+        ;; a stray point CHECK could not move is a fault it found, not a
+        ;; clean dimension: named here and counted apart in the summary
+        ((or (eq d1 'refused) (eq d2 'refused))
+         (princ (strcat "\n  Dimension " (cdr (assoc 5 ed))
+                        ": a definition point is off every object, but layer "
+                        (cond ((cdr (assoc 8 ed))) ("0")) " is locked - NOT shifted."))
+         'locked)
+        ((or d1 d2)
+         (cfchk:make-xline p13 p14)        ; through the ORIGINAL points
+         (cfchk:set-color ent *cfchk-dim-color*)
+         (entupd ent)
+         (princ (strcat "\n  Dimension " (cdr (assoc 5 ed)) ":"
+                        (if d1 (strcat " point 1 shifted " (cfchk:dist d1)) "")
+                        (if d2 (strcat " point 2 shifted " (cfchk:dist d2)) "")
+                        " onto the nearest object or anchor; recolored "
+                        (cfchk:color-name *cfchk-dim-color*) "."))
+         'fixed)
+        (t 'ok)))
     'skipped))
 
 ;; --- audit 2: arc endpoint attachment ------------------------------
 
+(defun cfchk:snap-end (ent which other mid p target / r)
+  ;; re-fit the arc so its end lands on target: the snap distance when
+  ;; it did, 'refused when the arc's layer is locked, nil when no arc fits
+  (setq r (cfchk:rebuild-arc ent which other mid target))
+  (cond ((eq r 'refused) 'refused)
+        (r (distance p target))))
+
 (defun cfchk:fix-arc-end (ent which cands / p other mid near ends target)
-  ;; returns the snap distance when the endpoint was moved, else nil
+  ;; returns the snap distance when the endpoint was moved, 'refused
+  ;; when it needed moving and its layer is locked, else nil
   (setq mid   (vlax-curve-getPointAtDist
                 ent
                 (/ (vlax-curve-getDistAtParam ent (vlax-curve-getEndParam ent)) 2.0))
@@ -56492,14 +58035,12 @@
         nil)                                ; ...and at one of its ends: OK
        (t                                   ; ...but mid-object: closest end of that object
         (setq target (cfchk:closest-of p ends))
-        (if (cfchk:rebuild-arc ent which other mid target)
-          (distance p target)))))
+        (cfchk:snap-end ent which other mid p target))))
     (t                                      ; floating: closest end anywhere,
      (setq target (cfchk:nearest-end p ent cands))
      (if (or (null target) (< (distance target other) *cfchk-same-pt*))
        (setq target (cadr near)))           ; else closest point on closest object
-     (if (cfchk:rebuild-arc ent which other mid target)
-       (distance p target)))))
+     (cfchk:snap-end ent which other mid p target))))
 
 (defun cfchk:check-arc (ent cands / ed d1 d2)
   (setq ed (entget ent))
@@ -56507,22 +58048,27 @@
     (progn
       (setq d1 (cfchk:fix-arc-end ent 'start cands)
             d2 (cfchk:fix-arc-end ent 'end cands))
-      (if (or d1 d2)
-        (progn
-          (cfchk:set-color ent *cfchk-arc-color*)
-          (princ (strcat "\n  Arc " (cdr (assoc 5 ed)) ":"
-                         (if d1 (strcat " start snapped " (cfchk:dist d1)) "")
-                         (if d2 (strcat " end snapped " (cfchk:dist d2)) "")
-                         " to nearest object end; recolored "
-                         (cfchk:color-name *cfchk-arc-color*) "."))
-          'fixed)
-        'ok))
+      (cond
+        ((or (eq d1 'refused) (eq d2 'refused))
+         (princ (strcat "\n  Arc " (cdr (assoc 5 ed))
+                        ": an end is not at the end of any object, but layer "
+                        (cond ((cdr (assoc 8 ed))) ("0")) " is locked - NOT snapped."))
+         'locked)
+        ((or d1 d2)
+         (cfchk:set-color ent *cfchk-arc-color*)
+         (princ (strcat "\n  Arc " (cdr (assoc 5 ed)) ":"
+                        (if d1 (strcat " start snapped " (cfchk:dist d1)) "")
+                        (if d2 (strcat " end snapped " (cfchk:dist d2)) "")
+                        " to nearest object end; recolored "
+                        (cfchk:color-name *cfchk-arc-color*) "."))
+         'fixed)
+        (t 'ok)))
     'skipped))
 
 ;; --- command -------------------------------------------------------
 
 (defun c:CHECK ( / *error* oldecho undo-open ss i e et cands dims arcs res
-                   anchors ndf ndo nds naf nao nas)
+                   anchors ndf ndo nds ndl naf nao nas nal)
   (defun *error* (msg)
     (if undo-open
       (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
@@ -56546,7 +58092,7 @@
      (prompt "\nNothing selected - CHECK cancelled."))
     (t
      (setq cands nil dims nil arcs nil i 0
-           ndf 0 ndo 0 nds 0 naf 0 nao 0 nas 0)
+           ndf 0 ndo 0 nds 0 ndl 0 naf 0 nao 0 nas 0 nal 0)
      (repeat (sslength ss)
        (setq e  (ssname ss i)
              i  (1+ i)
@@ -56586,11 +58132,13 @@
           (setq res (cfchk:check-dim e cands anchors))
           (cond ((eq res 'fixed)   (setq ndf (1+ ndf)))
                 ((eq res 'skipped) (setq nds (1+ nds)))
+                ((eq res 'locked)  (setq ndl (1+ ndl)))
                 (t                 (setq ndo (1+ ndo)))))
         (foreach e arcs
           (setq res (cfchk:check-arc e cands))
           (cond ((eq res 'fixed)   (setq naf (1+ naf)))
                 ((eq res 'skipped) (setq nas (1+ nas)))
+                ((eq res 'locked)  (setq nal (1+ nal)))
                 (t                 (setq nao (1+ nao)))))
         ;; closed only if one was opened -- the same guard the handler
         ;; above makes.  With undo recording off (UNDOCTL bit 1 clear)
@@ -56605,21 +58153,32 @@
         (princ (strcat "\n--- CHECK complete (attachment tolerance "
                        (rtos *cfchk-tol* *cfchk-dist-mode* *cfchk-tol-prec*)
                        ") ---"
-                       "\nDimensions: " (itoa (+ ndf ndo)) " checked, "
+                       "\nDimensions: " (itoa (+ ndf ndo ndl)) " checked, "
                        (itoa ndf) " shifted onto nearest object ("
                        (cfchk:color-name *cfchk-dim-color*) ")"
+                       (if (> ndl 0)
+                         (strcat ", " (itoa ndl)
+                                 " stray on a locked layer - NOT shifted")
+                         "")
                        (if (> nds 0)
                          (strcat ", " (itoa nds) " unsupported type skipped")
                          "")
-                       "\nArcs: " (itoa (+ naf nao)) " checked, "
+                       "\nArcs: " (itoa (+ naf nao nal)) " checked, "
                        (itoa naf) " with endpoint(s) snapped ("
                        (cfchk:color-name *cfchk-arc-color*) ")"
+                       (if (> nal 0)
+                         (strcat ", " (itoa nal)
+                                 " loose on a locked layer - NOT snapped")
+                         "")
                        (if (> nas 0)
                          (strcat ", " (itoa nas) " non-planar skipped")
                          "")
                        (if (> ndf 0)
                          (strcat "\nConstruction lines through the shifted dimensions' points are on layer "
                                  *cfchk-constr-layer* ".")
+                         "")
+                       (if (> (+ ndl nal) 0)
+                         "\nUnlock those layers and run CHECK again to fix them."
                          "")
                        "\nOne UNDO reverts everything CHECK changed."))))))
   (if lzd:end (lzd:end "CHECK"))
@@ -56801,9 +58360,12 @@
 ;;;   the last answer, drawn down a strip near the right edge of the
 ;;;   view, graded like a tape with the last answer ringed.  Click a
 ;;;   row and that is the answer; type one and it reads as DIMSTAMP
-;;;   reads (24, 24.5, 24 1/8, 2', 1'4-1/2", kept exactly as typed);
-;;;   click empty space and it is the first of two points to measure
-;;;   between, as getdist always offered.  Enter, Back and Same mean
+;;;   reads (24, 24.5, 24-1/8, 2', 1'4-1/2", kept exactly as typed --
+;;;   dash a fraction, since the spacebar is Enter at a prompt that
+;;;   also takes a click: 24 1/8 enters 24, and the 1/8 answers the
+;;;   question after it without a word); click empty space and it is
+;;;   the first of two points to measure between, as getdist always
+;;;   offered.  Enter, Back and Same mean
 ;;;   what they always did, and the prompt's wording is unchanged, so
 ;;;   a form answers it exactly as before.  The ruler is scratch on
 ;;;   the current layer: down again before the width prompt (which
@@ -57000,7 +58562,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.14") ; printed on load and at command start so a
+(setq *cs-version* "v4.15") ; printed on load and at command start so a
                             ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -57147,19 +58709,63 @@
 
 ;;; --------------------------- bead helpers -----------------------------
 
-;; The step numbers typed at a prompt - "1 3 4", "1,3,4" and "1, 3 and 4"
-;; all read the same.  Anything that is not a digit separates.
-(defun cs-numlist (str / out tok i c)
-  (setq out '() tok "" i 0)
-  (while (<= i (strlen str))
-    (setq c (if (< i (strlen str)) (substr str (1+ i) 1) " "))
-    (if (and (>= (ascii c) 48) (<= (ascii c) 57))
-      (setq tok (strcat tok c))
+;; The step numbers typed at a prompt, in the order typed: "1 3 4",
+;; "1,3,4" and "1, 3 and 4" all read the same, and "1-3" is steps 1, 2
+;; and 3 -- the range spelling PERPPTS's segment prompt takes, so a
+;; drafter used to it types it here too.  Every non-digit used to be a
+;; separator, which read 1-3 as steps 1 and 3 and left step 2 bare
+;; without a word.  Spaces and commas separate and "and" is a
+;; separator word; anything else -- another word, a backwards range, a
+;; stray dash -- makes the whole answer unreadable, and nil comes back
+;; so the question is asked again rather than beading a guess.
+(defun cs-numlist (str / toks tok i c out r a b bad)
+  (setq toks '() tok "" i 1)
+  (while (<= i (1+ (strlen str)))
+    (setq c (if (<= i (strlen str)) (substr str i 1) " "))
+    (if (or (= c " ") (= c ","))
       (progn
-        (if (/= tok "") (setq out (cons (atoi tok) out)))
-        (setq tok "")))
+        (if (/= tok "") (setq toks (cons tok toks)))
+        (setq tok ""))
+      (setq tok (strcat tok c)))
     (setq i (1+ i)))
-  (reverse out))
+  (setq out '() bad nil)
+  (foreach tok (reverse toks)
+    (cond
+      ((= (strcase tok) "AND") nil)
+      ((setq r (cs-numrange tok))
+       (setq a (car r) b (cadr r))
+       (while (<= a b)
+         (if (not (member a out)) (setq out (cons a out)))
+         (setq a (1+ a))))
+      (T (setq bad T))))
+  (if bad nil (reverse out)))
+
+;; One token of that answer as (FROM TO): "3" is (3 3), "1-3" is (1 3).
+;; nil for anything else, a range that runs backwards included.  Each
+;; end is three digits at most: no run draws a thousand steps, and a
+;; slip like 1-100000 was expanded one step at a time against every
+;; step already read -- billions of comparisons, in a loop Esc does not
+;; reliably break.  Refused here, it is asked again like any answer the
+;; reader cannot read.
+(defun cs-numrange (tok / p lft rgt)
+  (setq p (vl-string-search "-" tok))
+  (if p
+    (setq lft (substr tok 1 p)
+          rgt (substr tok (+ p 2)))
+    (setq lft tok
+          rgt tok))
+  (if (and (cs-digits-p lft) (cs-digits-p rgt)
+           (<= (strlen lft) 3) (<= (strlen rgt) 3)
+           (<= (atoi lft) (atoi rgt)))
+    (list (atoi lft) (atoi rgt))))
+
+;; T when S is one or more of 0-9 and nothing else.
+(defun cs-digits-p (s / i ok)
+  (setq ok (> (strlen s) 0) i 1)
+  (while (and ok (<= i (strlen s)))
+    (if (not (cal:len-digit-p (substr s i 1))) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
 
 ;; The tread line of every step that was committed, as
 ;; (step-number . ename).  A step's log record carries its entities
@@ -57196,11 +58802,14 @@
   out)
 
 ;; The step numbers on offer, as "1, 2, 3" - so the numbers prompt can
-;; be answered without scrolling back through the run.
+;; be answered without scrolling back through the run.  PAIRS is the
+;; (step-number . tread) list, or a plain list of step numbers -- the
+;; readback of what an answer was taken to mean.
 (defun cs-numsay (pairs / out pr)
   (setq out "")
   (foreach pr pairs
-    (setq out (strcat out (if (= out "") "" ", ") (itoa (car pr)))))
+    (setq out (strcat out (if (= out "") "" ", ")
+                      (itoa (if (numberp pr) pr (car pr))))))
   out)
 
 ;; Midpoint (WCS) of a LINE entity.
@@ -57554,10 +59163,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -57599,6 +59212,14 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The shared step settings, in the order the ruler reads them -- each
@@ -57632,7 +59253,7 @@
                        bns bnfar bnff bnl
                        tlist tvals tds drops pd ix ppt pw
                        px py totr totd cnrs ca cb pfo pgap fsteps fkey
-                       qstep qdir bstep lastwid rl rr dflt)
+                       qstep qdir bstep bmiss lastwid rl rr dflt)
 
   (defun *error* (msg)
     (cs-fclear)                     ; both exits clear the form store
@@ -58710,9 +60331,9 @@
                (progn
                  (princ (strcat "\n  Steps drawn: " (cs-numsay btreads)))
                  ;; ...and this one, as the string the prompt would
-                 ;; have taken: "1 3 5".  Anything that is not a string
-                 ;; is no answer at all rather than one the number
-                 ;; reader would have to guess at
+                 ;; have taken: "1 3 5" or "1-3".  Anything that is not
+                 ;; a string is no answer at all rather than one the
+                 ;; number reader would have to guess at
                  (if (cs-fhas 'beadnums)
                    (progn (setq s (cs-ftake 'beadnums))
                           (if (/= (type s) 'STR) (setq s "")))
@@ -58724,16 +60345,43 @@
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 2))
                    (progn
-                     (setq bnums (cs-numlist s))
-                     (setq bnums (vl-remove-if-not
+                     (setq bnums (cs-numlist s)
+                           bmiss (vl-remove-if
+                                   '(lambda (k) (assoc k btreads)) bnums)
+                           bnums (vl-remove-if-not
                                    '(lambda (k) (assoc k btreads)) bnums))
-                     (if (null bnums)
+                     ;; the steps taken are read back, and a number this
+                     ;; run did not draw is named -- both used to be
+                     ;; dropped without a word
+                     (if bmiss
+                       (princ (strcat "\n  Not drawn in this run, left out:"
+                                      " step " (cs-numsay bmiss) ".")))
+                     (if bnums
                        (progn
-                         (princ (strcat "\n  No step numbers recognized -"
-                                        " beading every side wall full"
-                                        " length."))
-                         (setq bside "All")))
-                     (setq bstep 4))))))
+                         (princ (strcat "\n  Beading the side walls of step "
+                                        (cs-numsay bnums) "."))
+                         (setq bstep 4))
+                       ;; nothing here names a step drawn.  This used to
+                       ;; switch to All and bead EVERY side wall -- the
+                       ;; opposite of the Some just given -- so the
+                       ;; numbers are asked again (a sheet's answer falls
+                       ;; through to the prompt the same way), and B
+                       ;; steps back to the question above them.  Numbers
+                       ;; read but none of them drawn (bmiss, named just
+                       ;; above) are said apart from an answer the reader
+                       ;; could not read at all ("1 thru 3"), which is a
+                       ;; spelling to fix, not a step that is missing
+                       (princ (strcat (cond
+                                        ((= s "")
+                                         "\n  No step numbers given")
+                                        (bmiss
+                                         (strcat "\n  \"" s "\" names no"
+                                                 " step drawn here"))
+                                        (T
+                                         (strcat "\n  \"" s "\" could not"
+                                                 " be read as step numbers")))
+                                      " - type step numbers like 1 3"
+                                      " or 1-3, or B to go back."))))))))
             ((= bstep 4)
              (initget "Back Undo")
              (setq bdir (getpoint "\nClick the side to bead toward [Back]: "))
@@ -58758,6 +60406,12 @@
                       (ssadd (ssname ss i) bss)
                       (setq i (1+ i)))
                     (autobead-ensure-layer *autobead-layer*)
+                    ;; the store is spent -- the three bead keys were
+                    ;; taken above -- and is cleared BEFORE the hand-off:
+                    ;; a failure in the build runs only the build's
+                    ;; handler and never comes back here, and a key it
+                    ;; left standing answered the next typed run
+                    (cs-fclear)
                     (autobead-build
                       bss bdir
                       bside
@@ -59129,9 +60783,12 @@
 ;;;   the last answer, drawn down a strip near the right edge of the
 ;;;   view, graded like a tape with the last answer ringed.  Click a
 ;;;   row and that is the answer; type one and it reads as DIMSTAMP
-;;;   reads (24, 24.5, 24 1/8, 2', 1'4-1/2", kept exactly as typed);
-;;;   click empty space and it is the first of two points to measure
-;;;   between, as getdist always offered.  Enter, Back and Same mean
+;;;   reads (24, 24.5, 24-1/8, 2', 1'4-1/2", kept exactly as typed --
+;;;   dash a fraction, since the spacebar is Enter at a prompt that
+;;;   also takes a click: 24 1/8 enters 24, and the 1/8 answers the
+;;;   question after it without a word); click empty space and it is
+;;;   the first of two points to measure between, as getdist always
+;;;   offered.  Enter, Back and Same mean
 ;;;   what they always did, and the prompt's wording is unchanged, so
 ;;;   a form answers it exactly as before.  The ruler is scratch on
 ;;;   the current layer: down again before the width prompt (which
@@ -59299,7 +60956,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.24") ; printed on load and at command start so a
+(setq *hs-version* "v3.25") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -59622,19 +61279,63 @@
 
 ;;; --------------------------- bead helpers -----------------------------
 
-;; The step numbers typed at a prompt - "1 3 4", "1,3,4" and "1, 3 and 4"
-;; all read the same.  Anything that is not a digit separates.
-(defun hs-numlist (str / out tok i c)
-  (setq out '() tok "" i 0)
-  (while (<= i (strlen str))
-    (setq c (if (< i (strlen str)) (substr str (1+ i) 1) " "))
-    (if (and (>= (ascii c) 48) (<= (ascii c) 57))
-      (setq tok (strcat tok c))
+;; The step numbers typed at a prompt, in the order typed: "1 3 4",
+;; "1,3,4" and "1, 3 and 4" all read the same, and "1-3" is steps 1, 2
+;; and 3 -- the range spelling PERPPTS's segment prompt takes, so a
+;; drafter used to it types it here too.  Every non-digit used to be a
+;; separator, which read 1-3 as steps 1 and 3 and left step 2 bare
+;; without a word.  Spaces and commas separate and "and" is a
+;; separator word; anything else -- another word, a backwards range, a
+;; stray dash -- makes the whole answer unreadable, and nil comes back
+;; so the question is asked again rather than beading a guess.
+(defun hs-numlist (str / toks tok i c out r a b bad)
+  (setq toks '() tok "" i 1)
+  (while (<= i (1+ (strlen str)))
+    (setq c (if (<= i (strlen str)) (substr str i 1) " "))
+    (if (or (= c " ") (= c ","))
       (progn
-        (if (/= tok "") (setq out (cons (atoi tok) out)))
-        (setq tok "")))
+        (if (/= tok "") (setq toks (cons tok toks)))
+        (setq tok ""))
+      (setq tok (strcat tok c)))
     (setq i (1+ i)))
-  (reverse out))
+  (setq out '() bad nil)
+  (foreach tok (reverse toks)
+    (cond
+      ((= (strcase tok) "AND") nil)
+      ((setq r (hs-numrange tok))
+       (setq a (car r) b (cadr r))
+       (while (<= a b)
+         (if (not (member a out)) (setq out (cons a out)))
+         (setq a (1+ a))))
+      (T (setq bad T))))
+  (if bad nil (reverse out)))
+
+;; One token of that answer as (FROM TO): "3" is (3 3), "1-3" is (1 3).
+;; nil for anything else, a range that runs backwards included.  Each
+;; end is three digits at most: no run draws a thousand steps, and a
+;; slip like 1-100000 was expanded one step at a time against every
+;; step already read -- billions of comparisons, in a loop Esc does not
+;; reliably break.  Refused here, it is asked again like any answer the
+;; reader cannot read.
+(defun hs-numrange (tok / p lft rgt)
+  (setq p (vl-string-search "-" tok))
+  (if p
+    (setq lft (substr tok 1 p)
+          rgt (substr tok (+ p 2)))
+    (setq lft tok
+          rgt tok))
+  (if (and (hs-digits-p lft) (hs-digits-p rgt)
+           (<= (strlen lft) 3) (<= (strlen rgt) 3)
+           (<= (atoi lft) (atoi rgt)))
+    (list (atoi lft) (atoi rgt))))
+
+;; T when S is one or more of 0-9 and nothing else.
+(defun hs-digits-p (s / i ok)
+  (setq ok (> (strlen s) 0) i 1)
+  (while (and ok (<= i (strlen s)))
+    (if (not (cal:len-digit-p (substr s i 1))) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
 
 ;; The tread line of every step that was committed, as
 ;; (step-number . ename).  A step's log record carries its entities
@@ -59656,11 +61357,14 @@
   out)
 
 ;; The step numbers on offer, as "1, 2, 3" - so the numbers prompt can
-;; be answered without scrolling back through the run.
+;; be answered without scrolling back through the run.  PAIRS is the
+;; (step-number . tread) list, or a plain list of step numbers -- the
+;; readback of what an answer was taken to mean.
 (defun hs-numsay (pairs / out pr)
   (setq out "")
   (foreach pr pairs
-    (setq out (strcat out (if (= out "") "" ", ") (itoa (car pr)))))
+    (setq out (strcat out (if (= out "") "" ", ")
+                      (itoa (if (numberp pr) pr (car pr))))))
   out)
 
 ;; Midpoint (WCS) of a LINE entity.
@@ -59961,10 +61665,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -60006,6 +61714,14 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The shared step settings, in the order the ruler reads them -- each
@@ -60036,7 +61752,7 @@
                       wallA wallB lastwid kx fx
                       tlist srt treads pv drops dd jx tcount ptop
                       px py totrun totdrop td cnrs pfo pgap fsteps fkey
-                      wnoun bstep s hstep rl rr dflt)
+                      wnoun bstep bmiss s hstep rl rr dflt)
 
   (defun *error* (msg)
     (hs-fclear)                     ; both exits clear the form store
@@ -60819,9 +62535,9 @@
                (progn
                  (princ (strcat "\n  Steps drawn: " (hs-numsay btreads)))
                  ;; ...and this one, as the string the prompt would
-                 ;; have taken: "1 3 5".  Anything that is not a string
-                 ;; is no answer at all rather than one the number
-                 ;; reader would have to guess at
+                 ;; have taken: "1 3 5" or "1-3".  Anything that is not
+                 ;; a string is no answer at all rather than one the
+                 ;; number reader would have to guess at
                  (if (hs-fhas 'beadnums)
                    (progn (setq s (hs-ftake 'beadnums))
                           (if (/= (type s) 'STR) (setq s "")))
@@ -60833,16 +62549,43 @@
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 2))
                    (progn
-                     (setq bnums (hs-numlist s))
-                     (setq bnums (vl-remove-if-not
+                     (setq bnums (hs-numlist s)
+                           bmiss (vl-remove-if
+                                   '(lambda (k) (assoc k btreads)) bnums)
+                           bnums (vl-remove-if-not
                                    '(lambda (k) (assoc k btreads)) bnums))
-                     (if (null bnums)
+                     ;; the steps taken are read back, and a number this
+                     ;; run did not draw is named -- both used to be
+                     ;; dropped without a word
+                     (if bmiss
+                       (princ (strcat "\n  Not drawn in this run, left out:"
+                                      " step " (hs-numsay bmiss) ".")))
+                     (if bnums
                        (progn
-                         (princ (strcat "\n  No step numbers recognized -"
-                                        " beading every side wall full"
-                                        " length."))
-                         (setq bside "All")))
-                     (setq bstep 4))))))
+                         (princ (strcat "\n  Beading the side walls of step "
+                                        (hs-numsay bnums) "."))
+                         (setq bstep 4))
+                       ;; nothing here names a step drawn.  This used to
+                       ;; switch to All and bead EVERY side wall -- the
+                       ;; opposite of the Some just given -- so the
+                       ;; numbers are asked again (a sheet's answer falls
+                       ;; through to the prompt the same way), and B
+                       ;; steps back to the question above them.  Numbers
+                       ;; read but none of them drawn (bmiss, named just
+                       ;; above) are said apart from an answer the reader
+                       ;; could not read at all ("1 thru 3"), which is a
+                       ;; spelling to fix, not a step that is missing
+                       (princ (strcat (cond
+                                        ((= s "")
+                                         "\n  No step numbers given")
+                                        (bmiss
+                                         (strcat "\n  \"" s "\" names no"
+                                                 " step drawn here"))
+                                        (T
+                                         (strcat "\n  \"" s "\" could not"
+                                                 " be read as step numbers")))
+                                      " - type step numbers like 1 3"
+                                      " or 1-3, or B to go back."))))))))
             ((= bstep 4)
              (initget "Back Undo")
              (setq bdir (getpoint "\nClick the side to bead toward [Back]: "))
@@ -60867,6 +62610,12 @@
                       (ssadd (ssname ss i) bss)
                       (setq i (1+ i)))
                     (autobead-ensure-layer *autobead-layer*)
+                    ;; the store is spent -- the three bead keys were
+                    ;; taken above -- and is cleared BEFORE the hand-off:
+                    ;; a failure in the build runs only the build's
+                    ;; handler and never comes back here, and a key it
+                    ;; left standing answered the next typed run
+                    (hs-fclear)
                     (autobead-build
                       bss bdir
                       bside
@@ -61234,9 +62983,12 @@
 ;;;   the last answer, drawn down a strip near the right edge of the
 ;;;   view, graded like a tape with the last answer ringed.  Click a
 ;;;   row and that is the answer; type one and it reads as DIMSTAMP
-;;;   reads (24, 24.5, 24 1/8, 2', 1'4-1/2", kept exactly as typed);
-;;;   click empty space and it is the first of two points to measure
-;;;   between, as getdist always offered.  Enter, Back and Same mean
+;;;   reads (24, 24.5, 24-1/8, 2', 1'4-1/2", kept exactly as typed --
+;;;   dash a fraction, since the spacebar is Enter at a prompt that
+;;;   also takes a click: 24 1/8 enters 24, and the 1/8 answers the
+;;;   question after it without a word); click empty space and it is
+;;;   the first of two points to measure between, as getdist always
+;;;   offered.  Enter, Back and Same mean
 ;;;   what they always did, and the prompt's wording is unchanged, so
 ;;;   a form answers it exactly as before.  The ruler is scratch on
 ;;;   the current layer: down again before the width prompt (which
@@ -61448,7 +63200,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.19") ; printed on load and at command start so a
+(setq *ns-version* "v3.20") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -61709,19 +63461,63 @@
 
 ;;; --------------------------- bead helpers -----------------------------
 
-;; The step numbers typed at a prompt - "1 3 4", "1,3,4" and "1, 3 and 4"
-;; all read the same.  Anything that is not a digit separates.
-(defun ns-numlist (str / out tok i c)
-  (setq out '() tok "" i 0)
-  (while (<= i (strlen str))
-    (setq c (if (< i (strlen str)) (substr str (1+ i) 1) " "))
-    (if (and (>= (ascii c) 48) (<= (ascii c) 57))
-      (setq tok (strcat tok c))
+;; The step numbers typed at a prompt, in the order typed: "1 3 4",
+;; "1,3,4" and "1, 3 and 4" all read the same, and "1-3" is steps 1, 2
+;; and 3 -- the range spelling PERPPTS's segment prompt takes, so a
+;; drafter used to it types it here too.  Every non-digit used to be a
+;; separator, which read 1-3 as steps 1 and 3 and left step 2 bare
+;; without a word.  Spaces and commas separate and "and" is a
+;; separator word; anything else -- another word, a backwards range, a
+;; stray dash -- makes the whole answer unreadable, and nil comes back
+;; so the question is asked again rather than beading a guess.
+(defun ns-numlist (str / toks tok i c out r a b bad)
+  (setq toks '() tok "" i 1)
+  (while (<= i (1+ (strlen str)))
+    (setq c (if (<= i (strlen str)) (substr str i 1) " "))
+    (if (or (= c " ") (= c ","))
       (progn
-        (if (/= tok "") (setq out (cons (atoi tok) out)))
-        (setq tok "")))
+        (if (/= tok "") (setq toks (cons tok toks)))
+        (setq tok ""))
+      (setq tok (strcat tok c)))
     (setq i (1+ i)))
-  (reverse out))
+  (setq out '() bad nil)
+  (foreach tok (reverse toks)
+    (cond
+      ((= (strcase tok) "AND") nil)
+      ((setq r (ns-numrange tok))
+       (setq a (car r) b (cadr r))
+       (while (<= a b)
+         (if (not (member a out)) (setq out (cons a out)))
+         (setq a (1+ a))))
+      (T (setq bad T))))
+  (if bad nil (reverse out)))
+
+;; One token of that answer as (FROM TO): "3" is (3 3), "1-3" is (1 3).
+;; nil for anything else, a range that runs backwards included.  Each
+;; end is three digits at most: no run draws a thousand steps, and a
+;; slip like 1-100000 was expanded one step at a time against every
+;; step already read -- billions of comparisons, in a loop Esc does not
+;; reliably break.  Refused here, it is asked again like any answer the
+;; reader cannot read.
+(defun ns-numrange (tok / p lft rgt)
+  (setq p (vl-string-search "-" tok))
+  (if p
+    (setq lft (substr tok 1 p)
+          rgt (substr tok (+ p 2)))
+    (setq lft tok
+          rgt tok))
+  (if (and (ns-digits-p lft) (ns-digits-p rgt)
+           (<= (strlen lft) 3) (<= (strlen rgt) 3)
+           (<= (atoi lft) (atoi rgt)))
+    (list (atoi lft) (atoi rgt))))
+
+;; T when S is one or more of 0-9 and nothing else.
+(defun ns-digits-p (s / i ok)
+  (setq ok (> (strlen s) 0) i 1)
+  (while (and ok (<= i (strlen s)))
+    (if (not (cal:len-digit-p (substr s i 1))) (setq ok nil))
+    (setq i (1+ i)))
+  ok)
 
 ;; The tread line of every step that was committed, newest first, as
 ;; (step-number . ename).  A step's log record is (entities cum pprev n),
@@ -61743,11 +63539,14 @@
   out)
 
 ;; The step numbers on offer, as "1, 2, 3" - so the numbers prompt can
-;; be answered without scrolling back through the run.
+;; be answered without scrolling back through the run.  PAIRS is the
+;; (step-number . tread) list, or a plain list of step numbers -- the
+;; readback of what an answer was taken to mean.
 (defun ns-numsay (pairs / out pr)
   (setq out "")
   (foreach pr pairs
-    (setq out (strcat out (if (= out "") "" ", ") (itoa (car pr)))))
+    (setq out (strcat out (if (= out "") "" ", ")
+                      (itoa (if (numberp pr) pr (car pr))))))
   out)
 
 ;; Midpoint (WCS) of a LINE entity.
@@ -62256,10 +64055,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -62301,6 +64104,14 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The shared step settings, in the order the ruler reads them -- each
@@ -62336,7 +64147,7 @@
                         tlist svals treads prevv nsteps drops k dv
                         wpu wpt totrun totdrop px0 cx cy
                         tt cnrs ca cb pfo pgap lastinn fsteps fkey
-                        bstep rredo rl rr szv dflt)
+                        bstep bmiss rredo rl rr szv dflt)
 
   (defun *error* (msg)
     (ns-fclear)                     ; both exits clear the form store
@@ -63296,9 +65107,9 @@
                (progn
                  (princ (strcat "\n  Steps drawn: " (ns-numsay btreads)))
                  ;; ...and this one, as the string the prompt would
-                 ;; have taken: "1 3 5".  Anything that is not a string
-                 ;; is no answer at all rather than one the number
-                 ;; reader would have to guess at
+                 ;; have taken: "1 3 5" or "1-3".  Anything that is not
+                 ;; a string is no answer at all rather than one the
+                 ;; number reader would have to guess at
                  (if (ns-fhas 'beadnums)
                    (progn (setq s (ns-ftake 'beadnums))
                           (if (/= (type s) 'STR) (setq s "")))
@@ -63310,16 +65121,43 @@
                    (progn (princ "\n  Stepping back one question.")
                           (setq bstep 2))
                    (progn
-                     (setq bnums (ns-numlist s))
-                     (setq bnums (vl-remove-if-not
+                     (setq bnums (ns-numlist s)
+                           bmiss (vl-remove-if
+                                   '(lambda (k) (assoc k btreads)) bnums)
+                           bnums (vl-remove-if-not
                                    '(lambda (k) (assoc k btreads)) bnums))
-                     (if (null bnums)
+                     ;; the steps taken are read back, and a number this
+                     ;; run did not draw is named -- both used to be
+                     ;; dropped without a word
+                     (if bmiss
+                       (princ (strcat "\n  Not drawn in this run, left out:"
+                                      " step " (ns-numsay bmiss) ".")))
+                     (if bnums
                        (progn
-                         (princ (strcat "\n  No step numbers recognized -"
-                                        " beading every side wall full"
-                                        " length."))
-                         (setq bside "All")))
-                     (setq bstep 4))))))
+                         (princ (strcat "\n  Beading the side walls of step "
+                                        (ns-numsay bnums) "."))
+                         (setq bstep 4))
+                       ;; nothing here names a step drawn.  This used to
+                       ;; switch to All and bead EVERY side wall -- the
+                       ;; opposite of the Some just given -- so the
+                       ;; numbers are asked again (a sheet's answer falls
+                       ;; through to the prompt the same way), and B
+                       ;; steps back to the question above them.  Numbers
+                       ;; read but none of them drawn (bmiss, named just
+                       ;; above) are said apart from an answer the reader
+                       ;; could not read at all ("1 thru 3"), which is a
+                       ;; spelling to fix, not a step that is missing
+                       (princ (strcat (cond
+                                        ((= s "")
+                                         "\n  No step numbers given")
+                                        (bmiss
+                                         (strcat "\n  \"" s "\" names no"
+                                                 " step drawn here"))
+                                        (T
+                                         (strcat "\n  \"" s "\" could not"
+                                                 " be read as step numbers")))
+                                      " - type step numbers like 1 3"
+                                      " or 1-3, or B to go back."))))))))
             ((= bstep 4)
              (initget "Back Undo")
              (setq bdir (getpoint "\nClick the side to bead toward [Back]: "))
@@ -63344,6 +65182,12 @@
                       (ssadd (ssname ss i) bss)
                       (setq i (1+ i)))
                     (autobead-ensure-layer *autobead-layer*)
+                    ;; the store is spent -- the three bead keys were
+                    ;; taken above -- and is cleared BEFORE the hand-off:
+                    ;; a failure in the build runs only the build's
+                    ;; handler and never comes back here, and a key it
+                    ;; left standing answered the next typed run
+                    (ns-fclear)
                     (autobead-build
                       bss bdir
                       bside
@@ -63709,7 +65553,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v2.0")
+(setq *lazstep-version* "v2.1")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -65294,6 +67138,12 @@
              (lzt:recall-save (lzt:recall-slot))
              (setq out (lzt:form) done T))))
          (t (setq done T))))))
+  ;; the dialog's run ends with the dialog.  What the command does with
+  ;; the answer -- runs POOL off the form, launches the tool picked -- is
+  ;; a run of its own: left standing, this one was JOINED by it (the
+  ;; command is still what CMDNAMES names), and a failure in the tool
+  ;; was filed under a dialog no report can replay
+  (if lzd:end (lzd:end "LAZSTEP"))
   out)
 
 ;;; -------------------- commands ----------------------------------------
@@ -65592,7 +67442,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.26")
+(setq *cchk-version* "v1.27")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -66023,12 +67873,15 @@
   (if c c 256))
 
 (defun cchk:set-color (ent color / ed old)
+  ;; T when the colour went in.  entmod answers nil on a LOCKED layer
+  ;; and changes nothing, so a caller that goes on to say "flagged
+  ;; (red)" has to ask first, or the report claims a mark nobody sees
   (setq ed  (entget ent)
         old (assoc 62 ed))
-  (entmod (if old
-            (subst (cons 62 color) old ed)
-            (append ed (list (cons 62 color)))))
-  (entupd ent))
+  (if (entmod (if old
+                (subst (cons 62 color) old ed)
+                (append ed (list (cons 62 color)))))
+    (progn (entupd ent) T)))
 
 (defun cchk:make-xline (p1 p2 / len)
   ;; infinite construction line through p1-p2 on the check layer,
@@ -66485,10 +68338,27 @@
   (if done (entupd ent))
   done)
 
+;; The space the drafter is working in, as group 410 names it: the
+;; layout only on the paper itself.  Inside a layout viewport CTAB
+;; still names the layout while every pick lands in model space.
+(defun cchk:space ()
+  (if (and (= 0 (getvar "TILEMODE")) (= 1 (getvar "CVPORT")))
+    (getvar "CTAB")
+    "Model"))
+
 ;; The Tech Title block: the first INSERT whose name carries it, looked
 ;; for in the selection and then across the drawing, since the title
 ;; block sits outside the area someone highlights as often as not.
-(defun cchk:find-title (ss / pat i e ed out ss2)
+;; Returns (insert where count): where is 'sel (it was highlighted),
+;; 'only (the one Tech Title in the drawing) or 'nearest, and count is
+;; how many the drawing holds.  A combined job has a Tech Title per
+;; sheet, and taking the FIRST the database returned checked -- and
+;; rewrote -- whichever sheet's date came back first, not the one
+;; being checked.  So with several, the one nearest the checked
+;; drawing (preferring the space the drafter is working in) is READ,
+;; and the caller writes only to 'sel or 'only.
+(defun cchk:find-title (ss / pat i e ed out ss2 all here pool bb minx miny
+                             maxx maxy cx cy best bestd d p)
   (setq pat (strcat "*" (cchk:squash *cchk-title-block*) "*") i 0)
   (if ss
     (repeat (sslength ss)
@@ -66498,22 +68368,61 @@
       (if (and (null out) ed (= "INSERT" (cdr (assoc 0 ed)))
                (wcmatch (cchk:squash (cchk:block-name e)) pat))
         (setq out e))))
-  (if (null out)
+  (if out
+    (list out 'sel 1)
     (progn
       (setq ss2 (ssget "_X" '((0 . "INSERT"))) i 0)
       (if ss2
         (repeat (sslength ss2)
           (setq e (ssname ss2 i) i (1+ i))
-          (if (and (null out)
-                   (wcmatch (cchk:squash (cchk:block-name e)) pat))
-            (setq out e))))))
-  out)
+          (if (wcmatch (cchk:squash (cchk:block-name e)) pat)
+            (setq all (cons e all)))))
+      (setq all (reverse all))
+      (cond
+        ((null all) nil)
+        ((null (cdr all)) (list (car all) 'only 1))
+        (t
+         ;; the centre of what was highlighted, from the same extents
+         ;; the report is placed by
+         (setq i 0)
+         (if ss
+           (repeat (sslength ss)
+             (setq bb (cal:bbox-ent (ssname ss i)) i (1+ i))
+             (if bb
+               (setq minx (if minx (min minx (caar bb)) (caar bb))
+                     miny (if miny (min miny (cadar bb)) (cadar bb))
+                     maxx (if maxx (max maxx (caadr bb)) (caadr bb))
+                     maxy (if maxy (max maxy (cadadr bb)) (cadadr bb))))))
+         (if minx
+           (setq cx (* 0.5 (+ minx maxx)) cy (* 0.5 (+ miny maxy))))
+         ;; a distance between a model point and a paper-space insert
+         ;; means nothing, so the drafter's own space is looked in first
+         (setq here (vl-remove-if-not
+                      '(lambda (e)
+                         (= (strcase (cond ((cdr (assoc 410 (entget e))))
+                                           ("Model")))
+                            (strcase (cchk:space))))
+                      all)
+               pool (if here here all))
+         (foreach e pool
+           (setq p (cdr (assoc 10 (entget e)))
+                 d (if cx (distance (list cx cy) (list (car p) (cadr p))) 0.0))
+           (if (or (null bestd) (< d bestd))
+             (setq best e bestd d)))
+         (list best 'nearest (length all)))))))
 
 ;; The verdict: (sentence . needs-attention).  With no Tech Title in
 ;; reach there is nothing to read, and that is said plainly rather than
 ;; flagged -- a cover or spa sheet may well be checked on its own.
-(defun cchk:audit-date (ss dofix / blk ed raw bad wrote)
-  (setq blk (cchk:find-title ss))
+(defun cchk:audit-date (ss dofix / blk ed raw bad wrote found many)
+  (setq found (cchk:find-title ss)
+        blk   (car found)
+        ;; several Tech Titles and none highlighted: the one read is a
+        ;; best guess, so it is named and never written to
+        many  (if (eq (cadr found) 'nearest)
+                (strcat " (" (itoa (caddr found)) " Tech Titles in the drawing"
+                        " - read the one nearest the checked drawing, "
+                        (cdr (assoc 5 (entget blk))) ")")))
   (if (null blk)
     (cons (strcat "no '" *cchk-title-block* "' block in reach - date NOT CHECKED")
           nil)
@@ -66529,20 +68438,26 @@
       ;; noticed, today's goes in over it in the same MM/DD/YYYY form
       ;; with any label in front of it kept.  Only an attribute can be
       ;; written, and only for COVERCHECK - the scans read.
-      (if (and bad dofix)
+      (if (and bad dofix (not many))
         (setq wrote (cchk:set-attrib blk *cchk-date-tag*
                                    (cchk:date-fixed (if raw raw "")))))
       (cond
         (wrote (cons (strcat *cchk-date-tag* " " bad " - UPDATED to "
                            (cchk:mdy-str (cchk:today-mdy)))
                    T))
+        ((and bad dofix many)
+         (cons (strcat *cchk-date-tag* " " bad " - NEEDS UPDATING, not"
+                       " written: highlight that sheet's Tech Title" many)
+               T))
         ((and bad dofix)
          (cons (strcat *cchk-date-tag* " " bad " - fix it in the block") T))
         (bad (cons (strcat *cchk-date-tag* " " bad
-                           " - NEEDS UPDATING (run COVERCHECK)")
+                           " - NEEDS UPDATING (run COVERCHECK)"
+                           (if many many ""))
                    T))
         (t (cons (strcat *cchk-date-tag* " = '"
-                         (vl-string-trim " \t" (cchk:datenorm raw)) "' - OK")
+                         (vl-string-trim " \t" (cchk:datenorm raw)) "' - OK"
+                         (if many many ""))
                  nil))))))
 
 ;; The whole report: the cover checks on the MAIN sheet - a large
@@ -66692,7 +68607,10 @@
 
 (defun cchk:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed pair)
   ;; re-fit the arc through its fixed end, its old midpoint and the
-  ;; target point; returns T on success
+  ;; target point; returns T on success, nil when no arc fits (the
+  ;; points are collinear), and 'refused when one fits but the write
+  ;; is turned down -- a LOCKED layer, which is no reason to tell the
+  ;; drafter their arc was "collinear" and then call it attached
   (if (and (> (distance target fixed) *cchk-same-pt*)
            (setq c (cal:circumcenter fixed mid target)))
     (progn
@@ -66710,7 +68628,8 @@
       (foreach pair (list (cons 10 c) (cons 40 r) (cons 50 a1) (cons 51 a2))
         (setq ed (subst pair (assoc (car pair) ed) ed)))
       (if (entmod ed)
-        (progn (entupd ent) T)))))
+        (progn (entupd ent) T)
+        'refused))))
 
 (defun cchk:move-arc-end (ent which target / mid other)
   ;; re-fit the arc so the chosen endpoint lands on target (WCS)
@@ -66750,13 +68669,19 @@
               (cal:axis-pt a1 u (max lena s2)))))))
 
 (defun cchk:merge-lines (la lb info / ed)
-  ;; stretch la's LINE over the union of both, delete lb's LINE
+  ;; stretch la's LINE over the union of both, delete lb's LINE; T when
+  ;; that happened.  lb goes only once la has really been stretched: a
+  ;; LOCKED layer refuses the entmod, and erasing lb then would lose
+  ;; the length it carried -- and "merged" would be reported over two
+  ;; lines still standing
   (setq ed (entget (cchk:seg-ent la))
         ed (subst (cons 10 (nth 3 info)) (assoc 10 ed) ed)
         ed (subst (cons 11 (nth 4 info)) (assoc 11 ed) ed))
-  (entmod ed)
-  (entupd (cchk:seg-ent la))
-  (entdel (cchk:seg-ent lb)))
+  (if (entmod ed)
+    (progn
+      (entupd (cchk:seg-ent la))
+      (entdel (cchk:seg-ent lb))
+      T)))
 
 (defun cchk:whole-line-p (s / ed)
   ;; T when the segment IS its owner entity - only whole LINEs can be
@@ -67258,7 +69183,9 @@
   ;; line.
   ;; Returns (original final how) when the point was looked at, where
   ;; how is 'auto / 'user / 'kept / 'anchor; nil when the point was
-  ;; already fine.
+  ;; already fine.  how is 'locked when the point is off its object but
+  ;; the dimension's layer refused the write: nothing can be moved, so
+  ;; nothing is asked, and a fourth element says how far off it is.
   (setq ed (entget ent)
         pt (cdr (assoc gcode ed)))
   (if pt
@@ -67285,11 +69212,22 @@
             (setq sugg anch  dsug danch  what "the shared anchor point"))
            (near
             (setq sugg (cadr near)  dsug dnear  what "the nearest object")))
-         (if (and sugg (> dsug *cchk-tol*))
-           (progn
-             ;; show the suggestion in place, but keep the original spot
-             ;; marked so both are on screen while the question is asked
-             (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
+         (cond
+           ((not (and sugg (> dsug *cchk-tol*))) nil)
+           ;; show the suggestion in place, but keep the original spot
+           ;; marked so both are on screen while the question is asked.
+           ;; A LOCKED layer refuses that write, and then every answer
+           ;; to Move/Keep/Pick would be a claim about a point that
+           ;; never moved -- the report used to say "moved onto the
+           ;; nearest object" over a dimension still off by the same
+           ;; amount.  Say what is wrong and leave it.
+           ((not (entmod (subst (cons gcode sugg) (assoc gcode ed) ed)))
+            (princ (strcat "\n  " label " is NOT ATTACHED - " what " is "
+                           (cchk:dist dsug) " away, but the dimension's"
+                           " layer is locked: NOT moved."))
+            (list pt pt 'locked
+                  (strcat label " off by " (cchk:dist dsug))))
+           (t
              (entupd ent)
              (princ (strcat "\n  " label " is not on any object - " what
                             " is " (cchk:dist dsug) " away."))
@@ -67321,10 +69259,12 @@
 
 (defun cchk:review-dim (ent cands anchors num total / ed dtype h sty p13 p14
                                               r1 r2 looked moved kept held
-                                              ok note meas assocnote fcol)
+                                              lockd ok note meas assocnote fcol
+                                              painted)
   ;; interactive review of one dimension.
   ;; Returns (handle ok-flag report-note moved-point-count measurement
-  ;; anchor-held-point-count).
+  ;; anchor-held-point-count locked-point-count painted), painted T when
+  ;; a flagged dimension really took the flag colour.
   (setq ed    (entget ent)
         h     (cdr (assoc 5 ed))
         sty   (cchk:dim-style ent)
@@ -67346,9 +69286,12 @@
   ;; a point held at a shared anchor was looked at and deliberately not
   ;; touched - it is neither a move nor a Keep answer, so it is counted
   ;; on its own and kept out of both tallies
+  ;; A point on a locked layer that could not be moved is neither: it
+  ;; is still off, and says so in the report line on its own.
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
         held   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'anchor)) looked)
-        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept anchor)))
+        lockd  (vl-remove-if-not '(lambda (x) (eq (caddr x) 'locked)) looked)
+        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept anchor locked)))
                              looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
   ;; only when something actually moved is there an old position worth
@@ -67363,15 +69306,19 @@
   (redraw ent 4)
   (redraw)
   (if (member ok '(back skip))
-    (list h ok nil (length moved) meas (length held))  ; navigation: caller handles it
+    (list h ok nil (length moved) meas (length held) (length lockd) nil)  ; navigation: caller handles it
     (progn
       (setq ok (eq ok 'yes)
             fcol (cal:ink *cchk-flag-color* 'flag))
       (setq note (strcat
-                   (if ok
-                     "OK"
-                     (strcat "FLAGGED to fix ("
-                             (cchk:color-name fcol) ")"))
+                   (cond
+                     (ok "OK")
+                     ;; the red is the flag: on a locked layer it does
+                     ;; not go on, and the line must not say it did
+                     ((setq painted (cchk:set-color ent fcol))
+                      (strcat "FLAGGED to fix ("
+                              (cchk:color-name fcol) ")"))
+                     (t "FLAGGED to fix - layer locked, NOT coloured"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -67384,9 +69331,14 @@
                      (strcat " - " (itoa (length held))
                              " point(s) held at a shared anchor")
                      "")
+                   (if lockd
+                     (strcat " - "
+                             (cchk:join (mapcar 'cadddr lockd) ", ")
+                             " - NOT ATTACHED, layer locked, NOT moved")
+                     "")
                    (if assocnote assocnote "")))
-      (if (not ok) (cchk:set-color ent fcol))
-      (list h ok note (length moved) meas (length held)))))
+      (list h ok note (length moved) meas (length held) (length lockd)
+            painted))))
 
 ;; --- arc review ----------------------------------------------------
 
@@ -67430,20 +69382,28 @@
   (entmod ed)
   (entupd ent))
 
-(defun cchk:review-arc-end (ent which label cands / p target st ans final how)
+(defun cchk:review-arc-end (ent which label cands / p target st ans final how
+                                                  res)
   ;; audits one arc endpoint: a detached end is snapped where it looks
   ;; like it belongs, then you choose - Move (take it), Keep (put the
   ;; arc back exactly as drawn) or Pick your own spot.
   ;; Returns (original final how) when the end was looked at, where how
-  ;; is 'auto / 'user / 'kept; nil when the end was already fine.
+  ;; is 'auto / 'user / 'kept, or 'locked when the arc's layer refused
+  ;; the re-fit and nothing was asked; nil when the end was already fine.
   (setq p      (if (eq which 'start)
                  (vlax-curve-getStartPoint ent)
                  (vlax-curve-getEndPoint ent))
         target (cchk:arc-end-target ent which cands)
         st     (cchk:arc-state ent))
   (cond
+    ((and target
+          (eq 'refused (setq res (cchk:move-arc-end ent which target))))
+     (princ (strcat "\n  " label " is NOT ATTACHED - the nearest object end is "
+                    (cchk:dist (distance p target)) " away, but the arc's"
+                    " layer is locked: NOT moved."))
+     (list p p 'locked))
     (target
-     (if (cchk:move-arc-end ent which target)
+     (if res
        (progn
          (princ (strcat "\n  " label " is not attached to an object end - nearest is "
                         (cchk:dist (distance p target)) " away."))
@@ -67462,7 +69422,7 @@
                            (cchk:ptstr final) " - the arc is unchanged.")))
            (t
             (setq ans (trans ans 1 0))
-            (if (cchk:move-arc-end ent which ans)
+            (if (eq T (cchk:move-arc-end ent which ans))
               (progn
                 (setq final ans
                       how   'user)
@@ -67485,16 +69445,18 @@
        nil
        (progn
          (setq ans (trans ans 1 0))
-         (if (cchk:move-arc-end ent which ans)
+         (if (eq T (cchk:move-arc-end ent which ans))
            (list p ans 'user)
            (progn
-             (princ "\n  Could not re-fit the arc through that spot (collinear?); unchanged.")
+             (princ "\n  Could not re-fit the arc through that spot (collinear or layer locked?); unchanged.")
              nil)))))
     (t nil)))
 
-(defun cchk:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note acol)
+(defun cchk:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept
+                                              lockd note acol)
   ;; interactive review of one arc's endpoints.
-  ;; Returns (handle untouched-flag report-note moved-point-count).
+  ;; Returns (handle untouched-flag report-note moved-point-count
+  ;; locked-endpoint-count).
   (setq ed     (entget ent)
         h      (cdr (assoc 5 ed))
         planar (cchk:planar-arc-p ed))
@@ -67509,12 +69471,20 @@
   (redraw ent 4)
   (redraw)
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
-        moved  (vl-remove-if '(lambda (x) (eq (caddr x) 'kept)) looked)
+        lockd  (vl-remove-if-not '(lambda (x) (eq (caddr x) 'locked)) looked)
+        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept locked)))
+                             looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
   (setq acol (cal:ink *cchk-arc-color* 'arc))
   (if moved (cchk:set-color ent acol))
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
+               ;; a detached end on a locked layer is a finding, not
+               ;; "endpoints OK": nothing was asked because nothing
+               ;; could be written
+               (lockd (strcat (itoa (length lockd))
+                              " endpoint(s) NOT ATTACHED - layer locked,"
+                              " NOT moved"))
                ((and moved kept)
                 (strcat (itoa (length moved)) " endpoint(s) moved ("
                         (cchk:color-name acol) "), "
@@ -67525,16 +69495,17 @@
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
-  (list h (null moved) note (length moved)))
+  (list h (null moved) note (length moved) (length lockd)))
 
 ;; --- overlapping line review ---------------------------------------
 
 (defun cchk:review-olap (la lb num total / info ea eb h1 h2 lay1 lay2 label
-                                           ans mergeable kinds ocol)
+                                           ans mergeable kinds ocol ok1 ok2)
   ;; interactive review of one overlapping segment pair.
   ;; Returns nil when the pair no longer overlaps (an earlier merge
   ;; absorbed it); otherwise (label report-note action ents...) where
-  ;; action is merged / flagged / left and ents keep their cyan.
+  ;; action is merged / flagged / left / locked (a Merge the layer
+  ;; refused) and ents keep their cyan.
   (setq ea (cchk:seg-ent la)
         eb (cchk:seg-ent lb))
   (if (and (entget ea) (entget eb) (setq info (cchk:overlap-info la lb)))
@@ -67580,8 +69551,13 @@
       (redraw)
       (setq ocol (cal:ink *cchk-olap-color* 'olap))
       (cond
+        ((and (= ans "Merge") (not (cchk:merge-lines la lb info)))
+         ;; the lines share a layer (or Merge was never offered), so
+         ;; one refusal is the pair's: both are left exactly as drawn
+         (princ "\n  Could NOT merge - the layer is locked; both lines left as drawn.")
+         (list label "could NOT merge - layer locked, left as drawn"
+               'locked))
         ((= ans "Merge")
-         (cchk:merge-lines la lb info)
          (cchk:set-color ea ocol)
          (princ (strcat "\n  Merged into one line ("
                         (cchk:color-name ocol) ")."))
@@ -67590,18 +69566,27 @@
                        (cchk:color-name ocol) ")")
                'merged ea))
         ((= ans "Flag")
-         (cchk:set-color ea ocol)
-         (cchk:set-color eb ocol)
-         (princ (strcat "\n  Flagged to fix ("
-                        (cchk:color-name ocol) ")."))
+         ;; the colour IS the flag; a locked layer refuses it, and the
+         ;; line says which of the two did not take it
+         (setq ok1 (cchk:set-color ea ocol)
+               ok2 (cchk:set-color eb ocol))
+         (princ (if (and ok1 ok2)
+                  (strcat "\n  Flagged to fix (" (cchk:color-name ocol) ").")
+                  "\n  Flagged to fix - but a locked layer refused the colour."))
          (list label
                (strcat
                  (if (cchk:whole-line-p la)
                    (if (= (strcase lay1) (strcase lay2))
-                     "flagged to fix ("
-                     "different layers - flagged to fix (")
-                   "polyline edge - flagged to fix (")
-                 (cchk:color-name ocol) ")")
+                     "flagged to fix"
+                     "different layers - flagged to fix")
+                   "polyline edge - flagged to fix")
+                 (cond
+                   ((and ok1 ok2) (strcat " (" (cchk:color-name ocol) ")"))
+                   ((or ok1 ok2)
+                    (strcat " (" (cchk:color-name ocol) ") - "
+                            (if ok1 h2 h1)
+                            " on a locked layer, NOT coloured"))
+                   (t " - layer locked, NOT coloured")))
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -68253,9 +70238,12 @@
 (defun cchk:pad-centers (/ ss2 i e ed nm bb out)
   ;; centers (extents middle) of every pad already in the drawing: an
   ;; INSERT on the pads layer, or one whose (effective) name is a pad
-  ;; block from *cchk-pad-blocks* - scoped to the current layout tab
-  ;; so a pad sitting in another tab is never counted as covering this one
-  (setq ss2 (ssget "_X" (list '(0 . "INSERT") (cons 410 (getvar "CTAB"))))
+  ;; block from *cchk-pad-blocks* - scoped to the space the drafter is
+  ;; working in so a pad sitting in another tab is never counted as
+  ;; covering this one.  CTAB alone was the sheet from inside a layout
+  ;; viewport: no model-space pad was found, and every 36" spot was
+  ;; circled as missing one
+  (setq ss2 (ssget "_X" (list '(0 . "INSERT") (cons 410 (cchk:space))))
         i   0)
   (if ss2
     (repeat (sslength ss2)
@@ -68585,10 +70573,22 @@
                      "No")
        (progn
          (setq replp T)
-         (setq pk (entsel (strcat "\nPick the '" *cchk-repl-block*
-                                  "' block <it is not placed>: ")))
-         (if lzd:ask (lzd:ask (getvar "LASTPROMPT") pk) pk)
-         (if lzd:watch (lzd:watch pk) pk)
+         ;; entsel answers nil for a click on empty space exactly as it
+         ;; does for Enter, and only Enter means "it is not placed": a
+         ;; missed click used to write "block is MISSING - add it" in
+         ;; red over a disclaimer standing a few units away, and the
+         ;; drafter added a second one.  ERRNO 7 is the miss; ask again.
+         (setq pk 'RETRY)
+         (while (eq pk 'RETRY)
+           (setvar "ERRNO" 0)
+           (setq pk (entsel (strcat "\nPick the '" *cchk-repl-block*
+                                    "' block <it is not placed>: ")))
+           (if lzd:ask (lzd:ask (getvar "LASTPROMPT") pk) pk)
+           (if lzd:watch (lzd:watch pk) pk)
+           (if (and (null pk) (= 7 (getvar "ERRNO")))
+             (progn
+               (princ "\n  Nothing there - click the block, or press Enter if it is not placed.")
+               (setq pk 'RETRY))))
          (cond
            ((and pk
                  (= "INSERT" (cdr (assoc 0 (entget (car pk)))))
@@ -68668,7 +70668,8 @@
                       saved keep res n total lines
                       anchors anchheld
                       ndok ndflag ndmoved ndanch naok namoved nasnap
-                      nomerged noflag noleft
+                      nomerged noflag noleft ndlock dimlock nalock nolock
+                      dimnc ndnc
                       rowtol sty l pair hdr cres
                       laylist locked relock lay
                       dlines skiprest
@@ -68683,13 +70684,20 @@
     ;; (a colour on a layer the user declined to unlock is in saved
     ;; too) used to skip the close and the CMDECHO restore below, and
     ;; a throw inside *error* is the one error nothing catches.
+    ;; The re-lock has a catch of its own: sharing one with the colour
+    ;; restore meant any throw in a set-color skipped it and left the
+    ;; drafter's layer unlocked with nothing said.  It still runs
+    ;; AFTER the colours, because a layer locked first would refuse
+    ;; every colour on it and leave those items grey.
     (vl-catch-all-apply
       '(lambda ()
          (foreach pair saved
            (if (and (not (member (car pair) keep)) (entget (car pair)))
              (cchk:set-color (car pair) (cdr pair))))
-         (foreach l relock (cchk:set-layer-lock l T))
          (redraw))
+      nil)
+    (vl-catch-all-apply
+      '(lambda () (foreach l relock (cchk:set-layer-lock l T)))
       nil)
     (if undo-open
       (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
@@ -68715,7 +70723,8 @@
      (setq cands nil dims nil arcs nil blks nil segs nil
            saved nil keep nil lines nil i 0
            ndok 0 ndflag 0 ndmoved 0 ndanch 0 naok 0 namoved 0 nasnap 0
-           nomerged 0 noflag 0 noleft 0)
+           nomerged 0 noflag 0 noleft 0 ndlock 0 nalock 0 nolock 0
+           dimlock nil dimnc nil)
      (repeat (sslength ss)
        (setq e  (ssname ss i)
              i  (1+ i)
@@ -68852,6 +70861,11 @@
           (if (> (nth 5 res) 0)
             (setq anchheld (cons (cons e (nth 5 res))
                                  (vl-remove (assoc e anchheld) anchheld))))
+          ;; ...and so are points a locked layer would not let move:
+          ;; they are still off when Back sends the dimension round again
+          (if (> (nth 6 res) 0)
+            (setq dimlock (cons (cons e (nth 6 res))
+                                (vl-remove (assoc e dimlock) dimlock))))
           (cond
             ((eq (cadr res) 'skip)
              (cchk:set-color e grey)
@@ -68885,7 +70899,8 @@
                                            (vl-remove (assoc e1 carried)
                                                       carried))))
                      (setq dlines (cdr dlines))))
-                 (setq keep (vl-remove e1 keep))
+                 (setq keep  (vl-remove e1 keep)
+                       dimnc (vl-remove (assoc e1 dimnc) dimnc))
                  (cchk:set-color e1 grey)
                  (princ "\n  Stepping back one dimension."))
                (princ "\n  Already at the first dimension."))
@@ -68895,7 +70910,11 @@
                (progn (setq ndok (1+ ndok))
                       (cchk:set-color e grey))
                (progn (setq ndflag (1+ ndflag))
-                      (setq keep (cons e keep))))
+                      (setq keep (cons e keep))
+                      ;; a flag its locked layer would not take: counted
+                      ;; as flagged, never as coloured
+                      (if (not (nth 7 res))
+                        (setq dimnc (cons (cons e 1) dimnc)))))
              (setq sty (cchk:dim-style e))
              ;; moves this dim collected on an earlier pass, before a
              ;; Back sent us round again -- they are real and belong
@@ -68917,6 +70936,8 @@
                                 dlines))))
           (setq n (1+ n)))
         (foreach pair anchheld (setq ndanch (+ ndanch (cdr pair))))
+        (foreach pair dimlock (setq ndlock (+ ndlock (cdr pair))))
+        (setq ndnc (length dimnc))
         (if skiprest
           (setq lines (cons (strcat "Dimensions: " (itoa (- total (length dlines)))
                                     " left UNREVIEWED (skipped by user)")
@@ -68934,11 +70955,15 @@
           (cchk:set-color e (cdr (assoc e saved)))
           (setq res (cchk:review-arc e cands n total))
           (setq nasnap (+ nasnap (cadddr res)))
-          (if (cadr res)
-            (progn (setq naok (1+ naok))
-                   (cchk:set-color e grey))
-            (progn (setq namoved (1+ namoved))
-                   (setq keep (cons e keep))))           ; moved: stays magenta
+          (cond
+            ;; detached, but its layer is locked: not OK and not moved
+            ((> (nth 4 res) 0) (setq nalock (1+ nalock)))
+            ((cadr res)
+             (setq naok (1+ naok))
+             (cchk:set-color e grey))
+            (t
+             (setq namoved (1+ namoved))
+             (setq keep (cons e keep))))                ; moved: stays magenta
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
 
         ;; --- overlapping lines, one pair at a time ------------------
@@ -68958,8 +70983,10 @@
             ((null res)                       ; absorbed by an earlier merge
              (cchk:unstage e1 keep grey)
              (cchk:unstage e2 keep grey))
-            ((eq (caddr res) 'left)
-             (setq noleft (1+ noleft))
+            ((member (caddr res) '(left locked))
+             (if (eq (caddr res) 'left)
+               (setq noleft (1+ noleft))
+               (setq nolock (1+ nolock)))
              (cchk:unstage e1 keep grey)
              (cchk:unstage e2 keep grey)
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
@@ -68996,24 +71023,40 @@
             (cons (strcat "Dimensions checked: " (itoa (length dims))
                           " (correct: " (itoa ndok)
                           ", flagged to fix: " (itoa ndflag)
+                          (if (> ndnc 0)
+                            (strcat " - " (itoa ndnc)
+                                    " NOT coloured, layer locked")
+                            "")
                           ", points adjusted: " (itoa ndmoved)
                           (if (> ndanch 0)
                             (strcat ", held at a shared anchor: " (itoa ndanch))
                             "")
+                          (if (> ndlock 0)
+                            (strcat ", NOT moved (layer locked): " (itoa ndlock))
+                            "")
                           ")")
-                  (> ndflag 0))
+                  (or (> ndflag 0) (> ndlock 0)))
             (cons (strcat "Arcs checked: " (itoa (length arcs))
                           " (OK: " (itoa naok)
                           ", with endpoints moved: " (itoa namoved)
-                          ", endpoints moved in total: " (itoa nasnap) ")")
-                  (> namoved 0))
+                          ", endpoints moved in total: " (itoa nasnap)
+                          (if (> nalock 0)
+                            (strcat ", detached but layer locked: " (itoa nalock))
+                            "")
+                          ")")
+                  (or (> namoved 0) (> nalock 0)))
             (cons (strcat "Overlapping line pairs: " (itoa (length olaps))
                           (if olaps
                             (strcat " (merged: " (itoa nomerged)
                                     ", flagged: " (itoa noflag)
-                                    ", left as drawn: " (itoa noleft) ")")
+                                    ", left as drawn: " (itoa noleft)
+                                    (if (> nolock 0)
+                                      (strcat ", could NOT merge (layer locked): "
+                                              (itoa nolock))
+                                      "")
+                                    ")")
                             " - none found"))
-                  (> noflag 0))))
+                  (or (> noflag 0) (> nolock 0)))))
         (setq dimlay (cchk:dimlayer-verdict dims)
               units  (cchk:audit-units ss)
               datev  (cchk:audit-date ss T))
@@ -69051,6 +71094,10 @@
                        "\nDimensions: " (itoa (length dims)) " checked, "
                        (itoa ndok) " correct, "
                        (itoa ndflag) " flagged to fix (red)"
+                       (if (> ndnc 0)
+                         (strcat " - " (itoa ndnc)
+                                 " of them NOT coloured (layer locked)")
+                         "")
                        (if (> ndmoved 0)
                          (strcat ", " (itoa ndmoved) " point(s) adjusted")
                          "")
@@ -69058,14 +71105,26 @@
                          (strcat ", " (itoa ndanch)
                                  " point(s) held at a shared anchor")
                          "")
+                       (if (> ndlock 0)
+                         (strcat ", " (itoa ndlock)
+                                 " point(s) NOT moved (layer locked)")
+                         "")
                        "\nArcs: " (itoa (length arcs)) " checked, "
                        (itoa namoved) " with endpoint(s) moved ("
                        (itoa nasnap) " endpoint(s), magenta)"
+                       (if (> nalock 0)
+                         (strcat ", " (itoa nalock)
+                                 " detached but NOT moved (layer locked)")
+                         "")
                        "\nOverlapping lines: " (itoa (length olaps)) " pair(s) found"
                        (if olaps
                          (strcat ", " (itoa nomerged) " merged, "
                                  (itoa noflag) " flagged (cyan), "
-                                 (itoa noleft) " left as drawn")
+                                 (itoa noleft) " left as drawn"
+                                 (if (> nolock 0)
+                                   (strcat ", " (itoa nolock)
+                                           " could NOT be merged (layer locked)")
+                                   ""))
                          "")))
         (foreach l (car cres) (princ (strcat "\n" l)))
         (princ (strcat "\nReport placed on the right side of the drawing (layer "
@@ -69113,7 +71172,9 @@
                       " (Enter = whole drawing): "))
       (setq ss (ssget))
       (if lzd:watch (lzd:watch ss) ss)))
-  (if (null ss) (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB"))))))
+  ;; Enter = the whole of the space the drafter is working in: model
+  ;; space from a layout viewport too, where CTAB names the sheet
+  (if (null ss) (setq ss (ssget "_X" (list (cons 410 (cchk:space))))))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
     (t
@@ -69427,28 +71488,42 @@
 
 ;; inserts a Cover Details demo instance with OVVAL/SPVAL as its
 ;; attribute answers; returns the new INSERT, or nil if it couldn't
-;; be built (a stuck/odd command sequence is not silently ignored)
-(defun cchk:tut-insert-details (pt ovval spval
-                                 / oldattdia oldattreq oldfiledia pre new)
+;; be built.  Entmade, not -INSERT: the typed rotation "0" was read
+;; through ANGBASE/ANGDIR, so a surveyor's template turned the block,
+;; the insertion point went in with the drafter's running snaps live,
+;; and a WCS point was read as a UCS one while every other piece of
+;; the demo is entmade in WCS from the same base.  The attributes sit
+;; where the definition's ATTDEFs put them (see cchk:tut-details-block).
+(defun cchk:tut-insert-details (pt ovval spval / pre new lay h)
   (if (not (tblsearch "BLOCK" *cchk-details-block*))
     (cchk:tut-details-block *cchk-details-block*))
-  (setq oldattdia  (getvar "ATTDIA")
-        oldattreq  (getvar "ATTREQ")
-        oldfiledia (getvar "FILEDIA"))
-  (setvar "ATTDIA" 0) (setvar "ATTREQ" 1) (setvar "FILEDIA" 0)
-  (setq pre (entlast))
-  (vl-catch-all-apply
-    '(lambda ()
-       (command "_.-INSERT" *cchk-details-block* pt "1" "1" "0" ovval spval "")) '())
-  (setvar "ATTDIA" oldattdia) (setvar "ATTREQ" oldattreq) (setvar "FILEDIA" oldfiledia)
-  (setq new (if pre (entnext pre) (entnext)))
+  (setq pre (entlast)
+        lay (getvar "CLAYER")
+        h   6.0)
+  (if (and (entmake (list '(0 . "INSERT") '(100 . "AcDbEntity") (cons 8 lay)
+                          '(100 . "AcDbBlockReference") '(66 . 1)
+                          (cons 2 *cchk-details-block*)
+                          (cons 10 pt) '(41 . 1.0) '(42 . 1.0) '(43 . 1.0)
+                          '(50 . 0.0)))
+           (entmake (list '(0 . "ATTRIB") '(100 . "AcDbEntity") (cons 8 lay)
+                          '(100 . "AcDbText") (cons 10 pt) (cons 40 h)
+                          (cons 1 ovval) '(100 . "AcDbAttribute")
+                          '(2 . "OVERLAP") '(70 . 0)))
+           (entmake (list '(0 . "ATTRIB") '(100 . "AcDbEntity") (cons 8 lay)
+                          '(100 . "AcDbText")
+                          (cons 10 (list (car pt) (- (cadr pt) h) (caddr pt)))
+                          (cons 40 h) (cons 1 spval) '(100 . "AcDbAttribute")
+                          '(2 . "SPACING") '(70 . 0)))
+           (entmake (list '(0 . "SEQEND") (cons 8 lay))))
+    (setq new (if pre (entnext pre) (entnext))))
   (if (and new (entget new) (= "INSERT" (cdr (assoc 0 (entget new)))))
     (progn (cchk:tag new "TUTORIAL") new)))
 
 ;; the whole demo scene, anchored at BP (WCS, z=0). Each piece is
 ;; independent - one failing (e.g. no DASHED linetype available)
 ;; never stops the rest from being built.
-(defun cchk:tut-build (bp / bx by oldfiledia oldosmode pre newdim detpt ins)
+(defun cchk:tut-build (bp / bx by oldfiledia oldosmode pre newdim detpt ins
+                           guard)
   (setq bx (car bp) by (cadr bp))
   (cal:ensure-layer *cchk-pool-layer* 7)
   (cal:ensure-layer *cchk-tut-layer* 5)
@@ -69464,11 +71539,22 @@
   (princ *cchk-pool-layer*) (princ "'.")
 
   ;; a dashed cover outline on the same layer, so the NA/dashed check
-  ;; has something to find (skips cleanly if DASHED can't be loaded)
-  (setq oldfiledia (getvar "FILEDIA"))
-  (setvar "FILEDIA" 0)
-  (vl-catch-all-apply '(lambda () (command "_.-LINETYPE" "_Load" "DASHED" "acad.lin" "")) '())
-  (setvar "FILEDIA" oldfiledia)
+  ;; has something to find (skips cleanly if DASHED can't be loaded).
+  ;; Loaded only when missing: with DASHED already in the drawing --
+  ;; the usual case in a shop that draws dashed covers -- -LINETYPE
+  ;; asks "Reload it?", the "" answered THAT, the shop's own DASHED was
+  ;; quietly replaced by acad.lin's, and the command was left open to
+  ;; swallow the next one.  Anything still asking is cancelled here.
+  (if (not (tblsearch "LTYPE" "DASHED"))
+    (progn
+      (setq oldfiledia (getvar "FILEDIA"))
+      (setvar "FILEDIA" 0)
+      (vl-catch-all-apply '(lambda () (command "_.-LINETYPE" "_Load" "DASHED" "acad.lin" "")) '())
+      (setq guard 0)
+      (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
+        (command)
+        (setq guard (1+ guard)))
+      (setvar "FILEDIA" oldfiledia)))
   (if (tblsearch "LTYPE" "DASHED")
     (progn
       (entmake (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity")
@@ -69493,7 +71579,7 @@
       (setq ins (cchk:tut-insert-details detpt "15\"" "3x3"))
       (if ins
         (princ "\n  Built: 'Cover Details' block (Overlap/Spacing set wrong on purpose).")
-        (princ "\n  Skipped: could not insert the 'Cover Details' demo block (-INSERT did not complete as expected)."))))
+        (princ "\n  Skipped: could not insert the 'Cover Details' demo block (the drawing refused the entity)."))))
 
   ;; an off-object dimension point: point 1 sits 4" below the pool's
   ;; true bottom-left corner instead of on it
@@ -69537,7 +71623,7 @@
   (cchk:tut-label (list (+ bx 195.0) (+ by 78.0) 0.0) 4.0 "(5) Cover Details set wrong on purpose")
   T)
 
-(defun c:TUTORIALCOVERCHECK ( / *error* oldecho os0 att0 req0 fil0
+(defun c:TUTORIALCOVERCHECK ( / *error* oldecho os0 fil0
                                undo-open bp)
   (defun *error* (msg)
     ;; object snaps first, before anything below it can throw.
@@ -69548,12 +71634,11 @@
     (if os0 (setvar "OSMODE" os0))
     (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
-    ;; cchk:tut-insert-details drops ATTDIA/ATTREQ/FILEDIA round its
-    ;; -INSERT and puts them back inline; a throw inside that window
-    ;; left FILEDIA at 0, which turns every OPEN into a command-line
-    ;; prompt -- so the tutorial holds the three itself
-    (if att0 (setvar "ATTDIA" att0))
-    (if req0 (setvar "ATTREQ" req0))
+    ;; cchk:tut-build drops FILEDIA round its -LINETYPE and puts it
+    ;; back inline; a throw inside that window left FILEDIA at 0, which
+    ;; turns every OPEN into a command-line prompt -- so the tutorial
+    ;; holds it itself.  (The demo block is entmade now, so ATTDIA and
+    ;; ATTREQ are no longer touched and no longer held.)
     (if fil0 (setvar "FILEDIA" fil0))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTUTORIALCOVERCHECK error: " msg)))
@@ -69569,7 +71654,7 @@
       (if lzd:ask (lzd:ask "\nPick a base point for the demo, clear of your real geometry <0,0>: " bp) bp)
       (if (null bp) (setq bp (list 0.0 0.0 0.0)))
       (setq oldecho (getvar "CMDECHO") os0 (getvar "OSMODE")
-            att0 (getvar "ATTDIA") req0 (getvar "ATTREQ") fil0 (getvar "FILEDIA"))
+            fil0 (getvar "FILEDIA"))
       (setvar "CMDECHO" 0)
       ;; only when undo is recording - _Begin in a drawing with UNDO
       ;; off (bit 1 of UNDOCTL clear) errors out of the command
@@ -70241,7 +72326,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cleardim-version* "v3.2")   ; announced on load; release_lisp.py
+(setq *cleardim-version* "v3.3")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -72138,11 +74223,23 @@
 
 ;;; -------------------- asking -----------------------------------------
 
+;; The space the drafter is working in, as group 410 names it: the
+;; layout only on the paper itself.  Inside a layout viewport CTAB
+;; still names the layout while every pick lands in model space, and a
+;; sweep of CTAB there took the viewport and the title block, found no
+;; dimension in them and said there was nothing to do over a drawing
+;; full of dims.
+(defun cd:space ()
+  (if (and (= 0 (getvar "TILEMODE")) (= 1 (getvar "CVPORT")))
+    (getvar "CTAB")
+    "Model"))
+
 ;; The one question either command puts: which part of the drawing to
-;; work on.  Enter takes the whole of model space, which is the answer
-;; nearly every run wants; a selection is for a sheet with more than one
-;; drawing on it.  Returns the selection set, or nil when the drawing
-;; holds no dimension at all.
+;; work on.  Enter takes the whole of the space the drafter is working
+;; in -- model space, from the Model tab or a layout viewport -- which
+;; is the answer nearly every run wants; a selection is for a sheet with
+;; more than one drawing on it.  Returns the selection set, or nil when
+;; the drawing holds no dimension at all.
 (defun cd:asksel (what / msg ss)
   ;; whatever the drafter had already picked before typing the command
   (setq ss (ssget "_I"))
@@ -72155,15 +74252,14 @@
       (setq ss (ssget))
       (if lzd:watch (lzd:watch ss) ss)
       (if lzd:ask (lzd:ask msg ss) ss)))
-  ;; Enter: everything in the space the drafter is looking at.  CTAB is
-  ;; "Model" in model space and the layout's name in a layout, so a run
-  ;; started on a sheet does not drag model-space geometry in as ink --
-  ;; and a drawing whose entities carry no space group at all still
-  ;; answers the plain sweep underneath
+  ;; Enter: everything in the space the drafter is working in
+  ;; (cd:space), so a run started on the paper does not drag model-space
+  ;; geometry in as ink, and one started in a viewport does not take the
+  ;; sheet for the drawing -- and a drawing whose entities carry no space
+  ;; group at all still answers the plain sweep underneath
   (if (null ss)
     (progn
-      (setq ss (ssget "_X"
-                      (list (cons 410 (cond ((getvar "CTAB")) ("Model"))))))
+      (setq ss (ssget "_X" (list (cons 410 (cd:space)))))
       (if lzd:watch (lzd:watch ss) ss)))
   (if (null ss)
     (progn
@@ -72569,7 +74665,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.25")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.26")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -72912,12 +75008,15 @@
 ;; --- small helpers -------------------------------------------------
 
 (defun dchk:set-color (ent color / ed old)
+  ;; T when the colour went in.  entmod answers nil on a LOCKED layer
+  ;; and changes nothing, so a caller that goes on to say "flagged
+  ;; (red)" has to ask first, or the report claims a mark nobody sees
   (setq ed  (entget ent)
         old (assoc 62 ed))
-  (entmod (if old
-            (subst (cons 62 color) old ed)
-            (append ed (list (cons 62 color)))))
-  (entupd ent))
+  (if (entmod (if old
+                (subst (cons 62 color) old ed)
+                (append ed (list (cons 62 color)))))
+    (progn (entupd ent) T)))
 
 (defun dchk:make-xline (p1 p2 / len)
   ;; infinite construction line through p1-p2 on the check layer,
@@ -73130,7 +75229,10 @@
 
 (defun dchk:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed pair)
   ;; re-fit the arc through its fixed end, its old midpoint and the
-  ;; target point; returns T on success
+  ;; target point; returns T on success, nil when no arc fits (the
+  ;; points are collinear), and 'refused when one fits but the write
+  ;; is turned down -- a LOCKED layer, which is no reason to tell the
+  ;; drafter their arc was "collinear" and then call it attached
   (if (and (> (distance target fixed) *dchk-same-pt*)
            (setq c (cal:circumcenter fixed mid target)))
     (progn
@@ -73148,7 +75250,8 @@
       (foreach pair (list (cons 10 c) (cons 40 r) (cons 50 a1) (cons 51 a2))
         (setq ed (subst pair (assoc (car pair) ed) ed)))
       (if (entmod ed)
-        (progn (entupd ent) T)))))
+        (progn (entupd ent) T)
+        'refused))))
 
 (defun dchk:move-arc-end (ent which target / mid other)
   ;; re-fit the arc so the chosen endpoint lands on target (WCS)
@@ -73190,13 +75293,19 @@
               (cal:axis-pt a1 u (max lena s2)))))))
 
 (defun dchk:merge-lines (la lb info / ed)
-  ;; stretch la's LINE over the union of both, delete lb's LINE
+  ;; stretch la's LINE over the union of both, delete lb's LINE; T when
+  ;; that happened.  lb goes only once la has really been stretched: a
+  ;; LOCKED layer refuses the entmod, and erasing lb then would lose
+  ;; the length it carried -- and "merged" would be reported over two
+  ;; lines still standing
   (setq ed (entget (dchk:seg-ent la))
         ed (subst (cons 10 (nth 3 info)) (assoc 10 ed) ed)
         ed (subst (cons 11 (nth 4 info)) (assoc 11 ed) ed))
-  (entmod ed)
-  (entupd (dchk:seg-ent la))
-  (entdel (dchk:seg-ent lb)))
+  (if (entmod ed)
+    (progn
+      (entupd (dchk:seg-ent la))
+      (entdel (dchk:seg-ent lb))
+      T)))
 
 (defun dchk:whole-line-p (s / ed)
   ;; T when the segment IS its owner entity - only whole LINEs can be
@@ -73510,7 +75619,9 @@
   ;; line.
   ;; Returns (original final how) when the point was looked at, where
   ;; how is 'auto / 'user / 'kept / 'anchor; nil when the point was
-  ;; already fine.
+  ;; already fine.  how is 'locked when the point is off its object but
+  ;; the dimension's layer refused the write: nothing can be moved, so
+  ;; nothing is asked, and a fourth element says how far off it is.
   (setq ed (entget ent)
         pt (cdr (assoc gcode ed)))
   (if pt
@@ -73537,11 +75648,22 @@
             (setq sugg anch  dsug danch  what "the shared anchor point"))
            (near
             (setq sugg (cadr near)  dsug dnear  what "the nearest object")))
-         (if (and sugg (> dsug *dchk-tol*))
-           (progn
-             ;; show the suggestion in place, but keep the original spot
-             ;; marked so both are on screen while the question is asked
-             (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
+         (cond
+           ((not (and sugg (> dsug *dchk-tol*))) nil)
+           ;; show the suggestion in place, but keep the original spot
+           ;; marked so both are on screen while the question is asked.
+           ;; A LOCKED layer refuses that write, and then every answer
+           ;; to Move/Keep/Pick would be a claim about a point that
+           ;; never moved -- the report used to say "moved onto the
+           ;; nearest object" over a dimension still off by the same
+           ;; amount.  Say what is wrong and leave it.
+           ((not (entmod (subst (cons gcode sugg) (assoc gcode ed) ed)))
+            (princ (strcat "\n  " label " is NOT ATTACHED - " what " is "
+                           (dchk:dist dsug) " away, but the dimension's"
+                           " layer is locked: NOT moved."))
+            (list pt pt 'locked
+                  (strcat label " off by " (dchk:dist dsug))))
+           (t
              (entupd ent)
              (princ (strcat "\n  " label " is not on any object - " what
                             " is " (dchk:dist dsug) " away."))
@@ -73573,10 +75695,12 @@
 
 (defun dchk:review-dim (ent cands anchors num total / ed dtype h sty p13 p14
                                               r1 r2 looked moved kept held
-                                              ok note meas assocnote fcol)
+                                              lockd ok note meas assocnote fcol
+                                              painted)
   ;; interactive review of one dimension.
   ;; Returns (handle ok-flag report-note moved-point-count measurement
-  ;; anchor-held-point-count).
+  ;; anchor-held-point-count locked-point-count painted), painted T when
+  ;; a flagged dimension really took the flag colour.
   (setq ed    (entget ent)
         h     (cdr (assoc 5 ed))
         sty   (dchk:dim-style ent)
@@ -73598,9 +75722,12 @@
   ;; a point held at a shared anchor was looked at and deliberately not
   ;; touched - it is neither a move nor a Keep answer, so it is counted
   ;; on its own and kept out of both tallies
+  ;; A point on a locked layer that could not be moved is neither: it
+  ;; is still off, and says so in the report line on its own.
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
         held   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'anchor)) looked)
-        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept anchor)))
+        lockd  (vl-remove-if-not '(lambda (x) (eq (caddr x) 'locked)) looked)
+        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept anchor locked)))
                              looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
   ;; only when something actually moved is there an old position worth
@@ -73615,15 +75742,19 @@
   (redraw ent 4)
   (redraw)
   (if (member ok '(back skip))
-    (list h ok nil (length moved) meas (length held))  ; navigation: caller handles it
+    (list h ok nil (length moved) meas (length held) (length lockd) nil)  ; navigation: caller handles it
     (progn
       (setq ok (eq ok 'yes)
             fcol (cal:ink *dchk-flag-color* 'flag))
       (setq note (strcat
-                   (if ok
-                     "OK"
-                     (strcat "FLAGGED to fix ("
-                             (dchk:color-name fcol) ")"))
+                   (cond
+                     (ok "OK")
+                     ;; the red is the flag: on a locked layer it does
+                     ;; not go on, and the line must not say it did
+                     ((setq painted (dchk:set-color ent fcol))
+                      (strcat "FLAGGED to fix ("
+                              (dchk:color-name fcol) ")"))
+                     (t "FLAGGED to fix - layer locked, NOT coloured"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -73636,9 +75767,14 @@
                      (strcat " - " (itoa (length held))
                              " point(s) held at a shared anchor")
                      "")
+                   (if lockd
+                     (strcat " - "
+                             (dchk:join (mapcar 'cadddr lockd) ", ")
+                             " - NOT ATTACHED, layer locked, NOT moved")
+                     "")
                    (if assocnote assocnote "")))
-      (if (not ok) (dchk:set-color ent fcol))
-      (list h ok note (length moved) meas (length held)))))
+      (list h ok note (length moved) meas (length held) (length lockd)
+            painted))))
 
 ;; --- arc review ----------------------------------------------------
 
@@ -73682,20 +75818,28 @@
   (entmod ed)
   (entupd ent))
 
-(defun dchk:review-arc-end (ent which label cands / p target st ans final how)
+(defun dchk:review-arc-end (ent which label cands / p target st ans final how
+                                                  res)
   ;; audits one arc endpoint: a detached end is snapped where it looks
   ;; like it belongs, then you choose - Move (take it), Keep (put the
   ;; arc back exactly as drawn) or Pick your own spot.
   ;; Returns (original final how) when the end was looked at, where how
-  ;; is 'auto / 'user / 'kept; nil when the end was already fine.
+  ;; is 'auto / 'user / 'kept, or 'locked when the arc's layer refused
+  ;; the re-fit and nothing was asked; nil when the end was already fine.
   (setq p      (if (eq which 'start)
                  (vlax-curve-getStartPoint ent)
                  (vlax-curve-getEndPoint ent))
         target (dchk:arc-end-target ent which cands)
         st     (dchk:arc-state ent))
   (cond
+    ((and target
+          (eq 'refused (setq res (dchk:move-arc-end ent which target))))
+     (princ (strcat "\n  " label " is NOT ATTACHED - the nearest object end is "
+                    (dchk:dist (distance p target)) " away, but the arc's"
+                    " layer is locked: NOT moved."))
+     (list p p 'locked))
     (target
-     (if (dchk:move-arc-end ent which target)
+     (if res
        (progn
          (princ (strcat "\n  " label " is not attached to an object end - nearest is "
                         (dchk:dist (distance p target)) " away."))
@@ -73714,7 +75858,7 @@
                            (dchk:ptstr final) " - the arc is unchanged.")))
            (t
             (setq ans (trans ans 1 0))
-            (if (dchk:move-arc-end ent which ans)
+            (if (eq T (dchk:move-arc-end ent which ans))
               (progn
                 (setq final ans
                       how   'user)
@@ -73737,16 +75881,18 @@
        nil
        (progn
          (setq ans (trans ans 1 0))
-         (if (dchk:move-arc-end ent which ans)
+         (if (eq T (dchk:move-arc-end ent which ans))
            (list p ans 'user)
            (progn
-             (princ "\n  Could not re-fit the arc through that spot (collinear?); unchanged.")
+             (princ "\n  Could not re-fit the arc through that spot (collinear or layer locked?); unchanged.")
              nil)))))
     (t nil)))
 
-(defun dchk:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note acol)
+(defun dchk:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept
+                                              lockd note acol)
   ;; interactive review of one arc's endpoints.
-  ;; Returns (handle untouched-flag report-note moved-point-count).
+  ;; Returns (handle untouched-flag report-note moved-point-count
+  ;; locked-endpoint-count).
   (setq ed     (entget ent)
         h      (cdr (assoc 5 ed))
         planar (dchk:planar-arc-p ed))
@@ -73761,12 +75907,20 @@
   (redraw ent 4)
   (redraw)
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
-        moved  (vl-remove-if '(lambda (x) (eq (caddr x) 'kept)) looked)
+        lockd  (vl-remove-if-not '(lambda (x) (eq (caddr x) 'locked)) looked)
+        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept locked)))
+                             looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
   (setq acol (cal:ink *dchk-arc-color* 'arc))
   (if moved (dchk:set-color ent acol))
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
+               ;; a detached end on a locked layer is a finding, not
+               ;; "endpoints OK": nothing was asked because nothing
+               ;; could be written
+               (lockd (strcat (itoa (length lockd))
+                              " endpoint(s) NOT ATTACHED - layer locked,"
+                              " NOT moved"))
                ((and moved kept)
                 (strcat (itoa (length moved)) " endpoint(s) moved ("
                         (dchk:color-name acol) "), "
@@ -73777,16 +75931,17 @@
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
-  (list h (null moved) note (length moved)))
+  (list h (null moved) note (length moved) (length lockd)))
 
 ;; --- overlapping line review ---------------------------------------
 
 (defun dchk:review-olap (la lb num total / info ea eb h1 h2 lay1 lay2 label
-                                           ans mergeable kinds ocol)
+                                           ans mergeable kinds ocol ok1 ok2)
   ;; interactive review of one overlapping segment pair.
   ;; Returns nil when the pair no longer overlaps (an earlier merge
   ;; absorbed it); otherwise (label report-note action ents...) where
-  ;; action is merged / flagged / left and ents keep their cyan.
+  ;; action is merged / flagged / left / locked (a Merge the layer
+  ;; refused) and ents keep their cyan.
   (setq ea (dchk:seg-ent la)
         eb (dchk:seg-ent lb))
   (if (and (entget ea) (entget eb) (setq info (dchk:overlap-info la lb)))
@@ -73832,8 +75987,13 @@
       (redraw)
       (setq ocol (cal:ink *dchk-olap-color* 'olap))
       (cond
+        ((and (= ans "Merge") (not (dchk:merge-lines la lb info)))
+         ;; the lines share a layer (or Merge was never offered), so
+         ;; one refusal is the pair's: both are left exactly as drawn
+         (princ "\n  Could NOT merge - the layer is locked; both lines left as drawn.")
+         (list label "could NOT merge - layer locked, left as drawn"
+               'locked))
         ((= ans "Merge")
-         (dchk:merge-lines la lb info)
          (dchk:set-color ea ocol)
          (princ (strcat "\n  Merged into one line ("
                         (dchk:color-name ocol) ")."))
@@ -73842,18 +76002,27 @@
                        (dchk:color-name ocol) ")")
                'merged ea))
         ((= ans "Flag")
-         (dchk:set-color ea ocol)
-         (dchk:set-color eb ocol)
-         (princ (strcat "\n  Flagged to fix ("
-                        (dchk:color-name ocol) ")."))
+         ;; the colour IS the flag; a locked layer refuses it, and the
+         ;; line says which of the two did not take it
+         (setq ok1 (dchk:set-color ea ocol)
+               ok2 (dchk:set-color eb ocol))
+         (princ (if (and ok1 ok2)
+                  (strcat "\n  Flagged to fix (" (dchk:color-name ocol) ").")
+                  "\n  Flagged to fix - but a locked layer refused the colour."))
          (list label
                (strcat
                  (if (dchk:whole-line-p la)
                    (if (= (strcase lay1) (strcase lay2))
-                     "flagged to fix ("
-                     "different layers - flagged to fix (")
-                   "polyline edge - flagged to fix (")
-                 (dchk:color-name ocol) ")")
+                     "flagged to fix"
+                     "different layers - flagged to fix")
+                   "polyline edge - flagged to fix")
+                 (cond
+                   ((and ok1 ok2) (strcat " (" (dchk:color-name ocol) ")"))
+                   ((or ok1 ok2)
+                    (strcat " (" (dchk:color-name ocol) ") - "
+                            (if ok1 h2 h1)
+                            " on a locked layer, NOT coloured"))
+                   (t " - layer locked, NOT coloured")))
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -73863,7 +76032,8 @@
                       cands dims arcs lns plns segs olaps rest e1 e2 pr
                       anchors anchheld saved keep res n total lines ans
                       ndok ndflag ndmoved ndanch naok namoved nasnap
-                      nomerged noflag noleft
+                      nomerged noflag noleft ndlock dimlock nalock nolock
+                      dimnc ndnc
                       rowtol sty pair dlines skiprest
                       laylist locked relock lay
                       minx miny maxx maxy bb h m ins txt nlin ref hdr l carried cmv
@@ -73876,13 +76046,20 @@
     ;; (a colour on a layer the user declined to unlock is in saved
     ;; too) used to skip the close and the CMDECHO restore below, and
     ;; a throw inside *error* is the one error nothing catches.
+    ;; The re-lock has a catch of its own: sharing one with the colour
+    ;; restore meant any throw in a set-color skipped it and left the
+    ;; drafter's layer unlocked with nothing said.  It still runs
+    ;; AFTER the colours, because a layer locked first would refuse
+    ;; every colour on it and leave those items grey.
     (vl-catch-all-apply
       '(lambda ()
          (foreach pair saved
            (if (and (not (member (car pair) keep)) (entget (car pair)))
              (dchk:set-color (car pair) (cdr pair))))
-         (foreach l relock (dchk:set-layer-lock l T))
          (redraw))
+      nil)
+    (vl-catch-all-apply
+      '(lambda () (foreach l relock (dchk:set-layer-lock l T)))
       nil)
     (if undo-open
       (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
@@ -73908,7 +76085,8 @@
      (setq cands nil dims nil arcs nil lns nil segs nil
            saved nil keep nil lines nil i 0
            ndok 0 ndflag 0 ndmoved 0 ndanch 0 naok 0 namoved 0 nasnap 0
-           nomerged 0 noflag 0 noleft 0)
+           nomerged 0 noflag 0 noleft 0 ndlock 0 nalock 0 nolock 0
+           dimlock nil dimnc nil)
      (repeat (sslength ss)
        (setq e  (ssname ss i)
              i  (1+ i)
@@ -74045,6 +76223,11 @@
           (if (> (nth 5 res) 0)
             (setq anchheld (cons (cons e (nth 5 res))
                                  (vl-remove (assoc e anchheld) anchheld))))
+          ;; ...and so are points a locked layer would not let move:
+          ;; they are still off when Back sends the dimension round again
+          (if (> (nth 6 res) 0)
+            (setq dimlock (cons (cons e (nth 6 res))
+                                (vl-remove (assoc e dimlock) dimlock))))
           (cond
             ((eq (cadr res) 'skip)
              (dchk:set-color e grey)
@@ -74078,7 +76261,8 @@
                                            (vl-remove (assoc e1 carried)
                                                       carried))))
                      (setq dlines (cdr dlines))))
-                 (setq keep (vl-remove e1 keep))
+                 (setq keep  (vl-remove e1 keep)
+                       dimnc (vl-remove (assoc e1 dimnc) dimnc))
                  (dchk:set-color e1 grey)
                  (princ "\n  Stepping back one dimension."))
                (princ "\n  Already at the first dimension."))
@@ -74088,7 +76272,11 @@
                (progn (setq ndok (1+ ndok))
                       (dchk:set-color e grey))
                (progn (setq ndflag (1+ ndflag))
-                      (setq keep (cons e keep))))
+                      (setq keep (cons e keep))
+                      ;; a flag its locked layer would not take: counted
+                      ;; as flagged, never as coloured
+                      (if (not (nth 7 res))
+                        (setq dimnc (cons (cons e 1) dimnc)))))
              (setq sty (dchk:dim-style e))
              ;; moves this dim collected on an earlier pass, before a
              ;; Back sent us round again -- they are real and belong
@@ -74110,6 +76298,8 @@
                                 dlines))))
           (setq n (1+ n)))
         (foreach pair anchheld (setq ndanch (+ ndanch (cdr pair))))
+        (foreach pair dimlock (setq ndlock (+ ndlock (cdr pair))))
+        (setq ndnc (length dimnc))
         (if skiprest
           (setq lines (cons (strcat "Dimensions: " (itoa (- total (length dlines)))
                                     " left UNREVIEWED (skipped by user)")
@@ -74127,11 +76317,15 @@
           (dchk:set-color e (cdr (assoc e saved)))
           (setq res (dchk:review-arc e cands n total))
           (setq nasnap (+ nasnap (cadddr res)))
-          (if (cadr res)
-            (progn (setq naok (1+ naok))
-                   (dchk:set-color e grey))
-            (progn (setq namoved (1+ namoved))
-                   (setq keep (cons e keep))))           ; moved: stays magenta
+          (cond
+            ;; detached, but its layer is locked: not OK and not moved
+            ((> (nth 4 res) 0) (setq nalock (1+ nalock)))
+            ((cadr res)
+             (setq naok (1+ naok))
+             (dchk:set-color e grey))
+            (t
+             (setq namoved (1+ namoved))
+             (setq keep (cons e keep))))                ; moved: stays magenta
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
 
         ;; --- overlapping lines, one pair at a time ------------------
@@ -74151,8 +76345,10 @@
             ((null res)                       ; absorbed by an earlier merge
              (dchk:unstage e1 keep grey)
              (dchk:unstage e2 keep grey))
-            ((eq (caddr res) 'left)
-             (setq noleft (1+ noleft))
+            ((member (caddr res) '(left locked))
+             (if (eq (caddr res) 'left)
+               (setq noleft (1+ noleft))
+               (setq nolock (1+ nolock)))
              (dchk:unstage e1 keep grey)
              (dchk:unstage e2 keep grey)
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
@@ -74208,24 +76404,40 @@
             (cons (strcat "Dimensions checked: " (itoa (length dims))
                           " (correct: " (itoa ndok)
                           ", flagged to fix: " (itoa ndflag)
+                          (if (> ndnc 0)
+                            (strcat " - " (itoa ndnc)
+                                    " NOT coloured, layer locked")
+                            "")
                           ", points adjusted: " (itoa ndmoved)
                           (if (> ndanch 0)
                             (strcat ", held at a shared anchor: " (itoa ndanch))
                             "")
+                          (if (> ndlock 0)
+                            (strcat ", NOT moved (layer locked): " (itoa ndlock))
+                            "")
                           ")")
-                  (> ndflag 0))
+                  (or (> ndflag 0) (> ndlock 0)))
             (cons (strcat "Arcs checked: " (itoa (length arcs))
                           " (OK: " (itoa naok)
                           ", with endpoints moved: " (itoa namoved)
-                          ", endpoints moved in total: " (itoa nasnap) ")")
-                  (> namoved 0))
+                          ", endpoints moved in total: " (itoa nasnap)
+                          (if (> nalock 0)
+                            (strcat ", detached but layer locked: " (itoa nalock))
+                            "")
+                          ")")
+                  (or (> namoved 0) (> nalock 0)))
             (cons (strcat "Overlapping line pairs: " (itoa (length olaps))
                           (if olaps
                             (strcat " (merged: " (itoa nomerged)
                                     ", flagged: " (itoa noflag)
-                                    ", left as drawn: " (itoa noleft) ")")
+                                    ", left as drawn: " (itoa noleft)
+                                    (if (> nolock 0)
+                                      (strcat ", could NOT merge (layer locked): "
+                                              (itoa nolock))
+                                      "")
+                                    ")")
                             " - none found"))
-                  (> noflag 0))))
+                  (or (> noflag 0) (> nolock 0)))))
         (setq txt (strcat "DIMCHECK REPORT - " (cal:datestr)
                           "  [DIMCHECK " *dchk-version* "]"
                           "\\P"
@@ -74263,6 +76475,10 @@
                        (itoa ndok) " correct, "
                        (itoa ndflag) " flagged to fix ("
                        (dchk:color-name (cal:ink *dchk-flag-color* 'flag)) ")"
+                       (if (> ndnc 0)
+                         (strcat " - " (itoa ndnc)
+                                 " of them NOT coloured (layer locked)")
+                         "")
                        (if (> ndmoved 0)
                          (strcat ", " (itoa ndmoved) " point(s) adjusted")
                          "")
@@ -74270,16 +76486,28 @@
                          (strcat ", " (itoa ndanch)
                                  " point(s) held at a shared anchor")
                          "")
+                       (if (> ndlock 0)
+                         (strcat ", " (itoa ndlock)
+                                 " point(s) NOT moved (layer locked)")
+                         "")
                        "\nArcs: " (itoa (length arcs)) " checked, "
                        (itoa namoved) " with endpoint(s) moved ("
                        (itoa nasnap) " endpoint(s), "
                        (dchk:color-name (cal:ink *dchk-arc-color* 'arc)) ")"
+                       (if (> nalock 0)
+                         (strcat ", " (itoa nalock)
+                                 " detached but NOT moved (layer locked)")
+                         "")
                        "\nOverlapping lines: " (itoa (length olaps)) " pair(s) found"
                        (if olaps
                          (strcat ", " (itoa nomerged) " merged, "
                                  (itoa noflag) " flagged ("
                                  (dchk:color-name (cal:ink *dchk-olap-color* 'olap)) "), "
-                                 (itoa noleft) " left as drawn")
+                                 (itoa noleft) " left as drawn"
+                                 (if (> nolock 0)
+                                   (strcat ", " (itoa nolock)
+                                           " could NOT be merged (layer locked)")
+                                   ""))
                          "")
                        "\nReport placed on the right side of the drawing (layer "
                        *dchk-report-layer* ")."
@@ -74291,15 +76519,20 @@
   (if lzd:end (lzd:end "DIMCHECK"))
   (princ))
 
+;; The space the drafter is working in, as group 410 names it: the
+;; layout only on the paper itself.  Inside a layout viewport CTAB
+;; still names the layout while every pick lands in model space.
+(defun dchk:space ()
+  (if (and (= 0 (getvar "TILEMODE")) (= 1 (getvar "CVPORT")))
+    (getvar "CTAB")
+    "Model"))
+
 ;; --- DIMSCAN: the read-only twin -----------------------------------
 ;;  Runs every audit, asks nothing, and changes nothing in the drawing
 ;;  except writing the report. Use it as a quick pre-flight, or when
 ;;  you want the findings without touching a released sheet.
 
-(defun c:DIMSCAN ( / *error* oldecho ss i e et ed sty meas cands dims arcs plns segs
-                     lines olaps pr anchors
-                     nd ndbad na nabad ndanch h m ins txt nlin ref hdr l
-                     minx miny maxx maxy bb p13 p14 near q dq s bad held w)
+(defun c:DIMSCAN ( / *error* oldecho)
   (defun *error* (msg)
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -74307,7 +76540,26 @@
     (if lzd:report (lzd:report "DIMSCAN" *dchk-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "DIMSCAN" *dchk-version*))
+  ;; saved here rather than inside the scan, so this handler holds the
+  ;; drafter's value whatever prompt an Esc lands on
+  (setq oldecho (getvar "CMDECHO"))
+  (dchk:scan)
+  (if lzd:end (lzd:end "DIMSCAN"))
+  (princ))
 
+;; The scan itself, with no *error* of its own.  TUTORIALDIMCHECK runs
+;; it inside its own undo group, and when it called c:DIMSCAN instead,
+;; an Esc at the highlight prompt ran only DIMSCAN's handler: the
+;; tutorial's group stayed open, so the drafter's next U swallowed
+;; their own later work, and CMDECHO stayed 0.  Called bare, the
+;; caller's handler is the one that runs.  Its CMDECHO save is named
+;; scanecho, not oldecho, because the handler that runs is the
+;; CALLER'S and reads oldecho dynamically -- a local of that name in
+;; here would hand it the 0 the tutorial had already set.
+(defun dchk:scan ( / scanecho ss i e et ed sty meas cands dims arcs plns segs
+                     lines olaps pr anchors
+                     nd ndbad na nabad ndanch h m ins txt nlin ref hdr l
+                     minx miny maxx maxy bb p13 p14 near q dq s bad held w)
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
   (if lzd:watch (lzd:watch ss) ss)
@@ -74316,11 +76568,15 @@
       (prompt "\nHighlight the drawing to DIMSCAN (Enter = whole drawing): ")
       (setq ss (ssget))
       (if lzd:watch (lzd:watch ss) ss)))
-  (if (null ss) (setq ss (ssget "_X")))
+  ;; Enter = the whole of the space the drafter is working in.  A bare
+  ;; "_X" took every layout's paper-space ink as well: border lines and
+  ;; sheet dimensions joined the candidates, and a paper-space line
+  ;; crossing a stray model point passed that point as attached.
+  (if (null ss) (setq ss (ssget "_X" (list (cons 410 (dchk:space))))))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
     (t
-     (setq oldecho (getvar "CMDECHO"))
+     (setq scanecho (getvar "CMDECHO"))
      (setvar "CMDECHO" 0)
      (setq i 0 nd 0 ndbad 0 na 0 nabad 0 ndanch 0)
      (repeat (sslength ss)
@@ -74476,7 +76732,7 @@
      (foreach l (reverse lines)
        (setq txt (strcat txt "\\P" (if (dchk:attn-p l) (dchk:red l) (dchk:small l)))))
      (dchk:mtext ins h (* *dchk-report-chars* h) txt *dchk-report-layer*)
-     (setvar "CMDECHO" oldecho)
+     (setvar "CMDECHO" scanecho)
      (princ (strcat "\n--- DIMSCAN complete (read-only) ---"
                     "\nDimensions: " (itoa nd) " scanned, " (itoa ndbad) " with a stray point"
                     (if (> ndanch 0)
@@ -74486,7 +76742,6 @@
                     "\nOverlapping line pairs: " (itoa (length olaps))
                     "\nReport written on layer " *dchk-report-layer*
                     "; nothing else was changed."))))
-  (if lzd:end (lzd:end "DIMSCAN"))
   (princ))
 
 ;; --- TUTORIALDIMCHECK: learn it two ways ---------------------------
@@ -74579,7 +76834,7 @@
   (setvar "OSMODE" old)
   (entlast))
 
-(defun dchk:tut-demo (/ org ox oy made e ss2 i)
+(defun dchk:tut-demo (/ org ox oy made e ss2 i rmark nx)
   (princ "\n\n--- DEMO: a practice drawing with faults planted in it ---")
   (setq org (getpoint "\n  Pick an empty spot for the practice drawing: "))
   (if lzd:ask (lzd:ask "\n  Pick an empty spot for the practice drawing: " org) org)
@@ -74664,18 +76919,32 @@
             (strcat "DIMSCAN will ask you to highlight - window the practice\n"
                     "  drawing (or press Enter for the whole drawing). The report\n"
                     "  lands to the right of whatever you highlight."))
-          (c:DIMSCAN)))
+          ;; the scan's body, not c:DIMSCAN: this tutorial's handler
+          ;; has to stay the innermost one, so an Esc at the highlight
+          ;; still closes the undo group and puts CMDECHO back
+          (setq rmark (entlast))
+          (dchk:scan)))
       (if (cal:ask-yn "\n  Erase the practice drawing now?" "Yes")
         (progn
           (setq i 0)
           (repeat (sslength ss2)
             (if (entget (ssname ss2 i)) (entdel (ssname ss2 i)))
             (setq i (1+ i)))
-          (setq ss2 (ssget "_X" (list (cons 8 *dchk-report-layer*))))
-          (if ss2
+          ;; ...and the report the scan wrote for it, and nothing
+          ;; older: the report layer is where EVERY scan in the drawing
+          ;; writes, and sweeping it whole took the drafter's own
+          ;; reports down with the practice one, under "Practice
+          ;; drawing erased."  What this run added is what follows
+          ;; RMARK, the last entity before the scan
+          (if rmark
             (progn
-              (setq i 0)
-              (repeat (sslength ss2) (entdel (ssname ss2 i)) (setq i (1+ i)))))
+              (setq e (entnext rmark))
+              (while e
+                (setq nx (entnext e))
+                (if (= (strcase (cdr (assoc 8 (entget e))))
+                       (strcase *dchk-report-layer*))
+                  (entdel e))
+                (setq e nx))))
           (princ "\n  Practice drawing erased."))
         (princ "\n  Left in place - one U removes the whole tutorial."))
       (princ))))
@@ -75071,10 +77340,11 @@
 ;;;
 ;;;  BASE POINT
 ;;;  ----------
-;;;  DDFIX scales about the CENTRE of the selection by default, so the feature
-;;;  stays put and only changes size. If a feature shares an edge with the pool
-;;;  (e.g. a spillover spa), pick that shared corner as the base point instead
-;;;  so the shared edge does not move.
+;;;  DDFIX always scales about the CENTRE of the selection, so the feature
+;;;  stays put and only changes size; it does not ask for a base point. A
+;;;  feature that shares an edge with the pool (e.g. a spillover spa) moves
+;;;  that edge too. For one of those, U the DDFIX and run SCALE yourself about
+;;;  the shared corner, by the factor DDFIX printed ("Applied scale ...").
 ;;;
 ;;;  COMMANDS
 ;;;  --------
@@ -75104,7 +77374,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *dronedistortion-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *dronedistortion-version* "v1.4")   ; announced on load; release_lisp.py
                                              ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -75139,6 +77409,41 @@
     (setq i (1+ i)))
   (if lomin
     (mapcar '(lambda (a b) (/ (+ a b) 2.0)) lomin himax)))
+
+;; -- the locked layers anything in a selection sits on --------------------------
+;; SCALE passes over whatever is on a locked layer and still succeeds, so a
+;; feature picked together with a label on a locked layer came out half
+;; corrected under "Applied scale ..." -- and the centre it was scaled about
+;; was taken from the whole pick, the object that stayed put included, so
+;; what did move landed in the wrong place too.  Each layer looked up once.
+(defun dd-locked-layers (ss / i lay seen out tb)
+  (setq i 0)
+  (while (< i (sslength ss))
+    (setq lay (cdr (assoc 8 (entget (ssname ss i)))))
+    (if (and lay (not (member (strcase lay) seen)))
+      (progn
+        (setq seen (cons (strcase lay) seen))
+        (if (and (setq tb (tblsearch "LAYER" lay))
+                 (= 4 (logand 4 (cdr (assoc 70 tb)))))
+          (setq out (cons lay out)))))
+    (setq i (1+ i)))
+  (reverse out))
+
+;; T, having said so, when the pick holds anything on a locked layer: the
+;; pick has to change before any height is asked for.
+(defun dd-locked-say (ss / lays txt l)
+  (if (setq lays (dd-locked-layers ss))
+    (progn
+      (setq txt (car lays))
+      (foreach l (cdr lays) (setq txt (strcat txt ", " l)))
+      (princ (strcat "\nLocked layer" (if (cdr lays) "s " " ") txt
+                     " - SCALE would leave what is on "
+                     (if (cdr lays) "them" "it")
+                     " behind and move the rest about the wrong centre."
+                     "\nSelect without "
+                     (if (cdr lays) "them" "it")
+                     ", or Enter, unlock, and run DDFIX again."))
+      T)))
 
 ;; -- parse one numeric piece into a number of inches; nil if not numeric -------
 ;; "6"   "6.5"   "6-1/2"   "1/2"  ->  number
@@ -75205,7 +77510,8 @@
   ;; re-opens an interactive pick.
   (setq ss (ssget "_I"))
   (if lzd:watch (lzd:watch ss) ss)
-  (setq stage (if ss 2 1) done nil)
+  ;; a pickfirst set with a locked member goes back to the pick
+  (setq stage (if (and ss (not (dd-locked-say ss))) 2 1) done nil)
   (while (not done)
     (cond
 
@@ -75214,9 +77520,10 @@
        (princ "\nSelect the spa / obstacle to correct (one or more objects), then Enter.")
        (setq ss (ssget))
        (if lzd:watch (lzd:watch ss) ss)
-       (if (null ss)
-         (progn (princ "\nNothing selected.") (setq done T))
-         (setq stage 2)))
+       (cond
+         ((null ss) (princ "\nNothing selected.") (setq done T))
+         ((dd-locked-say ss))                ; stays at the pick
+         (t (setq stage 2))))
 
       ;; 2) drone height above the deck - remembered; Enter keeps last value
       ((= stage 2)
@@ -75271,7 +77578,11 @@
                                (rtos (* 100.0 (- appf 1.0)) 2 2) "% too BIG."))
                 (princ (strcat "\nSunken feature: it was traced ~"
                                (rtos (* 100.0 (- 1.0 appf)) 2 2) "% too SMALL."))))
-            (princ "\nSCALE did not run - are the objects on a locked layer?"))))
+            ;; not the locked-layer guess this used to make: the pick
+            ;; has been refused at stage 1 for that already, so naming
+            ;; it here sent the drafter after the one cause it is not
+            (princ (strcat "\nSCALE did not run - nothing was scaled."
+                           "  Check the selection and its layers.")))))
        (setq done T))))
   (setvar "CMDECHO" cmd)
   (if lzd:end (lzd:end "DDFIX"))
@@ -77149,7 +79460,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v3.5")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.6")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -80767,8 +83078,8 @@
   en)
 
 ;; Erase only FITABHD's own objects on a layer.  Returns how many went.
-(defun fit:purge-mine (name / ss i n en)
-  (setq n 0)
+(defun fit:purge-mine (name / ss i n en mine stuck ed flags)
+  (setq n 0 stuck 0 mine nil)
   (if (tblsearch "LAYER" name)
     (progn
       (setq ss (ssget "_X" (list (cons 8 name))))
@@ -80778,8 +83089,27 @@
           (repeat (sslength ss)
             (setq en (ssname ss i))
             (if (assoc -3 (entget en '("FITABHD")))
-              (progn (entdel en) (setq n (1+ n))))
-            (setq i (1+ i)))))))
+              (setq mine (cons en mine)))
+            (setq i (1+ i)))))
+      ;; entdel answers nil on a locked layer and erases nothing, and
+      ;; this layer can be the drafter's own, locked on purpose.  So the
+      ;; lock is lifted for the erase and put back after it, and only an
+      ;; erase that took is counted: counting the attempts said
+      ;; "cleared" over markers still on screen, and the next run wrote
+      ;; its own markers over them
+      (if mine
+        (progn
+          (setq ed    (entget (tblobjname "LAYER" name))
+                flags (cond ((cdr (assoc 70 ed))) (0)))
+          (if (= 4 (logand 4 flags))
+            (entmod (subst (cons 70 (- flags 4)) (assoc 70 ed) ed)))
+          (foreach en mine
+            (if (entdel en) (setq n (1+ n)) (setq stuck (1+ stuck))))
+          (if (= 4 (logand 4 flags)) (entmod ed))
+          (if (> stuck 0)
+            (princ (strcat "\nFITABHD: " (itoa stuck)
+                           " of its own object(s) on layer " name
+                           " could not be erased - NOT removed.")))))))
   n)
 
 ;; verts: list of (pt bulge) in order, closed.  COL is an AutoCAD
@@ -80883,6 +83213,19 @@
       (setq nm (cdr p))))
   (if nm nm "?"))
 
+;; Where a survey point sits, in the world's numbers.  A block's
+;; insertion point is kept in its own plane, so an ab_pt inserted
+;; from below, (0 0 -1), read raw lands mirrored through the Y axis -
+;; off the outline it was shot on, with nothing said.  A POINT's 10
+;; is in world numbers already and is left alone, as is anything
+;; flat.
+(defun fit:ins-w (ed / nz)
+  (setq nz (cdr (assoc 210 ed)))
+  (if (and nz (/= (cdr (assoc 0 ed)) "POINT")
+           (not (equal nz '(0.0 0.0 1.0) 1.0e-10)))
+    (trans (cdr (assoc 10 ed)) (cdr (assoc -1 ed)) 0)
+    (cdr (assoc 10 ed))))
+
 ;; Sort the selection into survey points; anything else is counted and
 ;; ignored - the TYPE is the guide here, not drawn geometry.
 (defun fit:gather (ss / i en ed lay typ nskip)
@@ -80896,13 +83239,12 @@
     (cond
       ((and (= typ "INSERT")
             (= (strcase (cdr (assoc 2 ed))) (strcase fit:*point-block*)))
-       (fit:add-point (cal:2d (cdr (assoc 10 ed)))
+       (fit:add-point (cal:2d (fit:ins-w ed))
                       (cal:block-number en fit:*pt-tag*)))
       ((and (= lay (strcase fit:*point-layer*)) (= typ "POINT"))
        (fit:add-point (cal:2d (cdr (assoc 10 ed))) nil))
       ((and (= typ "INSERT") (= lay (strcase fit:*point-layer*)))
-       (fit:add-point (cal:2d (cdr (assoc 10 ed))
-                      )
+       (fit:add-point (cal:2d (fit:ins-w ed))
                       (cal:block-number en fit:*pt-tag*)))
       (T (setq nskip (1+ nskip)))))
   (if (> nskip 0)
@@ -81436,10 +83778,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -81481,6 +83827,14 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The ruler standing beside one of those prompts -- RUN STATE, not a
@@ -81496,12 +83850,25 @@
 ;; The scratch layer the rows are drawn on, made if it is missing.  A
 ;; layer of its own is what lets a drafter turn the ruler off without
 ;; turning anything of the fit off with it.
-(defun fit:rulerlayer ()
+;; LOCKED is not left alone: entmake draws onto a locked layer but
+;; entdel refuses there, so every ruler drawn stayed in the drawing
+;; for good and each redraw added another copy -- and LAYISO's
+;; lock-and-fade locks this layer with everything else.  It is
+;; calofin scratch, so it is unlocked, said once, and left unlocked.
+(defun fit:rulerlayer ( / ed fl)
   (if (not (tblsearch "LAYER" fit:*ruler-layer*))
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 fit:*ruler-layer*) '(70 . 0) '(62 . 7)
-                   (cons 6 "CONTINUOUS"))))
+                   (cons 6 "CONTINUOUS")))
+    (progn
+      (setq ed (entget (tblobjname "LAYER" fit:*ruler-layer*))
+            fl (cdr (assoc 70 ed)))
+      (if (and fl (= 4 (logand 4 fl))
+               (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed)))
+        (princ (strcat "\nFITABHD: layer " fit:*ruler-layer*
+                       " was locked - unlocked so the ruler can be"
+                       " taken down again.")))))
   fit:*ruler-layer*)
 
 ;; Take the ruler down -- the one call *error* and the clean exit both
@@ -81703,7 +84070,7 @@
 ;; then draws the whole bottom square to the leg's own frame.
 (defun fit:bottom (res / legs pick leg best bd lg d step go db sb so bo
                         v w lay pts lines ln p1w p2w h1 h2 w1 w2 mid
-                        redo out)
+                        redo out wpk)
   (setq legs (fit:legs res) redo T out nil)
   (while redo
    (setq redo nil)
@@ -81721,9 +84088,14 @@
      (princ "\nFITABHD: no deep end picked - no bottom drawn."))
     (T
      (progn
-      (setq best nil bd nil)
+      ;; the click is in the current UCS and the legs are world numbers
+      ;; off the survey, so it is taken to world first - under a moved
+      ;; UCS the raw numbers sat nearer the OTHER end, and the whole
+      ;; bottom went in back to front under a "hopper drawn" line
+      (setq best nil bd nil
+            wpk  (cal:2d (trans pick 1 0)))
       (foreach lg legs
-        (setq d (cal:dist (cal:2d pick) (car lg)))
+        (setq d (cal:dist wpk (car lg)))
         (if (or (null bd) (< d bd)) (setq best lg bd d)))
       (setq leg best
             w   (- (nth 4 leg) (nth 3 leg))
@@ -82393,7 +84765,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v2.5")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v2.6")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -82672,6 +85044,46 @@
 ;; ---- entity -> segment extraction ----------------------------------
 ;; A segment is (startPt endPt bulge), 2D points.
 
+;; ---- the entity's own plane ----------------------------------------
+;; An ARC, CIRCLE or polyline keeps its numbers in its OWN plane -- the
+;; OCS its 210 names -- not the world's.  Flat work carries no 210, or
+;; (0 0 1), and passes through untouched.  One on the underside of the
+;; plane, (0 0 -1), is what exploding a mirrored block or some survey
+;; exporters leave: every X is the other way round, so read raw the
+;; outline lands mirrored through the Y axis, and the "not drawn in the
+;; world plane" warning never fires because the plane IS the world's.
+;; So the plane is read once per entity (nil when flat), each end is
+;; taken to world through it, and each bulge turns the other way when
+;; the plane is seen from below.  A genuinely tilted plane is still only
+;; flattened here -- that one is warned about where it is read.
+(defun lh:ocs-n (ed / nz)
+  (setq nz (cdr (assoc 210 ed)))
+  (if (and nz (not (equal nz '(0.0 0.0 1.0) 1.0e-10))) nz))
+
+;; SEGS as read in EN's plane NZ at elevation Z, taken to the world's.
+(defun lh:segs-w (segs en nz z)
+  (if nz
+    (mapcar '(lambda (s)
+               (list (cal:2d (trans (list (car (car s)) (cadr (car s)) z)
+                                   en 0))
+                     (cal:2d (trans (list (car (cadr s)) (cadr (cadr s)) z)
+                                   en 0))
+                     (if (< (caddr nz) 0.0) (- (caddr s)) (caddr s))))
+            segs)
+    segs))
+
+;; Where a survey point sits, in the world's numbers.  A block's (or a
+;; TEXT's) insertion point is kept in its own plane just as an ARC's
+;; centre is, so an ab_pt inserted from below, (0 0 -1), read raw lands
+;; mirrored through the Y axis - off the outline it was shot on, with
+;; nothing said - and its Z, which LHD takes as the laser elevation,
+;; comes back with its sign flipped.  A POINT's 10 is in world numbers
+;; already and is left alone, as is anything flat.
+(defun lh:ins-w (ed)
+  (if (and (/= (cdr (assoc 0 ed)) "POINT") (lh:ocs-n ed))
+    (trans (cdr (assoc 10 ed)) (cdr (assoc -1 ed)) 0)
+    (cdr (assoc 10 ed))))
+
 (defun lh:lw-segs (ed / pts bls item segs n closed)
   (setq pts nil bls nil)
   (foreach item ed
@@ -82692,16 +85104,25 @@
                (< (cal:dist (last pts) (car pts)) *LH-CHAIN-FUZZ*)))
     (if (>= (cal:dist (last pts) (car pts)) *LH-CHAIN-FUZZ*)
       (setq segs (cons (list (last pts) (car pts) (last bls)) segs))))
-  (reverse segs))
+  (lh:segs-w (reverse segs) (cdr (assoc -1 ed)) (lh:ocs-n ed)
+             (cond ((cdr (assoc 38 ed))) (0.0))))
 
-(defun lh:pl-segs (en / ed sub pts bls segs n closed)
+(defun lh:pl-segs (en / ed sub pts bls segs n closed nz z)
   ;; heavy (old-style) 2D POLYLINE: walk its VERTEX sub-entities
   (setq ed (entget en)
         closed (= 1 (logand 1 (cdr (assoc 70 ed))))
+        ;; a 3D polyline or mesh (bits 8, 16) keeps world numbers
+        nz     (if (= 0 (logand 24 (cdr (assoc 70 ed)))) (lh:ocs-n ed))
+        z      (cond ((caddr (cdr (assoc 10 ed)))) (0.0))
         pts nil bls nil
         sub (entnext en))
   (while (and sub (= "VERTEX" (cdr (assoc 0 (setq ed (entget sub))))))
-    (if (= 0 (logand 17 (cond ((cdr (assoc 70 ed))) (0))))
+    ;; skip the spline FRAME points (flag 16) only: they are the
+    ;; control net, off the curve.  A curve-fit extra vertex (flag 1)
+    ;; is ON the curve -- PEDIT Fit joins an arc pair there -- and
+    ;; dropping it while keeping its neighbours' bulges read arcs that
+    ;; do not follow the outline
+    (if (= 0 (logand 16 (cond ((cdr (assoc 70 ed))) (0))))
       (setq pts (cons (cal:2d (cdr (assoc 10 ed))) pts)
             bls (cons (cond ((cdr (assoc 42 ed))) (0.0)) bls)))
     (setq sub (entnext sub)))
@@ -82711,11 +85132,13 @@
           n    (1+ n)))
   (if (and closed (> (length pts) 2))
     (setq segs (cons (list (last pts) (car pts) (last bls)) segs)))
-  (reverse segs))
+  (lh:segs-w (reverse segs) en nz z))
 
-(defun lh:ent-segs (en / ed typ c r a1 a2 delta)
+(defun lh:ent-segs (en / ed typ c r a1 a2 delta nz z)
   (setq ed  (entget en)
-        typ (cdr (assoc 0 ed)))
+        typ (cdr (assoc 0 ed))
+        nz  (lh:ocs-n ed)
+        z   (cond ((caddr (cdr (assoc 10 ed)))) (0.0)))
   (cond
     ((= typ "LINE")
      (list (list (cal:2d (cdr (assoc 10 ed)))
@@ -82729,15 +85152,19 @@
            delta (cal:angnorm (- a2 a1)))
      (if (< delta 1.0e-10) (setq delta (* 2.0 pi)))
      ;; a full-circle arc cannot be one bulged segment: two semis
-     (if (> delta (- (* 2.0 pi) 1.0e-9))
-       (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
-             (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
-       (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0))))))
+     (lh:segs-w
+       (if (> delta (- (* 2.0 pi) 1.0e-9))
+         (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
+               (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
+         (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0)))))
+       en nz z))
     ((= typ "CIRCLE")
      (setq c (cal:2d (cdr (assoc 10 ed)))
            r (cdr (assoc 40 ed)))
-     (list (list (polar c 0.0 r) (polar c pi r) 1.0)
-           (list (polar c pi r) (polar c 0.0 r) 1.0)))
+     (lh:segs-w
+       (list (list (polar c 0.0 r) (polar c pi r) 1.0)
+             (list (polar c pi r) (polar c 0.0 r) 1.0))
+       en nz z))
     ((= typ "LWPOLYLINE") (lh:lw-segs ed))
     ((= typ "POLYLINE") (lh:pl-segs en))
     (T nil)))
@@ -83104,7 +85531,7 @@
                       (strcase *LH-POINT-LAYER*)))
              (progn
                (setq nm (cal:block-number en *LH-PT-TAG*))
-               (setq out (cons (list (cal:2d (cdr (assoc 10 ed)))
+               (setq out (cons (list (cal:2d (lh:ins-w ed))
                                      (if (and nm (/= nm "")) nm "?"))
                                out)))))
           ((= typ "POINT")
@@ -84015,8 +86442,8 @@
   en)
 
 ;; Erase only LHD's own objects on a layer.  Returns how many went.
-(defun lh:purge-mine (name / ss i n en)
-  (setq n 0)
+(defun lh:purge-mine (name / ss i n en mine stuck ed flags)
+  (setq n 0 stuck 0 mine nil)
   (if (tblsearch "LAYER" name)
     (progn
       (setq ss (ssget "_X" (list (cons 8 name))))
@@ -84026,8 +86453,27 @@
           (repeat (sslength ss)
             (setq en (ssname ss i))
             (if (assoc -3 (entget en '("LHD")))
-              (progn (entdel en) (setq n (1+ n))))
-            (setq i (1+ i)))))))
+              (setq mine (cons en mine)))
+            (setq i (1+ i)))))
+      ;; entdel answers nil on a locked layer and erases nothing, and
+      ;; this layer can be the drafter's own, locked on purpose.  So the
+      ;; lock is lifted for the erase and put back after it, and only an
+      ;; erase that took is counted: counting the attempts said
+      ;; "cleared" over markers still on screen, and the next run wrote
+      ;; its own markers over them
+      (if mine
+        (progn
+          (setq ed    (entget (tblobjname "LAYER" name))
+                flags (cond ((cdr (assoc 70 ed))) (0)))
+          (if (= 4 (logand 4 flags))
+            (entmod (subst (cons 70 (- flags 4)) (assoc 70 ed) ed)))
+          (foreach en mine
+            (if (entdel en) (setq n (1+ n)) (setq stuck (1+ stuck))))
+          (if (= 4 (logand 4 flags)) (entmod ed))
+          (if (> stuck 0)
+            (princ (strcat "\nLHD: " (itoa stuck)
+                           " of its own object(s) on layer " name
+                           " could not be erased - NOT removed.")))))))
   n)
 
 ;; Make sure the DASHED linetype exists (pure entmake).
@@ -84427,9 +86873,22 @@
       (if lzd:ask (lzd:ask "\n  Keep which fit - click one, or [1/2/3/All/None/Redo] <2>: " pick) pick)
       (if (null pick)
         (progn
-          (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
-          (if lzd:ask (lzd:ask "\n  Pick the outline to keep (or Enter for 2): " sel) sel)
-          (if lzd:watch (lzd:watch sel) sel)
+          ;; entsel answers nil for Enter AND for a click that landed
+          ;; between the thin preview lines; ERRNO 7 tells them apart.
+          ;; Without asking again, a near-miss quietly kept the default
+          ;; and erased the fit they reached for.  ERRNO is sticky, so
+          ;; it is cleared before each pick it is read after
+          (setq sel 'RETRY)
+          (while (eq sel 'RETRY)
+            (vl-catch-all-apply 'setvar (list "ERRNO" 0))
+            (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
+            (if lzd:ask (lzd:ask "\n  Pick the outline to keep (or Enter for 2): " sel) sel)
+            (if lzd:watch (lzd:watch sel) sel)
+            (if (and (null sel) (= 7 (getvar "ERRNO")))
+              (progn
+                (princ (strcat "\n  (nothing there - click one of the"
+                               " outlines, or press Enter for 2)"))
+                (setq sel 'RETRY))))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -84653,7 +87112,9 @@
            (if (lh:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
-               (setq wp1 (cal:2d wp1) best nil bd nil)
+               ;; a UCS click against walls held in world numbers:
+               ;; untranslated, a moved UCS removed some other wall
+               (setq wp1 (cal:2d (trans wp1 1 0)) best nil bd nil)
                (foreach w lh-walls
                  (setq d (lh:seg-dist wp1 (list (car w) (cadr w) 0.0)))
                  (if (or (null bd) (< d bd)) (setq best w bd d)))
@@ -84770,7 +87231,7 @@
 ;; ---- the command -----------------------------------------------------
 (defun c:LHD ( / tol ans go wp1 wp2 rawwalls rawcnrs rawholds w w1 w2
                    step rstep mk decls reselect cands cand c c1 c2
-                   ss i en ed lay typ ext nunsup nocs closed
+                   ss i en ed lay typ ext ip nunsup nocs closed
                    segs pts dpts allow tour ok stale npt chn sketch
                    texts tx q v zs elev e1 e2
                    again omits pts2 ent ring lh-omitted
@@ -85015,15 +87476,19 @@
                 ext (cdr (assoc 210 ed))
                 i   (1+ i))
           ;; geometry drawn in a tilted UCS reads back in its own plane,
-          ;; so a flat 2D fit of it would be wrong - count and warn
+          ;; so a flat 2D fit of it would be wrong - count and warn.  The
+          ;; plane seen from below, (0 0 -1), is no tilt: the sketch's
+          ;; ends (lh:ent-segs) and a point block's or a label's insertion
+          ;; (lh:ins-w) are all taken to world, so it is neither warned
+          ;; about nor mirrored - and a block's Z, its laser elevation,
+          ;; keeps its sign
           (if (and ext (< (abs (caddr ext)) 0.999)) (setq nocs (1+ nocs)))
           (cond
             ;; the survey point block is ALWAYS a point, on any layer
             ((and (= typ "INSERT")
                   (= (strcase (cdr (assoc 2 ed))) (strcase *LH-POINT-BLOCK*)))
-             (lh:add-point (cal:2d (cdr (assoc 10 ed)))
-                           (cal:block-number en *LH-PT-TAG*)
-                           (caddr (cdr (assoc 10 ed)))))
+             (setq ip (lh:ins-w ed))
+             (lh:add-point (cal:2d ip) (cal:block-number en *LH-PT-TAG*) (caddr ip)))
             ;; a plain POINT counts on ANY layer - laser exports land
             ;; wherever the converter put them; its Z is its elevation
             ((= typ "POINT")
@@ -85036,7 +87501,7 @@
              (setq v (cond ((distof (cdr (assoc 1 ed)) 2))
                            ((distof (cdr (assoc 1 ed)) 4))))
              (if v
-               (setq texts (cons (cons v (cal:2d (cdr (assoc 10 ed))))
+               (setq texts (cons (cons v (cal:2d (lh:ins-w ed)))
                                  texts))))
             ;; curve types we cannot read, on the sketch layer: count
             ;; them so the user gets told what to do
@@ -85054,9 +87519,8 @@
              (setq segs (append segs (lh:ent-segs en))))
             ;; any other block dropped on the POINTS layer -> a point
             ((and (= typ "INSERT") (= lay (strcase *LH-POINT-LAYER*)))
-             (lh:add-point (cal:2d (cdr (assoc 10 ed)))
-                           (cal:block-number en *LH-PT-TAG*)
-                           (caddr (cdr (assoc 10 ed)))))))
+             (setq ip (lh:ins-w ed))
+             (lh:add-point (cal:2d ip) (cal:block-number en *LH-PT-TAG*) (caddr ip)))))
         (if (> nunsup 0)
           (princ (strcat "\nLHD: warning - " (itoa nunsup)
                          " SPLINE/ELLIPSE object(s) on layer "
@@ -85506,6 +87970,12 @@
   (setq *lin:log* (reverse out))
 )
 
+;; T when a typed string means "go back a step" - getstring prompts
+;; cannot take initget keywords, so Back is typed like a note.
+(defun lin:back-word (s)
+  (member (strcase s) lin:*back-words*)
+)
+
 ;; Section header - printed to the command line and added to the report.
 (defun lin:head (title)
   (princ (strcat "\n\n" lin:*head-echo-in* title lin:*head-echo-out*))
@@ -85523,7 +87993,7 @@
                                  ", or type a note): ")))
   (if lzd:ask (lzd:ask (getvar "LASTPROMPT") val) val)
   (cond
-    ((and back (cal:back-word-p val)) 'LIN-BACK)
+    ((and back (lin:back-word val)) 'LIN-BACK)
     ((= val "") (lin:log (strcat lin:*tick* item)) val)
     (T (lin:log (strcat lin:*tick* item lin:*note-sep* val)) val)
   )
@@ -85568,7 +88038,7 @@
                                  (if back ", B = back" "") "): ")))
   (if lzd:ask (lzd:ask (getvar "LASTPROMPT") val) val)
   (cond
-    ((and back (cal:back-word-p val)) 'LIN-BACK)
+    ((and back (lin:back-word val)) 'LIN-BACK)
     ((or (= val "") (= (strcase val) "NA") (= (strcase val) "N/A"))
      (lin:log (strcat "    " label ": NA (not provided)")) val)
     (T (lin:log (strcat "    " label ": " val)) val)
@@ -85813,7 +88283,7 @@
                                      ", B = back, blank to finish): ")))
     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") entry) entry)
     (cond
-      ((cal:back-word-p entry)
+      ((lin:back-word entry)
        (if (> n 0)
          (progn
            (setq n (1- n))
@@ -86150,7 +88620,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.22")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.23")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -86567,12 +89037,15 @@
 ;; --- small helpers -------------------------------------------------
 
 (defun lfc:set-color (ent color / ed old)
+  ;; T when the colour went in.  entmod answers nil on a LOCKED layer
+  ;; and changes nothing, so a caller that goes on to say "flagged
+  ;; (red)" has to ask first, or the report claims a mark nobody sees
   (setq ed  (entget ent)
         old (assoc 62 ed))
-  (entmod (if old
-            (subst (cons 62 color) old ed)
-            (append ed (list (cons 62 color)))))
-  (entupd ent))
+  (if (entmod (if old
+                (subst (cons 62 color) old ed)
+                (append ed (list (cons 62 color)))))
+    (progn (entupd ent) T)))
 
 (defun lfc:make-xline (p1 p2 / len)
   ;; infinite construction line through p1-p2 on the check layer,
@@ -86775,6 +89248,58 @@
                    (list (max (car hi) (caadr bb)) (max (cadr hi) (cadadr bb)))
                    (list (caadr bb) (cadadr bb)))))))
   (if (and lo hi) (list lo hi)))
+
+;; The border when the highlight held none.  Every entity on the
+;; border layer in the space the drafter is working in, grouped into
+;; separate frames -- boxes that touch are one frame, so four lines
+;; meeting at their corners still measure as one -- and the frame that
+;; holds, or else sits nearest, the centre of the checked drawing is
+;; the one measured.  The union of every sheet's border in a drawing
+;; with two sheets is a box no sheet has, and it was reported
+;; STRETCHED out of proportion over two correct borders.  Returns
+;; (box . number-of-frames), nil when there is no border at all.
+(defun lfc:border-fallback (minx miny maxx maxy / ss i bb boxes merged grown
+                                                  rest m again cx cy best
+                                                  bestd d dx dy)
+  (setq ss    (ssget "_X" (list (cons 8 *lfc-border-layer*)
+                                (cons 410 (lfc:space))))
+        i     0
+        boxes nil)
+  (if ss
+    (repeat (sslength ss)
+      (if (setq bb (cal:bbox-ent (ssname ss i)))
+        (setq boxes (cons (list (list (caar bb) (cadar bb))
+                                (list (caadr bb) (cadadr bb)))
+                          boxes)))
+      (setq i (1+ i))))
+  ;; merge until a whole pass joins nothing: a box grown by one merge
+  ;; can reach one it did not touch before
+  (setq again T)
+  (while again
+    (setq again nil merged nil)
+    (foreach bb boxes
+      (setq grown bb rest nil)
+      (foreach m merged
+        (if (lfc:boxes-touch grown m *lfc-same-pt*)
+          (setq grown (list (list (min (caar grown) (caar m))
+                                  (min (cadar grown) (cadar m)))
+                            (list (max (caadr grown) (caadr m))
+                                  (max (cadadr grown) (cadadr m))))
+                again T)
+          (setq rest (cons m rest))))
+      (setq merged (cons grown rest)))
+    (setq boxes merged))
+  (if minx
+    (setq cx (* 0.5 (+ minx maxx))
+          cy (* 0.5 (+ miny maxy))))
+  (foreach bb boxes
+    ;; distance from the centre to the box, 0 when it is inside
+    (setq dx (if cx (max (- (caar bb) cx) 0.0 (- cx (caadr bb))) 0.0)
+          dy (if cy (max (- (cadar bb) cy) 0.0 (- cy (cadadr bb))) 0.0)
+          d  (sqrt (+ (* dx dx) (* dy dy))))
+    (if (or (null bestd) (< d bestd))
+      (setq best bb bestd d)))
+  (if best (cons best (length boxes))))
 
 (defun lfc:border-verdict (bb / bw bh sw sh sc)
   ;; measure the border against the nominal sheet. Returns the report
@@ -87134,7 +89659,10 @@
 
 (defun lfc:rebuild-arc (ent which fixed mid target / c r a1 a2 am tmp ed pair)
   ;; re-fit the arc through its fixed end, its old midpoint and the
-  ;; target point; returns T on success
+  ;; target point; returns T on success, nil when no arc fits (the
+  ;; points are collinear), and 'refused when one fits but the write
+  ;; is turned down -- a LOCKED layer, which is no reason to tell the
+  ;; drafter their arc was "collinear" and then call it attached
   (if (and (> (distance target fixed) *lfc-same-pt*)
            (setq c (cal:circumcenter fixed mid target)))
     (progn
@@ -87152,7 +89680,8 @@
       (foreach pair (list (cons 10 c) (cons 40 r) (cons 50 a1) (cons 51 a2))
         (setq ed (subst pair (assoc (car pair) ed) ed)))
       (if (entmod ed)
-        (progn (entupd ent) T)))))
+        (progn (entupd ent) T)
+        'refused))))
 
 (defun lfc:move-arc-end (ent which target / mid other)
   ;; re-fit the arc so the chosen endpoint lands on target (WCS)
@@ -87192,13 +89721,19 @@
               (cal:axis-pt a1 u (max lena s2)))))))
 
 (defun lfc:merge-lines (la lb info / ed)
-  ;; stretch la's LINE over the union of both, delete lb's LINE
+  ;; stretch la's LINE over the union of both, delete lb's LINE; T when
+  ;; that happened.  lb goes only once la has really been stretched: a
+  ;; LOCKED layer refuses the entmod, and erasing lb then would lose
+  ;; the length it carried -- and "merged" would be reported over two
+  ;; lines still standing
   (setq ed (entget (lfc:seg-ent la))
         ed (subst (cons 10 (nth 3 info)) (assoc 10 ed) ed)
         ed (subst (cons 11 (nth 4 info)) (assoc 11 ed) ed))
-  (entmod ed)
-  (entupd (lfc:seg-ent la))
-  (entdel (lfc:seg-ent lb)))
+  (if (entmod ed)
+    (progn
+      (entupd (lfc:seg-ent la))
+      (entdel (lfc:seg-ent lb))
+      T)))
 
 (defun lfc:whole-line-p (s / ed)
   ;; T when the segment IS its owner entity - only whole LINEs can be
@@ -87716,12 +90251,17 @@
     (setq s (substr s 1 (1- n))))
   s)
 
-(defun lfc:wipe-attribs (ent tags words / e ed val new n out)
+(defun lfc:wipe-attribs (ent tags words / e ed val new n out refused)
   ;; take the bad words out of the listed attribute values.  Only the
   ;; bad phrase goes: a label, a real pattern name, anything else the
-  ;; field said is still there afterwards.  Returns
-  ;; ((tag . what-it-reads-now) ...) for every field touched.
-  (setq n 0 out nil)
+  ;; field said is still there afterwards.  Returns (DONE REFUSED):
+  ;; DONE is ((tag . what-it-reads-now) ...) for every field wiped,
+  ;; REFUSED the tags whose write was turned down.  entmod answers nil
+  ;; on a LOCKED layer and changes nothing -- and an ATTRIB's layer is
+  ;; never in the selection, so the unlock offer never names it.
+  ;; Counting those as wiped put "WIPED" in the report over a sheet
+  ;; that still read "Not Supplied".
+  (setq n 0 out nil refused nil)
   (if (= 1 (cdr (assoc 66 (entget ent))))
     (progn
       (setq e (entnext ent))
@@ -87730,15 +90270,18 @@
           (progn
             (setq val (cdr (assoc 1 ed))
                   new (lfc:strip-badwords val words))
-            (if (/= new val)
-              (progn
-                (entmod (subst (cons 1 new) (assoc 1 ed) ed))
-                (entupd e)
-                (setq n (1+ n))))
-            (setq out (cons (cons (cdr (assoc 2 ed)) new) out))))
+            (cond
+              ((= new val)
+               (setq out (cons (cons (cdr (assoc 2 ed)) new) out)))
+              ((entmod (subst (cons 1 new) (assoc 1 ed) ed))
+               (entupd e)
+               (setq n   (1+ n)
+                     out (cons (cons (cdr (assoc 2 ed)) new) out)))
+              (t
+               (setq refused (cons (cdr (assoc 2 ed)) refused))))))
         (setq e (entnext e)))))
   (if (> n 0) (entupd ent))
-  (reverse out))
+  (list (reverse out) (reverse refused)))
 
 (defun lfc:ins-attrib-deep (ent tag / val s)
   ;; the tag's value on the INSERT, or on a block nested inside it
@@ -88269,7 +90812,9 @@
   ;; line.
   ;; Returns (original final how) when the point was looked at, where
   ;; how is 'auto / 'user / 'kept / 'anchor; nil when the point was
-  ;; already fine.
+  ;; already fine.  how is 'locked when the point is off its object but
+  ;; the dimension's layer refused the write: nothing can be moved, so
+  ;; nothing is asked, and a fourth element says how far off it is.
   (setq ed (entget ent)
         pt (cdr (assoc gcode ed)))
   (if pt
@@ -88296,11 +90841,22 @@
             (setq sugg anch  dsug danch  what "the shared anchor point"))
            (near
             (setq sugg (cadr near)  dsug dnear  what "the nearest object")))
-         (if (and sugg (> dsug *lfc-tol*))
-           (progn
-             ;; show the suggestion in place, but keep the original spot
-             ;; marked so both are on screen while the question is asked
-             (entmod (subst (cons gcode sugg) (assoc gcode ed) ed))
+         (cond
+           ((not (and sugg (> dsug *lfc-tol*))) nil)
+           ;; show the suggestion in place, but keep the original spot
+           ;; marked so both are on screen while the question is asked.
+           ;; A LOCKED layer refuses that write, and then every answer
+           ;; to Move/Keep/Pick would be a claim about a point that
+           ;; never moved -- the report used to say "moved onto the
+           ;; nearest object" over a dimension still off by the same
+           ;; amount.  Say what is wrong and leave it.
+           ((not (entmod (subst (cons gcode sugg) (assoc gcode ed) ed)))
+            (princ (strcat "\n  " label " is NOT ATTACHED - " what " is "
+                           (lfc:dist dsug) " away, but the dimension's"
+                           " layer is locked: NOT moved."))
+            (list pt pt 'locked
+                  (strcat label " off by " (lfc:dist dsug))))
+           (t
              (entupd ent)
              (princ (strcat "\n  " label " is not on any object - " what
                             " is " (lfc:dist dsug) " away."))
@@ -88332,10 +90888,12 @@
 
 (defun lfc:review-dim (ent cands anchors num total / ed dtype h sty p13 p14
                                               r1 r2 looked moved kept held
-                                              ok note meas assocnote fcol)
+                                              lockd ok note meas assocnote fcol
+                                              painted)
   ;; interactive review of one dimension.
   ;; Returns (handle ok-flag report-note moved-point-count measurement
-  ;; anchor-held-point-count).
+  ;; anchor-held-point-count locked-point-count painted), painted T when
+  ;; a flagged dimension really took the flag colour.
   (setq ed    (entget ent)
         h     (cdr (assoc 5 ed))
         sty   (lfc:dim-style ent)
@@ -88357,9 +90915,12 @@
   ;; a point held at a shared anchor was looked at and deliberately not
   ;; touched - it is neither a move nor a Keep answer, so it is counted
   ;; on its own and kept out of both tallies
+  ;; A point on a locked layer that could not be moved is neither: it
+  ;; is still off, and says so in the report line on its own.
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
         held   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'anchor)) looked)
-        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept anchor)))
+        lockd  (vl-remove-if-not '(lambda (x) (eq (caddr x) 'locked)) looked)
+        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept anchor locked)))
                              looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
   ;; only when something actually moved is there an old position worth
@@ -88374,15 +90935,19 @@
   (redraw ent 4)
   (redraw)
   (if (member ok '(back skip))
-    (list h ok nil (length moved) meas (length held))  ; navigation: caller handles it
+    (list h ok nil (length moved) meas (length held) (length lockd) nil)  ; navigation: caller handles it
     (progn
       (setq ok (eq ok 'yes)
             fcol (cal:ink *lfc-flag-color* 'flag))
       (setq note (strcat
-                   (if ok
-                     "OK"
-                     (strcat "FLAGGED to fix ("
-                             (lfc:color-name fcol) ")"))
+                   (cond
+                     (ok "OK")
+                     ;; the red is the flag: on a locked layer it does
+                     ;; not go on, and the line must not say it did
+                     ((setq painted (lfc:set-color ent fcol))
+                      (strcat "FLAGGED to fix ("
+                              (lfc:color-name fcol) ")"))
+                     (t "FLAGGED to fix - layer locked, NOT coloured"))
                    (if moved
                      (strcat " - " (itoa (length moved))
                              " point(s) moved onto the nearest object/anchor")
@@ -88395,9 +90960,14 @@
                      (strcat " - " (itoa (length held))
                              " point(s) held at a shared anchor")
                      "")
+                   (if lockd
+                     (strcat " - "
+                             (lfc:join (mapcar 'cadddr lockd) ", ")
+                             " - NOT ATTACHED, layer locked, NOT moved")
+                     "")
                    (if assocnote assocnote "")))
-      (if (not ok) (lfc:set-color ent fcol))
-      (list h ok note (length moved) meas (length held)))))
+      (list h ok note (length moved) meas (length held) (length lockd)
+            painted))))
 
 ;; --- arc review ----------------------------------------------------
 
@@ -88441,20 +91011,28 @@
   (entmod ed)
   (entupd ent))
 
-(defun lfc:review-arc-end (ent which label cands / p target st ans final how)
+(defun lfc:review-arc-end (ent which label cands / p target st ans final how
+                                                  res)
   ;; audits one arc endpoint: a detached end is snapped where it looks
   ;; like it belongs, then you choose - Move (take it), Keep (put the
   ;; arc back exactly as drawn) or Pick your own spot.
   ;; Returns (original final how) when the end was looked at, where how
-  ;; is 'auto / 'user / 'kept; nil when the end was already fine.
+  ;; is 'auto / 'user / 'kept, or 'locked when the arc's layer refused
+  ;; the re-fit and nothing was asked; nil when the end was already fine.
   (setq p      (if (eq which 'start)
                  (vlax-curve-getStartPoint ent)
                  (vlax-curve-getEndPoint ent))
         target (lfc:arc-end-target ent which cands)
         st     (lfc:arc-state ent))
   (cond
+    ((and target
+          (eq 'refused (setq res (lfc:move-arc-end ent which target))))
+     (princ (strcat "\n  " label " is NOT ATTACHED - the nearest object end is "
+                    (lfc:dist (distance p target)) " away, but the arc's"
+                    " layer is locked: NOT moved."))
+     (list p p 'locked))
     (target
-     (if (lfc:move-arc-end ent which target)
+     (if res
        (progn
          (princ (strcat "\n  " label " is not attached to an object end - nearest is "
                         (lfc:dist (distance p target)) " away."))
@@ -88473,7 +91051,7 @@
                            (lfc:ptstr final) " - the arc is unchanged.")))
            (t
             (setq ans (trans ans 1 0))
-            (if (lfc:move-arc-end ent which ans)
+            (if (eq T (lfc:move-arc-end ent which ans))
               (progn
                 (setq final ans
                       how   'user)
@@ -88496,16 +91074,18 @@
        nil
        (progn
          (setq ans (trans ans 1 0))
-         (if (lfc:move-arc-end ent which ans)
+         (if (eq T (lfc:move-arc-end ent which ans))
            (list p ans 'user)
            (progn
-             (princ "\n  Could not re-fit the arc through that spot (collinear?); unchanged.")
+             (princ "\n  Could not re-fit the arc through that spot (collinear or layer locked?); unchanged.")
              nil)))))
     (t nil)))
 
-(defun lfc:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept note acol)
+(defun lfc:review-arc (ent cands num total / ed h planar r1 r2 looked moved kept
+                                              lockd note acol)
   ;; interactive review of one arc's endpoints.
-  ;; Returns (handle untouched-flag report-note moved-point-count).
+  ;; Returns (handle untouched-flag report-note moved-point-count
+  ;; locked-endpoint-count).
   (setq ed     (entget ent)
         h      (cdr (assoc 5 ed))
         planar (lfc:planar-arc-p ed))
@@ -88520,12 +91100,20 @@
   (redraw ent 4)
   (redraw)
   (setq looked (append (if r1 (list r1)) (if r2 (list r2)))
-        moved  (vl-remove-if '(lambda (x) (eq (caddr x) 'kept)) looked)
+        lockd  (vl-remove-if-not '(lambda (x) (eq (caddr x) 'locked)) looked)
+        moved  (vl-remove-if '(lambda (x) (member (caddr x) '(kept locked)))
+                             looked)
         kept   (vl-remove-if-not '(lambda (x) (eq (caddr x) 'kept)) looked))
   (setq acol (cal:ink *lfc-arc-color* 'arc))
   (if moved (lfc:set-color ent acol))
   (setq note (cond
                ((not planar) "not in world XY plane - skipped")
+               ;; a detached end on a locked layer is a finding, not
+               ;; "endpoints OK": nothing was asked because nothing
+               ;; could be written
+               (lockd (strcat (itoa (length lockd))
+                              " endpoint(s) NOT ATTACHED - layer locked,"
+                              " NOT moved"))
                ((and moved kept)
                 (strcat (itoa (length moved)) " endpoint(s) moved ("
                         (lfc:color-name acol) "), "
@@ -88536,16 +91124,17 @@
                (kept (strcat (itoa (length kept))
                              " endpoint(s) kept where you drew them"))
                (t "endpoints OK")))
-  (list h (null moved) note (length moved)))
+  (list h (null moved) note (length moved) (length lockd)))
 
 ;; --- overlapping line review ---------------------------------------
 
 (defun lfc:review-olap (la lb num total / info ea eb h1 h2 lay1 lay2 label
-                                           ans mergeable kinds ocol)
+                                           ans mergeable kinds ocol ok1 ok2)
   ;; interactive review of one overlapping segment pair.
   ;; Returns nil when the pair no longer overlaps (an earlier merge
   ;; absorbed it); otherwise (label report-note action ents...) where
-  ;; action is merged / flagged / left and ents keep their cyan.
+  ;; action is merged / flagged / left / locked (a Merge the layer
+  ;; refused) and ents keep their cyan.
   (setq ea (lfc:seg-ent la)
         eb (lfc:seg-ent lb))
   (if (and (entget ea) (entget eb) (setq info (lfc:overlap-info la lb)))
@@ -88591,8 +91180,13 @@
       (redraw)
       (setq ocol (cal:ink *lfc-olap-color* 'olap))
       (cond
+        ((and (= ans "Merge") (not (lfc:merge-lines la lb info)))
+         ;; the lines share a layer (or Merge was never offered), so
+         ;; one refusal is the pair's: both are left exactly as drawn
+         (princ "\n  Could NOT merge - the layer is locked; both lines left as drawn.")
+         (list label "could NOT merge - layer locked, left as drawn"
+               'locked))
         ((= ans "Merge")
-         (lfc:merge-lines la lb info)
          (lfc:set-color ea ocol)
          (princ (strcat "\n  Merged into one line ("
                         (lfc:color-name ocol) ")."))
@@ -88601,18 +91195,27 @@
                        (lfc:color-name ocol) ")")
                'merged ea))
         ((= ans "Flag")
-         (lfc:set-color ea ocol)
-         (lfc:set-color eb ocol)
-         (princ (strcat "\n  Flagged to fix ("
-                        (lfc:color-name ocol) ")."))
+         ;; the colour IS the flag; a locked layer refuses it, and the
+         ;; line says which of the two did not take it
+         (setq ok1 (lfc:set-color ea ocol)
+               ok2 (lfc:set-color eb ocol))
+         (princ (if (and ok1 ok2)
+                  (strcat "\n  Flagged to fix (" (lfc:color-name ocol) ").")
+                  "\n  Flagged to fix - but a locked layer refused the colour."))
          (list label
                (strcat
                  (if (lfc:whole-line-p la)
                    (if (= (strcase lay1) (strcase lay2))
-                     "flagged to fix ("
-                     "different layers - flagged to fix (")
-                   "polyline edge - flagged to fix (")
-                 (lfc:color-name ocol) ")")
+                     "flagged to fix"
+                     "different layers - flagged to fix")
+                   "polyline edge - flagged to fix")
+                 (cond
+                   ((and ok1 ok2) (strcat " (" (lfc:color-name ocol) ")"))
+                   ((or ok1 ok2)
+                    (strcat " (" (lfc:color-name ocol) ") - "
+                            (if ok1 h2 h1)
+                            " on a locked layer, NOT coloured"))
+                   (t " - layer locked, NOT coloured")))
                'flagged ea eb))
         (t
          (princ "\n  Left as drawn.")
@@ -88625,10 +91228,12 @@
                       saved keep res n total lines ans
                       anchors anchheld
                       ndok ndflag ndmoved ndanch naok namoved nasnap
-                      nomerged noflag noleft
+                      nomerged noflag noleft ndlock dimlock nalock nolock
+                      dimnc ndnc
                       sgroups scand svgroups pgroups g1 g2 stepsp svmode
                       satts attwrong attundec liners linerbadw linernostep bad w bn bh bp
                       linerstep linerfg fgstep badtags linerwiped wiped kept
+                      nowipe linernowipe painted attnc hdimnc
                       bgroups beadneed beadok beadmiss beadss beadbbs gbb
                       stepsum linersum rowtol sty g b l pair hdr
                       htsum stepht wallht wallraw tins tpat tss
@@ -88638,6 +91243,7 @@
                       laylist locked relock lay tlist tbest cx cy tvals s d
                       dlines skiprest bordbb bordsum
                       minx miny maxx maxy bb m dhdr right dimlay units carried cmv
+                      bordfb
                       ed col)
 
   (defun *error* (msg)
@@ -88648,13 +91254,20 @@
     ;; (a colour on a layer the user declined to unlock is in saved
     ;; too) used to skip the close and the CMDECHO restore below, and
     ;; a throw inside *error* is the one error nothing catches.
+    ;; The re-lock has a catch of its own: sharing one with the colour
+    ;; restore meant any throw in a set-color skipped it and left the
+    ;; drafter's layer unlocked with nothing said.  It still runs
+    ;; AFTER the colours, because a layer locked first would refuse
+    ;; every colour on it and leave those items grey.
     (vl-catch-all-apply
       '(lambda ()
          (foreach pair saved
            (if (and (not (member (car pair) keep)) (entget (car pair)))
              (lfc:set-color (car pair) (cdr pair))))
-         (foreach l relock (lfc:set-layer-lock l T))
          (redraw))
+      nil)
+    (vl-catch-all-apply
+      '(lambda () (foreach l relock (lfc:set-layer-lock l T)))
       nil)
     (if undo-open
       (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
@@ -88680,7 +91293,8 @@
      (setq cands nil dims nil arcs nil lns nil blks nil segs nil
            saved nil keep nil lines nil i 0
            ndok 0 ndflag 0 ndmoved 0 ndanch 0 naok 0 namoved 0 nasnap 0
-           nomerged 0 noflag 0 noleft 0)
+           nomerged 0 noflag 0 noleft 0 ndlock 0 nalock 0 nolock 0
+           dimlock nil dimnc nil)
      (repeat (sslength ss)
        (setq e  (ssname ss i)
              i  (1+ i)
@@ -88819,6 +91433,11 @@
           (if (> (nth 5 res) 0)
             (setq anchheld (cons (cons e (nth 5 res))
                                  (vl-remove (assoc e anchheld) anchheld))))
+          ;; ...and so are points a locked layer would not let move:
+          ;; they are still off when Back sends the dimension round again
+          (if (> (nth 6 res) 0)
+            (setq dimlock (cons (cons e (nth 6 res))
+                                (vl-remove (assoc e dimlock) dimlock))))
           (cond
             ((eq (cadr res) 'skip)
              (lfc:set-color e grey)
@@ -88852,7 +91471,8 @@
                                            (vl-remove (assoc e1 carried)
                                                       carried))))
                      (setq dlines (cdr dlines))))
-                 (setq keep (vl-remove e1 keep))
+                 (setq keep  (vl-remove e1 keep)
+                       dimnc (vl-remove (assoc e1 dimnc) dimnc))
                  (lfc:set-color e1 grey)
                  (princ "\n  Stepping back one dimension."))
                (princ "\n  Already at the first dimension."))
@@ -88862,7 +91482,11 @@
                (progn (setq ndok (1+ ndok))
                       (lfc:set-color e grey))
                (progn (setq ndflag (1+ ndflag))
-                      (setq keep (cons e keep))))
+                      (setq keep (cons e keep))
+                      ;; a flag its locked layer would not take: counted
+                      ;; as flagged, never as coloured
+                      (if (not (nth 7 res))
+                        (setq dimnc (cons (cons e 1) dimnc)))))
              (setq sty (lfc:dim-style e))
              ;; moves this dim collected on an earlier pass, before a
              ;; Back sent us round again -- they are real and belong
@@ -88884,6 +91508,8 @@
                                 dlines))))
           (setq n (1+ n)))
         (foreach pair anchheld (setq ndanch (+ ndanch (cdr pair))))
+        (foreach pair dimlock (setq ndlock (+ ndlock (cdr pair))))
+        (setq ndnc (length dimnc))
         (if skiprest
           (setq lines (cons (strcat "Dimensions: " (itoa (- total (length dlines)))
                                     " left UNREVIEWED (skipped by user)")
@@ -88901,11 +91527,15 @@
           (lfc:set-color e (cdr (assoc e saved)))
           (setq res (lfc:review-arc e cands n total))
           (setq nasnap (+ nasnap (cadddr res)))
-          (if (cadr res)
-            (progn (setq naok (1+ naok))
-                   (lfc:set-color e grey))
-            (progn (setq namoved (1+ namoved))
-                   (setq keep (cons e keep))))           ; moved: stays magenta
+          (cond
+            ;; detached, but its layer is locked: not OK and not moved
+            ((> (nth 4 res) 0) (setq nalock (1+ nalock)))
+            ((cadr res)
+             (setq naok (1+ naok))
+             (lfc:set-color e grey))
+            (t
+             (setq namoved (1+ namoved))
+             (setq keep (cons e keep))))                ; moved: stays magenta
           (setq lines (cons (strcat "Arc " (car res) ": " (caddr res)) lines)))
 
         ;; --- overlapping lines, one pair at a time ------------------
@@ -88925,8 +91555,10 @@
             ((null res)                       ; absorbed by an earlier merge
              (lfc:unstage e1 keep grey)
              (lfc:unstage e2 keep grey))
-            ((eq (caddr res) 'left)
-             (setq noleft (1+ noleft))
+            ((member (caddr res) '(left locked))
+             (if (eq (caddr res) 'left)
+               (setq noleft (1+ noleft))
+               (setq nolock (1+ nolock)))
              (lfc:unstage e1 keep grey)
              (lfc:unstage e2 keep grey)
              (setq lines (cons (strcat "Lines " (car res) ": " (cadr res)) lines)))
@@ -88949,6 +91581,7 @@
               svmode   nil
               satts    nil
               attwrong nil
+              attnc    nil
               attundec nil
               bgroups  nil)
         ;; a staircase side view reads as two step patterns at right
@@ -89051,11 +91684,16 @@
                                           lines)))
                       (progn
                         (setq attwrong T)
-                        (lfc:set-color b (cal:ink *lfc-flag-color* 'flag))
                         (setq keep (cons b keep))
+                        ;; the red IS the flag; a locked layer refuses it
+                        (setq painted (lfc:set-color b (cal:ink *lfc-flag-color* 'flag)))
+                        (if (not painted) (setq attnc T))
                         (setq lines (cons (strcat "Step Attachment "
                                                   (cdr (assoc 5 (entget b)))
-                                                  ": WRONG ONE - flagged to fix (red)")
+                                                  ": WRONG ONE - flagged to fix"
+                                                  (if painted
+                                                    " (red)"
+                                                    " - layer locked, NOT coloured"))
                                           lines))))
                     ;; every option still showing = nobody picked one,
                     ;; so the drawing has to ask the question instead
@@ -89239,31 +91877,42 @@
         ;; mark it red automatically and keep it red
         (if (and htbad hdim)
           (progn
-            (lfc:set-color hdim (cal:ink *lfc-flag-color* 'flag))
+            ;; marked red only when the colour went in: a locked
+            ;; layer refuses it and the line says so
+            (setq painted (lfc:set-color hdim (cal:ink *lfc-flag-color* 'flag))
+                  hdimnc  (not painted))
             (if (not (member hdim keep)) (setq keep (cons hdim keep)))
             (princ (strcat "\n  Side view height dimension "
                            (cdr (assoc 5 (entget hdim)))
                            " disagrees with " *lfc-wallht-tag*
-                           " - marked red."))
+                           (if painted
+                             " - marked red."
+                             " - its layer is locked, NOT marked.")))
             (setq lines (cons (strcat "Height dim "
                                       (cdr (assoc 5 (entget hdim)))
                                       " states " (rtos dimht)
                                       " but " *lfc-wallht-tag* " is '"
-                                      wallraw "' - MISMATCH, marked red")
+                                      wallraw "' - MISMATCH"
+                                      (if painted
+                                        ", marked red"
+                                        ", layer locked - NOT marked"))
                               lines))))
         ;; a dimension whose text was overridden to disagree with
         ;; the geometry it spans is wrong too
         (if (and hdim dimht stepht
                  (> (abs (- dimht stepht)) *lfc-height-tol*))
           (progn
-            (lfc:set-color hdim (cal:ink *lfc-flag-color* 'flag))
+            (setq painted (lfc:set-color hdim (cal:ink *lfc-flag-color* 'flag)))
             (if (not (member hdim keep)) (setq keep (cons hdim keep)))
             (setq lines (cons (strcat "Height dim "
                                       (cdr (assoc 5 (entget hdim)))
                                       " states " (rtos dimht)
                                       " but the side view is drawn "
                                       (rtos stepht)
-                                      " tall - MISMATCH, marked red")
+                                      " tall - MISMATCH"
+                                      (if painted
+                                        ", marked red"
+                                        ", layer locked - NOT marked"))
                               lines))))
         (setq htsum
           (cond
@@ -89306,7 +91955,9 @@
             (t
              (strcat "steps rise " (rtos htval) " but WallHt is '" wallraw
                      "' (" (rtos wallht) ") - MISMATCH"
-                     (if hdim ", dimension marked red" ", look at it")))))
+                     (cond ((null hdim) ", look at it")
+                           (hdimnc ", dimension on a locked layer - NOT marked")
+                           (t ", dimension marked red"))))))
         (if htsum (princ (strcat "\n  Wall height: " htsum)))
 
         ;; --- Tech Title Date ------------------------------------------
@@ -89349,6 +92000,7 @@
               linerstep   nil
               linerfg     nil
               linerwiped  0
+              linernowipe 0
               fgstep      (lfc:fgstep-src ss blks))
         (if fgstep
           (princ (strcat "\n--- Fiberglass Step found in the highlighted area: "
@@ -89379,26 +92031,45 @@
                 ;; leave the rest of the field alone, then say which
                 ;; fields went and what each one reads now
                 (badtags
-                 (setq wiped (lfc:wipe-attribs b badtags *lfc-badwords*)
-                       kept  (mapcar '(lambda (w)
-                                        (strcat (car w) " now reads '"
-                                                (cdr w) "'"))
-                                     (vl-remove-if
-                                       '(lambda (w) (= (cdr w) ""))
-                                       wiped)))
-                 (setq linerwiped (+ linerwiped (length badtags)))
-                 (princ (strcat "\n  '" bn "': wiped "
-                                (lfc:join bad " & ") " out of "
-                                (lfc:join badtags ", ") "."))
-                 (setq lines (cons (strcat "Liner Material (" bn ") " bh " at "
-                                           (lfc:ptstr bp) ": "
-                                           (lfc:join badtags ", ")
-                                           " carried " (lfc:join bad " & ")
-                                           " - WIPED"
-                                           (if kept
-                                             (strcat ", " (lfc:join kept ", "))
-                                             " clean"))
-                                   lines)))
+                 (setq wiped  (lfc:wipe-attribs b badtags *lfc-badwords*)
+                       nowipe (cadr wiped)
+                       wiped  (car wiped)
+                       kept   (mapcar '(lambda (w)
+                                         (strcat (car w) " now reads '"
+                                                 (cdr w) "'"))
+                                      (vl-remove-if
+                                        '(lambda (w) (= (cdr w) ""))
+                                        wiped)))
+                 ;; only a field that really changed counts as wiped; one
+                 ;; the drawing refused is still on the sheet and says so
+                 (setq linerwiped  (+ linerwiped (length wiped))
+                       linernowipe (+ linernowipe (length nowipe)))
+                 (if wiped
+                   (progn
+                     (princ (strcat "\n  '" bn "': wiped "
+                                    (lfc:join bad " & ") " out of "
+                                    (lfc:join (mapcar 'car wiped) ", ") "."))
+                     (setq lines (cons (strcat "Liner Material (" bn ") " bh " at "
+                                               (lfc:ptstr bp) ": "
+                                               (lfc:join (mapcar 'car wiped) ", ")
+                                               " carried " (lfc:join bad " & ")
+                                               " - WIPED"
+                                               (if kept
+                                                 (strcat ", " (lfc:join kept ", "))
+                                                 " clean"))
+                                       lines))))
+                 (if nowipe
+                   (progn
+                     (princ (strcat "\n  '" bn "': could NOT wipe "
+                                    (lfc:join nowipe ", ")
+                                    " - the drawing refused the write (locked layer?)."))
+                     (setq lines (cons (strcat "Liner Material (" bn ") " bh " at "
+                                               (lfc:ptstr bp) ": "
+                                               (lfc:join nowipe ", ")
+                                               " carries " (lfc:join bad " & ")
+                                               " - NEEDS WIPING, could not write it"
+                                               " (locked layer?)")
+                                       lines)))))
                 ;; the word sits in the block's own text, not in a field
                 ;; we can clear - report it and leave it alone
                 (bad
@@ -89448,11 +92119,16 @@
         ;; --- title block border size --------------------------------
         ;; the whole title block is normally in the selection; fall
         ;; back to the drawing when the border was not highlighted
-        (setq bordbb (lfc:border-box ss))
+        (setq bordbb (lfc:border-box ss) bordfb nil)
         (if (null bordbb)
-          (setq bordbb (lfc:border-box
-                         (ssget "_X" (list (cons 8 *lfc-border-layer*))))))
+          (setq bordfb (lfc:border-fallback minx miny maxx maxy)
+                bordbb (car bordfb)))
         (setq bordsum (lfc:border-verdict bordbb))
+        (if (and bordfb (> (cdr bordfb) 1))
+          (setq bordsum (strcat bordsum " (" (itoa (cdr bordfb))
+                                " separate borders on layer '"
+                                *lfc-border-layer*
+                                "' - measured the one nearest the checked drawing)")))
         (princ (strcat "\n--- Border: " bordsum " ---"))
 
         ;; --- one-line verdicts for steps & liner --------------------
@@ -89470,6 +92146,8 @@
                          (cond ((null svmode) "")
                                ((null satts)
                                 "; Step Attachment block MISSING - add one")
+                               ((and attwrong attnc)
+                                "; Step Attachment flagged WRONG - layer locked, NOT coloured")
                                (attwrong
                                 "; Step Attachment flagged WRONG (red)")
                                (t "; Step Attachment confirmed"))
@@ -89499,6 +92177,11 @@
                              (strcat "; word " (lfc:join linerbadw " & ")
                                      " found - review")
                              ""))
+                         (if (> linernowipe 0)
+                           (strcat "; NEEDS WIPING: " (itoa linernowipe)
+                                   " pattern field(s) could not be written"
+                                   " (locked layer?)")
+                           "")
                          (if linernostep
                            "; steps drawn but liner MISSING its Step"
                            "")
@@ -89519,24 +92202,40 @@
             (cons (strcat "Dimensions checked: " (itoa (length dims))
                           " (correct: " (itoa ndok)
                           ", flagged to fix: " (itoa ndflag)
+                          (if (> ndnc 0)
+                            (strcat " - " (itoa ndnc)
+                                    " NOT coloured, layer locked")
+                            "")
                           ", points adjusted: " (itoa ndmoved)
                           (if (> ndanch 0)
                             (strcat ", held at a shared anchor: " (itoa ndanch))
                             "")
+                          (if (> ndlock 0)
+                            (strcat ", NOT moved (layer locked): " (itoa ndlock))
+                            "")
                           ")")
-                  (> ndflag 0))
+                  (or (> ndflag 0) (> ndlock 0)))
             (cons (strcat "Arcs checked: " (itoa (length arcs))
                           " (OK: " (itoa naok)
                           ", with endpoints moved: " (itoa namoved)
-                          ", endpoints moved in total: " (itoa nasnap) ")")
-                  (> namoved 0))
+                          ", endpoints moved in total: " (itoa nasnap)
+                          (if (> nalock 0)
+                            (strcat ", detached but layer locked: " (itoa nalock))
+                            "")
+                          ")")
+                  (or (> namoved 0) (> nalock 0)))
             (cons (strcat "Overlapping line pairs: " (itoa (length olaps))
                           (if olaps
                             (strcat " (merged: " (itoa nomerged)
                                     ", flagged: " (itoa noflag)
-                                    ", left as drawn: " (itoa noleft) ")")
+                                    ", left as drawn: " (itoa noleft)
+                                    (if (> nolock 0)
+                                      (strcat ", could NOT merge (layer locked): "
+                                              (itoa nolock))
+                                      "")
+                                    ")")
                             " - none found"))
-                  (> noflag 0))))
+                  (or (> noflag 0) (> nolock 0)))))
         (setq dimlay (lfc:dimlayer-verdict dims)
               units  (lfc:audit-units ss))
         (foreach l (caddr units)
@@ -89576,6 +92275,10 @@
                        "\nDimensions: " (itoa (length dims)) " checked, "
                        (itoa ndok) " correct, "
                        (itoa ndflag) " flagged to fix (red)"
+                       (if (> ndnc 0)
+                         (strcat " - " (itoa ndnc)
+                                 " of them NOT coloured (layer locked)")
+                         "")
                        (if (> ndmoved 0)
                          (strcat ", " (itoa ndmoved) " point(s) adjusted")
                          "")
@@ -89583,14 +92286,26 @@
                          (strcat ", " (itoa ndanch)
                                  " point(s) held at a shared anchor")
                          "")
+                       (if (> ndlock 0)
+                         (strcat ", " (itoa ndlock)
+                                 " point(s) NOT moved (layer locked)")
+                         "")
                        "\nArcs: " (itoa (length arcs)) " checked, "
                        (itoa namoved) " with endpoint(s) moved ("
                        (itoa nasnap) " endpoint(s), magenta)"
+                       (if (> nalock 0)
+                         (strcat ", " (itoa nalock)
+                                 " detached but NOT moved (layer locked)")
+                         "")
                        "\nOverlapping lines: " (itoa (length olaps)) " pair(s) found"
                        (if olaps
                          (strcat ", " (itoa nomerged) " merged, "
                                  (itoa noflag) " flagged (cyan), "
-                                 (itoa noleft) " left as drawn")
+                                 (itoa noleft) " left as drawn"
+                                 (if (> nolock 0)
+                                   (strcat ", " (itoa nolock)
+                                           " could NOT be merged (layer locked)")
+                                   ""))
                          "")
                        "\nSteps: " stepsum
                        (if htsum (strcat "\nWall height: " htsum) "")
@@ -89615,6 +92330,14 @@
 ;;  except writing the report. Use it as a quick pre-flight, or when
 ;;  you want the findings without touching a released sheet.
 
+;; The space the drafter is working in, as group 410 names it: the
+;; layout only on the paper itself.  Inside a layout viewport CTAB
+;; still names the layout while every pick lands in model space.
+(defun lfc:space ()
+  (if (and (= 0 (getvar "TILEMODE")) (= 1 (getvar "CVPORT")))
+    (getvar "CTAB")
+    "Model"))
+
 (defun c:LINFINSCAN () (lfc:scan nil))
 
 (defun c:LITELINFINSCAN () (lfc:scan T))
@@ -89622,7 +92345,32 @@
 ;; The read-only scan.  lite = T skips the DIMCHECK-style pass - no
 ;; dimension, arc or overlap audit and no DIMENSION AUDIT column -
 ;; for a drawing DIMCHECK already went over.
-(defun lfc:scan (lite / *error* oldecho name ss i e et ed sty meas cands dims arcs
+(defun lfc:scan (lite / *error* oldecho name)
+  (setq name (if lite "LITELINFINSCAN" "LINFINSCAN"))
+  (defun *error* (msg)
+    (if oldecho (setvar "CMDECHO" oldecho))
+    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\n" name " error: " msg)))
+    (if lzd:report (lzd:report "LINFINCHECK" *lfc-version* msg))
+    (princ))
+  (if lzd:begin (lzd:begin "LINFINCHECK" *lfc-version*))
+  ;; saved here rather than inside the scan, so this handler holds the
+  ;; drafter's value whatever prompt an Esc lands on
+  (setq oldecho (getvar "CMDECHO"))
+  (lfc:scan-core lite)
+  (if lzd:end (lzd:end "LINFINCHECK"))
+  (princ))
+
+;; The scan itself, with no *error* of its own.  TUTORIALLINFINCHECK
+;; runs it inside its own undo group, and when it called c:LINFINSCAN
+;; instead, an Esc at the highlight prompt ran only the scan's handler:
+;; the tutorial's group stayed open, so the drafter's next U swallowed
+;; their own later work, and CMDECHO stayed 0.  Called bare, the
+;; caller's handler is the one that runs.  Its CMDECHO save is named
+;; scanecho, not oldecho, because the handler that runs is the
+;; CALLER'S and reads oldecho dynamically -- a local of that name in
+;; here would hand it the 0 the tutorial had already set.
+(defun lfc:scan-core (lite / scanecho name ss i e et ed sty meas cands dims arcs
                      plns segs
                      blks lines olaps pr sgroups scand svgroups pgroups
                      g g1 g2 rest svbb stepht satts liners fgstep linerstep
@@ -89632,18 +92380,9 @@
                      htval htbad htsum stepsum linersum bad wnd
                      datesum dateraw datebad
                      nd ndbad na nabad ndanch anchors q dq held m hdr dhdr l badtags dimlay units
-                     bordbb bordsum attundec
+                     bordbb bordsum bordfb attundec
                      minx miny maxx maxy p13 p14 near s b w)
-
   (setq name (if lite "LITELINFINSCAN" "LINFINSCAN"))
-  (defun *error* (msg)
-    (if oldecho (setvar "CMDECHO" oldecho))
-    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-      (princ (strcat "\n" name " error: " msg)))
-    (if lzd:report (lzd:report "LINFINCHECK" *lfc-version* msg))
-    (princ))
-  (if lzd:begin (lzd:begin "LINFINCHECK" *lfc-version*))
-
   ;; a pickfirst selection if there is one, otherwise ask for it
   (setq ss (ssget "_I"))
   (if lzd:watch (lzd:watch ss) ss)
@@ -89653,11 +92392,15 @@
                       " (Enter = whole drawing): "))
       (setq ss (ssget))
       (if lzd:watch (lzd:watch ss) ss)))
-  (if (null ss) (setq ss (ssget "_X")))
+  ;; Enter = the whole of the space the drafter is working in.  A bare
+  ;; "_X" took every layout's paper-space ink as well: border lines and
+  ;; sheet dimensions joined the candidates, and a paper-space line
+  ;; crossing a stray model point passed that point as attached.
+  (if (null ss) (setq ss (ssget "_X" (list (cons 410 (lfc:space))))))
   (cond
     ((null ss) (prompt "\nNothing to scan."))
     (t
-     (setq oldecho (getvar "CMDECHO"))
+     (setq scanecho (getvar "CMDECHO"))
      (setvar "CMDECHO" 0)
      (setq i 0 nd 0 ndbad 0 na 0 nabad 0 ndanch 0)
      (repeat (sslength ss)
@@ -89986,11 +92729,16 @@
                         (if (and (null wnd) (not (and fgstep linerstep))) " - OK" "")))))
 
      ;; --- title block border size
-     (setq bordbb (lfc:border-box ss))
+     (setq bordbb (lfc:border-box ss) bordfb nil)
      (if (null bordbb)
-       (setq bordbb (lfc:border-box
-                      (ssget "_X" (list (cons 8 *lfc-border-layer*))))))
+       (setq bordfb (lfc:border-fallback minx miny maxx maxy)
+             bordbb (car bordfb)))
      (setq bordsum (lfc:border-verdict bordbb))
+     (if (and bordfb (> (cdr bordfb) 1))
+       (setq bordsum (strcat bordsum " (" (itoa (cdr bordfb))
+                             " separate borders on layer '"
+                             *lfc-border-layer*
+                             "' - measured the one nearest the checked drawing)")))
 
      ;; --- report (the only thing the scan writes) --------------------
      (cal:ensure-layer *lfc-report-layer* *lfc-report-color*)
@@ -90041,7 +92789,7 @@
                                  ""))
                        hdr dhdr (reverse lines) lite
                        minx miny maxx maxy)
-     (setvar "CMDECHO" oldecho)
+     (setvar "CMDECHO" scanecho)
      (princ (strcat "\n--- " name " complete (read-only) ---"
                     (if lite
                       "\nLite: dimensions, arcs and overlaps were not audited."
@@ -90058,7 +92806,6 @@
                     (if datesum (strcat "\nDate: " datesum) "")
                     "\nReport written on layer " *lfc-report-layer*
                     "; nothing else was changed."))))
-  (if lzd:end (lzd:end "LINFINCHECK"))
   (princ))
 
 
@@ -90212,7 +92959,7 @@
   (setvar "OSMODE" old)
   (entlast))
 
-(defun lfc:tut-demo (/ org ox oy made e ss2 i)
+(defun lfc:tut-demo (/ org ox oy made e ss2 i rmark nx)
   (princ "\n\n--- DEMO: a practice drawing with faults planted in it ---")
   (setq org (getpoint "\n  Pick an empty spot for the practice drawing: "))
   (if lzd:ask (lzd:ask "\n  Pick an empty spot for the practice drawing: " org) org)
@@ -90323,18 +93070,32 @@
             (strcat "LINFINSCAN will ask you to highlight - window the practice\n"
                     "  drawing (or press Enter for the whole drawing). The report\n"
                     "  lands to the right of whatever you highlight."))
-          (c:LINFINSCAN)))
+          ;; the scan's body, not c:LINFINSCAN: this tutorial's handler
+          ;; has to stay the innermost one, so an Esc at the highlight
+          ;; still closes the undo group and puts CMDECHO back
+          (setq rmark (entlast))
+          (lfc:scan-core nil)))
       (if (cal:ask-yn "\n  Erase the practice drawing now?" "Yes")
         (progn
           (setq i 0)
           (repeat (sslength ss2)
             (if (entget (ssname ss2 i)) (entdel (ssname ss2 i)))
             (setq i (1+ i)))
-          (setq ss2 (ssget "_X" (list (cons 8 *lfc-report-layer*))))
-          (if ss2
+          ;; ...and the report the scan wrote for it, and nothing
+          ;; older: the report layer is where EVERY scan in the drawing
+          ;; writes, and sweeping it whole took the drafter's own
+          ;; reports down with the practice one, under "Practice
+          ;; drawing erased."  What this run added is what follows
+          ;; RMARK, the last entity before the scan
+          (if rmark
             (progn
-              (setq i 0)
-              (repeat (sslength ss2) (entdel (ssname ss2 i)) (setq i (1+ i)))))
+              (setq e (entnext rmark))
+              (while e
+                (setq nx (entnext e))
+                (if (= (strcase (cdr (assoc 8 (entget e))))
+                       (strcase *lfc-report-layer*))
+                  (entdel e))
+                (setq e nx))))
           (princ "\n  Practice drawing erased."))
         (princ "\n  Left in place - one U removes the whole tutorial."))
       (princ))))
@@ -90473,7 +93234,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lintxtchk-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *lintxtchk-version* "v1.7")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 ;;; ======================================================================
@@ -90585,7 +93346,12 @@
         (progn
           (command "_.UNDO" "_Begin")
           (setq undo-open T)))
-      (setq startx (car pt)
+      ;; the pick is a UCS point and entmake takes WORLD ones: without
+      ;; the trans, a drawing whose UCS origin sits on a pool corner got
+      ;; its checklist that far from the click.  The column itself is
+      ;; laid out along the world axes, as it always was.
+      (setq pt     (trans pt 1 0)
+            startx (car pt)
             y      (cadr pt)
             z      (if (caddr pt) (caddr pt) 0.0))
       (foreach item ltc:*items*
@@ -90722,7 +93488,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.16")
+(setq *paddle-version* "v1.17")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -91618,6 +94384,23 @@
                    (mapcar '(lambda (p) (list 10 (car p) (cadr p))) pts)))
   (entlast))
 
+;; The space the drafter is drawing in: model space from the Model tab
+;; and from inside a layout's viewport, the layout's paper only when it
+;; is the paper that is active.  CTAB and the active layout both name
+;; the LAYOUT from inside a viewport, so the sweeps below read the
+;; sheet and found no perimeter and no arrows there, while the pads
+;; were inserted into paper space over a model-space pool.  Every sweep
+;; and every insert goes through these two, so they cannot disagree.
+;; (vla-get-ModelSpace is reached only inside a viewport; everywhere
+;; else the active layout's block already is the right space.)
+(defun paddle--tab ()
+  (if (= 1 (getvar "CVPORT")) (getvar "CTAB") "Model"))
+
+(defun paddle--space (doc)
+  (if (and (= 0 (getvar "TILEMODE")) (/= 1 (getvar "CVPORT")))
+      (vla-get-ModelSpace doc)
+      (vla-get-Block (vla-get-ActiveLayout doc))))
+
 ;; PADDLE's own marks and nobody else's: every run clears the gap layer
 ;; and re-marks whatever is still open, so an arrow does not outlive
 ;; the gap it pointed at when the drafter closes one by hand.  Returns
@@ -91625,7 +94408,7 @@
 (defun paddle--clear-arrows ( / ss i n)
   (setq n 0)
   (if (setq ss (ssget "_X" (list (cons 8 *paddle-gap-layer*)
-                                 (cons 410 (getvar "CTAB")))))
+                                 (cons 410 (paddle--tab)))))
       (progn
         (setq i 0)
         (repeat (sslength ss)
@@ -91674,7 +94457,7 @@
   open)
 
 ;; --------------------------- selection -----------------------------
-;; Turns a selection set (or the whole current tab when SS is nil) into
+;; Turns a selection set (or the whole current space when SS is nil) into
 ;; (loops opens): the closed perimeter loops, as vertex lists, and the
 ;; open chains that would not close, as segments.  Auto-detect keeps
 ;; only the largest loop.  Every segment carries the entity it came off
@@ -91686,7 +94469,7 @@
   (setq auto (not ss))
   (if auto
       (setq ss (ssget "_X" (list '(0 . "LWPOLYLINE,POLYLINE,LINE,ARC")
-                                 (cons 410 (getvar "CTAB"))))))
+                                 (cons 410 (paddle--tab))))))
   (if ss
       (progn
         (setq i 0)
@@ -91724,6 +94507,36 @@
                     (setq loops (list best))))))
         (list loops opens))))
 
+;; ---------------------- a handed-over perimeter ---------------------
+;; AUTODIM, LINGUTTER and TYLERDRONESUITE hand PADDLE the perimeter they
+;; already hold through this global, not as a pickfirst set.  The
+;; pickfirst route needs PICKFIRST at 1, so AUTODIM and the suite
+;; switched it on round the call -- and an Esc inside PADDLE runs only
+;; PADDLE's own handler, so a drafter who works with it at 0 was left
+;; at 1 with nothing said.  LINGUTTER never switched it on, and at 0 its
+;; handoff went missing and PADDLE fell back to guessing the perimeter.
+;; The global borrows no setting of the drafter's.  It holds (NAME
+;; SELECTION), is read only by the command NAME, and is cleared at the
+;; read whoever it was for -- and by the handler, for a failure before
+;; the read -- so a handoff can never outlive the call it was made for.
+(setq *calofin-handoff* nil)
+
+;; The handed-over selection, narrowed to the entity TYPES PADDLE's own
+;; (ssget "_I") filter takes and to what is still in the drawing, or
+;; nil when nothing was handed to PADDLE.
+(defun paddle--handed (types / h ss i e)
+  (setq h                 *calofin-handoff*
+        *calofin-handoff* nil)
+  (if (and (listp h) (= (car h) "PADDLE") (cadr h))
+      (progn
+        (setq ss (ssadd) i 0)
+        (repeat (sslength (cadr h))
+          (setq e (ssname (cadr h) i)
+                i (1+ i))
+          (if (and (entget e) (wcmatch (cdr (assoc 0 (entget e))) types))
+              (ssadd e ss)))
+        (if (< 0 (sslength ss)) ss))))
+
 ;; ---------------------------- command ------------------------------
 (defun c:PADDLE (/ *error* doc space mark-open padsize blkname ss res perims
                    opens vts allpads delta ndodge ncorner narc ofrad otrim
@@ -91738,6 +94551,7 @@
     (if ofrad (setvar "FILLETRAD" ofrad))
     (if otrim (setvar "TRIMMODE" otrim))
     (if oecho (setvar "CMDECHO" oecho))
+    (setq *calofin-handoff* nil)     ; one never read goes with the run
     ;; close only the mark THIS run opened: an Esc at the perimeter
     ;; prompt comes before StartUndoMark, and closing a mark nothing
     ;; opened throws -- from inside the handler, where nothing catches
@@ -91752,7 +94566,7 @@
   (if lzd:begin (lzd:begin "PADDLE" *paddle-version*))
 
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
-        space (vla-get-Block (vla-get-ActiveLayout doc)))
+        space (paddle--space doc))
 
   (princ (strcat "\nPADDLE " *paddle-version*))
   (princ (strcat "\nPADDLE - " (paddle--in *paddle-padsize*)
@@ -91762,13 +94576,15 @@
   (setq padsize *paddle-padsize*
         blkname *paddle-blkname*)
 
-  ;; A pickfirst selection is taken as-is.  LINGUTTER hands its freshly
-  ;; drawn perimeter over that way, and a user who highlighted the
-  ;; outline before typing PADDLE meant the same thing.  It matters
-  ;; because auto-detect reads the WHOLE drawing for its largest closed
-  ;; loop -- being handed the loop beats guessing at it beside a title
-  ;; block border.
-  (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC"))))
+  ;; A perimeter handed over by another command (paddle--handed above),
+  ;; else a pickfirst selection, is taken as-is.  LINGUTTER and AUTODIM
+  ;; hand theirs over, and a user who highlighted the outline before
+  ;; typing PADDLE meant the same thing.  It matters because auto-detect
+  ;; reads the WHOLE drawing for its largest closed loop -- being handed
+  ;; the loop beats guessing at it beside a title block border.
+  (setq ss (paddle--handed "LWPOLYLINE,POLYLINE,LINE,ARC"))
+  (if (null ss)
+      (setq ss (ssget "_I" '((0 . "LWPOLYLINE,POLYLINE,LINE,ARC")))))
   (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
       (progn
@@ -91993,7 +94809,7 @@
     (princ))
   (if lzd:begin (lzd:begin "TUTORIALPADDLE" *paddle-version*))
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
-        space (vla-get-Block (vla-get-ActiveLayout doc)))
+        space (paddle--space doc))
   (vla-StartUndoMark doc)
   (setq mark-open T)
   (princ (strcat "\n=== PADDLE TUTORIAL " *paddle-version* " ==="))
@@ -92214,7 +95030,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *mohamaddle-version* "v1.3")
+(setq *mohamaddle-version* "v1.4")
 
 ;; --- the pad itself ---
 ;; Pad sizes MOHAMADDLE offers, in the order shown at the prompt.  Each
@@ -92310,7 +95126,23 @@
 ;; to go back to, so it offers no Back (tools/back_baseline.txt).  The
 ;; keyword string and the bracket shown are both built off the table,
 ;; so a third size needs no other edit here.
-(defun mohamaddle--asksize (dflt / kws shown v)
+;;
+;; The default is checked against the table HERE, not at load: it is a
+;; LAZTUNE knob, and an override lands after load.  A default the table
+;; does not offer ("48", a dwg path, a size dropped from the list) was
+;; handed straight back on Enter, found no entry, and died on
+;; arithmetic with nil -- and was saved as the next default first, so
+;; every Enter after it died the same way.  An unoffered default is
+;; matched case-folded to a table keyword, else falls back to the
+;; shipped "36", else to the first size listed.
+(defun mohamaddle--asksize (dflt / kws shown v hit)
+  (setq hit (if (= (type dflt) 'STR)
+                (vl-some '(lambda (s)
+                            (if (= (strcase (car s)) (strcase dflt)) (car s)))
+                         *mohamaddle-sizes*)))
+  (setq dflt (cond (hit)
+                   ((assoc "36" *mohamaddle-sizes*) "36")
+                   (T (car (car *mohamaddle-sizes*)))))
   (setq kws (apply 'strcat (mapcar '(lambda (s) (strcat (car s) " "))
                                    *mohamaddle-sizes*)))
   (setq shown (vl-string-translate " " "/" (substr kws 1 (1- (strlen kws)))))
@@ -93121,6 +95953,23 @@
                    (mapcar '(lambda (p) (list 10 (car p) (cadr p))) pts)))
   (entlast))
 
+;; The space the drafter is drawing in: model space from the Model tab
+;; and from inside a layout's viewport, the layout's paper only when it
+;; is the paper that is active.  CTAB and the active layout both name
+;; the LAYOUT from inside a viewport, so the sweeps below read the
+;; sheet and found no perimeter and no arrows there, while the pads
+;; were inserted into paper space over a model-space pool.  Every sweep
+;; and every insert goes through these two, so they cannot disagree.
+;; (vla-get-ModelSpace is reached only inside a viewport; everywhere
+;; else the active layout's block already is the right space.)
+(defun mohamaddle--tab ()
+  (if (= 1 (getvar "CVPORT")) (getvar "CTAB") "Model"))
+
+(defun mohamaddle--space (doc)
+  (if (and (= 0 (getvar "TILEMODE")) (/= 1 (getvar "CVPORT")))
+      (vla-get-ModelSpace doc)
+      (vla-get-Block (vla-get-ActiveLayout doc))))
+
 ;; the pad tools' own marks and nobody else's: every run clears the gap layer
 ;; and re-marks whatever is still open, so an arrow does not outlive
 ;; the gap it pointed at when the drafter closes one by hand.  Returns
@@ -93128,7 +95977,7 @@
 (defun mohamaddle--clear-arrows ( / ss i n)
   (setq n 0)
   (if (setq ss (ssget "_X" (list (cons 8 *mohamaddle-gap-layer*)
-                                 (cons 410 (getvar "CTAB")))))
+                                 (cons 410 (mohamaddle--tab)))))
       (progn
         (setq i 0)
         (repeat (sslength ss)
@@ -93177,7 +96026,7 @@
   open)
 
 ;; --------------------------- selection -----------------------------
-;; Turns a selection set (or the whole current tab when SS is nil) into
+;; Turns a selection set (or the whole current space when SS is nil) into
 ;; (loops opens): the closed perimeter loops, as vertex lists, and the
 ;; open chains that would not close, as segments.  Auto-detect keeps
 ;; only the largest loop.  Every segment carries the entity it came off
@@ -93189,7 +96038,7 @@
   (setq auto (not ss))
   (if auto
       (setq ss (ssget "_X" (list '(0 . "LWPOLYLINE,POLYLINE,LINE,ARC")
-                                 (cons 410 (getvar "CTAB"))))))
+                                 (cons 410 (mohamaddle--tab))))))
   (if ss
       (progn
         (setq i 0)
@@ -93256,7 +96105,7 @@
   (if lzd:begin (lzd:begin "MOHAMADDLE" *mohamaddle-version*))
 
   (setq doc   (vla-get-ActiveDocument (vlax-get-acad-object))
-        space (vla-get-Block (vla-get-ActiveLayout doc)))
+        space (mohamaddle--space doc))
 
   (princ (strcat "\nMOHAMADDLE " *mohamaddle-version*))
 
@@ -93590,7 +96439,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *upadover-version* "v1.3")
+(setq *upadover-version* "v1.4")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -93964,10 +96813,29 @@
 ;; "Pt.17", the way the prompts and the report name a point.
 (defun upad:ptname (nm) (strcat upad:*pt-prefix* nm))
 
-;; Every survey point in the drawing, as (position name).
+;; The space the drafter is drawing in: model space from the Model tab
+;; and from inside a layout's viewport, the layout's paper only when it
+;; is the paper that is active -- PADDLE's pair, under this prefix.
+;; The sweep below read every space at once, so a sheet whose title
+;; block carries a numbered point turned a typed number into "2 points
+;; are numbered" with only one of them anywhere near the pool; and the
+;; pads went into the ACTIVE LAYOUT's block, which from inside a
+;; viewport is the sheet's paper, not the model space the perimeter
+;; was picked in.  The sweep and the inserts both go through these two,
+;; so they cannot disagree.
+(defun upad:tab ()
+  (if (= 1 (getvar "CVPORT")) (getvar "CTAB") "Model"))
+
+(defun upad:space (doc)
+  (if (and (= 0 (getvar "TILEMODE")) (/= 1 (getvar "CVPORT")))
+      (vla-get-ModelSpace doc)
+      (vla-get-Block (vla-get-ActiveLayout doc))))
+
+;; Every survey point in the space being drawn in, as (position name).
 (defun upad:collect-points ( / ss i en ed typ p nm out)
   (setq out nil
-        ss  (ssget "_X" '((0 . "INSERT,POINT"))))
+        ss  (ssget "_X" (list '(0 . "INSERT,POINT")
+                              (cons 410 (upad:tab)))))
   (if ss
     (progn
       (setq i 0)
@@ -94429,7 +97297,7 @@
   (setvar "CMDECHO" 0)
   (setq undo-open (cal:undobegin)
         doc       (vla-get-ActiveDocument (vlax-get-acad-object))
-        space     (vla-get-Block (vla-get-ActiveLayout doc))
+        space     (upad:space doc)
         padsize   upad:*padsize*
         blkname   upad:*blkname*
         stage     1
@@ -94787,11 +97655,13 @@
 ;;;       dimensions in any other style.  Name a layer in
 ;;;       lg:*keeplayers* to spare it even inside the highlight.
 ;;;
-;;;    3. PADDLE.  The new perimeter is handed over as a pickfirst
-;;;       selection and PADDLE pads its concave features.  Handed, not
-;;;       hunted: PADDLE's own auto-detect reads the WHOLE drawing for
-;;;       its largest closed loop, which after a scoped gut may well be
-;;;       a title block border rather than the pool.
+;;;    3. PADDLE.  The new perimeter is handed to PADDLE in
+;;;       *calofin-handoff*, which PADDLE reads before its own pickfirst
+;;;       probe, so no PICKFIRST setting is needed, and PADDLE pads its
+;;;       concave features.  Handed, not hunted: PADDLE's own
+;;;       auto-detect reads the WHOLE drawing for its largest closed
+;;;       loop, which after a scoped gut may well be a title block
+;;;       border rather than the pool.
 ;;;
 ;;;  LINGUTTER erases a great deal of what you highlight, and does so
 ;;;  straight through -- no confirmation asked, just the report of
@@ -94899,7 +97769,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.11")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.12")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -96381,11 +99251,26 @@
 
 ;;; -------------------- handing over to PADDLE --------------------------
 
-;; Hand PERIM over as a pickfirst selection rather than letting PADDLE
-;; hunt for it: PADDLE auto-detects the largest closed loop in the WHOLE
-;; drawing, and LINGUTTER only ever gutted the highlighted area -- a
-;; title block border still standing outside it is a bigger loop than
-;; the pool.  Highlighted, PADDLE pads what we drew and asks nothing.
+;; What LINGUTTER hands PADDLE -- see lg:paddle.  Declared here, where it
+;; is used; PADDLE, AUTODIM and TYDRN read and clear the same global.
+(setq *calofin-handoff* nil)
+
+;; Hand PERIM over rather than letting PADDLE hunt for it: PADDLE
+;; auto-detects the largest closed loop in the WHOLE drawing, and
+;; LINGUTTER only ever gutted the highlighted area -- a title block
+;; border still standing outside it is a bigger loop than the pool.
+;; Handed it, PADDLE pads what we drew and asks nothing.
+;;
+;; It goes over in *calofin-handoff*, which PADDLE reads before its own
+;; pickfirst probe and clears.  It used to go as a pickfirst set, which
+;; ssget "_I" reads only with PICKFIRST at 1: a drafter who works at 0
+;; got PADDLE's perimeter prompt, and an Enter there auto-detected the
+;; title block border -- the very guess this handoff exists to prevent.
+;; The global borrows no setting of the drafter's.  The clear after the
+;; call keeps a PADDLE old enough not to read it (before v1.17, say a
+;; pinned dated twin) from leaving a stale set behind -- but that PADDLE
+;; gets nothing and asks for its own perimeter, so answer that prompt
+;; with a pick, not Enter.  The bundle ships the two in step.
 ;;
 ;; PADDLE is its own file, so it may not be in this session.  When it is
 ;; not, the gut has still happened and saying so beats dying on an
@@ -96399,9 +99284,10 @@
        (progn
          (setq ss (ssadd))
          (ssadd perim ss)
-         (sssetfirst nil ss)))
+         (setq *calofin-handoff* (list "PADDLE" ss))))
      (princ "\nLINGUTTER: handing the new perimeter to PADDLE.")
-     (c:PADDLE))
+     (c:PADDLE)
+     (setq *calofin-handoff* nil))
     (t
      (princ (strcat "\nLINGUTTER: PADDLE is not loaded, so no pads were"
                     " placed.  APPLOAD PADDLE.lsp (or the shared"
@@ -96748,10 +99634,14 @@
 ;;;                                 point, and the ruler re-grades
 ;;;                                 round it for the next;
 ;;;     * type a length          -- read the way DIMSTAMP reads: 44,
-;;;                                 44.5, 44 1/2, 4'4.5 and 4'-4 1/2"
+;;;                                 44.5, 44-1/2, 4'4.5 and 4'-4-1/2"
 ;;;                                 all mean what they say, kept
 ;;;                                 exactly as typed (44.3 stays 44.3;
-;;;                                 the ruler rounds to the eighth);
+;;;                                 the ruler rounds to the eighth).
+;;;                                 A fraction is DASHED: the spacebar
+;;;                                 is Enter here, so 44 1/2 would be
+;;;                                 44 for this point and 1/2 for the
+;;;                                 next;
 ;;;     * Enter                  -- the last length again, as before;
 ;;;     * click EMPTY SPACE      -- the first of two points to measure
 ;;;                                 the length between, which is what
@@ -96768,8 +99658,8 @@
 ;;;   * The whole run is one UNDO group: a single U reverses everything.
 ;;;   * Esc or an error at any prompt restores every system variable it
 ;;;     changed (OSMODE, CMDECHO, PDMODE, CLAYER, the CE* creation
-;;;     defaults and the current dimension style), erases the temporary
-;;;     guides and closes the UNDO group.
+;;;     defaults, PLINETYPE, PLINEWID and the current dimension style),
+;;;     erases the temporary guides and closes the UNDO group.
 ;;;   * Bad input re-prompts instead of aborting the command; zero and
 ;;;     negative lengths are rejected, as is a direction click that lands
 ;;;     on the line itself (where "which side" would be ambiguous).
@@ -96783,7 +99673,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.23")
+(setq *perp-version* "v0.24")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -96858,10 +99748,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -96902,6 +99796,14 @@
 ;;;            ladder it is standing on (nil = a tape)
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
+
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
 
 ;;; -------------------- end of the length ruler -------------------------
 
@@ -97566,8 +100468,8 @@
 
 (defun c:PERPPTS (/ *error* perp:kill perp:unplace perp:finish
                                     rl rr
-                    os ce pd plt clay cec celt celw celts cdim undoOpen
-                    tmpEnts
+                    os ce pd plt plw clay cec celt celw celts cdim undoOpen
+                    tmpEnts stopped
                     srcData srcLayer srcColor srcLtype srcLw srcLts
                     dimPairs dimStyle pr
                     sel ent etype verts pStart pFinish click
@@ -97594,17 +100496,23 @@
             newPts    (cdr newPts)
             i         (1- i))))
 
-  ;; single cleanup path shared by normal exit, Esc and errors
-  (defun perp:finish (/ guard)
-    ;; The drafter's settings come back FIRST -- ahead of the drain
-    ;; below, which is the one form in here that can throw.  A bare
-    ;; (command) from *error* is legal only while a pushed error mode is
-    ;; actually in effect; where it is not, AutoCAD rejects it, the throw
-    ;; lands inside the handler and every line after it is skipped.  This
-    ;; whole defun WAS those lines: the handler is nothing but a call to
-    ;; it, so a rejected drain used to take the OSMODE restore, the layer,
-    ;; the creation defaults and the error-mode pop with it.  Putting back
-    ;; values this run captured itself is pure setvar and cannot throw.
+  ;; single cleanup path shared by normal exit, Esc and errors.
+  ;;
+  ;; It runs in AutoCAD's DEFAULT error mode, and must: it is local to
+  ;; the command and reads only the command's locals, and under
+  ;; *push-error-using-command* AutoCAD resets the evaluator before
+  ;; *error* runs.  The handler used to call an undefined perp:finish
+  ;; there and die at its first form -- OSMODE left at 0, the drafter on
+  ;; PERPPTS-TEMP, the guides left in, no report, and the mode pushed
+  ;; for the session.  The push was only for a bare (command) drain of
+  ;; a pending PLINE, and none is ever pending: every (command ...) here
+  ;; is fed points the run computed, with no prompt in between, so an
+  ;; Esc lands at one of the run's own prompts.  No push, no pop, no
+  ;; drain; command-s only.
+  (defun perp:finish ()
+    ;; The drafter's settings come back FIRST: putting back values this
+    ;; run captured itself is pure setvar and cannot throw, so nothing
+    ;; after this block can take them with it.
     (if os    (setvar "OSMODE"    os))
     (if pd    (setvar "PDMODE"    pd))
     (if cec   (setvar "CECOLOR"   cec))
@@ -97612,29 +100520,22 @@
     (if celw  (setvar "CELWEIGHT" celw))
     (if celts (setvar "CELTSCALE" celts))
     (if plt   (setvar "PLINETYPE" plt))
+    (if plw   (setvar "PLINEWID"  plw))
     ;; CLAYER last of the setvars: it is the one that can throw here, if
     ;; the layer it names was purged while the run was open
     (if clay  (setvar "CLAYER"    clay))
-    ;; now the drain: cancel any command left pending by an Esc
-    ;; mid-PLINE/DIMALIGNED
-    (setq guard 0)
-    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
-      (command)
-      (setq guard (1+ guard)))
-    ;; The error mode comes off HERE, after the last bare (command) and
-    ;; before the first command-s: under a push AutoCAD refuses command-s
-    ;; inside *error* with "INTERNAL error in FAIL", past any
-    ;; vl-catch-all-apply, and the rest of the handler never runs
-    ;; -- the DIMSTYLE restore and the undo close below.  Both exits come
-    ;; through here, so a clean run's mode is not left stacked for the
-    ;; session either (AutoLISP reference, *push-error-using-command*).
-    (if *pop-error-mode* (*pop-error-mode*))
     (if rl (setq rl (cal:ruler-off rl)))
     (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
     (setq tmpEnts nil)
+    ;; cdim is cleared once it is put back: a stop the run explains
+    ;; comes through here twice, once before its (exit) and once from
+    ;; the handler, and the second -DIMSTYLE landed AFTER the undo group
+    ;; had closed -- one more thing for the drafter's next U to undo.
+    ;; Everything else in here is already safe to run twice.
     (if (and cdim (tblsearch "DIMSTYLE" cdim))
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" cdim)))
-    ;; CMDECHO after the drain, so the drain itself stays quiet
+    (setq cdim nil)
+    ;; CMDECHO after the -DIMSTYLE restore, so that stays quiet
     (if ce (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
@@ -97642,22 +100543,24 @@
 
   (defun *error* (msg)
     (perp:finish)
-    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-      (princ (strcat "\nError: " msg))
-      (princ "\nCancelled."))
+    ;; stopped = the run has already said why it is stopping (a line of
+    ;; no length, a resize the layer would not take) and ended itself by
+    ;; (exit), which arrives here like an Esc.  "Cancelled." under that
+    ;; reason told the drafter they had pressed a key they had not.
+    (if (not stopped)
+      (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nError: " msg))
+        (princ "\nCancelled.")))
     (if lzd:report (lzd:report "PERPPTS" *perp-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "PERPPTS" *perp-version*))
-  ;; AutoCAD 2012+ requires this so *error* may call (command) - the
-  ;; CMDACTIVE drain in perp:finish; harmless no-op guard on older
-  ;; releases where it doesn't exist
-  (if *push-error-using-command* (*push-error-using-command*))
 
   ;; --- save state and open one undo group for the whole run -----------
   (setq os    (getvar "OSMODE")
         ce    (getvar "CMDECHO")
         pd    (getvar "PDMODE")
         plt   (getvar "PLINETYPE")
+        plw   (getvar "PLINEWID")
         clay  (getvar "CLAYER")
         cec   (getvar "CECOLOR")
         celt  (getvar "CELTYPE")
@@ -97669,6 +100572,13 @@
   ;; PLINE must produce a lightweight polyline, the only kind an arc
   ;; bulge can be written onto
   (setvar "PLINETYPE" 2)
+  ;; ...and a hairline one.  PLINE starts at PLINEWID, which the drawing
+  ;; saves and any earlier PLINE Width answer sets, and perp:arcs keeps
+  ;; every group but the bulges -- so one 2" wide polyline drawn earlier
+  ;; made every measured course a heavy 2" band, with nothing said.
+  ;; Moved only when it is not already 0, so a run borrows nothing it
+  ;; does not have to give back.
+  (if (and plw (/= plw 0.0)) (setvar "PLINEWID" 0.0))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -97750,6 +100660,7 @@
               ((equal dlen 0.0 1e-9)
                (princ "\nSelected object has zero length.")
                (perp:finish)
+               (setq stopped T)
                (exit))
               (t
                (setq ux (/ dx dlen)
@@ -97816,6 +100727,7 @@
                                  " likely on a locked, frozen or switched-off"
                                  " layer.  Free the layer and run PERPPTS again."))
                   (perp:finish)
+                  (setq stopped T)
                   (exit)))
               (setq verts   (perp:scale-pts verts mid fac)
                     pStart  (perp:scale-pt pStart mid fac)
@@ -98500,10 +101412,14 @@
 ;;;                                 point, and the ruler re-grades
 ;;;                                 round it for the next;
 ;;;     * type a length          -- read the way DIMSTAMP reads: 44,
-;;;                                 44.5, 44 1/2, 4'4.5 and 4'-4 1/2"
+;;;                                 44.5, 44-1/2, 4'4.5 and 4'-4-1/2"
 ;;;                                 all mean what they say, kept
 ;;;                                 exactly as typed (44.3 stays 44.3;
-;;;                                 the ruler rounds to the eighth);
+;;;                                 the ruler rounds to the eighth).
+;;;                                 A fraction is DASHED: the spacebar
+;;;                                 is Enter here, so 44 1/2 would be
+;;;                                 44 for this point and 1/2 for the
+;;;                                 next;
 ;;;     * Enter                  -- the last length again, as before;
 ;;;     * click EMPTY SPACE      -- the first of two points to measure
 ;;;                                 the length between, which is what
@@ -98520,8 +101436,8 @@
 ;;;   * The whole run is one UNDO group: a single U reverses everything.
 ;;;   * Esc or an error at any prompt restores every system variable it
 ;;;     changed (OSMODE, CMDECHO, PDMODE, CLAYER, the CE* creation
-;;;     defaults and the current dimension style), erases the temporary
-;;;     guides and closes the UNDO group.
+;;;     defaults, PLINETYPE, PLINEWID and the current dimension style),
+;;;     erases the temporary guides and closes the UNDO group.
 ;;;   * Bad input re-prompts instead of aborting the command; zero and
 ;;;     negative lengths are rejected, as is a direction click that lands
 ;;;     on the curve itself (where "which side" would be ambiguous).
@@ -98541,7 +101457,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.23")
+(setq *cperp-version* "v0.24")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -98608,10 +101524,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -98652,6 +101572,14 @@
 ;;;            ladder it is standing on (nil = a tape)
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
+
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
 
 ;;; -------------------- end of the length ruler -------------------------
 
@@ -99139,7 +102067,8 @@
 
 (defun c:CPERPPTS (/ *error* cperp:kill cperp:unplace cperp:finish
                                       rl rr
-                     os ce pd clay cec celt celw celts cdim undoOpen tmpEnts
+                     os ce pd plw clay cec celt celw celts cdim undoOpen
+                     tmpEnts stopped
                      srcData srcLayer srcColor srcLtype srcLw srcLts
                      dimPairs dimStyle pr
                      sel crv etype sp ep click rev side tot
@@ -99170,17 +102099,23 @@
             idxs      (cdr idxs)))
     (setq i tgt))
 
-  ;; single cleanup path shared by normal exit, Esc and errors
-  (defun cperp:finish (/ guard)
-    ;; The drafter's settings come back FIRST -- ahead of the drain
-    ;; below, which is the one form in here that can throw.  A bare
-    ;; (command) from *error* is legal only while a pushed error mode is
-    ;; actually in effect; where it is not, AutoCAD rejects it, the throw
-    ;; lands inside the handler and every line after it is skipped.  This
-    ;; whole defun WAS those lines: the handler is nothing but a call to
-    ;; it, so a rejected drain used to take the OSMODE restore, the layer,
-    ;; the creation defaults and the error-mode pop with it.  Putting back
-    ;; values this run captured itself is pure setvar and cannot throw.
+  ;; single cleanup path shared by normal exit, Esc and errors.
+  ;;
+  ;; It runs in AutoCAD's DEFAULT error mode, and must: it is local to
+  ;; the command and reads only the command's locals, and under
+  ;; *push-error-using-command* AutoCAD resets the evaluator before
+  ;; *error* runs.  The handler used to call an undefined cperp:finish
+  ;; there and die at its first form -- OSMODE left at 0, the drafter on
+  ;; PERPPTS-TEMP, the guides left in, no report, and the mode pushed
+  ;; for the session.  The push was only for a bare (command) drain of
+  ;; a pending PLINE, and none is ever pending: every (command ...) here
+  ;; is fed points the run computed, with no prompt in between, so an
+  ;; Esc lands at one of the run's own prompts.  No push, no pop, no
+  ;; drain; command-s only.
+  (defun cperp:finish ()
+    ;; The drafter's settings come back FIRST: putting back values this
+    ;; run captured itself is pure setvar and cannot throw, so nothing
+    ;; after this block can take them with it.
     (if os    (setvar "OSMODE"    os))
     (if pd    (setvar "PDMODE"    pd))
     (if cec   (setvar "CECOLOR"   cec))
@@ -99188,27 +102123,22 @@
     (if celw  (setvar "CELWEIGHT" celw))
     (if celts (setvar "CELTSCALE" celts))
     (if plt   (setvar "PLINETYPE" plt))
+    (if plw   (setvar "PLINEWID"  plw))
     ;; CLAYER last of the setvars: it is the one that can throw here, if
     ;; the layer it names was purged while the run was open
     (if clay  (setvar "CLAYER"    clay))
-    (setq guard 0)
-    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
-      (command)
-      (setq guard (1+ guard)))
-    ;; The error mode comes off HERE, after the last bare (command) and
-    ;; before the first command-s: under a push AutoCAD refuses command-s
-    ;; inside *error* with "INTERNAL error in FAIL", past any
-    ;; vl-catch-all-apply, and the rest of the handler never runs
-    ;; -- the DIMSTYLE restore and the undo close below.  Both exits come
-    ;; through here, so a clean run's mode is not left stacked for the
-    ;; session either (AutoLISP reference, *push-error-using-command*).
-    (if *pop-error-mode* (*pop-error-mode*))
     (if rl (setq rl (cal:ruler-off rl)))
     (foreach e tmpEnts (if (and e (entget e)) (entdel e)))
     (setq tmpEnts nil)
+    ;; cdim is cleared once it is put back: a stop the run explains
+    ;; comes through here twice, once before its (exit) and once from
+    ;; the handler, and the second -DIMSTYLE landed AFTER the undo group
+    ;; had closed -- one more thing for the drafter's next U to undo.
+    ;; Everything else in here is already safe to run twice.
     (if (and cdim (tblsearch "DIMSTYLE" cdim))
       (vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" cdim)))
-    ;; CMDECHO after the drain, so the drain itself stays quiet
+    (setq cdim nil)
+    ;; CMDECHO after the -DIMSTYLE restore, so that stays quiet
     (if ce (setvar "CMDECHO" ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
@@ -99216,16 +102146,18 @@
 
   (defun *error* (msg)
     (cperp:finish)
-    (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
-      (princ (strcat "\nError: " msg))
-      (princ "\nCancelled."))
+    ;; stopped = the run has already said why it is stopping (a resize
+    ;; the layer would not take, too few points left to join) and ended
+    ;; itself by (exit), which arrives here like an Esc.  "Cancelled."
+    ;; under that reason told the drafter they had pressed a key they
+    ;; had not.
+    (if (not stopped)
+      (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+        (princ (strcat "\nError: " msg))
+        (princ "\nCancelled.")))
     (if lzd:report (lzd:report "CPERPPTS" *cperp-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "CPERPPTS" *cperp-version*))
-  ;; AutoCAD 2012+ requires this so *error* may call (command) - the
-  ;; CMDACTIVE drain in cperp:finish; harmless no-op guard on older
-  ;; releases where it doesn't exist
-  (if *push-error-using-command* (*push-error-using-command*))
 
   ;; --- save state and open one undo group for the whole run -----------
   (setq os    (getvar "OSMODE")
@@ -99238,11 +102170,19 @@
         celts (getvar "CELTSCALE")
         cdim  (getvar "DIMSTYLE")
         plt   (getvar "PLINETYPE")
+        plw   (getvar "PLINEWID")
         tmpEnts '())
   (setvar "CMDECHO" 0)
   ;; PLINE must produce a lightweight polyline so the arc bulges can be
   ;; written into it and the result stays a plain LWPOLYLINE
   (setvar "PLINETYPE" 2)
+  ;; ...and a hairline one.  PLINE starts at PLINEWID, which the drawing
+  ;; saves and any earlier PLINE Width answer sets, and cperp:arcs keeps
+  ;; every group but the bulges -- so one 2" wide polyline drawn earlier
+  ;; made every measured course a heavy 2" band, with nothing said.
+  ;; Moved only when it is not already 0, so a run borrows nothing it
+  ;; does not have to give back.
+  (if (and plw (/= plw 0.0)) (setvar "PLINEWID" 0.0))
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command
   (if (= 1 (logand 1 (getvar "UNDOCTL")))
@@ -99389,6 +102329,7 @@
                                  " likely on a locked, frozen or switched-off"
                                  " layer.  Free the layer and run CPERPPTS again."))
                   (cperp:finish)
+                  (setq stopped T)
                   (exit)))
               ;; re-read: the curve itself is what every round measures along
               (setq tot (cperp:curvelen crv)
@@ -99655,6 +102596,7 @@
       (progn
         (princ "\nToo few points were placed to build a polyline.")
         (cperp:finish)
+        (setq stopped T)
         (exit)))
     (setvar "CLAYER"    srcLayer)
     (setvar "CECOLOR"   srcColor)
@@ -99842,7 +102784,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.9")
+(setq *tutperp-version* "v0.10")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -99883,7 +102825,7 @@
 
 (defun c:TUTORIALPERPPTS (/ *error* tutp:say tutp:pause tutp:track
                             tutp:finish
-                            os ce pd undoOpen ents mode ans p sz z
+                            os ce pd plt plw undoOpen ents mode ans p sz z
                             n i tt bx q d lens len base np
                             basePts newPts bases2 new2 e s)
 
@@ -99901,9 +102843,11 @@
     (setq ents (cons (entlast) ents)))
 
   (defun tutp:finish ()
-    (if pd (setvar "PDMODE"  pd))
-    (if os (setvar "OSMODE"  os))
-    (if ce (setvar "CMDECHO" ce))
+    (if pd  (setvar "PDMODE"    pd))
+    (if os  (setvar "OSMODE"    os))
+    (if plt (setvar "PLINETYPE" plt))
+    (if plw (setvar "PLINEWID"  plw))
+    (if ce  (setvar "CMDECHO"   ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
              (setq undoOpen nil))))
@@ -99916,9 +102860,11 @@
     (princ))
   (if lzd:begin (lzd:begin "TUTORIALPERPPTS" *tutperp-version*))
 
-  (setq os (getvar "OSMODE")
-        ce (getvar "CMDECHO")
-        pd (getvar "PDMODE")
+  (setq os  (getvar "OSMODE")
+        ce  (getvar "CMDECHO")
+        pd  (getvar "PDMODE")
+        plt (getvar "PLINETYPE")
+        plw (getvar "PLINEWID")
         ents '())
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -100085,6 +103031,10 @@
       (if lzd:ask (lzd:ask "\nDemo size <100>: " sz) sz)
       (if (null sz) (setq sz 100.0))
       (setvar "OSMODE" 0)
+      ;; the demo shows what PERPPTS draws -- a lightweight hairline
+      ;; polyline -- whatever PLINETYPE and the width PLINE last used say
+      (setvar "PLINETYPE" 2)
+      (if (and plw (/= plw 0.0)) (setvar "PLINEWID" 0.0))
       (if (member pd '(0 1)) (setvar "PDMODE" 3))
       (setq z (caddr p))
 
@@ -100293,7 +103243,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.10")
+(setq *tutcperp-version* "v0.11")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -100357,7 +103307,7 @@
 
 (defun c:TUTORIALCPERPPTS (/ *error* tutc:say tutc:pause tutc:track
                              tutc:finish tutc:round
-                             os ce pd plt undoOpen ents mode ans p sz z
+                             os ce pd plt plw undoOpen ents mode ans p sz z
                              w1 w2 w3 crv tot n i dd q d tg nrm
                              lens base np basePts newPts tangs e s)
 
@@ -100377,6 +103327,7 @@
     (if pd  (setvar "PDMODE"    pd))
     (if os  (setvar "OSMODE"    os))
     (if plt (setvar "PLINETYPE" plt))
+    (if plw (setvar "PLINEWID"  plw))
     (if ce  (setvar "CMDECHO"   ce))
     (if undoOpen
       (progn (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
@@ -100432,6 +103383,7 @@
         ce  (getvar "CMDECHO")
         pd  (getvar "PDMODE")
         plt (getvar "PLINETYPE")
+        plw (getvar "PLINEWID")
         ents '())
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
@@ -100602,6 +103554,9 @@
       (if (null sz) (setq sz 100.0))
       (setvar "OSMODE" 0)
       (setvar "PLINETYPE" 2)
+      ;; PLINE starts at the width the drawing last used; the demo shows
+      ;; what CPERPPTS draws, which is a hairline
+      (if (and plw (/= plw 0.0)) (setvar "PLINEWID" 0.0))
       (if (member pd '(0 1)) (setvar "PDMODE" 3))
       (setq z (caddr p))
 
@@ -100762,6 +103717,8 @@
 ;;;   point the same way, and this uses their classifier: an "ab_pt"
 ;;;   INSERT wherever it sits, any other INSERT on the POINTS layer, and
 ;;;   a plain POINT on that layer, numbered by its "number" attribute.
+;;;   Only model space is read: a point block pasted onto a layout is
+;;;   not one of the pool's points.
 ;;;
 ;;; Workflow
 ;;;   1. Select the perimeter -- the wall the distances were taped off.
@@ -100885,8 +103842,10 @@
 ;;;   right edge of the view: the eighths of an inch for a whole inch
 ;;;   either side of the last distance, graded like a tape with the
 ;;;   last one ringed.  Click a row and that is the distance; type one
-;;;   and it reads as DIMSTAMP reads (44, 44.5, 44 1/2, 3'8, 4'-4 1/2"
-;;;   - kept exactly as typed, only the ruler rounds to the eighth);
+;;;   and it reads as DIMSTAMP reads (44, 44.5, 44-1/2, 3'8, 4'-4-1/2"
+;;;   - kept exactly as typed, only the ruler rounds to the eighth; a
+;;;   fraction is dashed, because the spacebar is Enter here and 44 1/2
+;;;   would hand the 1/2 to the next question);
 ;;;   click empty space and it is the first of two points to measure
 ;;;   between, as getdist always offered.  Back means what it always
 ;;;   did.  The ruler is scratch on the marks layer, down when the
@@ -100922,7 +103881,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.10")
+(setq *perpmark-version* "v1.11")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -101374,9 +104333,15 @@
 (defun pm:ptname (nm) (strcat pm:*pt-prefix* nm))
 
 ;; Every survey point in the drawing, as (position name entity).
+;;
+;; Model space only.  "_X" sweeps every layout too, so a survey-point
+;; block pasted onto a sheet -- a key plan, a detail -- was a candidate
+;; beside the real one: a typed number came back "two points are
+;; numbered N", or a click was measured against paper-space numbers
+;; that have nothing to do with the pool.
 (defun pm:collect-points ( / ss i en ed typ p nm out)
   (setq out nil
-        ss  (ssget "_X" '((0 . "INSERT,POINT"))))
+        ss  (ssget "_X" '((0 . "INSERT,POINT") (410 . "Model"))))
   (if ss
     (progn
       (setq i 0)
@@ -101456,10 +104421,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -101500,6 +104469,14 @@
 ;;;            ladder it is standing on (nil = a tape)
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
+
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
 
 ;;; -------------------- end of the length ruler -------------------------
 
@@ -101547,6 +104524,12 @@
 ;; prose inside the angle brackets on a loop prompt whose Enter ends the
 ;; loop (nil = a point is required).  Returns the candidate, nil for
 ;; Enter, or CAL-BACK.
+;;
+;; A click comes back in the CURRENT UCS and the survey points are read
+;; out of entget in WCS, so the click is carried into WCS before it is
+;; measured against them.  Compared raw, a UCS moved off World matched
+;; the click against the wrong numbers: the point under the crosshair
+;; was "not there", or a different point was marked.
 (defun pm:askpoint (msg tail back cands / v out done dupes)
   (setq done nil out nil)
   (while (not done)
@@ -101578,7 +104561,7 @@
                          "\" - click the one you mean.")))
          (t (setq out (car dupes) done T))))
       (t
-       (setq out (pm:nearest v cands))
+       (setq out (pm:nearest (trans v 1 0) cands))
        (if out
          (setq done T)
          (princ (strcat "\nNo survey point there - click one, or type"
@@ -102422,7 +105405,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.7")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.8")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -102507,9 +105490,27 @@
 (setq sf:*minang*     0.02)  ; how far off straight (radians) two legs
                              ; must be before there is a corner at all
 
+;;; -------------------- run-time state -------------------------------
+;;; Not knobs: what a run keeps while it runs, ruled off from the block
+;;; above so LAZTUNE does not offer them as settings.  A sysvar snapshot
+;;; offered as a knob is set again at every panel open, and every run
+;;; then skips taking its own and puts that stored value back instead of
+;;; the drafter's settings -- or throws on it, from inside the handler.
+;;;
+;;; The dim style and the undo flag live here, not in the command's
+;;; locals, because the command pushes the error mode for its handler's
+;;; (command) drain, and under a push AutoCAD resets the evaluator
+;;; before *error* runs: the handler sees globals only.  As locals they
+;;; read nil there, so a failure left the undo group open and, from
+;;; inside the radius dimension, the small style current.  Both are
+;;; cleared at the top of every run, before the push, so a run that died
+;;; without its handler cannot hand the next one a group to close.
+
 (setq sf:*preview*    nil)   ; every entity drawn as a preview
 (setq sf:*picks*      nil)   ; (preview-arc . radius), what a click means
 (setq sf:*smallwarned* nil)  ; the missing-style note is said once
+(setq sf:*odim*       nil)   ; the dim style the run opened with
+(setq sf:*undo-open*  nil)   ; T while this run's undo group is open
 
 ;;; -------------------- shared helpers ------------------------------
 ;;; The generic CALOFIN-LIB helpers this tool leans on.  Here they are
@@ -103133,7 +106134,7 @@
 
 ;;; -------------------- the command ---------------------------------
 
-(defun c:SMARTFILLET ( / *error* olderr odim undo-open
+(defun c:SMARTFILLET ( / *error*
                          one two geo rmax rads extra shown-extras note
                          r arc dim1 made)
 
@@ -103143,7 +106144,15 @@
   ;;    the next tool to read as work.  Then the user's settings, then
   ;;    the undo group -- left open, the next U would swallow the
   ;;    user's own work
-  (setq olderr *error*)
+  ;;
+  ;;    *error* is a local of this command, so nothing here saves or
+  ;;    restores the global one: a copy taken here is the local nil, and
+  ;;    under the pushed mode, where the handler sees globals only,
+  ;;    writing it back wiped whatever handler another application had
+  ;;    installed.  The two run globals are cleared FIRST, before the
+  ;;    push, so nothing a dead run left behind is acted on.
+  (setq sf:*odim* nil
+        sf:*undo-open* nil)
   (defun *error* (m)
     (sf:clear)
     (cal:sysrestore)
@@ -103159,10 +106168,12 @@
     ;; inside *error* with "INTERNAL error in FAIL", past any
     ;; vl-catch-all-apply, and the rest of the handler never runs
     (if *pop-error-mode* (*pop-error-mode*))
-    (sf:restyle odim)
-    (if undo-open
-      (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
-    (setq *error* olderr)
+    (sf:restyle sf:*odim*)
+    (setq sf:*odim* nil)
+    (if sf:*undo-open*
+      (progn
+        (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+        (setq sf:*undo-open* nil)))
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nSMARTFILLET error: " m)))
@@ -103170,14 +106181,16 @@
     (princ))
   (if lzd:begin (lzd:begin "SMARTFILLET" *smartfillet-version*))
 
-  ;; AutoCAD 2012+ requires this before *error* may call (command) --
-  ;; the CMDACTIVE drain and the undo close in the handler above; a
-  ;; harmless no-op guard on older releases, where it does not exist
+  ;; AutoCAD 2012+ requires this before *error* may call a bare
+  ;; (command), and the handler above has one: the sf:flush drain.  The
+  ;; style restore and the undo close after it are command-s, issued
+  ;; once the handler has popped the mode.  A harmless no-op guard on
+  ;; older releases, where it does not exist
   (if *push-error-using-command* (*push-error-using-command*))
 
   (vl-load-com)
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER" "FILLETRAD" "TRIMMODE"))
-  (setq odim (getvar "DIMSTYLE")
+  (setq sf:*odim* (getvar "DIMSTYLE")
         made 0)
   (setvar "CMDECHO" 0)
   (setvar "OSMODE"  0)
@@ -103216,7 +106229,7 @@
      (if (= 1 (logand 1 (getvar "UNDOCTL")))
        (progn
          (command "_.UNDO" "_Begin")
-         (setq undo-open t)))
+         (setq sf:*undo-open* t)))
      (setq 
            rads      (sf:candidates rmax)
            extra     (- (sf:howmany rmax) (length rads)))
@@ -103295,18 +106308,18 @@
      ;; (UNDOCTL bit 1 clear) none was, and an _End on nothing is an
      ;; error of its own -- and it lands HERE, with the corner already
      ;; cut and the settings restore below it never reached
-     (if undo-open
+     (if sf:*undo-open*
        (progn
          (command "_.UNDO" "_End")
-         (setq undo-open nil)))))
+         (setq sf:*undo-open* nil)))))
 
   ;; every path out drops the snapshot, the quiet ones included: a run
   ;; that found nothing to do and kept its snapshot would hand it to the
   ;; NEXT run, which would then put the user's settings back to what
   ;; they were two commands ago
-  (sf:restyle odim)
+  (sf:restyle sf:*odim*)
+  (setq sf:*odim* nil)
   (cal:sysrestore)
-  (setq *error* olderr)
   ;; ...and so does the error mode pushed at the top: every quiet exit
   ;; and the cut one come through here, and a mode left stacked refuses
   ;; command-s inside every later handler in the session (AutoLISP
@@ -103504,7 +106517,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *honefillet-version* "v1.5")  ; announced on load; release_lisp.py
+(setq *honefillet-version* "v1.6")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -103605,9 +106618,27 @@
 (setq hn:*minang*     0.02)  ; how far off straight (radians) two legs
                              ; must be before there is a corner at all
 
+;;; -------------------- run-time state -------------------------------
+;;; Not knobs: what a run keeps while it runs, ruled off from the block
+;;; above so LAZTUNE does not offer them as settings.  A sysvar snapshot
+;;; offered as a knob is set again at every panel open, and every run
+;;; then skips taking its own and puts that stored value back instead of
+;;; the drafter's settings -- or throws on it, from inside the handler.
+;;;
+;;; The dim style and the undo flag live here, not in the command's
+;;; locals, because the command pushes the error mode for its handler's
+;;; (command) drain, and under a push AutoCAD resets the evaluator
+;;; before *error* runs: the handler sees globals only.  As locals they
+;;; read nil there, so a failure left the undo group open and, from
+;;; inside the radius dimension, the small style current.  Both are
+;;; cleared at the top of every run, before the push, so a run that died
+;;; without its handler cannot hand the next one a group to close.
+
 (setq hn:*preview*    nil)   ; every entity drawn as a preview
 (setq hn:*picks*      nil)   ; (preview-arc . radius), what a click means
 (setq hn:*smallwarned* nil)  ; the missing-style note is said once
+(setq hn:*odim*       nil)   ; the dim style the run opened with
+(setq hn:*undo-open*  nil)   ; T while this run's undo group is open
 
 ;;; -------------------- shared helpers ------------------------------
 ;;; The generic CALOFIN-LIB helpers this tool leans on.  Here they are
@@ -104296,7 +107327,7 @@
 
 ;;; -------------------- the command ---------------------------------
 
-(defun c:HONEFILLET ( / *error* olderr odim undo-open
+(defun c:HONEFILLET ( / *error*
                          one two geo rmax rads extra shown-extras note
                          span fines r arc dim1 made)
 
@@ -104306,7 +107337,15 @@
   ;;    the next tool to read as work.  Then the user's settings, then
   ;;    the undo group -- left open, the next U would swallow the
   ;;    user's own work
-  (setq olderr *error*)
+  ;;
+  ;;    *error* is a local of this command, so nothing here saves or
+  ;;    restores the global one: a copy taken here is the local nil, and
+  ;;    under the pushed mode, where the handler sees globals only,
+  ;;    writing it back wiped whatever handler another application had
+  ;;    installed.  The two run globals are cleared FIRST, before the
+  ;;    push, so nothing a dead run left behind is acted on.
+  (setq hn:*odim* nil
+        hn:*undo-open* nil)
   (defun *error* (m)
     (hn:clear)
     (cal:sysrestore)
@@ -104322,10 +107361,12 @@
     ;; inside *error* with "INTERNAL error in FAIL", past any
     ;; vl-catch-all-apply, and the rest of the handler never runs
     (if *pop-error-mode* (*pop-error-mode*))
-    (hn:restyle odim)
-    (if undo-open
-      (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
-    (setq *error* olderr)
+    (hn:restyle hn:*odim*)
+    (setq hn:*odim* nil)
+    (if hn:*undo-open*
+      (progn
+        (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+        (setq hn:*undo-open* nil)))
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nHONEFILLET error: " m)))
@@ -104333,14 +107374,16 @@
     (princ))
   (if lzd:begin (lzd:begin "HONEFILLET" *honefillet-version*))
 
-  ;; AutoCAD 2012+ requires this before *error* may call (command) --
-  ;; the CMDACTIVE drain and the undo close in the handler above; a
-  ;; harmless no-op guard on older releases, where it does not exist
+  ;; AutoCAD 2012+ requires this before *error* may call a bare
+  ;; (command), and the handler above has one: the hn:flush drain.  The
+  ;; style restore and the undo close after it are command-s, issued
+  ;; once the handler has popped the mode.  A harmless no-op guard on
+  ;; older releases, where it does not exist
   (if *push-error-using-command* (*push-error-using-command*))
 
   (vl-load-com)
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER" "FILLETRAD" "TRIMMODE"))
-  (setq odim (getvar "DIMSTYLE")
+  (setq hn:*odim* (getvar "DIMSTYLE")
         made 0)
   (setvar "CMDECHO" 0)
   (setvar "OSMODE"  0)
@@ -104388,7 +107431,7 @@
      (if (= 1 (logand 1 (getvar "UNDOCTL")))
        (progn
          (command "_.UNDO" "_Begin")
-         (setq undo-open t)))
+         (setq hn:*undo-open* t)))
      ;; rads is already the candidate list -- the cond arm above tested
      ;; it for a second size and left it set
      (setq extra (- (hn:howmany rmax) (length rads)))
@@ -104489,18 +107532,18 @@
      ;; (UNDOCTL bit 1 clear) none was, and an _End on nothing is an
      ;; error of its own -- and it lands HERE, with the corner already
      ;; cut and the settings restore below it never reached
-     (if undo-open
+     (if hn:*undo-open*
        (progn
          (command "_.UNDO" "_End")
-         (setq undo-open nil)))))
+         (setq hn:*undo-open* nil)))))
 
   ;; every path out drops the snapshot, the quiet ones included: a run
   ;; that found nothing to do and kept its snapshot would hand it to the
   ;; NEXT run, which would then put the user's settings back to what
   ;; they were two commands ago
-  (hn:restyle odim)
+  (hn:restyle hn:*odim*)
+  (setq hn:*odim* nil)
   (cal:sysrestore)
-  (setq *error* olderr)
   ;; ...and so does the error mode pushed at the top: every quiet exit
   ;; and the cut one come through here, and a mode left stacked refuses
   ;; command-s inside every later handler in the session (AutoLISP
@@ -104616,15 +107659,23 @@
 ;;;      write nothing and say NEEDS UPDATING instead.  The block is
 ;;;      looked for in the selection and then across the drawing;
 ;;;      with none in reach the report says the date was not checked
-;;;      rather than flagging it.  LITESPACHECKSCAN keeps this one.
+;;;      rather than flagging it.  With several, the one nearest the
+;;;      spa is read, named, and never written.  LITESPACHECKSCAN
+;;;      keeps this one.
 ;;;
 ;;;   8. THE TITLE BLOCK.  Everything on the border layer is measured
 ;;;      together, so a frame drawn as one polyline and one drawn as
-;;;      four lines both measure the same.  A spa sheet's title block is
-;;;      exactly 0.6x the liner block: the liner nominal is 704 x
-;;;      543.625, so the spa nominal is 422.4 x 326.175.  Anything else
-;;;      is reported with the factor it actually came out at, and a
-;;;      border out of proportion is reported separately as STRETCHED.
+;;;      four lines -- corners closed or left a little open -- both
+;;;      measure the same; one frame per sheet: with several sheets,
+;;;      the one around or nearest the spa.  A border not in the
+;;;      selection is looked for in the space the drafter is working in
+;;;      only (model space from a layout viewport), unlike the Tech
+;;;      Title in 7, which may live in paper space.  A spa
+;;;      sheet's title block is exactly 0.6x the liner block: the liner
+;;;      nominal is 704 x 543.625, so the spa nominal is 422.4 x
+;;;      326.175.  Anything else is reported with the factor it actually
+;;;      came out at, and a border out of proportion is reported
+;;;      separately as STRETCHED.
 ;;;
 ;;;   9. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;      drawing, sized to scale with it: a large title, the date and
@@ -104648,7 +107699,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.20")
+(setq *spacheck-version* "v1.21")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -104885,6 +107936,21 @@
     (setq out (if out (strcat out sep s) s)))
   (if out out ""))
 
+;; "MM/DD/YYYY HH:MM" off the computer clock, for the report's stamp --
+;; the sheet's own MM/DD/YYYY, the form the Tech Title date is held to.
+;; CDATE is decoded arithmetically, as spachk:today-mdy does: rtos of
+;; it is trimmed by DIMZIN 8 (which SPA sets), so a sliced
+;; (rtos CDATE 2 6) read "20260923.1" at ten o'clock and stamped " 1:".
+;; Kept local rather than swapped for cal:datestr, whose YYYY-MM-DD is
+;; the other review tools' form -- the one-file build printed that one
+;; and the standalone this, for the same report.
+(defun spachk:datestr ( / d tt)
+  (setq d  (getvar "CDATE")
+        tt (- d (fix d)))
+  (strcat (spachk:mdy-str (spachk:today-mdy)) " "
+          (spachk:pad2 (fix (+ (* tt 100) 1e-6))) ":"
+          (spachk:pad2 (rem (fix (+ (* tt 10000) 1e-4)) 100))))
+
 ;; Everything after the last colon, trimmed: "Taper: 4-2" -> "4-2".
 (defun spachk:aftercolon (s / i out)
   (setq i (strlen s) out s)
@@ -104984,6 +108050,65 @@
        (>= (- (cadar inner) (cadar outer)) (- slack))
        (>= (- (caadr outer) (caadr inner)) (- slack))
        (>= (- (cadadr outer) (cadadr inner)) (- slack))))
+
+;; Do two boxes overlap or touch, with slack?
+(defun spachk:touch-p (a b slack)
+  (and (<= (caar a) (+ (caadr b) slack)) (<= (caar b) (+ (caadr a) slack))
+       (<= (cadar a) (+ (cadadr b) slack)) (<= (cadar b) (+ (cadadr a) slack))))
+
+(defun spachk:bbunion (a b)
+  (list (list (min (caar a) (caar b)) (min (cadar a) (cadar b)))
+        (list (max (caadr a) (caadr b)) (max (cadadr a) (cadadr b)))))
+
+;; Boxes that come within slack of each other merged into one, until
+;; no two left do: one sheet's frame -- a polyline, four lines, a double
+;; rule -- comes out as one box, and each separate sheet as a box of its
+;; own.  The slack is what tells a sheet from a gap: a hand-drawn frame's
+;; corners are open by a thousandth or half a unit, sheets sit hundreds
+;; apart, and joining only boxes that met to 1e-4 split one correct
+;; four-line frame into four "borders" and measured a single line.
+(defun spachk:clusters (bbs slack / out hit rest merged bb c)
+  (setq merged T)
+  (while merged
+    (setq merged nil out nil)
+    (foreach bb bbs
+      (setq hit bb rest nil)
+      (foreach c out
+        (if (spachk:touch-p c hit slack)
+          (setq hit (spachk:bbunion c hit) merged T)
+          (setq rest (cons c rest))))
+      (setq out (cons hit rest)))
+    (setq bbs out))
+  bbs)
+
+;; How far a point is from a box: 0 inside it.
+(defun spachk:box-dist (p bb / dx dy)
+  (setq dx (max 0.0 (- (caar bb) (car p)) (- (car p) (caadr bb)))
+        dy (max 0.0 (- (cadar bb) (cadr p)) (- (cadr p) (cadadr bb))))
+  (sqrt (+ (* dx dx) (* dy dy))))
+
+;; The middle of the spa being checked -- its cover outline, or failing
+;; that the whole selection -- which is what "nearest the spa" means
+;; when a drawing holds more than one sheet.  nil with nothing to measure.
+(defun spachk:focus (ss / bb ents i)
+  (setq bb (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*)))
+  (if (and (null bb) ss)
+    (progn
+      (setq i 0)
+      (repeat (sslength ss)
+        (setq ents (cons (ssname ss i) ents) i (1+ i)))
+      (setq bb (spachk:bbox-of ents))))
+  (if bb
+    (list (* 0.5 (+ (caar bb) (caadr bb)))
+          (* 0.5 (+ (cadar bb) (cadadr bb))))))
+
+;; The space the drafter is working in, as group 410 names it.  CTAB
+;; alone is wrong from inside a layout viewport: it names the layout
+;; while every pick lands in model space.
+(defun spachk:space ()
+  (if (and (= 0 (getvar "TILEMODE")) (= 1 (getvar "CVPORT")))
+    (getvar "CTAB")
+    "Model"))
 
 (defun spachk:closed-p (ent / f)
   (cond ((member (spachk:etype ent) spachk:*closed-types*) t)
@@ -105190,8 +108315,13 @@
                      (rtos tw) " x " (rtos th) ")") nil))))))))
 
 ;; Everything on the border layer, from the selection when it holds the
-;; border and from the whole drawing when it does not.
-(defun spachk:border-box (ss / ents ss2 i e out)
+;; border and from the space the drafter is in when it does not.  A
+;; drawing with more than one sheet has one frame per sheet, and all of
+;; them measured together gave a verdict for a box no sheet has -- two
+;; correct sheets side by side read STRETCHED.  So the frames are told
+;; apart (spachk:clusters) and the one around, or nearest, the spa is
+;; measured.  Returns (box . number-of-frames), nil with no border.
+(defun spachk:border-box (ss / ents ss2 i e bb bbs cl f best bestd d)
   (setq ents nil i 0)
   (if ss
     (repeat (sslength ss)
@@ -105200,11 +108330,37 @@
         (setq ents (cons e ents)))))
   (if (null ents)
     (progn
-      (setq ss2 (ssget "_X" (list (cons 8 spachk:*border-layer*))) i 0)
+      (setq ss2 (ssget "_X" (list (cons 8 spachk:*border-layer*)
+                                  (cons 410 (spachk:space))))
+            i   0)
       (if ss2
         (repeat (sslength ss2)
           (setq e (ssname ss2 i) i (1+ i) ents (cons e ents))))))
-  (if ents (spachk:bbox-of ents)))
+  (foreach e ents
+    (if (setq bb (cal:bbox-ent e)) (setq bbs (cons bb bbs))))
+  ;; the slack: 2% of a spa sheet's width (8.4 units) -- far wider than
+  ;; any corner a drafter leaves open, far narrower than the room
+  ;; between two sheets
+  (setq cl (spachk:clusters bbs (* 0.02 spachk:*title-frac*
+                                   spachk:*liner-w*))
+        f  (if (cdr cl) (spachk:focus ss)))
+  (foreach bb cl
+    (setq d (if f (spachk:box-dist f bb) 0.0))
+    (if (or (null bestd) (< d bestd))
+      (setq bestd d best bb)))
+  ;; a nearest "frame" with no size of its own -- one stray line, or a
+  ;; frame whose corners are open wider than the slack -- says nothing
+  ;; about any sheet, and reporting it as the border read a correct
+  ;; sheet as broken.  Everything on the layer is then measured
+  ;; together, which is what a lone frame always was.
+  (if (and (cdr cl)
+           (or (<= (spachk:bw best) spachk:*tiny*)
+               (<= (spachk:bh best) spachk:*tiny*)))
+    (progn
+      (setq best (car cl))
+      (foreach bb (cdr cl) (setq best (spachk:bbunion best bb)))
+      (setq cl (list best))))
+  (if best (cons best (length cl))))
 
 ;;; ======================================================================
 ;;;  THE AUDIT
@@ -105755,12 +108911,19 @@
 
 ;;; --- 6. the title block -------------------------------------------------
 
-(defun spachk:audit-title (ss / bb v)
-  (setq bb (spachk:border-box ss)
-        v  (spachk:title-verdict bb))
+(defun spachk:audit-title (ss / r v)
+  (setq r (spachk:border-box ss)
+        v (spachk:title-verdict (car r)))
   (spachk:res
-    (list (spachk:row (strcat "Title block: " (car v))
-                      (if (cdr v) nil 1)))
+    (append
+      (list (spachk:row (strcat "Title block: " (car v))
+                        (if (cdr v) nil 1)))
+      (if (and r (> (cdr r) 1))
+        (list (spachk:row (strcat "Title block: " (itoa (cdr r))
+                                  " separate borders on layer '"
+                                  spachk:*border-layer*
+                                  "' - the one nearest the spa was measured")
+                          2))))
     nil))
 
 ;;; --- feet-and-inch text -------------------------------------------------
@@ -106005,33 +109168,47 @@
   (if done (entupd ent))
   done)
 
-;; The Tech Title block: the first INSERT whose name carries it, looked
-;; for in the selection and then across the drawing, since the title
-;; block sits outside the area someone highlights as often as not.
-(defun spachk:find-title (ss / pat i e out ss2)
-  (setq pat (strcat "*" (spachk:squash spachk:*techtitle-block*) "*") i 0)
+;; Every Tech Title block in a selection set, in order.
+(defun spachk:titles-in (ss pat / i e out)
+  (setq i 0)
   (if ss
     (repeat (sslength ss)
       (setq e (ssname ss i) i (1+ i))
-      (if (and (null out) (entget e) (= "INSERT" (spachk:etype e))
+      (if (and (entget e) (= "INSERT" (spachk:etype e))
                (wcmatch (spachk:squash (spachk:block-name e)) pat))
-        (setq out e))))
-  (if (null out)
-    (progn
-      (setq ss2 (ssget "_X" '((0 . "INSERT"))) i 0)
-      (if ss2
-        (repeat (sslength ss2)
-          (setq e (ssname ss2 i) i (1+ i))
-          (if (and (null out)
-                   (wcmatch (spachk:squash (spachk:block-name e)) pat))
-            (setq out e))))))
-  out)
+        (setq out (cons e out)))))
+  (reverse out))
+
+;; The Tech Title block, looked for in the selection and then across
+;; the drawing, since the title block sits outside the area someone
+;; highlights as often as not.  Returns (title number-in-reach).  Of
+;; several, the one nearest the spa is read: the FIRST one found used
+;; to win, so in a drawing with two sheets the date was read off --
+;; and SPACHECK wrote today's into -- whichever sheet's title the
+;; database listed first.
+(defun spachk:title-pick (ss / pat all f best bestd d e p)
+  (setq pat (strcat "*" (spachk:squash spachk:*techtitle-block*) "*")
+        all (spachk:titles-in ss pat))
+  (if (null all)
+    (setq all (spachk:titles-in (ssget "_X" '((0 . "INSERT"))) pat)))
+  (setq f (if (cdr all) (spachk:focus ss)))
+  (foreach e all
+    (setq p (spachk:dxf 10 e)
+          d (if (and f p) (distance f (list (car p) (cadr p))) 0.0))
+    (if (or (null bestd) (< d bestd))
+      (setq bestd d best e)))
+  (if best (list best (length all))))
 
 ;; With no Tech Title in reach there is nothing to read, and that is
 ;; said plainly rather than flagged -- a spa sheet may well be checked
-;; on its own, away from the sheet it will sit on.
-(defun spachk:audit-date (ss dofix / blk raw bad wrote)
-  (setq blk (spachk:find-title ss))
+;; on its own, away from the sheet it will sit on.  With more than one
+;; in reach the nearest is read and named, and nothing is WRITTEN: the
+;; nearest is a good guess for reading and a bad one for rewriting
+;; another sheet's title block.
+(defun spachk:audit-date (ss dofix / pick blk n raw bad wrote p)
+  (setq pick (spachk:title-pick ss)
+        blk  (car pick)
+        n    (cadr pick))
   (if (null blk)
     (spachk:res
       (list (spachk:row (strcat "Tech Title: no '" spachk:*techtitle-block*
@@ -106047,23 +109224,36 @@
       ;; writes today's over it in the same MM/DD/YYYY form, keeping any
       ;; label in front of it.  Only an attribute can be written, and
       ;; only when the caller is the fixing command -- the scans read.
-      (if (and bad dofix)
+      (if (and bad dofix (= n 1))
         (setq wrote (spachk:set-attrib blk spachk:*date-tag*
                                      (spachk:date-fixed (if raw raw "")))))
+      (setq p (spachk:dxf 10 blk))
       (spachk:res
-        (list (spachk:row
-                (cond
-                  (wrote (strcat "Tech Title: " spachk:*date-tag* " " bad
-                               " - UPDATED to "
-                               (spachk:mdy-str (spachk:today-mdy))))
-                  ((and bad dofix)
-                   (strcat "Tech Title: " spachk:*date-tag* " " bad
-                           " - fix it in the block"))
-                  (bad (strcat "Tech Title: " spachk:*date-tag* " " bad
-                               " - NEEDS UPDATING (run SPACHECK)"))
-                  (t (strcat "Tech Title: " spachk:*date-tag* " = '"
-                             (cal:trim (spachk:datenorm raw)) "' - OK")))
-                (if bad 1 nil)))
+        (append
+          (if (> n 1)
+            (list (spachk:row
+                    (strcat "Tech Title: " (itoa n) " '"
+                            spachk:*techtitle-block* "' blocks in reach -"
+                            " read the one at " (rtos (car p) 2 1) ","
+                            (rtos (cadr p) 2 1) ", nearest the spa")
+                    2)))
+          (list (spachk:row
+                  (cond
+                    (wrote (strcat "Tech Title: " spachk:*date-tag* " " bad
+                                 " - UPDATED to "
+                                 (spachk:mdy-str (spachk:today-mdy))))
+                    ((and bad (> n 1))
+                     (strcat "Tech Title: " spachk:*date-tag* " " bad
+                             " - NOT UPDATED: highlight the spa with its"
+                             " own Tech Title and run SPACHECK"))
+                    ((and bad dofix)
+                     (strcat "Tech Title: " spachk:*date-tag* " " bad
+                             " - fix it in the block"))
+                    (bad (strcat "Tech Title: " spachk:*date-tag* " " bad
+                                 " - NEEDS UPDATING (run SPACHECK)"))
+                    (t (strcat "Tech Title: " spachk:*date-tag* " = '"
+                               (cal:trim (spachk:datenorm raw)) "' - OK")))
+                  (if bad 1 nil))))
         nil))))
 
 ;;; ======================================================================
@@ -106213,7 +109403,7 @@
                                       (readonly "SPACHECKSCAN REPORT")
                                       (t "SPACHECK REPORT")))
                     "\\P"
-                    (spachk:small (strcat (cal:datestr)
+                    (spachk:small (strcat (spachk:datestr)
                                           "  -  SPACHECK "
                                           *spacheck-version*))
                     "\\P"
@@ -106273,54 +109463,105 @@
 (defun spachk:regapp ()
   (if (not (tblsearch "APPID" "SPACHECK")) (regapp "SPACHECK")))
 
+;; T when the layer named is LOCKED, where entmod answers nil and
+;; entdel refuses.
+(defun spachk:layer-locked-p (lay / rec)
+  (setq rec (if lay (tblsearch "LAYER" lay)))
+  (and rec (= 4 (logand 4 (cdr (assoc 70 rec))))))
+
+;; T when ent sits on a LOCKED layer.
+(defun spachk:locked-p (ent)
+  (spachk:layer-locked-p (spachk:layer ent)))
+
+;; The tail a completion line carries for writes AutoCAD refused:
+;; ", 2 NOT recoloured (their layers are locked)".  n were refused and
+;; nlock of them sit on a locked layer -- a refusal is blamed on a lock
+;; only when the layer really is locked, since entmod answers nil for
+;; other reasons too.  "" when nothing was refused.
+(defun spachk:refused-tail (n nlock what)
+  (if (> n 0)
+    (strcat ", " (itoa n) " NOT " what
+            (cond ((<= nlock 0) "")
+                  ((and (= nlock n) (= n 1)) " (its layer is locked)")
+                  ((= nlock n) " (their layers are locked)")
+                  (t (strcat " (" (itoa nlock) " on "
+                             (if (= nlock 1) "a locked layer"
+                                             "locked layers")
+                             ")"))))
+    ""))
+
 ;; Remember the entity's own colour in xdata so SPACHECKRESCUE can put
 ;; it back even after a crash; an existing stash (from an interrupted
-;; run - the TRUE original) is never overwritten.
-(defun spachk:stash-color (ent col / ed cur)
+;; run - the TRUE original) is never overwritten.  Non-nil only when
+;; the item really went red: on a locked layer both writes are refused,
+;; and the walk used to count "1 item marked red" over an item that
+;; never changed colour.  The stash and the colour go in together or
+;; not at all -- a colour with no stash is one RESCUE cannot put back.
+(defun spachk:stash-color (ent col / ed cur ok fresh)
   (spachk:regapp)
   (setq ed  (entget ent '("SPACHECK"))
-        cur (cdr (assoc 62 (entget ent))))
-  (if (and ed (not (assoc -3 ed)))
-    (entmod (append ed (list (list -3 (list "SPACHECK"
-                                            '(1000 . "COLOR")
-                                            (cons 1071 (if cur cur 256))))))))
+        cur (cdr (assoc 62 (entget ent)))
+        ok  (and ed (not (spachk:locked-p ent))))
+  (if (and ok (not (assoc -3 ed)))
+    (setq fresh T
+          ok    (entmod (append ed (list (list -3 (list "SPACHECK"
+                                                  '(1000 . "COLOR")
+                                                  (cons 1071
+                                                        (if cur cur 256)))))))))
   ;; now recolour it
-  (setq ed (entget ent))
-  (entmod (if (assoc 62 ed)
-              (subst (cons 62 col) (assoc 62 ed) ed)
-              (append ed (list (cons 62 col)))))
-  (entupd ent))
+  (if ok
+    (progn
+      (setq ed (entget ent)
+            ok (entmod (if (assoc 62 ed)
+                           (subst (cons 62 col) (assoc 62 ed) ed)
+                           (append ed (list (cons 62 col))))))
+      ;; a stash this call wrote for a colour that did not go in comes
+      ;; out again, so RESCUE never counts an item it never changed
+      (if (and fresh (not ok))
+        (progn
+          (setq ed (entget ent '("SPACHECK")))
+          (entmod (subst (list -3 (list "SPACHECK")) (assoc -3 ed) ed))))
+      (entupd ent)))
+  ok)
 
-;; Put a stashed colour back and drop the xdata.  T when it did.
-(defun spachk:unstash (ent / ed xd old)
+;; Put a stashed colour back and drop the xdata.  T when it did both,
+;; 'refused when the entity's layer would not take the writes -- the
+;; stash is then left in place, so a RESCUE run after the layer is
+;; unlocked still finds it -- and nil when there was nothing stashed.
+(defun spachk:unstash (ent / ed xd old ok)
   (setq ed (entget ent '("SPACHECK"))
         xd (if (assoc -3 ed) (cdadr (assoc -3 ed)) nil))
   (if xd
     (progn
-      (setq old (cdr (assoc 1071 xd)))
-      (if old
+      (setq old (cdr (assoc 1071 xd))
+            ok  (not (spachk:locked-p ent)))
+      (if (and ok old)
         (progn
-          (setq ed (entget ent))
-          (entmod (if (= old 256)
-                      (if (assoc 62 ed)
-                          (vl-remove (assoc 62 ed) ed)
-                          ed)
-                      (if (assoc 62 ed)
-                          (subst (cons 62 old) (assoc 62 ed) ed)
-                          (append ed (list (cons 62 old))))))))
-      (setq ed (entget ent '("SPACHECK")))
-      (entmod (subst (list -3 (list "SPACHECK")) (assoc -3 ed) ed))
-      (entupd ent)
-      T)))
+          (setq ed (entget ent)
+                ok (entmod (if (= old 256)
+                               (if (assoc 62 ed)
+                                   (vl-remove (assoc 62 ed) ed)
+                                   ed)
+                               (if (assoc 62 ed)
+                                   (subst (cons 62 old) (assoc 62 ed) ed)
+                                   (append ed (list (cons 62 old)))))))))
+      (if ok
+        (progn
+          (setq ed (entget ent '("SPACHECK"))
+                ok (entmod (subst (list -3 (list "SPACHECK"))
+                                  (assoc -3 ed) ed)))
+          (entupd ent)))
+      (if ok T 'refused))))
 
 (defun spachk:zoom-ent (ent / bb p1 p2 m)
   (if (setq bb (cal:bbox-ent ent))
     (progn
       (setq m  (* spachk:*zoom-margin*
                   (max (spachk:bw bb) (spachk:bh bb) 1.0))
-            p1 (list (- (caar bb) m) (- (cadar bb) m))
-            p2 (list (+ (caadr bb) m) (+ (cadadr bb) m)))
-      (command "_.ZOOM" "_Window" p1 p2))))
+            p1 (list (- (caar bb) m) (- (cadar bb) m) 0.0)
+            p2 (list (+ (caadr bb) m) (+ (cadadr bb) m) 0.0))
+      ;; the box is WCS and ZOOM reads the current UCS
+      (command "_.ZOOM" "_Window" (trans p1 0 1) (trans p2 0 1)))))
 
 ;;; -------------------- asking ------------------------------------------
 ;;;  The section-4 helpers, embedded under this file's own prefix.
@@ -106367,7 +109608,11 @@
                       " block to " name " (Enter = whole drawing): "))
       (setq ss (ssget))
       (if lzd:watch (lzd:watch ss) ss)))
-  (if (null ss) (setq ss (ssget "_X")))
+  ;; Enter: the space the drafter is working in.  A bare "_X" took every
+  ;; layout's paper-space ink as well, and a sheet border or a paper
+  ;; dimension crossing the spa's coordinates could make a stray point
+  ;; read as attached
+  (if (null ss) (setq ss (ssget "_X" (list (cons 410 (spachk:space))))))
   (if (null ss)
     (prompt "\nNothing to scan.")
     (progn
@@ -106396,7 +109641,7 @@
 ;;; --- SPACHECK: the audits, then a walk of what they flagged ------------
 
 (defun c:SPACHECK ( / *error* oldecho undo-open ss res rows drows ents bb n
-                      e k tot ans marked)
+                      e k tot ans marked nref nlock)
   (defun *error* (msg)
     (cal:sysrestore)
     (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -106416,7 +109661,8 @@
                       " block to SPACHECK (Enter = whole drawing): "))
       (setq ss (ssget))
       (if lzd:watch (lzd:watch ss) ss)))
-  (if (null ss) (setq ss (ssget "_X")))
+  ;; Enter: the space the drafter is working in (see spachk:scan)
+  (if (null ss) (setq ss (ssget "_X" (list (cons 410 (spachk:space))))))
   (if (null ss)
     (prompt "\nNothing to check.")
     (progn
@@ -106435,7 +109681,7 @@
             ents  (caddr res)
             bb    (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*)))
       ;; walk what was flagged, one at a time
-      (setq tot (length ents) k 0 marked 0)
+      (setq tot (length ents) k 0 marked 0 nref 0 nlock 0)
       (if (> tot 0)
         (progn
           (princ (strcat "\n" (itoa tot) " item"
@@ -106452,8 +109698,20 @@
                             "Yes No Skip" "Yes/No/Skip" "No" nil))
                 (cond
                   ((= ans "Yes")
-                   (spachk:stash-color e spachk:*flag-color*)
-                   (setq marked (1+ marked)))
+                   (if (spachk:stash-color e spachk:*flag-color*)
+                     (setq marked (1+ marked))
+                     (progn
+                       (setq nref (1+ nref))
+                       (if (spachk:locked-p e)
+                         (progn
+                           (setq nlock (1+ nlock))
+                           (princ (strcat "\n  On locked layer "
+                                          (spachk:layer e)
+                                          " - listed in the report, NOT"
+                                          " recoloured.")))
+                         (princ (strcat "\n  AutoCAD would not recolour"
+                                        " it (layer " (spachk:layer e)
+                                        ") - listed in the report."))))))
                   ((= ans "Skip") (setq k tot))))))))
       (setq n (spachk:write-report rows drows bb nil nil))
       (command "_.ZOOM" "_Extents")
@@ -106476,6 +109734,7 @@
                      (if (= 1 (cadr n)) "y" "ies")
                      "\n" (itoa marked) " item"
                      (if (= 1 marked) "" "s") " marked red"
+                     (spachk:refused-tail nref nlock "recoloured")
                      "\nReport written on layer " spachk:*report-layer*
                      ".  SPACHECKRESCUE puts the colours back."))))
   (if lzd:end (lzd:end "SPACHECK"))
@@ -106483,7 +109742,7 @@
 
 ;;; --- SPACHECKRESCUE: put every colour back -----------------------------
 
-(defun c:SPACHECKRESCUE ( / *error* oldecho ss i e n)
+(defun c:SPACHECKRESCUE ( / *error* oldecho ss i e n r nref nlock kept)
   (defun *error* (msg)
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg)
@@ -106494,20 +109753,36 @@
   (if lzd:begin (lzd:begin "SPACHECKRESCUE" *spacheck-version*))
   (setq oldecho (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
-  (setq ss (ssget "_X") i 0 n 0)
+  (setq ss (ssget "_X") i 0 n 0 nref 0 nlock 0 kept 0)
   (if ss
     (repeat (sslength ss)
-      (setq e (ssname ss i) i (1+ i))
-      (if (spachk:unstash e) (setq n (1+ n)))))
-  ;; and the report itself
+      (setq e (ssname ss i) i (1+ i)
+            r (spachk:unstash e))
+      (cond ((eq r 'refused)
+             (setq nref (1+ nref))
+             (if (spachk:locked-p e) (setq nlock (1+ nlock))))
+            (r (setq n (1+ n))))))
+  ;; and the report itself -- entdel refuses on a locked layer too,
+  ;; and a refusal is counted rather than allowed to end the run
   (setq ss (ssget "_X" (list (cons 8 spachk:*report-layer*))) i 0)
   (if ss
     (repeat (sslength ss)
-      (entdel (ssname ss i))
+      (setq r (vl-catch-all-apply 'entdel (list (ssname ss i))))
+      (if (or (null r) (vl-catch-all-error-p r)) (setq kept (1+ kept)))
       (setq i (1+ i))))
   (setvar "CMDECHO" oldecho)
+  ;; only what really changed is counted: a colour on a locked layer is
+  ;; still wrong on the sheet, and the drafter has to be told where
   (princ (strcat "\nSPACHECKRESCUE: " (itoa n) " colour"
-                 (if (= 1 n) "" "s") " put back, report removed."))
+                 (if (= 1 n) "" "s") " put back"
+                 (spachk:refused-tail nref nlock "put back")
+                 (if (> nlock 0)
+                   " - unlock and run SPACHECKRESCUE again"
+                   "")
+                 (cond ((= kept 0) ", report removed.")
+                       ((spachk:layer-locked-p spachk:*report-layer*)
+                        ", report NOT removed (its layer is locked).")
+                       (t ", report NOT removed."))))
   (if lzd:end (lzd:end "SPACHECKRESCUE"))
   (princ))
 
@@ -106565,7 +109840,8 @@
     ""
     "6. THE TITLE BLOCK"
     (strcat "   Everything on layer '" spachk:*border-layer*
-            "' measured together.")
+            "' measured together, one frame")
+    "     per sheet: with several sheets, the one nearest the spa."
     (strcat "   A spa title block is exactly "
             (rtos spachk:*title-frac* 2 2) "x the liner block "
             (rtos spachk:*liner-w*) " x " (rtos spachk:*liner-h*))
@@ -106615,15 +109891,22 @@
     (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity") (cons 8 layer)
                     '(100 . "AcDbLine") (cons 10 p) (cons 11 q)))))
 
-;; An aligned dim carrying a note, drawn the way SPA draws one.
+;; An aligned dim carrying a note, drawn the way SPA draws one.  The
+;; points are WORLD, like everything else the demo entmakes, and a
+;; command reads the current UCS -- so each goes through trans, or
+;; under a moved UCS every practice dim floated off its rectangle and
+;; the scan reported faults nobody planted.
 (defun spachk:demo-dim (p1 p2 at note style / e)
   (spachk:dimstyle-set style)
   (setvar "CLAYER" spachk:*lay-dim*)
   ;; _non on every point: the whole demo turns on a dim that DISAGREES
   ;; with the geometry under it, and a live osnap would quietly pull it
   ;; onto the true corner and plant nothing at all
-  (command "_.DIMALIGNED" "_non" p1 "_non" p2 "_T" (strcat "<>" note)
-           "_non" at)
+  (command "_.DIMALIGNED"
+           "_non" (trans (list (car p1) (cadr p1) 0.0) 0 1)
+           "_non" (trans (list (car p2) (cadr p2) 0.0) 0 1)
+           "_T" (strcat "<>" note)
+           "_non" (trans (list (car at) (cadr at) 0.0) 0 1))
   (if (setq e (entlast)) (spachk:demo-ent e))
   e)
 
@@ -106716,7 +109999,12 @@
   (if (null base)
     (princ "\nNo spot picked - demo skipped.")
     (progn
-      (setq x (car base) y (cadr base))
+      ;; the pick is a UCS point; the demo is built in WORLD numbers
+      ;; (entmake takes nothing else) and each dim point goes back to the
+      ;; UCS for its command in spachk:demo-dim
+      (setq base (trans base 1 0)
+            x    (car base)
+            y    (cadr base))
       (spachk:dimstysave)
       ;; only when undo is recording - _Begin in a drawing with UNDO
       ;; off (bit 1 of UNDOCTL clear) errors out of the command
@@ -106805,7 +110093,15 @@
                                  "Yes No" "Yes/No" "Yes" nil))
         (progn
           ;; the real command, not a rehearsal of it -- so it asks for a
-          ;; selection exactly as it always does
+          ;; selection exactly as it always does.  And it has a handler of
+          ;; its own: an Esc inside it runs THAT one and unwinds straight
+          ;; to the command line, past TUTORIALSPACHECK's, which left the
+          ;; drafter on the dimension layer with CMDECHO off.  So the
+          ;; tutorial's oldlay and oldecho -- seen here by dynamic scope,
+          ;; like undo-open above -- go back BEFORE the hand-off.  The
+          ;; group and the dim style are already closed.
+          (if oldlay (setvar "CLAYER" oldlay))
+          (if oldecho (setvar "CMDECHO" oldecho))
           (princ (strcat "\n(SPACHECKSCAN asks what to scan - press Enter"
                          " to take the whole drawing.)"))
           (c:SPACHECKSCAN)))
@@ -106955,7 +110251,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacovcreate-version* "v1.1")
+(setq *spacovcreate-version* "v1.2")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value SPACOVCREATE reads that somebody might want
@@ -107984,6 +111280,10 @@
 ;; Returns (grade taper assumed-flag), or SCV-BACK.
 (defun scv:askblock (back / v ed bn att g tp)
   (cal:osup)
+  ;; ERRNO is sticky, so it is cleared before the pick and read straight
+  ;; after (wrapped: an engine that makes it read-only must not kill the
+  ;; command at its own prompt).  See the miss clause below.
+  (vl-catch-all-apply 'setvar (list "ERRNO" 0))
   (initget (if back "Type Skip Back Undo" "Type Skip"))
   (setq v (entsel (strcat "\nSelect the block that gives the taper [Type/Skip"
                           (if back "/Back" "") "] <Skip>: ")))
@@ -107995,6 +111295,14 @@
     ((and (= (type v) 'STR) (= v "Type"))
      (setq tp (scv:asktaper))
      (if (eq tp 'SCV-BACK) (scv:askblock back) (list scv:*grade-dflt* tp nil)))
+    ;; entsel answers nil for Enter AND for a click that hit nothing;
+    ;; ERRNO 7 is the miss.  Taken for the skip, a click just beside
+    ;; the block drew a STANDARD 4-2 cover and the report said the
+    ;; taper was not given -- when it was, in the block they aimed at.
+    ((and (null v) (= 7 (getvar "ERRNO")))
+     (scv:say (strcat "Nothing there - click the block itself, type T to"
+                      " type the taper, or press Enter to skip."))
+     (scv:askblock back))
     ((or (null v) (= (type v) 'STR))            ; Skip, or Enter
      (list scv:*grade-dflt* scv:*taper-dflt* t))
     (t
@@ -108378,7 +111686,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.9") ; printed on load and at command
+(setq *stockcover-version* "v1.10") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -108510,6 +111818,90 @@
         (- (cadr (cadr an)) (cadr (car an)))))
 
 ;;; -------------------------------------------------------------------
+;;;  locked layers, and checking the swap really happened
+;;; -------------------------------------------------------------------
+
+;;; ERASE and MOVE pass over anything on a locked layer without a word
+;;; under CMDECHO 0, and -INSERT still lands on a locked current layer
+;;; that EXPLODE and MOVE then refuse.  A locked POOL layer left the old
+;;; perimeter under the new cover while the done line counted it "out";
+;;; a locked current layer left the cover at 0,0 and the perimeter gone.
+(defun stock:locked-p (lname / tb)
+  (and lname
+       (setq tb (tblsearch "LAYER" lname))
+       (= 4 (logand 4 (cdr (assoc 70 tb))))))
+
+;;; Every locked layer SS sits on, each named once.  The selection is
+;;; walked rather than the table: a locked layer nothing highlighted
+;;; sits on cannot get in the way.
+(defun stock:locked-layers (ss / i lay seen out)
+  (setq i 0)
+  (while (< i (sslength ss))
+    (setq lay (cdr (assoc 8 (entget (ssname ss i)))))
+    (if (and lay (not (member (strcase lay) seen)))
+      (progn
+        (setq seen (cons (strcase lay) seen))
+        (if (stock:locked-p lay) (setq out (cons lay out)))))
+    (setq i (1+ i)))
+  (reverse out))
+
+;;; What stops the swap before it starts: the locked layers the
+;;; highlight sits on, plus a locked current layer, which the insert
+;;; lands on.
+(defun stock:in-the-way (ss / out cl)
+  (setq out (stock:locked-layers ss)
+        cl  (getvar "CLAYER"))
+  (if (and (stock:locked-p cl)
+           (not (member (strcase cl) (mapcar 'strcase out))))
+    (setq out (append out (list cl))))
+  out)
+
+(defun stock:names (lst / out s)          ; ("A" "B") -> "A, B"
+  (foreach s lst
+    (setq out (if out (strcat out ", " s) s)))
+  out)
+
+;;; How many of SS are really gone from the drawing -- the count the
+;;; done line reports, rather than the size of the set handed to ERASE.
+(defun stock:gone (ss / i n)
+  (setq i 0 n 0)
+  (while (< i (sslength ss))
+    (if (null (entget (ssname ss i))) (setq n (1+ n)))
+    (setq i (1+ i)))
+  n)
+
+;;; T when box NBB is box OBB shifted by D, in plan: the proof the MOVE
+;;; took every piece, since a piece MOVE skipped stays where it was and
+;;; drags the box with it.
+(defun stock:shifted-p (obb nbb d)
+  (and nbb
+       (equal (list (+ (car (car obb)) (car d)) (+ (cadr (car obb)) (cadr d))
+                    (+ (car (cadr obb)) (car d)) (+ (cadr (cadr obb)) (cadr d)))
+              (list (car (car nbb)) (cadr (car nbb))
+                    (car (cadr nbb)) (cadr (cadr nbb)))
+              1e-4)))
+
+;;; The stock squared to the World axes, whatever the UCS.  -INSERT
+;;; reads its 0.0 rotation in the current UCS, and through ANGBASE as
+;;; well, so under a UCS turned to follow the pool the stock came in
+;;; turned by the same angle, its anchor span stopped matching, and the
+;;; drafter was told they had named the wrong stock drawing.  Where it
+;;; landed does not matter -- the anchors are measured after this --
+;;; so only the turn is undone, as a World-axis ActiveX transform that
+;;; carries any attributes along with the reference.
+(defun stock:square (e / ed rot nrm)
+  (setq ed  (if e (entget e))
+        rot (cdr (assoc 50 ed))
+        nrm (cdr (assoc 210 ed)))
+  (if (and (= "INSERT" (cdr (assoc 0 ed)))
+           rot
+           (not (equal rot 0.0 1e-12))
+           (or (null nrm) (equal nrm '(0.0 0.0 1.0) 1e-9)))
+    (vla-Rotate (vlax-ename->vla-object e)
+                (vlax-3d-point (cdr (assoc 10 ed)))
+                (- rot))))
+
+;;; -------------------------------------------------------------------
 ;;;  reading the stock DWG in
 ;;; -------------------------------------------------------------------
 
@@ -108602,7 +111994,7 @@
                        oscm osos osclay osiu osareq osadia undone
                        folder files ss-old tbb tsz tanch name last hits
                        pick i file path bname mark ss-new sbb ssz sanch
-                       dx dy f)
+                       dx dy f locked stuck out)
 
   (defun stock:restore ()
     (if oscm   (setvar "CMDECHO"  oscm))
@@ -108659,9 +112051,15 @@
           (princ "\nHighlight the perimeter to be replaced: ")
           (setq ss-old (ssget))
           (if lzd:watch (lzd:watch ss-old) ss-old)))
-      (if (null ss-old)
-        (stock:say "nothing highlighted - nothing to replace.")
-        (progn
+      (cond
+        ((null ss-old)
+         (stock:say "nothing highlighted - nothing to replace."))
+        ;; refused before anything is inserted, with the layers named:
+        ;; the commands below would pass over them without a word
+        ((setq locked (stock:in-the-way ss-old))
+         (stock:say (strcat "Unlock " (stock:names locked)
+                            " first, then run STOCKCOVER again.")))
+        (t
           (setq tbb (cal:bbox-ss ss-old))
           (if (null tbb)
             (stock:say "could not measure the highlighted entities.")
@@ -108744,8 +112142,18 @@
                   (if (null bname)
                     (stock:say (strcat "could not read " path))
                     (progn
-                      (if *stock-explode*
-                        (command "_.EXPLODE" (entlast) ""))
+                      ;; Only a reference this insert placed is turned
+                      ;; or exploded.  -INSERT can define the block and
+                      ;; still place nothing, and then entlast is the
+                      ;; drafter's own last object: a rotated block of
+                      ;; theirs was squared to 0 and blown apart, and
+                      ;; STOCKCOVER went on to say the stock brought
+                      ;; nothing in.
+                      (if (not (eq (entlast) mark))
+                        (progn
+                          (stock:square (entlast))
+                          (if *stock-explode*
+                            (command "_.EXPLODE" (entlast) ""))))
                       (setq ss-new (stock:new-ents mark))
                       (if (null ss-new)
                         (stock:say (strcat path " brought nothing in."))
@@ -108784,18 +112192,47 @@
                               ;; ------------------------- place:
                               ;; ONE move, bottom-left anchor to
                               ;; bottom-left anchor, and it stays
-                              ;; exactly there
+                              ;; exactly there.  The anchors are World
+                              ;; points and MOVE reads the UCS, so both
+                              ;; go through trans: a turned UCS turned
+                              ;; the displacement with it.
                               (command "_.MOVE" ss-new ""
-                                       (car sanch) (car tanch))
-                              (command "_.ERASE" ss-old "")
+                                       (trans (car sanch) 0 1)
+                                       (trans (car tanch) 0 1))
                               (if *stock-explode*
                                 (command "_.-PURGE" "_B" bname "_N"))
-                              (stock:say
-                                (strcat (vl-filename-base file) " placed on the anchor - "
-                                        (itoa (sslength ss-new))
-                                        " object(s) in, "
-                                        (itoa (sslength ss-old))
-                                        " out."))))))))
+                              ;; the old perimeter goes only once the
+                              ;; new one is proven on the anchor: a
+                              ;; stock piece landing on a locked layer
+                              ;; of the same name is one MOVE skips
+                              (setq stuck (stock:locked-layers ss-new))
+                              (if (or stuck
+                                      (not (stock:shifted-p
+                                             sbb (cal:bbox-ss ss-new)
+                                             (mapcar '- (car tanch) (car sanch)))))
+                                (progn
+                                  (stock:say
+                                    (strcat "the stock did NOT all move onto the anchor"
+                                            (if stuck
+                                              (strcat " - pieces are on locked layer(s) "
+                                                      (stock:names stuck))
+                                              "")
+                                            "."))
+                                  (stock:say "the old perimeter was left in place - one U rolls this back."))
+                                (progn
+                                  (command "_.ERASE" ss-old "")
+                                  (setq out (stock:gone ss-old))
+                                  (stock:say
+                                    (strcat (vl-filename-base file) " placed on the anchor - "
+                                            (itoa (sslength ss-new))
+                                            " object(s) in, "
+                                            (itoa out)
+                                            " out."))
+                                  (if (< out (sslength ss-old))
+                                    (stock:say
+                                      (strcat (itoa (- (sslength ss-old) out))
+                                              " highlighted object(s) could NOT be erased"
+                                              " - they are still under the new cover.")))))))))))
                   ;; closed only if one was opened, as the handler
                   ;; above is: with undo recording off (UNDOCTL bit 1
                   ;; clear) there is none, and an _End on nothing is an
@@ -109199,7 +112636,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.9")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -109296,6 +112733,32 @@
         (setq i (1+ i)))))
   result)
 
+;; The selection TYLERDRONESUITE hands this stage, through a global
+;; rather than a pickfirst set: the pickfirst route needs PICKFIRST at
+;; 1, and switching it on round a stage left a drafter who works at 0
+;; at 1 whenever a stage failed or was Esc'd (see the suite's header).
+;; It holds (NAME SELECTION), is read only by the command NAME, and is
+;; cleared at the read whoever it was for -- and by the handler, for a
+;; failure before the read -- so it never outlives the call it was made
+;; for.  PADDLE reads the same global the same way.
+(setq *calofin-handoff* nil)
+
+;; The handed-over selection narrowed to TYPES (the filter this
+;; command's own (ssget "_I") uses) and to what is still in the
+;; drawing, or nil when nothing was handed to TYDRN.
+(defun tydrn:handed (types / h ss i e)
+  (setq h                 *calofin-handoff*
+        *calofin-handoff* nil)
+  (if (and (listp h) (= (car h) "TYDRN") (cadr h))
+    (progn
+      (setq ss (ssadd) i 0)
+      (repeat (sslength (cadr h))
+        (setq e (ssname (cadr h) i)
+              i (1+ i))
+        (if (and (entget e) (wcmatch (cdr (assoc 0 (entget e))) types))
+          (ssadd e ss)))
+      (if (< 0 (sslength ss)) ss))))
+
 ;; ---------------------------------------------------------------
 ;; Main command
 ;; ---------------------------------------------------------------
@@ -109316,6 +112779,7 @@
     ;; mark close below -- a throw inside *error* is uncatchable
     (if unlocked (vl-catch-all-apply 'tydrn:relock-layers (list unlocked)))
     (setq unlocked nil)
+    (setq *calofin-handoff* nil)     ; one never read goes with the run
     (if mark-open (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
     (setq mark-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -109338,7 +112802,9 @@
   ;; ------------------------------------------------------------
   ;; 1. Text: highlighted selection, else prompt, Enter = all text
   ;; ------------------------------------------------------------
-  (setq ss-text (ssget "_I" '((0 . "TEXT"))))
+  (setq ss-text (tydrn:handed "TEXT"))
+  (if (null ss-text)
+    (setq ss-text (ssget "_I" '((0 . "TEXT")))))
   (if lzd:watch (lzd:watch ss-text) ss-text)
   (if (null ss-text)
     (progn
@@ -109448,8 +112914,10 @@
 ;;; PADDLE the perimeter - and AutoCAD clears the pickfirst set the
 ;;; moment a command consumes it, so run by hand the trace has to be
 ;;; highlighted once per stage.  Here it is highlighted once in total:
-;;; the set is read at the start and put back with sssetfirst before
-;;; each stage, so every stage opens with exactly what the operator
+;;; the set is read at the start and handed to each stage in
+;;; *calofin-handoff*, which the stage reads where it would have read
+;;; the pickfirst set (tydrn:handed, and PADDLE's and AUTODIM's own
+;;; copies of it), so every stage opens with exactly what the operator
 ;;; picked and takes from it whatever its own filter takes.
 ;;; Highlight nothing and the suite asks once, up front; press Enter
 ;;; there and each stage asks on its own, exactly as it does alone.
@@ -109459,17 +112927,22 @@
 ;;; reason for the order.  It is what let AUTODIM, when it was in this
 ;;; list, open with the pads PADDLE had just dropped (its filter takes
 ;;; INSERTs for exactly those), and it is what any stage put into
-;;; *tydrn-suite* after another gets for free.
+;;; *tydrn-suite* after another gets for free -- as long as it reads
+;;; *calofin-handoff*, as TYDRN, PADDLE and AUTODIM do; one that does
+;;; not simply asks for its own selection.
 ;;;
 ;;; CDIM IS HANDED A CLEARED SELECTION.  It works over the drawing's
 ;;; dimensioning, which is in nobody's original highlight; typed by
 ;;; hand it starts with nothing selected too, so clearing is what keeps
 ;;; it behaving the way its operator knows it.
 ;;;
-;;; PICKFIRST is forced to 1 for the run and put back afterwards.  With
-;;; it at 0 sssetfirst still highlights but ssget "_I" reads nothing, and
-;;; the handoff would go quietly missing - the one failure mode worth
-;;; spending a sysvar to rule out.
+;;; PICKFIRST IS NOT TOUCHED.  The set used to go over as a pickfirst
+;;; set, with PICKFIRST forced to 1 round the stages because at 0
+;;; sssetfirst still highlights but ssget "_I" reads nothing.  But an
+;;; Esc inside a stage runs only that stage's handler (below), so the
+;;; restore never ran and a drafter who works at 0 was left at 1 for
+;;; good, with nothing said.  The handoff global needs no setting of
+;;; theirs, and a stage clears it itself.
 ;;;
 ;;; EACH STAGE KEEPS ITS OWN UNDO GROUP, so three U's back the suite
 ;;; out, one per stage.  That is deliberate, and it is XYPLOT's
@@ -109504,10 +112977,10 @@
 ;;; (On that path the stage's own *error* handler is the one AutoCAD
 ;;; calls - the innermost binding wins, and each stage declares its own
 ;;; as a local, STANDARDS section 5 - so the stage cleans up after
-;;; itself and this command's PICKFIRST restore does not run: it is
-;;; left at 1, the factory default, which is the cost of letting each
-;;; stage keep its own cleanup.  Esc at the suite's OWN prompt, where
-;;; no stage is running, does reach the handler below.)
+;;; itself, the handoff included, and this command's handler does not
+;;; run.  That is why the suite borrows nothing it would have to put
+;;; back.  Esc at the suite's OWN prompt, where no stage is running,
+;;; does reach the handler below.)
 ;;;
 ;;; THE CHECK COVERS THE CALOFIN STAGES AND NOT CDIM, on purpose.
 ;;; boundp can only see commands AutoLISP defined; an in-house command
@@ -109581,8 +113054,10 @@
 ;; A stage is free to erase what it replaces, and an erased ename in a
 ;; set is not something AutoCAD will hand to the next command -- so the
 ;; set is rebuilt from what survives, every time, rather than kept.
-;; nil when nothing survives, which is what sssetfirst wants for
-;; "clear it".
+;; nil when nothing survives: it becomes the set half of
+;; *calofin-handoff*, and a nil set there is what the stage readers
+;; (tydrn:handed, paddle--handed, ad:handed) treat as "nothing handed",
+;; so the stage asks for its own selection instead of acting on a dead one.
 (defun tydrn:live-ss (lst / ss e)
   (setq ss (ssadd))
   (foreach e lst
@@ -109590,17 +113065,16 @@
   (if (< 0 (sslength ss)) ss))
 
 ;; The handler is LOCAL to the command (STANDARDS section 5), as every
-;; other handler in this file is: PICKFIRST is the one thing the suite
-;; itself changes, and oldpick is reached through dynamic scope.  It
-;; runs for an Esc at the suite's own selection prompt; inside a stage
-;; the stage's own handler is the innermost one and this never sees it
-;; (see the header).
-(defun c:TYLERDRONESUITE ( / *error* oldpick missing nm step carry mark
-                            stages)
+;; other handler in this file is.  The suite changes no setting of the
+;; drafter's, so all it has to put right is a handoff no stage read.
+;; It runs for an Esc at the suite's own selection prompt; inside a
+;; stage the stage's own handler is the innermost one and this never
+;; sees it (see the header) -- which is why the handoff is a global
+;; the stage clears itself, and not a PICKFIRST borrow this would
+;; have to put back.
+(defun c:TYLERDRONESUITE ( / *error* missing nm step carry mark stages)
   (defun *error* (msg)
-    ;; the sysvar comes back FIRST so nothing below can skip it
-    (if oldpick (setvar "PICKFIRST" oldpick))
-    (setq oldpick nil)
+    (setq *calofin-handoff* nil)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nTYLERDRONESUITE error: " msg)))
@@ -109632,12 +113106,6 @@
       (princ "\n  well is not undone to get at one that did not.  Esc in")
       (princ "\n  any stage stops the suite there.")
 
-      ;; PICKFIRST at 0 would let sssetfirst highlight while ssget "_I"
-      ;; read nothing, and the handoff would go quietly missing.  Put
-      ;; back below, and by the error handler if Esc gets here first.
-      (setq oldpick (getvar "PICKFIRST"))
-      (setvar "PICKFIRST" 1)
-
       ;; What the operator highlighted before typing the command.  If
       ;; that is nothing, ask once here rather than three times over.
       (setq carry (tydrn:ss->list (cadr (ssgetfirst))))
@@ -109652,12 +113120,17 @@
         (setq step (1+ step))
         (princ (strcat "\n\n--- " (itoa step) " of " (itoa (length stages))
                        ": " nm " ---"))
-        ;; Hand this stage the highlight -- or, for the finisher,
-        ;; clear it: CDIM works on the dimensions AUTODIM has just
-        ;; made, which are in nobody's original pick.
-        (sssetfirst nil (if (member nm *tydrn-suite*)
-                          (tydrn:live-ss carry)
-                          nil))
+        ;; Hand this stage the highlight through *calofin-handoff*
+        ;; (see tydrn:handed) -- or, for the finisher, nothing: CDIM
+        ;; works on the dimensions AUTODIM has just made, which are in
+        ;; nobody's original pick.  The pickfirst set is cleared either
+        ;; way, so nothing is left gripped for a stage's own commands
+        ;; to act on, and so CDIM starts with nothing selected, as it
+        ;; does when it is typed.
+        (sssetfirst nil nil)
+        (setq *calofin-handoff*
+              (if (member nm *tydrn-suite*)
+                (list (strcase nm) (tydrn:live-ss carry))))
         (setq mark (entlast))
         ;; NOT (command)/(vl-cmdf): the command processor does not know
         ;; AutoLISP commands (typing works only through the command
@@ -109677,14 +113150,13 @@
            (princ "\n  (queued on the command line - it runs as the suite closes)")
            (vla-SendCommand (vla-get-ActiveDocument (vlax-get-acad-object))
                             (strcat nm " "))))
+        (setq *calofin-handoff* nil)    ; a stage that never read it
         ;; Grow the carried set by what this stage drew, so the next
         ;; one sees it.  Only worth doing while a calofin stage is
         ;; still to come -- the finisher gets a cleared selection.
         (if (member nm *tydrn-suite*)
           (setq carry (append carry (tydrn:since mark)))))
 
-      (setvar "PICKFIRST" oldpick)
-      (setq oldpick nil)
       (princ (strcat "\n\nTYLERDRONESUITE done - all "
                      (itoa (length stages)) " stages ran."))))
   (if lzd:end (lzd:end "TYLERDRONESUITE"))
@@ -112076,7 +115548,7 @@
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
 
-(setq *wcalst-version* "v2.0")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v2.1")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 ;;; -------------------- tunables ----------------------------------------
@@ -112555,7 +116027,7 @@
   hit
 )
 
-(defun wc:inwin (sgm wins / hit lo hi wn)
+(defun wc:inwin (sgm wins / hit lo hi wn a b)
   ;; T when BOTH ends of segment SGM lie inside one of the windows in
   ;; WINS, each a (corner corner) pair in any order -- AutoCAD's own
   ;; Window rule, applied to one segment rather than to a whole entity.
@@ -112563,13 +116035,20 @@
   ;; took the whole entity, and with it the whole far side became the
   ;; "stair section" -- developed rigidly, every dart dropped, and the
   ;; summary reading a bottom line 0.00% off.
-  (setq hit nil)
+  ;; The corners were clicked, so they are UCS; the segment came out of
+  ;; entget, so it is world.  The ends go into the UCS for the test --
+  ;; a window drawn under a turned UCS is square to THAT, not to the
+  ;; world -- because compared raw, a moved UCS caught nothing and the
+  ;; stairs were cut full of darts under a clean-looking summary.
+  (setq hit nil
+        a (trans (list (car (car sgm)) (cadr (car sgm)) 0.0) 0 1)
+        b (trans (list (car (cadr sgm)) (cadr (cadr sgm)) 0.0) 0 1))
   (foreach wn wins
     (setq lo (list (min (car (car wn)) (car (cadr wn)))
                    (min (cadr (car wn)) (cadr (cadr wn))))
           hi (list (max (car (car wn)) (car (cadr wn)))
                    (max (cadr (car wn)) (cadr (cadr wn)))))
-    (if (and (wc:ptin (car sgm) lo hi) (wc:ptin (cadr sgm) lo hi))
+    (if (and (wc:ptin a lo hi) (wc:ptin b lo hi))
       (setq hit T)))
   hit
 )
@@ -112659,7 +116138,7 @@
                  rsgns rsgn rkeep rmaj sumk ln
                  strest nodes2 endpts dpa stentry stpath usedj stpt stgo
                  stcand se pA pB stang stca stsn sttot stlen stprev stdx
-                 stdy dfeats run stairrng stage wc-pick)
+                 stdy dfeats run stairrng stage wc-pick stnone sthit stw)
 
   (defun *error* (msg)
     (if inundo (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -112719,7 +116198,10 @@
          ((not (ssmemb (car pick) ss))
           (princ "  (that entity is not in the selection)"))
          (T
-          (setq en (car pick) pk (cadr pick))
+          ;; the pick point is UCS and the segments are world: raw, a
+          ;; moved UCS seeded the trace from whichever segment of a
+          ;; polyline sat nearest the untranslated numbers
+          (setq en (car pick) pk (trans (cadr pick) 1 0))
           ;; seed = the segment of the picked entity nearest the pick
           (setq seed nil d2min 1.0e18 i 0)
           (foreach sg segs
@@ -113066,7 +116548,7 @@
   ;; treads come out level with their exact lengths and every riser
   ;; keeps its exact rise (validated against a hand-drawn example:
   ;; every segment length is preserved to the hundredth)
-  (setq synth nil stkeys nil stairrng nil)
+  (setq synth nil stkeys nil stairrng nil stnone 0)
   (if stwins
     (progn
       ;; candidate segments: both ends inside a window, on the far
@@ -113082,6 +116564,14 @@
           (setq stsegs (cons (list (car sgm) (cadr sgm)) stsegs))
         )
       )
+      ;; a window that caught no far-side line holds nothing back, and
+      ;; its stairs get darts like the rest of the band -- counted here
+      ;; so the report can say so instead of reading as a clean run
+      (foreach stw stwins
+        (setq sthit nil)
+        (foreach sgm stsegs
+          (if (wc:inwin sgm (list stw)) (setq sthit T)))
+        (if (not sthit) (setq stnone (1+ stnone))))
       ;; process each connected stair path
       (while stsegs
         ;; flood-fill one connected component
@@ -113502,6 +116992,10 @@
   (if (> stdrop 0)
     (princ (strcat "\n  " (itoa stdrop) " dart(s) fall inside the stair"
                    " section(s) and are left for the hand work there.")))
+  (if (> stnone 0)
+    (princ (strcat "\n  " (itoa stnone) " stair window(s) caught no line"
+                   " of the far side, so nothing was held back there -"
+                   " window both ends of each segment to be kept.")))
   (princ (strcat "\n  top line " (wc:num toplen)
                  ", bottom before " (wc:num botb)
                  ", bottom after " (wc:num bota)
@@ -113604,7 +117098,7 @@
 
 
 
-(setq *xft-version* "v1.18") ; printed on load and at command start so a
+(setq *xft-version* "v1.19") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -113618,9 +117112,11 @@
 ;; Scale factor applied to EVERYTHING highlighted, about the middle of
 ;; its bounding box, before any point is read.  12 is feet -> inches,
 ;; which is how both exports arrive.  1.0 skips the SCALE step entirely
-;; (an import that is already in inches); any other factor is applied
-;; as given.  Every distance below that is NOT counted in text heights
-;; is measured AFTER this scale, in drawing units.
+;; (an import that is already in inches); any other positive factor is
+;; applied as given, and anything else -- SCALE refuses a zero or a
+;; negative -- is read as 12, and the run says so.  Every distance below
+;; that is NOT counted in text heights is measured AFTER this scale, in
+;; drawing units.
 (setq *xft-scale* 12.0)
 
 ;; --- the block every marker becomes ---------------------------------
@@ -114205,32 +117701,42 @@
        (= 4 (logand 4 (cdr (assoc 70 tb)))))
 )
 
-;; Every locked layer that would be in the way, named so the message can
-;; say which one to unlock: the layer of anything highlighted that the
-;; swap has to erase, plus the block layer it inserts onto.  The
-;; SELECTION is walked rather than the layer table because
-;; *xft-dot-layer* is a comma list of three names and tblsearch takes
-;; one name, no wildcards - and because a locked layer with nothing of
-;; ours on it is not in the way at all.
-(defun xft:locked-layers (ss / i lay pats out)
+;; Every locked layer ANYTHING highlighted sits on, named so the message
+;; can say which one to unlock.  The whole highlight, not just the
+;; survey's own layers: SCALE takes all of it and quietly passes over
+;; whatever sits on a locked layer, and the text sweep erases every
+;; leftover text in it.  Checking the marker and name layers alone let
+;; Enter-for-everything catch a locked title-block or note layer, leave
+;; it unscaled and unerased, and still report a clean conversion; the
+;; revert checked only the layers of its own blocks, and counted what
+;; SCALE had skipped as "scaled back".  The SELECTION is walked rather
+;; than the layer table because a locked layer with nothing highlighted
+;; on it is not in the way at all.
+(defun xft:ss-locked (ss / i lay seen out)
   (setq i    0
         out  '()
-        pats (strcat (strcase *xft-marker-layer*) ","
-                     (strcase *xft-name-layer*) ","
-                     (strcase *xft-dot-layer*) ","
-                     (strcase *xft-dot-name-layer*)))
+        seen '())
   (while (< i (sslength ss))
     (setq lay (cdr (assoc 8 (entget (ssname ss i)))))
-    (if (and (not (member (strcase lay) (mapcar 'strcase out)))
-             (wcmatch (strcase lay) pats)
-             (xft:locked lay))
-      (setq out (cons lay out)))
+    ;; each layer looked up once: a survey is thousands of entities on
+    ;; a handful of layers
+    (if (and lay (not (member (strcase lay) seen)))
+      (progn
+        (setq seen (cons (strcase lay) seen))
+        (if (xft:locked lay)
+          (setq out (cons lay out)))))
     (setq i (1+ i))
   )
+  (reverse out)
+)
+
+;; ...and for the conversion, the block layer the swap inserts onto too.
+(defun xft:locked-layers (ss / out)
+  (setq out (xft:ss-locked ss))
   (if (and (xft:locked *xft-block-layer*)
            (not (member (strcase *xft-block-layer*) (mapcar 'strcase out))))
-    (setq out (cons *xft-block-layer* out)))
-  (reverse out)
+    (setq out (append out (list *xft-block-layer*))))
+  out
 )
 
 (defun xft:namelist (items / out s)          ; "A, B, C" for a message
@@ -114239,6 +117745,48 @@
     (setq out (if (= out "") s (strcat out ", " s))))
   out
 )
+
+;; The refusal, for either command.  Unlocking is the answer for the
+;; survey's own layers, but over a locked north arrow or sheet border
+;; that Enter-for-everything swept in, it had the drafter unlock it and
+;; get it scaled with the survey.  So any layer but the block layer --
+;; which has to be unlocked whatever is highlighted -- is offered the
+;; other way out as well.
+(defun xft:say-locked (locked cmd)
+  (princ (strcat "\nUnlock " (xft:namelist locked)
+                 " first, then run " cmd " again."))
+  (if (or (cdr locked)
+          (/= (strcase (car locked)) (strcase *xft-block-layer*)))
+    (princ (strcat "\n  A layer that is not part of the survey can stay"
+                   " locked - highlight only the survey instead.")))
+)
+
+;; The space Enter-for-everything means: the one the drafter is working
+;; in.  CTAB alone names the LAYOUT while the drafter works inside one
+;; of its viewports, and the sweep then took the sheet's viewport and
+;; title block instead of the survey behind them.  Inside a viewport,
+;; and on the Model tab, that is model space; only paper space proper
+;; (a layout with no viewport active, CVPORT 1) is the layout itself.
+(defun xft:space ()
+  (if (and (= 0 (getvar "TILEMODE")) (= 1 (getvar "CVPORT")))
+    (getvar "CTAB")
+    "Model"))
+
+;; The factor the run scales by: *xft-scale* when it is a positive
+;; number, the shipped 12 when it is not, and said so.  It is a LAZTUNE
+;; knob and the panel checks only that it is a number, so a 0 or a
+;; negative reached SCALE, which refuses the factor and sits asking for
+;; another -- and took the UNDO _End sent next as its answer, leaving
+;; the run's group open and the survey unscaled under a report of a
+;; clean conversion.  Checked here, at the run, because an override
+;; applied after the file loads never meets a check made at load.
+(defun xft:factor ()
+  (if (and (numberp *xft-scale*) (> *xft-scale* 0))
+    (float *xft-scale*)
+    (progn
+      (princ (strcat "\n*xft-scale* is " (vl-princ-to-string *xft-scale*)
+                     ", not a positive number - scaling by 12 instead."))
+      12.0)))
 
 (defun xft:style ()
   (if (tblsearch "STYLE" *xft-att-style*)
@@ -114417,63 +117965,55 @@
 ;;;  XFTCONV
 ;;; -------------------------------------------------------------------
 
-(defun c:XFTCONV ( / *error* xft:restore xft:sysback oscm osos osclay undone guard
-                     ss base wbase i en ed typ locked
-                     markers names dots dotnames r recs
+(defun c:XFTCONV ( / *error* xft:restore oscm osos osclay undone begun
+                     ss base wbase scale i en ed typ locked
+                     markers names dots dotnames r recs lspec
                      nmade nblank ndots nleft)
 
-  ;; The sysvars alone, OSMODE first.  Three setvars of values this run
-  ;; captured itself: nothing here can throw, which is the point -- the
-  ;; handler calls it BEFORE its (command) drain, so a drain that dies
-  ;; cannot take the drafter's object snaps with it.  The pop below
-  ;; cannot move up with them: the drain needs the pushed mode.
-  (defun xft:sysback ()
-    (if oscm   (setvar "CMDECHO" oscm))
+  ;; The sysvars, OSMODE first.  Three setvars of values this run
+  ;; captured itself: nothing here can throw, so the handler reaches
+  ;; everything after it.
+  (defun xft:restore ()
     (if osos   (setvar "OSMODE"  osos))
+    (if oscm   (setvar "CMDECHO" oscm))
     (if osclay (setvar "CLAYER"  osclay)))
 
-  (defun xft:restore ()
-    (xft:sysback)
-    ;; The error mode pushed below is popped HERE, on every way out --
-    ;; the three quiet exits, the report, and the handler -- not in the
-    ;; handler alone.  A clean run used to leave the mode stacked for
-    ;; the rest of the session, and while it is stacked command-s is
-    ;; refused inside every later handler (AutoLISP reference,
-    ;; *push-error-using-command*), so the next tool's Esc left its
-    ;; undo group open without a word.
-    (if *pop-error-mode* (*pop-error-mode*))
-  )
-
+  ;; No *push-error-using-command* here, on purpose.  Under a push
+  ;; AutoCAD resets the evaluator before *error* runs, so every local of
+  ;; this command -- the snapshot, the undo flag, and the local helper
+  ;; that puts them back -- is gone by the time the handler looks.  With
+  ;; one, an Esc at the only prompt died on the handler's first line and
+  ;; left the mode pushed for the session, refusing command-s inside
+  ;; every LATER tool's handler; a failure mid-swap also left the object
+  ;; snaps at 0 and the undo group open, and nothing was reported.  The
+  ;; push only ever served a bare (command) drain, and there is nothing
+  ;; to drain: every command this run sends -- UNDO _Begin/_End, and
+  ;; SCALE with its set, its base and a factor xft:factor has checked
+  ;; is positive -- is handed all its input and cannot be left waiting.
+  ;; In the default mode the handler sees the locals, and command-s is
+  ;; the sanctioned way to close the group.
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTCONV error: " msg)))
-    ;; the drafter's settings come back FIRST, ahead of the drain below:
-    ;; that drain is a bare (command), the one form in this handler that
-    ;; can throw, and it used to sit in front of the only OSMODE restore
-    ;; there is -- so an Esc that died in the drain left every object
-    ;; snap unticked AND stranded the pop, which refuses command-s inside
-    ;; every later handler for the rest of the session
-    (xft:sysback)
-    ;; back out of SCALE etc.  Bounded: CMDACTIVE carries a
-    ;; "dialog is up" bit no keystroke from here can clear, and an
-    ;; unbounded drain against it would hang with no Esc out.
-    (setq guard 0)
-    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
-      (command)
-      (setq guard (1+ guard)))
     (xft:restore)
-    ;; through the catch: a throw here would strand the pop below, and
-    ;; error mode would stay pushed for the rest of the session
-    (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
-    (princ "\nNothing was left half done - use U to roll the run back.")
+    ;; the U hint only when there IS a group for U to take back.  It used
+    ;; to print on every way in here -- an Esc at the highlight, before
+    ;; anything was touched, told the drafter to U away the import they
+    ;; had just made.  With undo recording off there is no group, and a
+    ;; run stopped part-way is left part-way: said so, plainly.
+    (if undone
+      (progn
+        (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+        (setq undone nil)
+        (princ "\nNothing was left half done - use U to roll the run back."))
+      (if begun
+        (princ (strcat "\nXFTCONV stopped part-way with undo recording off,"
+                       " so U cannot take it back - some points may be"
+                       " swapped and some not.  Check the survey."))))
     (if lzd:report (lzd:report "XFTCONV" *xft-version* msg))
     (princ)
   )
   (if lzd:begin (lzd:begin "XFTCONV" *xft-version*))
-
-  ;; AutoCAD 2012+ requires this so *error* may call (command);
-  ;; harmless no-op guard on older releases where it doesn't exist
-  (if *push-error-using-command* (*push-error-using-command*))
 
   (setq oscm   (getvar "CMDECHO")
         osos   (getvar "OSMODE")
@@ -114496,7 +118036,7 @@
       (setq ss (ssget))
       (if lzd:watch (lzd:watch ss) ss)))
   (if (not ss)
-    (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
+    (setq ss (ssget "_X" (list (cons 410 (xft:space)))))
   )
 
   (if (not ss)
@@ -114504,14 +118044,13 @@
     (progn
 
       ;; ---- locked layers would break the swap --------------------
-      ;; only the ones actually in the way are named: entdel and entmake
-      ;; both refuse a locked layer, and a layer nothing in the
-      ;; selection sits on cannot stop the run.
+      ;; only the ones actually in the way are named: SCALE skips a
+      ;; locked layer, entdel and entmake both refuse one, and a layer
+      ;; nothing in the selection sits on cannot stop the run.
       (setq locked (xft:locked-layers ss))
       (if locked
         (progn
-          (princ (strcat "\nUnlock " (xft:namelist locked)
-                         " first, then run XFTCONV again."))
+          (xft:say-locked locked "XFTCONV")
           (xft:restore)
           (princ)
         )
@@ -114527,6 +118066,9 @@
             (progn
               (command "_.UNDO" "_Begin")
               (setq undone t)))
+          ;; from here on the drawing changes: a failure past this line
+          ;; with no group open is one the handler has to own up to
+          (setq begun t)
 
           ;; ---- 0. the layer and the block have to be there --------
           (cal:ensure-layer *xft-block-layer* *xft-block-layer-color*)
@@ -114538,12 +118080,13 @@
           ;; UCS of the day would be read back under whatever UCS the
           ;; revert runs in, and land the survey somewhere else.
           (setq wbase (xft:centre ss)
-                base  (trans wbase 0 1))
-          (if (/= *xft-scale* 1.0)
+                base  (trans wbase 0 1)
+                scale (xft:factor))
+          (if (/= scale 1.0)
             (progn
               (princ (strcat "\nScaling " (itoa (sslength ss)) " objects by "
-                             (rtos *xft-scale* 2 4) " about the middle of the selection ..."))
-              (command "_.SCALE" ss "" base *xft-scale*)
+                             (rtos scale 2 4) " about the middle of the selection ..."))
+              (command "_.SCALE" ss "" base scale)
             )
           )
 
@@ -114633,12 +118176,18 @@
                   (progn
                     ;; read before erasing, and kept by the block it
                     ;; sat nearest: a leftover text belongs to no one
-                    ;; marker, so that is the only association there is
-                    (if *xft-record*
-                      (setq recs (xft:attach recs (xft:txtpt ed)
-                                             (xft:ser en))))
-                    (entdel en)
-                    (setq nleft (1+ nleft)))
+                    ;; marker, so that is the only association there is.
+                    ;; Recorded and counted only once the erase has
+                    ;; really gone through: a refused entdel answers nil,
+                    ;; and a text still on the sheet that the record also
+                    ;; carries comes back as a stray duplicate from
+                    ;; XFTRECONV, under a count that said it was erased.
+                    (setq lspec (if *xft-record* (xft:ser en)))
+                    (if (entdel en)
+                      (progn
+                        (if lspec
+                          (setq recs (xft:attach recs (xft:txtpt ed) lspec)))
+                        (setq nleft (1+ nleft)))))
                 )
                 (setq i (1+ i))
               )
@@ -114652,10 +118201,11 @@
           ;; xdata back to append to it.
           (if *xft-record*
             (foreach r recs
-              (xft:stamp (car r) wbase *xft-scale* (caddr r))))
+              (xft:stamp (car r) wbase scale (caddr r))))
 
           (if undone (command "_.UNDO" "_End"))
-          (setq undone nil)
+          (setq undone nil
+                begun  nil)
           (xft:restore)
 
           ;; ---- report --------------------------------------------
@@ -114727,65 +118277,38 @@
   (reverse out)
 )
 
-;; The locked layers in the way: the ones the blocks to be erased sit
-;; on.  A layer a rebuild writes TO is an output layer and goes through
-;; ensure-layer instead, which unlocks it for good and says so.
-(defun xft:locked-blocks (recs / lay out r)
-  (setq out '())
-  (foreach r recs
-    (setq lay (cdr (assoc 8 (entget (car r)))))
-    (if (and lay
-             (not (member (strcase lay) (mapcar 'strcase out)))
-             (xft:locked lay))
-      (setq out (cons lay out)))
-  )
-  (reverse out)
-)
-
-(defun c:XFTRECONV ( / *error* xft:restore xft:sysback oscm osos osclay undone guard
+(defun c:XFTRECONV ( / *error* xft:restore oscm osos osclay undone begun
                        ss recs runs locked r spec keep i en
                        scale base nback nrebuilt)
 
-  ;; The sysvars alone, OSMODE first.  Three setvars of values this run
-  ;; captured itself: nothing here can throw, which is the point -- the
-  ;; handler calls it BEFORE its (command) drain, so a drain that dies
-  ;; cannot take the drafter's object snaps with it.  The pop below
-  ;; cannot move up with them: the drain needs the pushed mode.
-  (defun xft:sysback ()
-    (if oscm   (setvar "CMDECHO" oscm))
+  ;; The sysvars, OSMODE first -- nothing here can throw.
+  (defun xft:restore ()
     (if osos   (setvar "OSMODE"  osos))
+    (if oscm   (setvar "CMDECHO" oscm))
     (if osclay (setvar "CLAYER"  osclay)))
 
-  (defun xft:restore ()
-    (xft:sysback)
-    ;; popped on every way out, not in the handler alone -- see the
-    ;; same note in c:XFTCONV
-    (if *pop-error-mode* (*pop-error-mode*))
-  )
-
+  ;; No error-mode push, for the reason c:XFTCONV gives: under one the
+  ;; handler finds this command's locals and its local helper gone and
+  ;; dies on its first line, and there is no pending command for a bare
+  ;; (command) to drain -- UNDO and SCALE are each handed all their input.
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTRECONV error: " msg)))
-    ;; the drafter's settings come back FIRST, ahead of the drain below:
-    ;; that drain is a bare (command), the one form in this handler that
-    ;; can throw, and it used to sit in front of the only OSMODE restore
-    ;; there is -- so an Esc that died in the drain left every object
-    ;; snap unticked AND stranded the pop, which refuses command-s inside
-    ;; every later handler for the rest of the session
-    (xft:sysback)
-    (setq guard 0)
-    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
-      (command)
-      (setq guard (1+ guard)))
     (xft:restore)
-    (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
-    (princ "\nNothing was left half done - use U to roll the run back.")
+    ;; the U hint only over a group U can take back -- see c:XFTCONV
+    (if undone
+      (progn
+        (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+        (setq undone nil)
+        (princ "\nNothing was left half done - use U to roll the run back."))
+      (if begun
+        (princ (strcat "\nXFTRECONV stopped part-way with undo recording"
+                       " off, so U cannot take it back - some blocks may"
+                       " be put back and some not.  Check the survey."))))
     (if lzd:report (lzd:report "XFTRECONV" *xft-version* msg))
     (princ)
   )
   (if lzd:begin (lzd:begin "XFTRECONV" *xft-version*))
-
-  (if *push-error-using-command* (*push-error-using-command*))
 
   (setq oscm   (getvar "CMDECHO")
         osos   (getvar "OSMODE")
@@ -114803,7 +118326,7 @@
       (setq ss (ssget))
       (if lzd:watch (lzd:watch ss) ss)))
   (if (not ss)
-    (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
+    (setq ss (ssget "_X" (list (cons 410 (xft:space)))))
   )
 
   (cond
@@ -114831,10 +118354,15 @@
      (xft:restore)
      (princ))
 
-    ;; ---- a locked layer would refuse the erase --------------------
-    ((setq locked (xft:locked-blocks recs))
-     (princ (strcat "\nUnlock " (xft:namelist locked)
-                    " first, then run XFTRECONV again."))
+    ;; ---- a locked layer would refuse the erase, or the scale -----
+    ;; anything highlighted, not only the blocks: the erase refuses a
+    ;; block on a locked layer, and SCALE passes over everything else on
+    ;; one and was counted as scaling it back all the same, leaving it
+    ;; twelve times too big beside a survey back in feet.  A layer a
+    ;; rebuild writes TO is an output layer and goes through
+    ;; ensure-layer instead, which unlocks it for good and says so.
+    ((setq locked (xft:ss-locked ss))
+     (xft:say-locked locked "XFTRECONV")
      (xft:restore)
      (princ))
 
@@ -114845,6 +118373,7 @@
        (progn
          (command "_.UNDO" "_Begin")
          (setq undone t)))
+     (setq begun t)
 
      (setq scale    (nth 2 (car recs))
            base     (nth 3 (car recs))
@@ -114880,7 +118409,10 @@
      )
 
      ;; ---- 3. and back down to the units it arrived in ------------
-     (if (and (/= scale 0.0) (/= scale 1.0) (> (sslength keep) 0))
+     ;; a factor that is not positive means the conversion's own SCALE
+     ;; refused it and never ran, so there is nothing to scale back --
+     ;; and handing SCALE its inverse would leave it waiting for another
+     (if (and (> scale 0.0) (/= scale 1.0) (> (sslength keep) 0))
        (progn
          (princ (strcat "\nScaling " (itoa (sslength keep)) " objects back by 1/"
                         (rtos scale 2 4) " about the conversion's own base ..."))
@@ -114895,6 +118427,7 @@
        (progn
          (command "_.UNDO" "_End")
          (setq undone nil)))
+     (setq begun nil)
      (xft:restore)
 
      ;; ---- report -------------------------------------------------
@@ -115018,7 +118551,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.9")
+(setq *xyplot-version* "v1.10")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -115239,8 +118772,15 @@
                 val  (+ (* feet 12.0) inch)
                 xyp:*dirty* T)))
       (if neg (setq val (- val)))
-      ;; --- final sanity: non-positive or still impossible -> unreadable --
-      (if (or (<= val 0.0) (and maxd (> val (* maxd 1.1))))
+      ;; --- final sanity: no digit at all, or still impossible -> unreadable
+      ;; A coordinate is not a tape: 0 is the origin and a negative is the
+      ;; other side of it, both real readings.  ABCDEF's rule that a value
+      ;; of 0 or less is unreadable came across with the parser, and it
+      ;; dropped the reference corner and every negative offset from the
+      ;; plot while the report called them unreadable.  What a coordinate
+      ;; cell must have is a digit: a lone "-", the sheet's usual "not
+      ;; measured", parses to 0 and is still left blank.
+      (if (or (not (wcmatch s "*#*")) (and maxd (> val (* maxd 1.1))))
         (progn (setq xyp:*dirty* T) nil)
         val))))
 
@@ -115728,6 +119268,9 @@
 
 ;; Pre-select graph 1's points and start ABHD on them.  (ABCDEF's handoff,
 ;; for the same reason and with the same caveat when ABHD is not loaded.)
+;; XYPLOT's undo group is already closed when this runs, so an Esc inside
+;; ABHD - which reaches ABHD's handler, not this command's - leaves the
+;; plot as one U and nothing of XYPLOT's standing open.
 (defun xyp:to-abhd (ss / n)
   (setq n (if ss (sslength ss) 0))
   (cond
@@ -115741,10 +119284,21 @@
                     "\n  whole LAZPASS.lsp build), then run ABHD and"
                     "\n  window graph 1's points.")))
     (T
-     (princ (strcat "\n  Starting ABHD on the " (itoa n)
-                    " point(s) of graph 1 ..."))
-     (sssetfirst nil ss)
-     (vl-cmdf "_.ABHD"))))
+     ;; with PICKFIRST off a pre-selection cannot be handed over at all,
+     ;; so ABHD will ask for the points.  One line says so: a "starting
+     ;; on the points" line followed by one taking it back left the
+     ;; drafter unsure whether ABHD had them or not.
+     (if (= 0 (getvar "PICKFIRST"))
+       (princ (strcat "\n  Starting ABHD - PICKFIRST is off, so window"
+                      " graph 1's " (itoa n) " point(s) when it asks."))
+       (progn
+         (princ (strcat "\n  Starting ABHD on the " (itoa n)
+                        " point(s) of graph 1 ..."))
+         (sssetfirst nil ss)))
+     ;; the c: function, CALLED: (vl-cmdf "_.ABHD") reached the command
+     ;; processor, which does not know AutoLISP commands, so ABHD never
+     ;; started after the line above said it was starting
+     (c:ABHD))))
 
 ;;; --------------------------------------------------------------------------
 ;;;  Main command
@@ -116104,7 +119658,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.8")
+(setq *constellation-version* "v1.9")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -116453,10 +120007,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -116498,17 +120056,38 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The scratch layer the rows are drawn on, made if it is missing.  A
 ;; layer of its own is what lets a drafter turn the ruler off without
 ;; turning anything of the chart off with it.
-(defun cst:rulerlayer ()
+;; LOCKED is not left alone: entmake draws onto a locked layer but
+;; entdel refuses there, so every ruler drawn stayed in the drawing
+;; for good and each redraw added another copy -- and LAYISO's
+;; lock-and-fade locks this layer with everything else.  It is
+;; calofin scratch, so it is unlocked, said once, and left unlocked.
+(defun cst:rulerlayer ( / ed fl)
   (if (not (tblsearch "LAYER" cst:*ruler-layer*))
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 cst:*ruler-layer*) '(70 . 0) '(62 . 7)
-                   (cons 6 "CONTINUOUS"))))
+                   (cons 6 "CONTINUOUS")))
+    (progn
+      (setq ed (entget (tblobjname "LAYER" cst:*ruler-layer*))
+            fl (cdr (assoc 70 ed)))
+      (if (and fl (= 4 (logand 4 fl))
+               (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed)))
+        (princ (strcat "\nCONSTELLATION: layer " cst:*ruler-layer*
+                       " was locked - unlocked so the ruler can be"
+                       " taken down again.")))))
   cst:*ruler-layer*)
 
 ;; Take the ruler down -- the one call *error* and the clean exit both
@@ -117353,6 +120932,25 @@
 (defun cst:dotr  (w h) (max cst:*dotr-min*  (* cst:*dotr*  (min w h))))
 (defun cst:dimoff (w h) (* cst:*dimoff* (min w h)))
 
+;; A point of the drawing as the WORLD point entmake wants.  The base
+;; point is a click, and a click answers in the current UCS, so the
+;; whole drawing -- the space, the points, the dims, the outline -- is
+;; laid out in the UCS and moved into the world only here, where it is
+;; written.  Without this a UCS off the world origin drew everything
+;; that far from the base point clicked, and a turned one drew the
+;; space square to the world instead of to the UCS it was sized in.
+(defun cst:wcs (p)
+  (trans (list (car p) (cadr p) 0.0) 1 0))
+
+;; How far the current UCS is turned from the world X axis, so text and
+;; blocks read along it.  Taken off the UCS X axis moved into the world
+;; -- not off UCSXDIR run back into the UCS, which is (1 0 0) there
+;; however far the UCS is turned, so it would always answer zero.
+;; 0 in the world UCS.
+(defun cst:ucsang ( / v)
+  (setq v (trans '(1.0 0.0 0.0) 1 0 T))
+  (atan (cadr v) (car v)))
+
 ;; entmake and hand back the ename, so the preview can erase what it
 ;; drew.  (cal:mtext does the same dance for the same reason -- entmake
 ;; returns the entity list, not a name.)
@@ -117361,7 +120959,7 @@
 (defun cst:circle (p r lay)
   (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity") (cons 8 lay)
                   '(100 . "AcDbCircle")
-                  (list 10 (car p) (cadr p) 0.0) (cons 40 r))))
+                  (cons 10 (cst:wcs p)) (cons 40 r))))
 
 ;; Closed polyline through the points given, in order.  BULGES is one
 ;; number per vertex or nil for a straight run; a bulge bends the
@@ -117371,7 +120969,7 @@
                   '(100 . "AcDbPolyline") (cons 90 (length pts)) '(70 . 1))
         i   0)
   (foreach p pts
-    (setq dxf (append dxf (list (cons 10 (cal:2d p))))
+    (setq dxf (append dxf (list (cons 10 (cal:2d (cst:wcs p)))))
           dxf (if (and bulges (/= 0.0 (nth i bulges)))
                 (append dxf (list (cons 42 (nth i bulges))))
                 dxf)
@@ -117427,12 +121025,12 @@
 (defun cst:dim (p1 p2 loc lay)
   (entmakex (list '(0 . "DIMENSION") '(100 . "AcDbEntity") (cons 8 lay)
                   '(100 . "AcDbDimension")
-                  (list 10 (car loc) (cadr loc) 0.0)
-                  (list 11 (car loc) (cadr loc) 0.0)
+                  (cons 10 (cst:wcs loc))
+                  (cons 11 (cst:wcs loc))
                   '(70 . 33) '(1 . "")
                   '(100 . "AcDbAlignedDimension")
-                  (list 13 (car p1) (cadr p1) 0.0)
-                  (list 14 (car p2) (cadr p2) 0.0))))
+                  (cons 13 (cst:wcs p1))
+                  (cons 14 (cst:wcs p2)))))
 
 ;; The ab_pt survey block, built if this drawing has never seen one.
 ;; (ABCDEF's definition, made the same way, so a drawing can hold
@@ -117462,17 +121060,20 @@
                      "\" was not in this drawing - created it."))))
   (tblsearch "BLOCK" cst:*point-block*))
 
-(defun cst:insert-pt (pt name th)
+(defun cst:insert-pt (pt name th / rot)
+  (setq rot (cst:ucsang))
   (entmake (list '(0 . "INSERT") '(100 . "AcDbEntity")
                  (cons 8 cst:*point-layer*)
                  '(100 . "AcDbBlockReference") '(66 . 1)
                  (cons 2 cst:*point-block*)
-                 (list 10 (car pt) (cadr pt) 0.0)
-                 (cons 41 th) (cons 42 th) (cons 43 th)))
+                 (cons 10 (cst:wcs pt))
+                 (cons 41 th) (cons 42 th) (cons 43 th) (cons 50 rot)))
   (entmake (list '(0 . "ATTRIB") '(100 . "AcDbEntity")
                  (cons 8 cst:*point-layer*) '(100 . "AcDbText")
-                 (list 10 (+ (car pt) th) (- (cadr pt) (* 2.0 th)) 0.0)
-                 (cons 40 th) (cons 1 name) '(100 . "AcDbAttribute")
+                 (cons 10 (cst:wcs (list (+ (car pt) th)
+                                         (- (cadr pt) (* 2.0 th)))))
+                 (cons 40 th) (cons 50 rot) (cons 1 name)
+                 '(100 . "AcDbAttribute")
                  (cons 2 cst:*point-tag*) '(70 . 0)))
   (entmake (list '(0 . "SEQEND") '(100 . "AcDbEntity")
                  (cons 8 cst:*point-layer*))))
@@ -117504,7 +121105,8 @@
     (setq p   (cal:v+ base p)
           cst:*preview* (cons (cst:circle p r cst:*guide-layer*)
                               cst:*preview*)
-          lab (cst:made (cal:text (list (+ (car p) r) (+ (cadr p) r))
+          lab (cst:made (cal:text (cst:wcs (list (+ (car p) r)
+                                                 (+ (cadr p) r)))
                                   th (cst:letter i) cst:*guide-layer*))
           cst:*preview* (if lab (cons lab cst:*preview*) cst:*preview*)
           i   (1+ i)))
@@ -117569,6 +121171,11 @@
          (cst:askcount))
         (t v)))
 
+;; The base point, in the CURRENT UCS: a click answers in it, and so
+;; does Enter -- <0,0> is the UCS origin, the same point typing 0,0
+;; gives, rather than a world origin the drafter cannot see from the
+;; prompt.  The drawing is laid out off it in the UCS and moved into
+;; the world where it is written (cst:wcs).
 (defun cst:askbase ( / v)
   (initget "Back Undo")
   (setq v (getpoint "\nInsertion base point [Back] <0,0>: "))
@@ -118284,7 +121891,7 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.7")
+(setq *lazspa-version* "v1.8")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -119654,6 +123261,12 @@
   (setq dcl nil)
   (if f (vl-file-delete f))
   (setq f nil)
+  ;; the dialog's run ends with the dialog.  What the command does with
+  ;; the answer -- runs POOL off the form, launches the tool picked -- is
+  ;; a run of its own: left standing, this one was JOINED by it (the
+  ;; command is still what CMDNAMES names), and a failure in the tool
+  ;; was filed under a dialog no report can replay
+  (if lzd:end (lzd:end "LAZSPA"))
   out)
 
 ;;; -------------------- commands ----------------------------------------
@@ -119795,7 +123408,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.20")
+(setq *lazform-version* "v2.21")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -121687,6 +125300,12 @@
                               (nth lzf:*btype* lzf:*btypes*))))))
      (unload_dialog dcl)
      (vl-file-delete f)))
+  ;; the dialog's run ends with the dialog.  What the command does with
+  ;; the answer -- runs POOL off the form, launches the tool picked -- is
+  ;; a run of its own: left standing, this one was JOINED by it (the
+  ;; command is still what CMDNAMES names), and a failure in the tool
+  ;; was filed under a dialog no report can replay
+  (if lzd:end (lzd:end "LAZTXT"))
   out)
 
 (defun c:LAZTXT ( / c form)
@@ -122168,9 +125787,17 @@
            (numberp (setq v (cal:formanswer (cal:trim (lzf:get key))))))
       v))
 
+;; ...and a depth is more than zero before it is compared at all.
+;; POOL's own prompts refuse zero and a leading minus, and since REV41
+;; pool:askh spends such a form answer and asks at the command line --
+;; so a sheet that writes depths as negative elevations (C -3'4", D
+;; -10") would pass the D-beats-C test here, light Insert, and then
+;; have POOL ask for both again.  Said here instead.
 (defun lzf:depthbad ( / cv dv c2v)
   (setq cv (lzf:depth "c") dv (lzf:depth "d") c2v (lzf:depth "c2"))
   (cond
+    ((vl-some '(lambda (v) (and v (<= v 0.0))) (list cv dv c2v))
+     "C, D and C2 must be more than zero - POOL will not take them otherwise.")
     ((and cv dv (<= dv cv))
      "D must be deeper than C - POOL will not take it otherwise.")
     ((and cv c2v dv (or (< c2v cv) (> c2v dv)))
@@ -122581,6 +126208,12 @@
   (setq dcl nil)
   (if f (vl-file-delete f))
   (setq f nil)
+  ;; the dialog's run ends with the dialog.  What the command does with
+  ;; the answer -- runs POOL off the form, launches the tool picked -- is
+  ;; a run of its own: left standing, this one was JOINED by it (the
+  ;; command is still what CMDNAMES names), and a failure in the tool
+  ;; was filed under a dialog no report can replay
+  (if lzd:end (lzd:end "LAZFORM"))
   out)
 
 ;; WHERE THE DIALOG COMES BACK UP.  done_dialog reports the position it
@@ -122870,7 +126503,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.59")
+(setq *lazpanel-version* "v3.60")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -123354,7 +126987,7 @@
     ("DIMCHECK" "Guided, one-at-a-time dimension review.\nWhat it asks, in order:\n 1. Select objects\n 2. dimension point 1\n 3. dimension point 2\n 4. Is this dimension correct?\n 5. arc start point\n 6. arc end point\n 7. Merge into one line, Flag to fix, or Leave as is?\n 8. Flag to fix, or Leave as is?")
     ("DIMCONTEND" "Chains a seed dimension out to every feature point.\nWhat it asks, in order:\n 1. Select the dimension to continue\n 2. Select objects\n 3. Continue from another dimension?")
     ("DIMSCAN" "Scan drawing for dimensions.\nWhat it asks, in order:\n 1. Select objects")
-    ("DIMSTAMP" "Click a point, type 4'4.5, 44.5 or a letter; stamps it canonically, a ruler picks the next.\nA letter labels a point the way the survey names them - A, B, C ... Z, AA - and moves on as it lands, so a run of labels is click, click, click rather than retyping each one.\nWhat it asks, in order:\n 1. Click a point to place text (Enter when done)\n 2. Text - 4'-4 1/2\", just 4'4.5, or a letter like A\n 3. Click to place text, click the ruler to change it, or type new text (Enter when done)")
+    ("DIMSTAMP" "Click a point, type 4'4.5, 44.5 or a letter; stamps it canonically, a ruler picks the next.\nA letter labels a point the way the survey names them - A, B, C ... Z, AA - and moves on as it lands, so a run of labels is click, click, click rather than retyping each one.\nWhat it asks, in order:\n 1. Click a point to place text (Enter when done)\n 2. Text - 4'-4-1/2\", just 4'4.5, or a letter like A\n 3. Click to place text, click the ruler to change it, or type new text (Enter when done)")
     ("DRONE" "Drone cleanup routine.\nWhat it asks, in order:\n 1. Select objects")
     ("DRONOTE" "Places a canned drone-photo review note - diving board, hidden anchors or slide sketch - at a picked point.\nWhat it asks, in order:\n 1. Which note?\n 2. Pick a point for the note (Enter when done)")
     ("FITABHD" "Fits a typed pool template through surveyed points.\nWhat it asks, in order:\n 1. Select objects\n 2. Rectangle/Grecian/ROman/Oval/L/LAzyl/ROUnd\n 3. the pool corners\n 4. the cut corners\n 5. Oasis shape\n 6. Maximum distance from a point\n 7. Percent of points allowed beyond\n 8. Is the pool in-square or out-of-square?\n 9. Any bowed walls?\n 10. Keep this fit, or Redo it?\n 11. Point to leave out, or a ringed one to restore - pick it or type its number\n 12. Hopper offset in from the wall\n 13. Pick a point at the DEEP end of the pool\n 14. Deep break - how far from the deep end wall?\n 15. Shallow break - how far from the deep end wall?\n 16. Hopper offset in from each side wall\n 17. Hopper offset in from the deep end wall")
@@ -123919,6 +127552,12 @@
 (setq lzp:*aliases* nil)          ; (COMMAND . the name this drafter types)
 (setq lzp:*capsof* nil)           ; (COMMAND . the words this drafter's button says)
 (setq lzp:*aliasat* nil)          ; lzp:*aliases* as the names editor opened it
+(setq lzp:*aliasoff* nil)         ; ((COMMAND NAME WHY) ...) the last apply refused
+;; lzp:*aliasmade* -- ((NAME . COMMAND) ...), the wrappers this file has
+;; defined in THIS drawing -- is deliberately not set here: a reload
+;; leaves those defuns standing, and resetting the record would make
+;; every one of them read as "already runs something" and be reported
+;; as not applied.
 (setq lzp:*namesel* nil)          ; the tool the names editor has selected
 (setq lzp:*names* nil)            ; the names editor's rows, in list order
 
@@ -125313,6 +128952,23 @@
 ;; path rather than the image, and AutoCAD re-reads it whenever the
 ;; button is redrawn.  A toolbar that survives into another session
 ;; would otherwise be pointing at a swept temp file for ever.
+;;
+;; The THEME is in the name -- lazpanel-16-dark.bmp, lazpanel-16-light.bmp
+;; -- because the picture is not one picture: lzp:bmp-bytes paints the
+;; square round the hexagon in the theme's own grey.  Under one name
+;; per size, the pair written on the first theme was found on disk
+;; ever after and never rewritten, so a drafter who switched theme kept
+;; the old tile for good while CALSET promised the new one at the next
+;; LAZBUTTON.  A name per ground keeps the on-disk check honest, and
+;; hands SetBitmaps a NEW name when the theme moves -- the CUI caches a
+;; bitmap by name, so a file rewritten in place under the same one is
+;; not guaranteed to show.
+(defun lzp:icon-ground ()
+  (if (eq (cal:ui) 'light) "light" "dark"))
+
+(defun lzp:icon-name (name)
+  (strcat "lazpanel-" name "-" (lzp:icon-ground) ".bmp"))
+
 (defun lzp:icon-file (dir name / d)
   (setq d dir)
   ;; a folder is not guaranteed to end in a separator -- glue the name
@@ -125320,7 +128976,7 @@
   ;; Templazpanel-16.bmp, which fails silently later
   (if (not (member (substr d (strlen d) 1) '("\\" "/")))
       (setq d (strcat d "\\")))
-  (strcat d "lazpanel-" name ".bmp"))
+  (strcat d (lzp:icon-name name)))
 
 (defun lzp:icon-path (name / d)
   (setq d (getvar "TEMPPREFIX"))
@@ -125362,7 +129018,8 @@
         (setq s (lzp:icon-file dir "16")
               l (lzp:icon-file dir "32"))
         ;; Both already on disk from an earlier load: nothing to write.
-        ;; The picture never changes, and writing it again on every
+        ;; A name holds one picture -- the ground is in it, see
+        ;; lzp:icon-file -- and writing it again on every
         ;; drawing open (a Startup Suite runs this file per document)
         ;; put two COM round trips and two file writes -- into a
         ;; shared network support folder, on some sites -- behind every
@@ -125386,7 +129043,7 @@
   (cond
     ((and (setq d (lzp:support-dir)) (lzp:try-icons d))
      (setq lzp:*iconref* "name")
-     (list "lazpanel-16.bmp" "lazpanel-32.bmp"))
+     (list (lzp:icon-name "16") (lzp:icon-name "32")))
     ((lzp:try-icons (getvar "TEMPPREFIX"))
      (setq lzp:*iconref* "path")
      (list (lzp:icon-file (getvar "TEMPPREFIX") "16")
@@ -125438,11 +129095,17 @@
 
 ;; Put the button on screen: reuse the toolbar when one exists -- its
 ;; position and docking are the user's -- otherwise create it and float
-;; it in view.  Either way the icons are rewritten and re-applied, and
-;; the toolbar is made visible: a toolbar the user closed is still
-;; found by name, and without this it would never come back.
+;; it in view.  Either way the icons are rewritten and re-applied.
+;;
+;; SHOW is whether a toolbar that is already there is made visible.
+;; LAZBUTTON passes T: a toolbar the user closed is still found by
+;; name, and that command is how it comes back.  The load-time call
+;; passes nil, because closing it is also the user's -- it used to be
+;; put back on screen at the first drawing of every session, so a
+;; drafter who works from the ribbon or the palette closed it again
+;; every morning.  A toolbar made here is new, and is shown either way.
 ;; Returns the toolbar, or nil when there is none to be had.
-(defun lzp:button-init ( / tb btn pair paths made)
+(defun lzp:button-init (show / tb btn pair paths made)
   (cond
     ((setq tb (lzp:toolbar-find))
      (setq btn (vl-catch-all-apply 'vla-item (list tb 0)))
@@ -125459,7 +129122,8 @@
         ;; one line, not a stack trace: the panel still works without a
         ;; picture, but a blank button should not be a mystery
         (princ "\n[lazpanel] button picture not applied - LAZICON says why."))
-      (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true))
+      (if (or show made)
+        (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true)))
       (if made (vl-catch-all-apply 'vla-float (list tb 200 300 1)))))
   tb)
 
@@ -125588,6 +129252,12 @@
   (setq dcl nil)
   (if f (vl-file-delete f))
   (setq f nil lzp:*pick* nil lzp:*pick-quiet* nil)
+  ;; the dialog's run ends with the dialog.  What the command does with
+  ;; the answer -- runs POOL off the form, launches the tool picked -- is
+  ;; a run of its own: left standing, this one was JOINED by it (the
+  ;; command is still what CMDNAMES names), and a failure in the tool
+  ;; was filed under a dialog no report can replay
+  (if lzd:end (lzd:end "LAZPANEL"))
   out)
 
 ;; WHERE THE PANEL COMES BACK UP.  done_dialog reports the position it
@@ -125751,7 +129421,7 @@
     (if lzd:report (lzd:report "LAZBUTTON" *lazpanel-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "LAZBUTTON" *lazpanel-version*))
-  (setq tb (vl-catch-all-apply 'lzp:button-init nil))
+  (setq tb (vl-catch-all-apply 'lzp:button-init '(T)))
   (cond
     ((vl-catch-all-error-p tb)
      (princ (strcat "\nLAZBUTTON error: " (vl-catch-all-error-message tb))))
@@ -126091,7 +129761,8 @@
                                      " colour -- an ACI number, a hex code, "
                                      "Back to leave it, or . for Auto: ")))
         (if lzd:ask (lzd:ask (strcat role " colour") v) v)
-        (setq rgb (lzp:hex2rgb v))
+        (setq v   (vl-string-trim " \t" v)
+              rgb (lzp:hex2rgb v))
         (cond
           ((member (strcase v) '("B" "BACK" "U" "UNDO")) (c:CALSET))
           ((= v "") (princ "\nUnchanged."))
@@ -126102,15 +129773,20 @@
            (setenv key (itoa (lzp:aci-near (car rgb) (cadr rgb) (caddr rgb))))
            (princ (strcat "\n" role " colour is now ACI " (getenv key)
                           " -- the closest recommended preset to " v
-                          ".  COVERCHECK, DIMCHECK and LINFINCHECK read it"
-                          " on their next run.")))
-          ((= (atoi v) 0)
-           (princ "\nNot a colour number or hex code -- unchanged."))
+                          ".  Every tool whose colour for it is auto"
+                          " takes it from its next run.")))
+          ;; The same test the LAZSET dialog and a LAZBACKUP import
+          ;; make.  atoi alone stored 300, -3, 12abc and AutoCAD's own
+          ;; 255,0,0 (as 255) and reported each one set, and the
+          ;; review tools then drew their cues in it -- or failed on
+          ;; it -- a run later, far from the typo.
+          ((not (lzp:aci-p v))
+           (princ "\nNot a colour number (1-255) or hex code -- unchanged."))
           (t
            (setenv key (itoa (atoi v)))
            (princ (strcat "\n" role " colour is now ACI " (itoa (atoi v))
-                          ".  COVERCHECK, DIMCHECK and LINFINCHECK read it"
-                          " on their next run.")))))))
+                          ".  Every tool whose colour for it is auto"
+                          " takes it from its next run.")))))))
     ;; routes straight to LAZHIDE's own dialog and comes back to this
     ;; prompt -- the same way Back re-enters CALSET below
     ((= pick "Hidden") (c:LAZHIDE) (c:CALSET))
@@ -126140,22 +129816,15 @@
      (if lzd:ask (lzd:ask "Theme" v) v)
      (cond
        ((member v '("Back" "Undo")) (c:CALSET))
-       (t (setq v (if v (strcase v) "AUTO"))
-          (setenv "CalofinTheme" v)
-          ;; ...and beside the pins, where the VB palette reads it
-          ;; (ui/calofin_net/PaletteTheme.vb).  The profile is what the
-          ;; Lisp side reads and the registry is what the palette can
-          ;; reach, and a drafter who has said which way their screen
-          ;; reads has said it to both surfaces -- the same bargain the
-          ;; pinned row already strikes.  Auto is written as empty:
-          ;; the palette's own probe is what "auto" means there.
-          ;;
-          ;; Read from V and not back out of getenv -- a strcase on the
-          ;; nil a failed setenv would leave is an error thrown from
-          ;; inside the line that reports success.
-          (vl-catch-all-apply
-            'vl-registry-write
-            (list lzp:*pinkey* "Theme" (if (= v "AUTO") "" v)))
+       ;; Through lzp:theme-write, the one writer: the profile AND the
+       ;; palette's registry copy, Auto as empty in both.  Written
+       ;; here as the word AUTO, it left LAZICON and this command's own
+       ;; listing reporting an override the drafter never set.
+       ;;
+       ;; Reported from V and not back out of getenv -- a strcase on
+       ;; the nil a failed setenv would leave is an error thrown from
+       ;; inside the line that reports success.
+       (t (setq v (lzp:theme-write (if v (strcase v) "AUTO")))
           (princ (strcat "\nCalofinTheme is now " v
                          ".  Every tool reads it on the next colour it"
                          " picks; the toolbar icon takes it at the next"
@@ -126429,21 +130098,31 @@
   (lzp:set-put lzp:*osrkey* (itoa (lzp:osr-get)))
   lzp:*setvals*)
 
-;; The one place that writes.
-(defun lzp:set-write ( / r v)
-  (setq v (lzp:set-get "CalofinTheme"))
-  ;; EMPTY is what every reader takes for auto -- lzp:ui, cal:themeset
-  ;; and the palette all treat an unset or empty value as "measure it"
-  ;; -- so writing the word AUTO would leave LAZICON and lzp:setshow
-  ;; reporting an override the drafter never set.  The registry mirror
-  ;; below already wrote it this way; now the profile agrees with it.
+;; The ONE writer of CalofinTheme -- this dialog, CALSET's Theme and a
+;; LAZBACKUP import all come here.  V is DARK, LIGHT or AUTO (anything
+;; else is Auto); answers the word it wrote.
+;;
+;; EMPTY is what every reader takes for auto -- lzp:ui, cal:themeset
+;; and the palette all treat an unset or empty value as "measure it" --
+;; so writing the word AUTO would leave LAZICON and lzp:setshow
+;; reporting an override the drafter never set.  And the same answer
+;; goes beside the pins, where the VB palette reads it
+;; (ui/calofin_net/PaletteTheme.vb): the profile is what the Lisp side
+;; reads and the registry is what the palette can reach.  Three writers
+;; used to disagree -- CALSET wrote AUTO, and an import never reached
+;; the registry at all, so a palette forced dark stayed dark after a
+;; backup had put the drafter back on Auto.
+(defun lzp:theme-write (v)
+  (setq v (if (member v '("DARK" "LIGHT")) v "AUTO"))
   (setenv "CalofinTheme" (if (= v "AUTO") "" v))
-  ;; ...and beside the pins, where the VB palette reads it
-  ;; (ui/calofin_net/PaletteTheme.vb) -- the same bargain CALSET's own
-  ;; Theme branch strikes.
   (vl-catch-all-apply
     'vl-registry-write
     (list lzp:*pinkey* "Theme" (if (= v "AUTO") "" v)))
+  v)
+
+;; The one place that writes.
+(defun lzp:set-write ( / r v)
+  (lzp:theme-write (lzp:set-get "CalofinTheme"))
   (foreach r '("CalofinErrorDir" "StockCover_Folder")
     (setenv r (lzp:set-get r)))
   ;; lzp:inkkey's value is always "" or one of the presets' own ACI
@@ -126755,6 +130434,10 @@
 ;;      CHECK for the whole session, and DIMARCCHECK -- which is
 ;;      (c:CHECK) -- with it.  lzp:has cannot see the difference, so the
 ;;      button would stay lit while running the wrong tool.
+;;    - an AutoCAD command or an acad.pgp shortcut.  Neither is a
+;;      c: function, so the check above never saw them: AREA as an
+;;      alias never ran (the native command wins), and PL for POOL
+;;      took PLINE's shortcut away in every drawing.
 ;;    - a caption carrying ";" or "=", which are the store's own
 ;;      separators, or a double quote, which lzp:dcl-one pastes straight
 ;;      into DCL and which would make every page of the panel
@@ -126817,6 +130500,45 @@
 (defun lzp:alias-taken-p (name)
   (if (car (atoms-family 1 (list (strcase (strcat "C:" name))))) t nil))
 
+;; ...and the two places atoms-family cannot see, because neither is an
+;; AutoLISP function.  AutoCAD's own command table -- native, ARX and
+;; .NET alike -- which getcname asks, in either spelling: a native
+;; command beats a c: function of the same name, so an alias AREA or
+;; SCALE was stored, re-applied in every drawing and never ran once.
+;; And acad.pgp's shortcuts, where PL, C, SP and PO -- the natural short
+;; names for POOL and SPA -- already mean PLINE, CIRCLE, SPELL and
+;; POINT, and one of the two names quietly stopped working.
+;; getcname under a catch: this runs from the load-time apply too.
+(defun lzp:alias-native-p (name / a b)
+  (setq a (vl-catch-all-apply 'getcname (list name))
+        b (vl-catch-all-apply 'getcname (list (strcat "_" name))))
+  (if (or (= (type a) 'STR) (= (type b) 'STR)) t nil))
+
+;; acad.pgp's alias names, upper case, read once per drawing: 'unread
+;; until then, and nil when no acad.pgp is on the support path.
+(setq lzp:*pgp* 'unread)
+
+(defun lzp:pgp-lines (fh / line i out)
+  (while (setq line (read-line fh))
+    (setq line (vl-string-trim " \t" line))
+    (if (and (/= line "") (/= (substr line 1 1) ";")
+             (setq i (vl-string-search "," line)) (> i 0))
+      (setq out (cons (strcase (vl-string-trim " \t" (substr line 1 i)))
+                      out))))
+  out)
+
+(defun lzp:pgp-read ( / f fh r)
+  (if (and (setq f (findfile "acad.pgp")) (setq fh (open f "r")))
+    (progn
+      (setq r (vl-catch-all-apply 'lzp:pgp-lines (list fh)))
+      (close fh)
+      (if (vl-catch-all-error-p r) nil r))))
+
+(defun lzp:pgp-alias-p (name)
+  (if (eq lzp:*pgp* 'unread)
+    (setq lzp:*pgp* (vl-catch-all-apply 'lzp:pgp-read nil)))
+  (if (and (listp lzp:*pgp*) (member (strcase name) lzp:*pgp*)) t nil))
+
 ;; Why this alias cannot be used, as words, or nil when it can.  TOOL is
 ;; the command it would summon; the alias it ALREADY had is allowed
 ;; through, or re-opening the editor would refuse what it just showed.
@@ -126832,7 +130554,14 @@
      (strcat "that name is already yours for " (car p)))
     ((and (lzp:alias-taken-p name)
           (/= (strcase name) (strcase (lzp:alias-was tool))))
-     (strcat name " already runs something in this session"))))
+     (strcat name " already runs something in this session"))
+    ;; asked only of a name no c: function holds, so a wrapper this
+    ;; file defined itself is judged by the clause above and nothing
+    ;; hangs on whether getcname can see an AutoLISP command
+    ((and (not (lzp:alias-taken-p name)) (lzp:alias-native-p name))
+     (strcat name " is an AutoCAD command, and it would win"))
+    ((lzp:pgp-alias-p name)
+     (strcat name " is an AutoCAD shortcut in acad.pgp"))))
 
 (defun lzp:alias-was (tool)
   (lzp:pairval tool lzp:*aliasat*))
@@ -126847,21 +130576,103 @@
     ((vl-string-search "\"" s)
      "a double quote would break the panel's own dialog file")))
 
-;; Define one wrapper, or answer nil having done nothing.
-(defun lzp:alias-make (name tool)
-  (if (and (lzp:alias-shape-p name)
-           (not (lzp:alias-taken-p name))
-           (member tool (lzp:commands)))
-    (progn
-      (eval (list 'defun (read (strcat "c:" (strcase name))) nil
-                  (list (read (strcat "c:" tool)))))
-      t)))
+;; Define one wrapper, or answer nil having done nothing.  The command
+;; table and acad.pgp are asked again here, not only when the name was
+;; typed: a name stored before either was checked, or one AutoCAD has
+;; taken since, must not go on shadowing the drafter's own shortcut in
+;; every drawing.  A wrapper this file already made for the same tool
+;; in this drawing -- a reload, or LAZNAME's OK re-applying the whole
+;; store -- is still in force, and answers T without being made again.
+(defun lzp:alias-make (name tool / key)
+  (setq key (cons (strcase name) tool))
+  (cond
+    ((member key lzp:*aliasmade*) t)
+    ((and (lzp:alias-shape-p name)
+          (not (lzp:alias-taken-p name))
+          (not (lzp:alias-native-p name))
+          (not (lzp:pgp-alias-p name))
+          (member tool (lzp:commands)))
+     (eval (list 'defun (read (strcat "c:" (strcase name))) nil
+                 (list (read (strcat "c:" tool)))))
+     (setq lzp:*aliasmade* (cons key lzp:*aliasmade*))
+     t)))
 
+;; Why lzp:alias-make just refused NAME, asked in its own order.  Not
+;; lzp:alias-why: that one lets through the alias a tool already had,
+;; which is right for the editor and is exactly the stored name being
+;; refused here.
+(defun lzp:alias-off-why (name tool)
+  (cond
+    ((not (lzp:alias-shape-p name))
+     "a name is letters and digits, starts with a letter, up to 12")
+    ((lzp:alias-taken-p name)
+     (strcat name " already runs something in this session"))
+    ((lzp:alias-native-p name)
+     (strcat name " is an AutoCAD command, and it would win"))
+    ((lzp:pgp-alias-p name)
+     (strcat name " is an AutoCAD shortcut in acad.pgp"))
+    (t (strcat tool " is not a command this build has"))))
+
+;; Every stored name made to answer, and the ones that could not be
+;; kept in lzp:*aliasoff* with the reason.  The drafter who stored
+;; POOL=PL before acad.pgp was checked typed PL in every drawing and got
+;; POOL; once this build refused it, PL ran PLINE with no word said,
+;; while LAZNAME's list and its closing count went on claiming it.  An
+;; empty value is a name taken away in the editor, not a refusal.
 (defun lzp:aliases-apply ( / p n)
-  (setq n 0)
+  (setq n 0 lzp:*aliasoff* nil)
   (foreach p lzp:*aliases*
-    (if (lzp:alias-make (cdr p) (car p)) (setq n (1+ n))))
+    (cond
+      ((= (cdr p) "") nil)
+      ((lzp:alias-make (cdr p) (car p)) (setq n (1+ n)))
+      (t (setq lzp:*aliasoff*
+               (cons (list (car p) (strcase (cdr p))
+                           (lzp:alias-off-why (cdr p) (car p)))
+                     lzp:*aliasoff*)))))
+  (setq lzp:*aliasoff* (reverse lzp:*aliasoff*))
   n)
+
+;; The reason TOOL's name ALIAS was refused at the last apply, or nil.
+(defun lzp:alias-off (tool alias)
+  (caddr (car (vl-remove-if-not
+                '(lambda (r) (and (= (car r) tool)
+                                  (= (cadr r) (strcase alias))))
+                lzp:*aliasoff*))))
+
+;; The stored names that answer: not empty, not refused.
+(defun lzp:aliases-live ()
+  (length (vl-remove-if
+            '(lambda (p) (or (= (cdr p) "") (lzp:alias-off (car p) (cdr p))))
+            lzp:*aliases*)))
+
+;; One line per refused name, and where to change it; nil when none.
+(defun lzp:aliasoff-text ( / r s)
+  (setq s "")
+  (foreach r lzp:*aliasoff*
+    (setq s (strcat s "\nLAZPANEL: " (cadr r) " (your name for " (car r)
+                    ") is not applied -- " (caddr r) ".")))
+  (if (/= s "")
+    (strcat s "\n  LAZNAME gives " (if (cdr lzp:*aliasoff*) "them" "it")
+            " another name.")))
+
+;; The load-time apply, and the one place a refusal is SAID unasked.
+;; Once a session, not per drawing: the refusal is the same in every
+;; drawing a Startup Suite opens, so the blackboard -- the namespace
+;; every document shares, as lzp:first-load-p uses it -- carries what
+;; was said, and a drawing says it again only when it has something
+;; different to say.  Not behind *calofin-quiet*: that silences a
+;; greeting, and this is a name the drafter types that has stopped
+;; working.  With no blackboard it is said every time -- told twice
+;; beats not told.
+(defun lzp:aliases-load ( / s)
+  (lzp:aliases-apply)
+  (if (and (setq s (lzp:aliasoff-text))
+           (not (equal s (vl-catch-all-apply 'vl-bb-ref
+                                             (list 'lzp:*aliasnote*)))))
+    (progn
+      (princ s)
+      (vl-catch-all-apply 'vl-bb-set (list 'lzp:*aliasnote* s))))
+  (princ))
 
 (defun lzp:names-write ()
   (lzp:kv-write lzp:*aliasval* lzp:*aliases*)
@@ -126871,10 +130682,15 @@
 ;; One row.  Not padded into columns: whether the dialog font is
 ;; fixed-pitch is exactly what LAZASCII exists to ask, so nothing here
 ;; may assume two rows line up.
+;; A name the last apply refused says so on its row: the list is where
+;; the drafter looks to see what they type, and it used to show PL for
+;; POOL long after PL had gone back to meaning PLINE.
 (defun lzp:namerow (n / a)
   (setq a (lzp:pairval n lzp:*aliases*))
   (strcat n
-          (if (/= a "") (strcat "  (type " a ")") "")
+          (cond ((= a "") "")
+                ((lzp:alias-off n a) (strcat "  (type " a " - not applied)"))
+                (t (strcat "  (type " a ")")))
           "  -  " (lzp:caption n)))
 
 ;; A map's value, or "" when it has none.  (cdr (assoc ...)) answers nil
@@ -127004,7 +130820,7 @@
      (if (= rc 1) (lzp:names-write) (lzp:names-read))
      t)))
 
-(defun c:LAZNAME ( / *error* f dcl)
+(defun c:LAZNAME ( / *error* f dcl live)
   ;; an error inside a tile callback used to leak the dialog handle
   ;; and the temp .dcl -- the same fix c:LAZPIN and c:LAZHIDE carry
   (defun *error* (msg)
@@ -127029,11 +130845,15 @@
      (lzp:name-edit dcl)
      (unload_dialog dcl)
      (vl-file-delete f)
+     ;; counted as they ANSWER, not as they are stored: a refused name
+     ;; is named instead, with its reason, never counted as working
+     (setq live (lzp:aliases-live))
      (princ (strcat "\nLAZPANEL: "
-                    (itoa (length lzp:*aliases*)) " tool"
-                    (if (= (length lzp:*aliases*) 1) "" "s")
+                    (itoa live) " tool"
+                    (if (= live 1) "" "s")
                     " answer to a name of yours, "
-                    (itoa (length lzp:*capsof*)) " renamed on the panel."))))
+                    (itoa (length lzp:*capsof*)) " renamed on the panel."))
+     (if lzp:*aliasoff* (princ (lzp:aliasoff-text)))))
   (if lzd:end (lzd:end "LAZNAME"))
   (princ))
 
@@ -127118,7 +130938,7 @@
      ("acc:*appid*" "\"ABCURCHECK\"" "Everything ABCURCHECK draws carries xdata under this name, so a rescue erases only its own work off a layer...")
      ("acc:*dash-name*" "\"DASHED\"" "The dashed linetype declarations are ringed with, and its pattern: dash, gap, and the total the two must ad...")
      ("acc:*dash-on*" "12.0" "drawing units of dash The dashed linetype declarations are ringed with, and its pattern: dash, gap, and the...")
-     ("acc:*dash-off*" "6.0" "...and of gap -- G0: is the loop closed at all ------------------------------------- The dashed linetype de...")
+     ("acc:*dash-off*" "6.0" "...and of gap The dashed linetype declarations are ringed with, and its pattern: dash, gap, and the total t...")
      ("acc:*fuzz*" "1.0e-4" "drawing units Closer than this and two ends are the same point -- ABHD's *PF-CHAIN-FUZZ*. Raising it forgiv...")
      ("acc:*close-tol*" "5.0" "degrees The signed turning of a simple closed loop is 360 degrees. This is how far off that the total may s...")
      ("acc:*cross-max*" "300" "segments The crossing scan compares every segment with every other, so it is skipped above this many segmen...")
@@ -127641,7 +131461,7 @@
      ("*cchk-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
      ("*cchk-flag-color*" "1" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
      ("*cchk-arc-color*" "6" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
-     ("*cchk-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) The three crosses are 'auto: they do not vary with the scre...")
+     ("*cchk-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
      ("*cchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) The three crosses are 'auto: they do not vary with the sc...")
      ("*cchk-sugg-color*" "'auto" "ACI: the + marking where COVERCHECK would put it (green) The three crosses are 'auto: they do not vary with...")
      ("*cchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) The three crosses are 'auto: they do not vary with...")
@@ -127665,18 +131485,14 @@
      ("*cchk-dist-prec*" "4" "decimal places Distances in prompts and the report go through (rtos d mode prec): mode 2 is decimal, 3 engi...")
      ("*cchk-same-pt*" "1e-8" "drawing units Two points closer than this are the SAME point: no construction line is drawn through them, n...")
      ("*cchk-planar-eps*" "1e-9" "dimensionless (normal components) How far an arc's extrusion normal (DXF 210) may lean from world +Z and st...")
-     ("*cchk-flat-eps*" "1e-12" "---------------------------------------------------------------------- Below this a polyline bulge is treat..."))
+     ("*cchk-flat-eps*" "1e-12" "Below this a polyline bulge is treated as straight, so the edge joins overlap detection, and three points a..."))
     ("CUSTBLOCK" "lisp/custblock/CUSTBLOCK.lsp"
      ("cbk:*layer*" "\"COVER\"" "the block itself")
      ("cbk:*laycolor*" "7" "")
      ("cbk:*dimlayer*" "\"DIMENSION\"" "its dimensions")
      ("cbk:*dimcolor*" "141" "")
      ("cbk:*style*" "\"STANDARD INCHES\"" "")
-     ("cbk:*dimoff*" "12.0" "dim line stand-off, units")
-     ("cbk:*sysold*" "nil" "sysvar snapshot, live mid-run")
-     ("cbk:*last-len*" "nil" "the previous block's sizes -")
-     ("cbk:*last-wid*" "nil" "session memory, offered as")
-     ("cbk:*last-hgt*" "nil" "<defaults> that Enter accepts"))
+     ("cbk:*dimoff*" "12.0" "dim line stand-off, units"))
     ("DIMCHECK" "lisp/dimcheck/dimcheck.lsp"
      ("*dchk-tol*" "1.0e-4" "drawing units A dimension point or an arc end within this distance of an object is ATTACHED and is not ques...")
      ("*dchk-anchor-tol*" "1.0e-4" "drawing units How close two dimension points must be to count as the same spot...")
@@ -127692,7 +131508,7 @@
      ("*dchk-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
      ("*dchk-flag-color*" "1" "ACI: dimensions you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than th...")
      ("*dchk-arc-color*" "6" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
-     ("*dchk-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) The three crosses are 'auto: they do not vary with the scre...")
+     ("*dchk-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
      ("*dchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) The three crosses are 'auto: they do not vary with the sc...")
      ("*dchk-sugg-color*" "'auto" "ACI: the + marking where DIMCHECK would put it (green) The three crosses are 'auto: they do not vary with t...")
      ("*dchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) The three crosses are 'auto: they do not vary with...")
@@ -127717,7 +131533,7 @@
      ("*dchk-dist-prec*" "4" "decimal places Distances in prompts and the report go through (rtos d mode prec): mode 2 is decimal, 3 engi...")
      ("*dchk-same-pt*" "1e-8" "drawing units Two points closer than this are the SAME point: no construction line is drawn through them, n...")
      ("*dchk-planar-eps*" "1e-9" "dimensionless (normal components) How far an arc's extrusion normal (DXF 210) may lean from world +Z and st...")
-     ("*dchk-flat-eps*" "1e-12" "---------------------------------------------------------------------- Below this a polyline bulge is treat..."))
+     ("*dchk-flat-eps*" "1e-12" "Below this a polyline bulge is treated as straight, so the edge joins overlap detection, and three points a..."))
     ("DIMSTAMP" "lisp/dimstamp/DIMSTAMP.lsp"
      ("ds:*layer*" "\"TEXT\"" "layer the stamped MTEXT lands on. Created when the drawing lacks it; thawed, unlocked and switched on when...")
      ("ds:*layer-color*" "7" "ACI colour that layer is CREATED with -- 7 is AutoCAD's own black-on-white/white-on-black swap. A layer alr...")
@@ -127821,7 +131637,7 @@
      ("fit:*ruler-ring-frac*" "0.26" "the ring round the current row, as a fraction of the row spacing a fraction of the row spacing")
      ("fit:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
      ("fit:*brk-deep-ladder*" "'(48.0 144.0 12.0)" "deep break off the wall The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per questio...")
-     ("fit:*brk-shal-ladder*" "'(144.0 360.0 24.0)" "shallow break, ditto 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a hopp...")
+     ("fit:*brk-shal-ladder*" "'(144.0 360.0 24.0)" "shallow break, ditto The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per question,...")
      ("fit:*hop-side-ladder*" "'(24.0 72.0 6.0)" "hopper in from a side 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a hop...")
      ("fit:*hop-back-ladder*" "'(24.0 72.0 6.0)" "hopper in from the end 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a ho...")
      ("fit:*tol-ladder*" "'(0.25 2.0 0.25)" "the fit tolerance 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a hopper...")
@@ -127869,11 +131685,7 @@
      ("hn:*dimoff*" "nil" "nil = one radius past the arc matches the dims beside it")
      ("hn:*dimrepeat*" "nil" "one callout plus \"Typ.\" is how the sheet reads; set T to dimension every corner matches the dims beside it")
      ("hn:*typ*" "t" "reads; set T to dimension every corner")
-     ("hn:*minang*" "0.02" "how far off straight (radians) two legs must be before there is a corner at all reads; set T to dimension e...")
-     ("hn:*sysold*" "nil" "sysvar snapshot, live only mid-run")
-     ("hn:*preview*" "nil" "every entity drawn as a preview")
-     ("hn:*picks*" "nil" "(preview-arc . radius), what a click means")
-     ("hn:*smallwarned*" "nil" "the missing-style note is said once"))
+     ("hn:*minang*" "0.02" "how far off straight (radians) two legs must be before there is a corner at all reads; set T to dimension e..."))
     ("LAZDIAG" "lisp/lazdiag/LAZDIAG.lsp"
      ("lzd:*max-ents*" "400" "How many entities a report will copy. A run that drew ten thousand things before falling over is a real fai...")
      ("lzd:*max-log*" "200" "How many transcript lines are kept. A tutorial loop can princ for ever; the last 200 lines are the ones tha...")
@@ -128034,7 +131846,7 @@
      ("*lfc-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
      ("*lfc-flag-color*" "1" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
      ("*lfc-arc-color*" "6" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
-     ("*lfc-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) The three crosses are 'auto: they do not vary with the scre...")
+     ("*lfc-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
      ("*lfc-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) The three crosses are 'auto: they do not vary with the sc...")
      ("*lfc-sugg-color*" "'auto" "ACI: the + marking where LINFINCHECK would put it (green) The three crosses are 'auto: they do not vary wit...")
      ("*lfc-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) The three crosses are 'auto: they do not vary with...")
@@ -128059,7 +131871,7 @@
      ("*lfc-dist-prec*" "4" "decimal places Distances in prompts and the report go through (rtos d mode prec): mode 2 is decimal, 3 engi...")
      ("*lfc-same-pt*" "1e-8" "drawing units Two points closer than this are the SAME point: no construction line is drawn through them, n...")
      ("*lfc-planar-eps*" "1e-9" "dimensionless (normal components) How far an arc's extrusion normal (DXF 210) may lean from world +Z and st...")
-     ("*lfc-flat-eps*" "1e-12" "---------------------------------------------------------------------- Below this a polyline bulge is treat..."))
+     ("*lfc-flat-eps*" "1e-12" "Below this a polyline bulge is treated as straight, so the edge joins overlap detection, and three points a..."))
     ("LINGUTTER" "lisp/lingutter/LINGUTTER.lsp"
      ("lg:*poollayer*" "\"POOL\"" "layer the traced perimeter is drawn on; made if missing, and thawed / switched on / unlocked if it exists b...")
      ("lg:*poolcolor*" "4" "its colour when the layer has to be created -- ACI 4 = cyan, POOL's own. Ignored when the layer already exi...")
@@ -128107,18 +131919,18 @@
      ("lobf:*tiny*" "1.0e-10" "Anything smaller than this is zero: the guard on a degenerate fit (every point on one spot), on a zero-leng..."))
     ("MOHAMADDLE" "lisp/mohamaddle/MOHAMADDLE.lsp"
      ("*mohamaddle-sizes*" "'((\"24\" \"Pad24x24\" 24.0) (\"36\" \"Pad36x36\" 36.0))" "--- the pad itself --- Pad sizes MOHAMADDLE offers, in the order shown at the prompt. Each entry is (KEYWOR...")
-     ("*mohamaddle-defaultkw*" "\"36\"" "The dwg the block definitions are imported from when the drawing does not already hold them. Looked up with...")
-     ("*mohamaddle-blkfile*" "\"24inpad.dwg\"" "Layer the pads land on. Created when missing; an existing one is thawed, unlocked and turned on so the resu...")
-     ("*mohamaddle-layer*" "\"PADS\"" "AutoCAD colour index the layer is created with. An existing layer keeps whatever colour it already has. Lay...")
-     ("*mohamaddle-layer-color*" "7" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
+     ("*mohamaddle-defaultkw*" "\"36\"" "Which size the prompt defaults to the first time it is asked in a session. MOHAMADDLE remembers whatever wa...")
+     ("*mohamaddle-blkfile*" "\"24inpad.dwg\"" "The dwg the block definitions are imported from when the drawing does not already hold them. Looked up with...")
+     ("*mohamaddle-layer*" "\"PADS\"" "Layer the pads land on. Created when missing; an existing one is thawed, unlocked and turned on so the resu...")
+     ("*mohamaddle-layer-color*" "7" "AutoCAD colour index the layer is created with. An existing layer keeps whatever colour it already has.")
      ("*mohamaddle-align*" "nil" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
-     ("*mohamaddle-maxrad*" "48.0" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
-     ("*mohamaddle-cornertol*" "(/ (* 30.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
+     ("*mohamaddle-maxrad*" "48.0" "--- what counts as a feature --- Largest concave radius that still needs pads, 4'-0\". Concave arcs this tig...")
+     ("*mohamaddle-cornertol*" "(/ (* 30.0 pi) 180.0)" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
      ("*mohamaddle-arctol*" "(/ (* 10.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
      ("*mohamaddle-fuzz*" "0.05" "--- reading the perimeter --- Largest gap between the end of one loose line/arc and the start of the next t...")
-     ("*mohamaddle-gapmax*" "36.0" "Layer the gap arrow is drawn on, and the colour index it is created with. A plain ACI number rather than 'a...")
+     ("*mohamaddle-gapmax*" "36.0" "--- the gap in a perimeter that nearly closes --- Furthest apart two loose ends may be and still read as a...")
      ("*mohamaddle-gap-layer*" "\"PADDLE-GAP\"" "Layer the gap arrow is drawn on, and the colour index it is created with. A plain ACI number rather than 'a...")
-     ("*mohamaddle-gap-color*" "1" "Length of that arrow, tail to tip, in drawing units. Its head is a third of that long and three times as wi...")
+     ("*mohamaddle-gap-color*" "1" "Layer the gap arrow is drawn on, and the colour index it is created with. A plain ACI number rather than 'a...")
      ("*mohamaddle-arrow*" "36.0" "Length of that arrow, tail to tip, in drawing units. Its head is a third of that long and three times as wi..."))
     ("OASIS" "lisp/oasis/OASIS.lsp"
      ("oasis:*poollayer*" "\"POOL\"" "the arcs, and the pool bottom The three layers, created if the drawing has not got them and thawed, unlocke...")
@@ -128198,19 +132010,19 @@
     ("OSR" "lisp/osr/OSR.lsp"
      ("osr:*default*" "191" "The OSMODE OSR puts back when the drafter has not saved a preset of their own (LAZSET's Object snaps box, o..."))
     ("PADDLE" "lisp/paddle/PADDLE.lsp"
-     ("*paddle-blkname*" "\"Pad36x36\"" "Edge of the pad in drawing units (a 36\" x 36\" square). This one number sets the pitch of the flush rows alo...")
-     ("*paddle-padsize*" "36.0" "The dwg the block definitions are imported from when the drawing does not already hold them. Looked up with...")
-     ("*paddle-blkfile*" "\"24inpad.dwg\"" "Layer the pads land on. Created when missing; an existing one is thawed, unlocked and turned on so the resu...")
-     ("*paddle-layer*" "\"PADS\"" "AutoCAD colour index the layer is created with. An existing layer keeps whatever colour it already has. Lay...")
-     ("*paddle-layer-color*" "7" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
+     ("*paddle-blkname*" "\"Pad36x36\"" "--- the pad itself --- Name of the block inserted at every pad spot. *paddle-blkfile* ships two, Pad36x36 a...")
+     ("*paddle-padsize*" "36.0" "Edge of the pad in drawing units (a 36\" x 36\" square). This one number sets the pitch of the flush rows alo...")
+     ("*paddle-blkfile*" "\"24inpad.dwg\"" "The dwg the block definitions are imported from when the drawing does not already hold them. Looked up with...")
+     ("*paddle-layer*" "\"PADS\"" "Layer the pads land on. Created when missing; an existing one is thawed, unlocked and turned on so the resu...")
+     ("*paddle-layer-color*" "7" "AutoCAD colour index the layer is created with. An existing layer keeps whatever colour it already has.")
      ("*paddle-align*" "nil" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
-     ("*paddle-maxrad*" "48.0" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
-     ("*paddle-cornertol*" "(/ (* 30.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
+     ("*paddle-maxrad*" "48.0" "--- what counts as a feature --- Largest concave radius that still needs pads, 4'-0\". Concave arcs this tig...")
+     ("*paddle-cornertol*" "(/ (* 30.0 pi) 180.0)" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
      ("*paddle-arctol*" "(/ (* 10.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
      ("*paddle-fuzz*" "0.05" "--- reading the perimeter --- Largest gap between the end of one loose line/arc and the start of the next t...")
-     ("*paddle-gapmax*" "36.0" "Layer the gap arrow is drawn on, and the colour index it is created with. A plain ACI number rather than 'a...")
+     ("*paddle-gapmax*" "36.0" "--- the gap in a perimeter that nearly closes --- Furthest apart two loose ends may be and still read as a...")
      ("*paddle-gap-layer*" "\"PADDLE-GAP\"" "Layer the gap arrow is drawn on, and the colour index it is created with. A plain ACI number rather than 'a...")
-     ("*paddle-gap-color*" "1" "Length of that arrow, tail to tip, in drawing units. Its head is a third of that long and three times as wi...")
+     ("*paddle-gap-color*" "1" "Layer the gap arrow is drawn on, and the colour index it is created with. A plain ACI number rather than 'a...")
      ("*paddle-arrow*" "36.0" "Length of that arrow, tail to tip, in drawing units. Its head is a third of that long and three times as wi...")
      ("*paddle-demo-layer*" "\"PADDLE-DEMO\"" "--- TUTORIALPADDLE --- Layer the tutorial draws its labelled sample perimeter on, and the colour index it i...")
      ("*paddle-demo-color*" "3" "--- TUTORIALPADDLE --- Layer the tutorial draws its labelled sample perimeter on, and the colour index it i..."))
@@ -128272,7 +132084,7 @@
      ("ptr:*filter*" "'((0 . \"POINT,INSERT,LWPOLYLINE,POLYLINE\"))" "What the highlight is allowed to keep, so a hatch or a dimension cannot be dragged in by a sloppy window. L...")
      ("ptr:*vertex-skip*" "16" "Which vertices of an old-style (heavy) POLYLINE are NOT on the drawn curve, as a mask over the vertex flags...")
      ("ptr:*band*" "6.0" "How far off the perimeter still counts as on it -- what the FIRST run of a session offers, before anyone ha...")
-     ("ptr:*dir*" "\"Clockwise\"" "Which way round the FIRST run of a session offers, on the same footing as the band. Spelled exactly as the...")
+     ("ptr:*dir*" "\"Clockwise\"" "Which way round the FIRST run of a session offers: \"Clockwise\" or \"Counterclockwise\", in any case, or CW /...")
      ("ptr:*first*" "1" "The number the count starts at, offered at every run. Unlike the band and the direction this one is NOT car...")
      ("ptr:*sysvars*" "'(\"CMDECHO\")" "The sysvars saved on the way in and put back on the way out, however the run ends. Add a name here if a cha...")
      ("ptr:*far-pick*" "12.0" "A start pick further than this off the perimeter is called out. The sweep still begins at the nearest spot...")
@@ -128378,9 +132190,6 @@
      ("pool:*hopoffset-ladder*" "'(24.0 72.0 6.0)" "...and the one the HOPPER OFFSETS stand on: M and K, the gap the hopper leaves to the top side and to the b..."))
     ("POOLSIDE" "lisp/poolside/POOLSIDE.lsp"
      ("psd:*base*" "(list 0.0 0.0)" "insertion base for this run")
-     ("psd:*sysold*" "nil" "the user's sysvars, pending restore")
-     ("psd:*pvents*" "nil" "live guide entities")
-     ("psd:*valnotes*" "nil" "validation problems, for the notes")
      ("psd:*pv-col*" "'auto" "guide outline color: 'auto picks it for the background (grey either way round), a number is used as given")
      ("psd:*pvx-col*" "7" "guide measuring-tie color (white) it for the background (grey either way round), a number is used as given")
      ("psd:*hi-col*" "1" "highlight color (red) it for the background (grey either way round), a number is used as given")
@@ -128424,11 +132233,7 @@
      ("sf:*dimoff*" "nil" "nil = one radius past the arc matches the dims beside it")
      ("sf:*dimrepeat*" "nil" "one callout plus \"Typ.\" is how the sheet reads; set T to dimension every corner matches the dims beside it")
      ("sf:*typ*" "t" "reads; set T to dimension every corner")
-     ("sf:*minang*" "0.02" "how far off straight (radians) two legs must be before there is a corner at all reads; set T to dimension e...")
-     ("sf:*sysold*" "nil" "sysvar snapshot, live only mid-run")
-     ("sf:*preview*" "nil" "every entity drawn as a preview")
-     ("sf:*picks*" "nil" "(preview-arc . radius), what a click means")
-     ("sf:*smallwarned*" "nil" "the missing-style note is said once"))
+     ("sf:*minang*" "0.02" "how far off straight (radians) two legs must be before there is a corner at all reads; set T to dimension e..."))
     ("SOCONV" "lisp/soconv/SOCONV.lsp"
      ("*soconv-map*" "'((\"Pool Perimeter\" \"*\" \"POOL\") (\"Obstacles\" \"*\" \"POOL\") (\"LEICA_DISTO_POINT_ENTITY\" \"POINT\" \"POINTS\") (\"Existing Anchorss\" \"POINT\" \"POINTS\") (\"Existing Anchors\" \"POINT\" \"POINTS\") (\"Dimensions\" \"TEXT,MTEXT\" \"TEXT\") (\"Dimensions\" \"*\" \"DIMENSION\"))" "The conversion itself, one row per rule: (source-layer entity-types destination-layer) Both patterns are wc...")
      ("*soconv-colors*" "'((\"POOL\" . 4) ; cyan, as POOL.LSP creates it (\"POINTS\" . 6) ; magenta - the pink survey points read as (\"TEXT\" . 4) (\"DIMENSION\" . 141))" "What to CREATE a destination layer with when the drawing has not got it. An existing layer is never recolou...")
@@ -128472,7 +132277,7 @@
      ("spa:*lay-cover*" "\"COVER\"" "cover size perimeter ---- output layers and their colours Made (or un-frozen, unlocked and switched back on...")
      ("spa:*lay-dim*" "\"DIMENSION\"" "every dimension and corner mark ---- output layers and their colours Made (or un-frozen, unlocked and switc...")
      ("spa:*lay-notes*" "\"SPA-NOTES\"" "the mini-model and its corner letters, the mode note, the report, and the grey input guide ---- output laye...")
-     ("spa:*lay-text*" "\"TEXT\"" "the Hinge / Velcro Hinge labels The hinges themselves are cover hardware, so they are drawn on the cover's...")
+     ("spa:*lay-text*" "\"TEXT\"" "the Hinge / Velcro Hinge labels letters, the mode note, the report, and the grey input guide")
      ("spa:*lay-hinge*" "\"COVER\"" "The hinges themselves are cover hardware, so they are drawn on the cover's layer even on a sheet that shows...")
      ("spa:*col-water*" "4" "cyan, and only when POOL is created The hinges themselves are cover hardware, so they are drawn on the cove...")
      ("spa:*col-cover*" "6" "magenta, ditto -- an existing layer keeps the colour the office gave it The hinges themselves are cover har...")
@@ -128507,7 +132312,7 @@
      ("spa:*map-size*" "24.0" "th multiples: the mini-model's fit box measurement ever runs into it")
      ("spa:*pv-col*" "'auto" "guide outline: 'auto picks the grey for the background (8 is nearly the stock dark one), a number is used e...")
      ("spa:*pvx-col*" "7" "measuring tie (white) grey for the background (8 is nearly the stock dark one), a number is used exactly as...")
-     ("spa:*hi-col*" "1" "the element being asked for (red) The RECTANGLE guide's nominal box. The octagon and round guides keep thei...")
+     ("spa:*hi-col*" "1" "the element being asked for (red) grey for the background (8 is nearly the stock dark one), a number is use...")
      ("spa:*pv-w*" "240.0" "nominal guide width The RECTANGLE guide's nominal box. The octagon and round guides keep their own ring in...")
      ("spa:*pv-l*" "200.0" "nominal guide length The RECTANGLE guide's nominal box. The octagon and round guides keep their own ring in...")
      ("spa:*pv-th*" "12.0" "guide corner-letter height The RECTANGLE guide's nominal box. The octagon and round guides keep their own r...")
@@ -128583,7 +132388,7 @@
      ("spachk:*grade-tag*" "\"GRADE\"" "The details block's two attribute tags, and how their values are recognised. GRADE and TAPER are matched as...")
      ("spachk:*taper-tag*" "\"TAPER\"" "The details block's two attribute tags, and how their values are recognised. GRADE and TAPER are matched as...")
      ("spachk:*grade-words*" "'((\"ECON\" . \"ECONOMY\") (\"ULTRA\" . \"ULTRA\") (\"FRP\" . \"ULTRA\") (\"THERMO\" . \"THERMOLIGHT\"))" "The details block's two attribute tags, and how their values are recognised. GRADE and TAPER are matched as...")
-     ("spachk:*grade-default*" "\"STANDARD\"" "the grade a value matching nothing takes ...and the taper vocabulary, matched the same way; an unrecognised...")
+     ("spachk:*grade-default*" "\"STANDARD\"" "the grade a value matching nothing takes")
      ("spachk:*taper-words*" "'((\"3-2\" . \"3-2\") (\"4-2\" . \"4-2\") (\"4-3\" . \"4-3\") (\"5-3\" . \"5-3\") (\"5-4\" . \"5-4\") (\"3-3\" . \"3-3\") (\"3/8\" . \"1-3/8\"))" "...and the taper vocabulary, matched the same way; an unrecognised taper measures against no foam row at al...")
      ("spachk:*grade-short*" "'((\"ECONOMY\" . \"ECO\") (\"STANDARD\" . \"STD\") (\"ULTRA\" . \"ULTRA\") (\"THERMOLIGHT\" . \"THERMO\"))" "The short grade names the report prints, keyed by the canonical name.")
      ("spachk:*outline-types*" "'(\"LWPOLYLINE\" \"POLYLINE\" \"CIRCLE\" \"ELLIPSE\")" "Entity types, by the job each does in the audit: what may be an outline at all, which of those are closed b...")
@@ -128763,9 +132568,7 @@
      ("*xft-keep*" "'((\"LINE\" (10 11)) (\"POINT\" (10 50)) (\"CIRCLE\" (10 40)) (\"TEXT\" (1 7 10 11 40 41 50 51 71 72 73)) (\"MTEXT\" (1 3 7 10 40 41 50 71 72)))" "And the groups it carries per type: what an export writes on the five kinds of object XFTCONV erases. An ex..."))
     ("XYPLOT" "lisp/xyplot/XYPLOT.lsp"
      ("xyp:*gutter*" "0.35" "Gap between the two graphs, as a share of graph 1's width. Wide enough that graph 2's Y dimension chain nev...")
-     ("xyp:*same*" "0.0625" "Two points whose X (or Y) differ by less than this share one rung of the dimension chain - a chain rung of...")
-     ("xyp:*dirty*" "nil" "set T whenever a value needed cleaning")
-     ("xyp:*fixes*" "nil" "running list of cleanup / warning messages"))
+     ("xyp:*same*" "0.0625" "Two points whose X (or Y) differ by less than this share one rung of the dimension chain - a chain rung of..."))
    ))
 
 ;; One shop decision, and every knob that spells it.  See
@@ -128931,7 +132734,6 @@
     ("orig-color" ("*cchk-orig-color*" "*dchk-orig-color*" "*lfc-orig-color*"))
     ("out-layer" ("*PF-OUT-LAYER*" "*CAB-OUT-LAYER*" "fit:*out-layer*"))
     ("padsize" ("*cchk-pad-size*" "*paddle-padsize*" "upad:*padsize*"))
-    ("picks" ("hn:*picks*" "sf:*picks*"))
     ("planar-eps" ("*cfchk-planar-eps*" "*cchk-planar-eps*" "*dchk-planar-eps*" "*lfc-planar-eps*"))
     ("point-block" ("abcdef:*point-block*" "abf:*point-block*" "*PF-POINT-BLOCK*" "*ABL-POINT-BLOCK*" "bp:*point-block*" "*CAB-POINT-BLOCK*" "cdo:*point-block*" "cst:*point-block*" "fit:*point-block*" "*LH-POINT-BLOCK*" "pm:*point-block*" "upad:*point-block*"))
     ("point-color" ("*cchk-point-color*" "*dchk-point-color*" "*lfc-point-color*"))
@@ -128942,7 +132744,6 @@
     ("poolcolor" ("lg:*poolcolor*" "oasis:*poolcolor*"))
     ("poollayer" ("lg:*poollayer*" "oasis:*poollayer*"))
     ("prec" ("abf:*prec*" "cdo:*prec*"))
-    ("preview" ("hn:*preview*" "sf:*preview*"))
     ("pt-block" ("abp:*pt-block*" "lobf:*pt-block*" "ptr:*pt-block*"))
     ("pt-layer" ("abp:*pt-layer*" "lobf:*pt-layer*" "ptr:*pt-layer*"))
     ("pt-prefix" ("bp:*pt-prefix*" "pm:*pt-prefix*" "upad:*pt-prefix*"))
@@ -128989,7 +132790,6 @@
     ("sheet-chars" ("*dchk-sheet-chars*" "*lfc-sheet-chars*"))
     ("smalldim" ("hn:*smalldim*" "pool:*smalldim*" "sf:*smalldim*"))
     ("smallstyle" ("hn:*smallstyle*" "pool:*smallstyle*" "sf:*smallstyle*"))
-    ("smallwarned" ("hn:*smallwarned*" "sf:*smallwarned*"))
     ("snap" ("abf:*snap*" "*PF-SNAP*" "*ABL-SNAP*" "bp:*snap*" "*CAB-SNAP*" "fit:*snap*" "*LH-SNAP*" "pm:*snap*" "upad:*snap*"))
     ("snap-eps" ("*PF-SNAP-EPS*" "*ABL-SNAP-EPS*" "*CAB-SNAP-EPS*" "fit:*snap-eps*" "*LH-SNAP-EPS*"))
     ("solve-iters" ("abcdef:*solve-iters*" "altabcdef:*solve-iters*"))
@@ -129003,7 +132803,6 @@
     ("style" ("abf:*style*" "cdo:*style*" "cdc:*style*"))
     ("style-order" ("*cchk-style-order*" "*dchk-style-order*" "*lfc-style-order*"))
     ("sugg-color" ("*cchk-sugg-color*" "*dchk-sugg-color*" "*lfc-sugg-color*"))
-    ("sysold" ("cbk:*sysold*" "hn:*sysold*" "psd:*sysold*" "sf:*sysold*"))
     ("tabbudget" ("lzf:*tabbudget*" "lzs:*tabbudget*"))
     ("tag-drop" ("abcdef:*tag-drop*" "altabcdef:*tag-drop*"))
     ("tag-gap" ("abcdef:*tag-gap*" "altabcdef:*tag-gap*"))
@@ -129088,6 +132887,64 @@
   (foreach k (lzp:knob-index) (write-line (strcat k "=" (lzp:knob-get k)) fh))
   (list na nc (length (lzp:backup-keys)) (length (lzp:knob-index))))
 
+;; The file a typed answer names, as a FULL path.  A bare name used to
+;; be opened as typed, so it landed in whatever folder AutoCAD's
+;; current directory happened to be and was reported back bare -- a
+;; backup nobody could find again.  So a name with no drive and no
+;; leading \ is taken inside the drafter's Documents folder
+;; (MYDOCUMENTSPREFIX), both ways, so an Import of the same bare name
+;; reads back what Export wrote.  nil when there is no such folder.
+(defun lzp:backup-fullpath (path / docs)
+  (cond
+    ((or (= (substr path 2 1) ":")
+         (member (substr path 1 1) '("\\" "/")))
+     path)
+    ((and (setq docs (getvar "MYDOCUMENTSPREFIX"))
+          (= (type docs) 'STR) (/= docs ""))
+     (strcat docs
+             (if (member (substr docs (strlen docs) 1) '("\\" "/")) "" "\\")
+             path))))
+
+;; Export's half of the command: the file question, and the one after
+;; it when that file is already there.  (open path "w") replaces a
+;; file without a word, and this used to reach it for whatever was
+;; typed -- last month's backup, a job's takeoff.txt -- then report
+;; "Wrote ..." over the loss.  Its own defun so the Replace question's
+;; Back can come back to the file question.
+(defun lzp:backup-export-ask ( / path full ans)
+  (setq path (getstring T "\nFile to write the backup to, Back to leave it: "))
+  (if lzd:ask (lzd:ask "File to write" path) path)
+  (cond
+    ((member (strcase path) '("B" "BACK" "U" "UNDO")) (c:LAZBACKUP))
+    ((= path "") (princ "\nNothing written."))
+    ((null (setq full (lzp:backup-fullpath path)))
+     (princ (strcat "\nNo Documents folder to put " path
+                    " in -- type the whole path, C:\\...  Nothing written.")))
+    ((findfile full)
+     (initget "Yes No Back Undo")
+     (setq ans (getkword (strcat "\n" full " is already there.  Replace it?"
+                                 " [Yes/No/Back] <No>: ")))
+     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
+     (cond
+       ((member ans '("Back" "Undo")) (lzp:backup-export-ask))
+       ((= ans "Yes") (lzp:backup-export-say full))
+       (t (princ (strcat "\nNothing written -- " full " is as it was.")))))
+    (t (lzp:backup-export-say full))))
+
+;; Write FULL and say so, naming the whole path it went to.
+(defun lzp:backup-export-say (full / counts)
+  (if (setq counts (lzp:backup-export full))
+    (princ (strcat "\nWrote " (itoa (car counts)) " name"
+                   (if (= (car counts) 1) "" "s") ", "
+                   (itoa (cadr counts)) " caption"
+                   (if (= (cadr counts) 1) "" "s") ", "
+                   (itoa (caddr counts)) " setting"
+                   (if (= (caddr counts) 1) "" "s") " and "
+                   (itoa (cadddr counts)) " default"
+                   (if (= (cadddr counts) 1) "" "s")
+                   " of yours to " full "."))
+    (princ (strcat "\nCould not write " full "."))))
+
 (defun lzp:backup-export (path / fh counts)
   (setq fh (vl-catch-all-apply 'open (list path "w")))
   (cond
@@ -129106,8 +132963,9 @@
   (cond
     ((= key "CalofinTheme")
      (cond
+       ;; through the one writer, so the palette's copy moves with it
        ((member (strcase val) '("" "AUTO" "DARK" "LIGHT"))
-        (setenv key (strcase val)) "")
+        (lzp:theme-write (strcase val)) "")
        (t (strcat key "=" val " (not Auto, Dark or Light)"))))
     ((member key '("CalofinErrorDir" "StockCover_Folder"))
      (setenv key val) "")
@@ -129178,7 +133036,7 @@
 ;; Theme/Errordir/Stockdir question already does -- "Backup [...]" is
 ;; the first question of the command and does not, matching
 ;; tools/back_baseline.txt's reason for CALSET's own first prompt.
-(defun c:LAZBACKUP ( / *error* pick path counts res n skipped s)
+(defun c:LAZBACKUP ( / *error* pick path full res n skipped s)
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -129191,38 +133049,24 @@
   (setq pick (getkword "\nBackup [Export/Import/Quit] <Quit>: "))
   (if lzd:ask (lzd:ask "Backup" pick) pick)
   (cond
-    ((= pick "Export")
-     (setq path (getstring T "\nFile to write the backup to, Back to leave it: "))
-     (if lzd:ask (lzd:ask "File to write" path) path)
-     (cond
-       ((member (strcase path) '("B" "BACK" "U" "UNDO")) (c:LAZBACKUP))
-       ((= path "") (princ "\nNothing written."))
-       ((setq counts (lzp:backup-export path))
-        (princ (strcat "\nWrote " (itoa (car counts)) " name"
-                       (if (= (car counts) 1) "" "s") ", "
-                       (itoa (cadr counts)) " caption"
-                       (if (= (cadr counts) 1) "" "s") ", "
-                       (itoa (caddr counts)) " setting"
-                       (if (= (caddr counts) 1) "" "s") " and "
-                       (itoa (cadddr counts)) " default"
-                       (if (= (cadddr counts) 1) "" "s")
-                       " of yours to " path ".")))
-       (t (princ (strcat "\nCould not write " path ".")))))
+    ((= pick "Export") (lzp:backup-export-ask))
     ((= pick "Import")
      (setq path (getstring T "\nFile to read the backup from, Back to leave it: "))
      (if lzd:ask (lzd:ask "File to read" path) path)
+     ;; a bare name is looked for where Export would have put it
+     (setq full (if (/= path "") (lzp:backup-fullpath path)))
      (cond
        ((member (strcase path) '("B" "BACK" "U" "UNDO")) (c:LAZBACKUP))
        ((= path "") (princ "\nNothing read."))
-       ((setq res (lzp:backup-import path))
+       ((and full (setq res (lzp:backup-import full)))
         (setq n (car res) skipped (cadr res))
         (princ (strcat "\n" (itoa n) " line" (if (= n 1) "" "s")
-                       " applied from " path "."))
+                       " applied from " full "."))
         (if skipped
           (progn
             (princ (strcat "\n" (itoa (length skipped)) " skipped:"))
             (foreach s skipped (princ (strcat "\n  " s))))))
-       (t (princ (strcat "\nCould not read " path ".")))))
+       (t (princ (strcat "\nCould not read " (if full full path) ".")))))
     (t (princ "\nNothing changed.")))
   (if lzd:end (lzd:end "LAZBACKUP"))
   (princ))
@@ -129390,10 +133234,26 @@
           (member kn '("a symbol" "a whole number"))) nil)
     (t (strcat "Alec's choice is " ks ", this is " kn))))
 
+;; T for a global a tool keeps its RUN in rather than a shop choice --
+;; the sysvar snapshot its handler restores from, a preview's entities,
+;; the picks so far, a note said once, the last size offered as a
+;; default.  Several sit in their tool's tunables block, so the
+;; generated catalog lists them.  A value stored on one was applied at
+;; every panel open: HONEFILLET's snapshot then read as already taken,
+;; the restore walked a string as a list and threw, first on the clean
+;; path and again inside *error*, and OSMODE stayed 0 after every run.
+(defun lzp:knob-state-p (sym)
+  (wcmatch (strcase sym)
+           (strcat "*:`*SYSOLD`*,*:`*PREVIEW`*,*:`*PICKS`*,*:`*PVENTS`*,"
+                   "*:`*VALNOTES`*,*:`*SMALLWARNED`*,*:`*DIRTY`*,"
+                   "*:`*FIXES`*,*:`*LAST-*`*")))
+
 ;; Why TEXT cannot be SYM's value, or nil when it can.
 (defun lzp:knob-why (sym text / p s)
   (cond
     ((not (lzp:knob-entry sym)) "not a knob this build has")
+    ((lzp:knob-state-p sym)
+     "the tool's own run-time state, not a setting -- it cannot be set")
     ((not (setq p (lzp:knob-parse text)))
      "not a value: a number, \"a string\", 'a-symbol or '(a list)")
     ((not (setq s (lzp:knob-shipped sym))) nil)
@@ -129744,9 +133604,10 @@
 ;; Put the button up as the file loads, quietly: in a session where
 ;; the COM menu API (or the blackboard) is missing the panel still
 ;; loads and LAZPANEL still runs -- the button is a convenience, never
-;; a gate.
+;; a gate.  Made the first time, re-iced after that, and NOT reopened
+;; if the drafter closed it (nil: see lzp:button-init).
 (vl-catch-all-apply
-  '(lambda () (if (lzp:first-load-p) (lzp:button-init))) nil)
+  '(lambda () (if (lzp:first-load-p) (lzp:button-init nil))) nil)
 (vl-catch-all-apply 'lzp:pins-read nil)
 ;; The drafter's own names, and the wrappers that make them answer.
 ;; Per DOCUMENT, not per session: a defun lives in the drawing's own
@@ -129755,7 +133616,7 @@
 ;; vl-catch-all-apply beside the rest: a file that throws as it loads
 ;; takes the panel and the toolbar with it.
 (vl-catch-all-apply 'lzp:names-read nil)
-(vl-catch-all-apply 'lzp:aliases-apply nil)
+(vl-catch-all-apply 'lzp:aliases-load nil)
 ;; The drafter's own defaults (LAZTUNE), over every tool's block.  This
 ;; file loads LAST in LAZPASS.lsp, which is what makes the load-time
 ;; pass enough there; the panel re-applies on every open and launch for
@@ -129853,13 +133714,13 @@
   cal:dot cal:dotn cal:ensure-layer cal:error-cancel-p cal:formanswer
   cal:imgflatten cal:imgpline cal:imgtext cal:imgtexth cal:imgtextw
   cal:in-loop-p cal:ink cal:inward-sign cal:kvpack cal:kvunpack
-  cal:layer-usable-p cal:loop-area cal:mid cal:midn cal:mtext
-  cal:nthcdr cal:osdown cal:osup cal:pad cal:perp
-  cal:plural cal:proj-param cal:pt-line-dist cal:ruler-new cal:ruler-off
-  cal:ruler-show cal:signed-dang cal:spikes cal:sublist cal:sysrestore
-  cal:syssave cal:tan cal:text cal:trim cal:ui
-  cal:undobegin cal:undoend cal:unit cal:unitn cal:v*
-  cal:v+ cal:v- cal:vlen cal:zeropad2
+  cal:layer-usable-p cal:len-digit-p cal:loop-area cal:mid cal:midn
+  cal:mtext cal:nthcdr cal:osdown cal:osup cal:pad
+  cal:perp cal:plural cal:proj-param cal:pt-line-dist cal:ruler-new
+  cal:ruler-off cal:ruler-show cal:signed-dang cal:spikes cal:sublist
+  cal:sysrestore cal:syssave cal:tan cal:text cal:trim
+  cal:ui cal:undobegin cal:undoend cal:unit cal:unitn
+  cal:v* cal:v+ cal:v- cal:vlen cal:zeropad2
 ))
 (setq lazpass:*nohelper* nil)
 (foreach n lazpass:*helpers*

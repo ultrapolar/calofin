@@ -141,7 +141,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.59")
+(setq *lazpanel-version* "v3.60")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -625,7 +625,7 @@
     ("DIMCHECK" "Guided, one-at-a-time dimension review.\nWhat it asks, in order:\n 1. Select objects\n 2. dimension point 1\n 3. dimension point 2\n 4. Is this dimension correct?\n 5. arc start point\n 6. arc end point\n 7. Merge into one line, Flag to fix, or Leave as is?\n 8. Flag to fix, or Leave as is?")
     ("DIMCONTEND" "Chains a seed dimension out to every feature point.\nWhat it asks, in order:\n 1. Select the dimension to continue\n 2. Select objects\n 3. Continue from another dimension?")
     ("DIMSCAN" "Scan drawing for dimensions.\nWhat it asks, in order:\n 1. Select objects")
-    ("DIMSTAMP" "Click a point, type 4'4.5, 44.5 or a letter; stamps it canonically, a ruler picks the next.\nA letter labels a point the way the survey names them - A, B, C ... Z, AA - and moves on as it lands, so a run of labels is click, click, click rather than retyping each one.\nWhat it asks, in order:\n 1. Click a point to place text (Enter when done)\n 2. Text - 4'-4 1/2\", just 4'4.5, or a letter like A\n 3. Click to place text, click the ruler to change it, or type new text (Enter when done)")
+    ("DIMSTAMP" "Click a point, type 4'4.5, 44.5 or a letter; stamps it canonically, a ruler picks the next.\nA letter labels a point the way the survey names them - A, B, C ... Z, AA - and moves on as it lands, so a run of labels is click, click, click rather than retyping each one.\nWhat it asks, in order:\n 1. Click a point to place text (Enter when done)\n 2. Text - 4'-4-1/2\", just 4'4.5, or a letter like A\n 3. Click to place text, click the ruler to change it, or type new text (Enter when done)")
     ("DRONE" "Drone cleanup routine.\nWhat it asks, in order:\n 1. Select objects")
     ("DRONOTE" "Places a canned drone-photo review note - diving board, hidden anchors or slide sketch - at a picked point.\nWhat it asks, in order:\n 1. Which note?\n 2. Pick a point for the note (Enter when done)")
     ("FITABHD" "Fits a typed pool template through surveyed points.\nWhat it asks, in order:\n 1. Select objects\n 2. Rectangle/Grecian/ROman/Oval/L/LAzyl/ROUnd\n 3. the pool corners\n 4. the cut corners\n 5. Oasis shape\n 6. Maximum distance from a point\n 7. Percent of points allowed beyond\n 8. Is the pool in-square or out-of-square?\n 9. Any bowed walls?\n 10. Keep this fit, or Redo it?\n 11. Point to leave out, or a ringed one to restore - pick it or type its number\n 12. Hopper offset in from the wall\n 13. Pick a point at the DEEP end of the pool\n 14. Deep break - how far from the deep end wall?\n 15. Shallow break - how far from the deep end wall?\n 16. Hopper offset in from each side wall\n 17. Hopper offset in from the deep end wall")
@@ -1190,6 +1190,12 @@
 (setq lzp:*aliases* nil)          ; (COMMAND . the name this drafter types)
 (setq lzp:*capsof* nil)           ; (COMMAND . the words this drafter's button says)
 (setq lzp:*aliasat* nil)          ; lzp:*aliases* as the names editor opened it
+(setq lzp:*aliasoff* nil)         ; ((COMMAND NAME WHY) ...) the last apply refused
+;; lzp:*aliasmade* -- ((NAME . COMMAND) ...), the wrappers this file has
+;; defined in THIS drawing -- is deliberately not set here: a reload
+;; leaves those defuns standing, and resetting the record would make
+;; every one of them read as "already runs something" and be reported
+;; as not applied.
 (setq lzp:*namesel* nil)          ; the tool the names editor has selected
 (setq lzp:*names* nil)            ; the names editor's rows, in list order
 
@@ -2584,6 +2590,23 @@
 ;; path rather than the image, and AutoCAD re-reads it whenever the
 ;; button is redrawn.  A toolbar that survives into another session
 ;; would otherwise be pointing at a swept temp file for ever.
+;;
+;; The THEME is in the name -- lazpanel-16-dark.bmp, lazpanel-16-light.bmp
+;; -- because the picture is not one picture: lzp:bmp-bytes paints the
+;; square round the hexagon in the theme's own grey.  Under one name
+;; per size, the pair written on the first theme was found on disk
+;; ever after and never rewritten, so a drafter who switched theme kept
+;; the old tile for good while CALSET promised the new one at the next
+;; LAZBUTTON.  A name per ground keeps the on-disk check honest, and
+;; hands SetBitmaps a NEW name when the theme moves -- the CUI caches a
+;; bitmap by name, so a file rewritten in place under the same one is
+;; not guaranteed to show.
+(defun lzp:icon-ground ()
+  (if (eq (cal:ui) 'light) "light" "dark"))
+
+(defun lzp:icon-name (name)
+  (strcat "lazpanel-" name "-" (lzp:icon-ground) ".bmp"))
+
 (defun lzp:icon-file (dir name / d)
   (setq d dir)
   ;; a folder is not guaranteed to end in a separator -- glue the name
@@ -2591,7 +2614,7 @@
   ;; Templazpanel-16.bmp, which fails silently later
   (if (not (member (substr d (strlen d) 1) '("\\" "/")))
       (setq d (strcat d "\\")))
-  (strcat d "lazpanel-" name ".bmp"))
+  (strcat d (lzp:icon-name name)))
 
 (defun lzp:icon-path (name / d)
   (setq d (getvar "TEMPPREFIX"))
@@ -2633,7 +2656,8 @@
         (setq s (lzp:icon-file dir "16")
               l (lzp:icon-file dir "32"))
         ;; Both already on disk from an earlier load: nothing to write.
-        ;; The picture never changes, and writing it again on every
+        ;; A name holds one picture -- the ground is in it, see
+        ;; lzp:icon-file -- and writing it again on every
         ;; drawing open (a Startup Suite runs this file per document)
         ;; put two COM round trips and two file writes -- into a
         ;; shared network support folder, on some sites -- behind every
@@ -2657,7 +2681,7 @@
   (cond
     ((and (setq d (lzp:support-dir)) (lzp:try-icons d))
      (setq lzp:*iconref* "name")
-     (list "lazpanel-16.bmp" "lazpanel-32.bmp"))
+     (list (lzp:icon-name "16") (lzp:icon-name "32")))
     ((lzp:try-icons (getvar "TEMPPREFIX"))
      (setq lzp:*iconref* "path")
      (list (lzp:icon-file (getvar "TEMPPREFIX") "16")
@@ -2709,11 +2733,17 @@
 
 ;; Put the button on screen: reuse the toolbar when one exists -- its
 ;; position and docking are the user's -- otherwise create it and float
-;; it in view.  Either way the icons are rewritten and re-applied, and
-;; the toolbar is made visible: a toolbar the user closed is still
-;; found by name, and without this it would never come back.
+;; it in view.  Either way the icons are rewritten and re-applied.
+;;
+;; SHOW is whether a toolbar that is already there is made visible.
+;; LAZBUTTON passes T: a toolbar the user closed is still found by
+;; name, and that command is how it comes back.  The load-time call
+;; passes nil, because closing it is also the user's -- it used to be
+;; put back on screen at the first drawing of every session, so a
+;; drafter who works from the ribbon or the palette closed it again
+;; every morning.  A toolbar made here is new, and is shown either way.
 ;; Returns the toolbar, or nil when there is none to be had.
-(defun lzp:button-init ( / tb btn pair paths made)
+(defun lzp:button-init (show / tb btn pair paths made)
   (cond
     ((setq tb (lzp:toolbar-find))
      (setq btn (vl-catch-all-apply 'vla-item (list tb 0)))
@@ -2730,7 +2760,8 @@
         ;; one line, not a stack trace: the panel still works without a
         ;; picture, but a blank button should not be a mystery
         (princ "\n[lazpanel] button picture not applied - LAZICON says why."))
-      (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true))
+      (if (or show made)
+        (vl-catch-all-apply 'vla-put-visible (list tb :vlax-true)))
       (if made (vl-catch-all-apply 'vla-float (list tb 200 300 1)))))
   tb)
 
@@ -2859,6 +2890,12 @@
   (setq dcl nil)
   (if f (vl-file-delete f))
   (setq f nil lzp:*pick* nil lzp:*pick-quiet* nil)
+  ;; the dialog's run ends with the dialog.  What the command does with
+  ;; the answer -- runs POOL off the form, launches the tool picked -- is
+  ;; a run of its own: left standing, this one was JOINED by it (the
+  ;; command is still what CMDNAMES names), and a failure in the tool
+  ;; was filed under a dialog no report can replay
+  (if lzd:end (lzd:end "LAZPANEL"))
   out)
 
 ;; WHERE THE PANEL COMES BACK UP.  done_dialog reports the position it
@@ -3022,7 +3059,7 @@
     (if lzd:report (lzd:report "LAZBUTTON" *lazpanel-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "LAZBUTTON" *lazpanel-version*))
-  (setq tb (vl-catch-all-apply 'lzp:button-init nil))
+  (setq tb (vl-catch-all-apply 'lzp:button-init '(T)))
   (cond
     ((vl-catch-all-error-p tb)
      (princ (strcat "\nLAZBUTTON error: " (vl-catch-all-error-message tb))))
@@ -3362,7 +3399,8 @@
                                      " colour -- an ACI number, a hex code, "
                                      "Back to leave it, or . for Auto: ")))
         (if lzd:ask (lzd:ask (strcat role " colour") v) v)
-        (setq rgb (lzp:hex2rgb v))
+        (setq v   (vl-string-trim " \t" v)
+              rgb (lzp:hex2rgb v))
         (cond
           ((member (strcase v) '("B" "BACK" "U" "UNDO")) (c:CALSET))
           ((= v "") (princ "\nUnchanged."))
@@ -3373,15 +3411,20 @@
            (setenv key (itoa (lzp:aci-near (car rgb) (cadr rgb) (caddr rgb))))
            (princ (strcat "\n" role " colour is now ACI " (getenv key)
                           " -- the closest recommended preset to " v
-                          ".  COVERCHECK, DIMCHECK and LINFINCHECK read it"
-                          " on their next run.")))
-          ((= (atoi v) 0)
-           (princ "\nNot a colour number or hex code -- unchanged."))
+                          ".  Every tool whose colour for it is auto"
+                          " takes it from its next run.")))
+          ;; The same test the LAZSET dialog and a LAZBACKUP import
+          ;; make.  atoi alone stored 300, -3, 12abc and AutoCAD's own
+          ;; 255,0,0 (as 255) and reported each one set, and the
+          ;; review tools then drew their cues in it -- or failed on
+          ;; it -- a run later, far from the typo.
+          ((not (lzp:aci-p v))
+           (princ "\nNot a colour number (1-255) or hex code -- unchanged."))
           (t
            (setenv key (itoa (atoi v)))
            (princ (strcat "\n" role " colour is now ACI " (itoa (atoi v))
-                          ".  COVERCHECK, DIMCHECK and LINFINCHECK read it"
-                          " on their next run.")))))))
+                          ".  Every tool whose colour for it is auto"
+                          " takes it from its next run.")))))))
     ;; routes straight to LAZHIDE's own dialog and comes back to this
     ;; prompt -- the same way Back re-enters CALSET below
     ((= pick "Hidden") (c:LAZHIDE) (c:CALSET))
@@ -3411,22 +3454,15 @@
      (if lzd:ask (lzd:ask "Theme" v) v)
      (cond
        ((member v '("Back" "Undo")) (c:CALSET))
-       (t (setq v (if v (strcase v) "AUTO"))
-          (setenv "CalofinTheme" v)
-          ;; ...and beside the pins, where the VB palette reads it
-          ;; (ui/calofin_net/PaletteTheme.vb).  The profile is what the
-          ;; Lisp side reads and the registry is what the palette can
-          ;; reach, and a drafter who has said which way their screen
-          ;; reads has said it to both surfaces -- the same bargain the
-          ;; pinned row already strikes.  Auto is written as empty:
-          ;; the palette's own probe is what "auto" means there.
-          ;;
-          ;; Read from V and not back out of getenv -- a strcase on the
-          ;; nil a failed setenv would leave is an error thrown from
-          ;; inside the line that reports success.
-          (vl-catch-all-apply
-            'vl-registry-write
-            (list lzp:*pinkey* "Theme" (if (= v "AUTO") "" v)))
+       ;; Through lzp:theme-write, the one writer: the profile AND the
+       ;; palette's registry copy, Auto as empty in both.  Written
+       ;; here as the word AUTO, it left LAZICON and this command's own
+       ;; listing reporting an override the drafter never set.
+       ;;
+       ;; Reported from V and not back out of getenv -- a strcase on
+       ;; the nil a failed setenv would leave is an error thrown from
+       ;; inside the line that reports success.
+       (t (setq v (lzp:theme-write (if v (strcase v) "AUTO")))
           (princ (strcat "\nCalofinTheme is now " v
                          ".  Every tool reads it on the next colour it"
                          " picks; the toolbar icon takes it at the next"
@@ -3700,21 +3736,31 @@
   (lzp:set-put lzp:*osrkey* (itoa (lzp:osr-get)))
   lzp:*setvals*)
 
-;; The one place that writes.
-(defun lzp:set-write ( / r v)
-  (setq v (lzp:set-get "CalofinTheme"))
-  ;; EMPTY is what every reader takes for auto -- lzp:ui, cal:themeset
-  ;; and the palette all treat an unset or empty value as "measure it"
-  ;; -- so writing the word AUTO would leave LAZICON and lzp:setshow
-  ;; reporting an override the drafter never set.  The registry mirror
-  ;; below already wrote it this way; now the profile agrees with it.
+;; The ONE writer of CalofinTheme -- this dialog, CALSET's Theme and a
+;; LAZBACKUP import all come here.  V is DARK, LIGHT or AUTO (anything
+;; else is Auto); answers the word it wrote.
+;;
+;; EMPTY is what every reader takes for auto -- lzp:ui, cal:themeset
+;; and the palette all treat an unset or empty value as "measure it" --
+;; so writing the word AUTO would leave LAZICON and lzp:setshow
+;; reporting an override the drafter never set.  And the same answer
+;; goes beside the pins, where the VB palette reads it
+;; (ui/calofin_net/PaletteTheme.vb): the profile is what the Lisp side
+;; reads and the registry is what the palette can reach.  Three writers
+;; used to disagree -- CALSET wrote AUTO, and an import never reached
+;; the registry at all, so a palette forced dark stayed dark after a
+;; backup had put the drafter back on Auto.
+(defun lzp:theme-write (v)
+  (setq v (if (member v '("DARK" "LIGHT")) v "AUTO"))
   (setenv "CalofinTheme" (if (= v "AUTO") "" v))
-  ;; ...and beside the pins, where the VB palette reads it
-  ;; (ui/calofin_net/PaletteTheme.vb) -- the same bargain CALSET's own
-  ;; Theme branch strikes.
   (vl-catch-all-apply
     'vl-registry-write
     (list lzp:*pinkey* "Theme" (if (= v "AUTO") "" v)))
+  v)
+
+;; The one place that writes.
+(defun lzp:set-write ( / r v)
+  (lzp:theme-write (lzp:set-get "CalofinTheme"))
   (foreach r '("CalofinErrorDir" "StockCover_Folder")
     (setenv r (lzp:set-get r)))
   ;; lzp:inkkey's value is always "" or one of the presets' own ACI
@@ -4026,6 +4072,10 @@
 ;;      CHECK for the whole session, and DIMARCCHECK -- which is
 ;;      (c:CHECK) -- with it.  lzp:has cannot see the difference, so the
 ;;      button would stay lit while running the wrong tool.
+;;    - an AutoCAD command or an acad.pgp shortcut.  Neither is a
+;;      c: function, so the check above never saw them: AREA as an
+;;      alias never ran (the native command wins), and PL for POOL
+;;      took PLINE's shortcut away in every drawing.
 ;;    - a caption carrying ";" or "=", which are the store's own
 ;;      separators, or a double quote, which lzp:dcl-one pastes straight
 ;;      into DCL and which would make every page of the panel
@@ -4088,6 +4138,45 @@
 (defun lzp:alias-taken-p (name)
   (if (car (atoms-family 1 (list (strcase (strcat "C:" name))))) t nil))
 
+;; ...and the two places atoms-family cannot see, because neither is an
+;; AutoLISP function.  AutoCAD's own command table -- native, ARX and
+;; .NET alike -- which getcname asks, in either spelling: a native
+;; command beats a c: function of the same name, so an alias AREA or
+;; SCALE was stored, re-applied in every drawing and never ran once.
+;; And acad.pgp's shortcuts, where PL, C, SP and PO -- the natural short
+;; names for POOL and SPA -- already mean PLINE, CIRCLE, SPELL and
+;; POINT, and one of the two names quietly stopped working.
+;; getcname under a catch: this runs from the load-time apply too.
+(defun lzp:alias-native-p (name / a b)
+  (setq a (vl-catch-all-apply 'getcname (list name))
+        b (vl-catch-all-apply 'getcname (list (strcat "_" name))))
+  (if (or (= (type a) 'STR) (= (type b) 'STR)) t nil))
+
+;; acad.pgp's alias names, upper case, read once per drawing: 'unread
+;; until then, and nil when no acad.pgp is on the support path.
+(setq lzp:*pgp* 'unread)
+
+(defun lzp:pgp-lines (fh / line i out)
+  (while (setq line (read-line fh))
+    (setq line (vl-string-trim " \t" line))
+    (if (and (/= line "") (/= (substr line 1 1) ";")
+             (setq i (vl-string-search "," line)) (> i 0))
+      (setq out (cons (strcase (vl-string-trim " \t" (substr line 1 i)))
+                      out))))
+  out)
+
+(defun lzp:pgp-read ( / f fh r)
+  (if (and (setq f (findfile "acad.pgp")) (setq fh (open f "r")))
+    (progn
+      (setq r (vl-catch-all-apply 'lzp:pgp-lines (list fh)))
+      (close fh)
+      (if (vl-catch-all-error-p r) nil r))))
+
+(defun lzp:pgp-alias-p (name)
+  (if (eq lzp:*pgp* 'unread)
+    (setq lzp:*pgp* (vl-catch-all-apply 'lzp:pgp-read nil)))
+  (if (and (listp lzp:*pgp*) (member (strcase name) lzp:*pgp*)) t nil))
+
 ;; Why this alias cannot be used, as words, or nil when it can.  TOOL is
 ;; the command it would summon; the alias it ALREADY had is allowed
 ;; through, or re-opening the editor would refuse what it just showed.
@@ -4103,7 +4192,14 @@
      (strcat "that name is already yours for " (car p)))
     ((and (lzp:alias-taken-p name)
           (/= (strcase name) (strcase (lzp:alias-was tool))))
-     (strcat name " already runs something in this session"))))
+     (strcat name " already runs something in this session"))
+    ;; asked only of a name no c: function holds, so a wrapper this
+    ;; file defined itself is judged by the clause above and nothing
+    ;; hangs on whether getcname can see an AutoLISP command
+    ((and (not (lzp:alias-taken-p name)) (lzp:alias-native-p name))
+     (strcat name " is an AutoCAD command, and it would win"))
+    ((lzp:pgp-alias-p name)
+     (strcat name " is an AutoCAD shortcut in acad.pgp"))))
 
 (defun lzp:alias-was (tool)
   (lzp:pairval tool lzp:*aliasat*))
@@ -4118,21 +4214,103 @@
     ((vl-string-search "\"" s)
      "a double quote would break the panel's own dialog file")))
 
-;; Define one wrapper, or answer nil having done nothing.
-(defun lzp:alias-make (name tool)
-  (if (and (lzp:alias-shape-p name)
-           (not (lzp:alias-taken-p name))
-           (member tool (lzp:commands)))
-    (progn
-      (eval (list 'defun (read (strcat "c:" (strcase name))) nil
-                  (list (read (strcat "c:" tool)))))
-      t)))
+;; Define one wrapper, or answer nil having done nothing.  The command
+;; table and acad.pgp are asked again here, not only when the name was
+;; typed: a name stored before either was checked, or one AutoCAD has
+;; taken since, must not go on shadowing the drafter's own shortcut in
+;; every drawing.  A wrapper this file already made for the same tool
+;; in this drawing -- a reload, or LAZNAME's OK re-applying the whole
+;; store -- is still in force, and answers T without being made again.
+(defun lzp:alias-make (name tool / key)
+  (setq key (cons (strcase name) tool))
+  (cond
+    ((member key lzp:*aliasmade*) t)
+    ((and (lzp:alias-shape-p name)
+          (not (lzp:alias-taken-p name))
+          (not (lzp:alias-native-p name))
+          (not (lzp:pgp-alias-p name))
+          (member tool (lzp:commands)))
+     (eval (list 'defun (read (strcat "c:" (strcase name))) nil
+                 (list (read (strcat "c:" tool)))))
+     (setq lzp:*aliasmade* (cons key lzp:*aliasmade*))
+     t)))
 
+;; Why lzp:alias-make just refused NAME, asked in its own order.  Not
+;; lzp:alias-why: that one lets through the alias a tool already had,
+;; which is right for the editor and is exactly the stored name being
+;; refused here.
+(defun lzp:alias-off-why (name tool)
+  (cond
+    ((not (lzp:alias-shape-p name))
+     "a name is letters and digits, starts with a letter, up to 12")
+    ((lzp:alias-taken-p name)
+     (strcat name " already runs something in this session"))
+    ((lzp:alias-native-p name)
+     (strcat name " is an AutoCAD command, and it would win"))
+    ((lzp:pgp-alias-p name)
+     (strcat name " is an AutoCAD shortcut in acad.pgp"))
+    (t (strcat tool " is not a command this build has"))))
+
+;; Every stored name made to answer, and the ones that could not be
+;; kept in lzp:*aliasoff* with the reason.  The drafter who stored
+;; POOL=PL before acad.pgp was checked typed PL in every drawing and got
+;; POOL; once this build refused it, PL ran PLINE with no word said,
+;; while LAZNAME's list and its closing count went on claiming it.  An
+;; empty value is a name taken away in the editor, not a refusal.
 (defun lzp:aliases-apply ( / p n)
-  (setq n 0)
+  (setq n 0 lzp:*aliasoff* nil)
   (foreach p lzp:*aliases*
-    (if (lzp:alias-make (cdr p) (car p)) (setq n (1+ n))))
+    (cond
+      ((= (cdr p) "") nil)
+      ((lzp:alias-make (cdr p) (car p)) (setq n (1+ n)))
+      (t (setq lzp:*aliasoff*
+               (cons (list (car p) (strcase (cdr p))
+                           (lzp:alias-off-why (cdr p) (car p)))
+                     lzp:*aliasoff*)))))
+  (setq lzp:*aliasoff* (reverse lzp:*aliasoff*))
   n)
+
+;; The reason TOOL's name ALIAS was refused at the last apply, or nil.
+(defun lzp:alias-off (tool alias)
+  (caddr (car (vl-remove-if-not
+                '(lambda (r) (and (= (car r) tool)
+                                  (= (cadr r) (strcase alias))))
+                lzp:*aliasoff*))))
+
+;; The stored names that answer: not empty, not refused.
+(defun lzp:aliases-live ()
+  (length (vl-remove-if
+            '(lambda (p) (or (= (cdr p) "") (lzp:alias-off (car p) (cdr p))))
+            lzp:*aliases*)))
+
+;; One line per refused name, and where to change it; nil when none.
+(defun lzp:aliasoff-text ( / r s)
+  (setq s "")
+  (foreach r lzp:*aliasoff*
+    (setq s (strcat s "\nLAZPANEL: " (cadr r) " (your name for " (car r)
+                    ") is not applied -- " (caddr r) ".")))
+  (if (/= s "")
+    (strcat s "\n  LAZNAME gives " (if (cdr lzp:*aliasoff*) "them" "it")
+            " another name.")))
+
+;; The load-time apply, and the one place a refusal is SAID unasked.
+;; Once a session, not per drawing: the refusal is the same in every
+;; drawing a Startup Suite opens, so the blackboard -- the namespace
+;; every document shares, as lzp:first-load-p uses it -- carries what
+;; was said, and a drawing says it again only when it has something
+;; different to say.  Not behind *calofin-quiet*: that silences a
+;; greeting, and this is a name the drafter types that has stopped
+;; working.  With no blackboard it is said every time -- told twice
+;; beats not told.
+(defun lzp:aliases-load ( / s)
+  (lzp:aliases-apply)
+  (if (and (setq s (lzp:aliasoff-text))
+           (not (equal s (vl-catch-all-apply 'vl-bb-ref
+                                             (list 'lzp:*aliasnote*)))))
+    (progn
+      (princ s)
+      (vl-catch-all-apply 'vl-bb-set (list 'lzp:*aliasnote* s))))
+  (princ))
 
 (defun lzp:names-write ()
   (lzp:kv-write lzp:*aliasval* lzp:*aliases*)
@@ -4142,10 +4320,15 @@
 ;; One row.  Not padded into columns: whether the dialog font is
 ;; fixed-pitch is exactly what LAZASCII exists to ask, so nothing here
 ;; may assume two rows line up.
+;; A name the last apply refused says so on its row: the list is where
+;; the drafter looks to see what they type, and it used to show PL for
+;; POOL long after PL had gone back to meaning PLINE.
 (defun lzp:namerow (n / a)
   (setq a (lzp:pairval n lzp:*aliases*))
   (strcat n
-          (if (/= a "") (strcat "  (type " a ")") "")
+          (cond ((= a "") "")
+                ((lzp:alias-off n a) (strcat "  (type " a " - not applied)"))
+                (t (strcat "  (type " a ")")))
           "  -  " (lzp:caption n)))
 
 ;; A map's value, or "" when it has none.  (cdr (assoc ...)) answers nil
@@ -4275,7 +4458,7 @@
      (if (= rc 1) (lzp:names-write) (lzp:names-read))
      t)))
 
-(defun c:LAZNAME ( / *error* f dcl)
+(defun c:LAZNAME ( / *error* f dcl live)
   ;; an error inside a tile callback used to leak the dialog handle
   ;; and the temp .dcl -- the same fix c:LAZPIN and c:LAZHIDE carry
   (defun *error* (msg)
@@ -4300,11 +4483,15 @@
      (lzp:name-edit dcl)
      (unload_dialog dcl)
      (vl-file-delete f)
+     ;; counted as they ANSWER, not as they are stored: a refused name
+     ;; is named instead, with its reason, never counted as working
+     (setq live (lzp:aliases-live))
      (princ (strcat "\nLAZPANEL: "
-                    (itoa (length lzp:*aliases*)) " tool"
-                    (if (= (length lzp:*aliases*) 1) "" "s")
+                    (itoa live) " tool"
+                    (if (= live 1) "" "s")
                     " answer to a name of yours, "
-                    (itoa (length lzp:*capsof*)) " renamed on the panel."))))
+                    (itoa (length lzp:*capsof*)) " renamed on the panel."))
+     (if lzp:*aliasoff* (princ (lzp:aliasoff-text)))))
   (if lzd:end (lzd:end "LAZNAME"))
   (princ))
 
@@ -4389,7 +4576,7 @@
      ("acc:*appid*" "\"ABCURCHECK\"" "Everything ABCURCHECK draws carries xdata under this name, so a rescue erases only its own work off a layer...")
      ("acc:*dash-name*" "\"DASHED\"" "The dashed linetype declarations are ringed with, and its pattern: dash, gap, and the total the two must ad...")
      ("acc:*dash-on*" "12.0" "drawing units of dash The dashed linetype declarations are ringed with, and its pattern: dash, gap, and the...")
-     ("acc:*dash-off*" "6.0" "...and of gap -- G0: is the loop closed at all ------------------------------------- The dashed linetype de...")
+     ("acc:*dash-off*" "6.0" "...and of gap The dashed linetype declarations are ringed with, and its pattern: dash, gap, and the total t...")
      ("acc:*fuzz*" "1.0e-4" "drawing units Closer than this and two ends are the same point -- ABHD's *PF-CHAIN-FUZZ*. Raising it forgiv...")
      ("acc:*close-tol*" "5.0" "degrees The signed turning of a simple closed loop is 360 degrees. This is how far off that the total may s...")
      ("acc:*cross-max*" "300" "segments The crossing scan compares every segment with every other, so it is skipped above this many segmen...")
@@ -4912,7 +5099,7 @@
      ("*cchk-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
      ("*cchk-flag-color*" "1" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
      ("*cchk-arc-color*" "6" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
-     ("*cchk-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) The three crosses are 'auto: they do not vary with the scre...")
+     ("*cchk-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
      ("*cchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) The three crosses are 'auto: they do not vary with the sc...")
      ("*cchk-sugg-color*" "'auto" "ACI: the + marking where COVERCHECK would put it (green) The three crosses are 'auto: they do not vary with...")
      ("*cchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) The three crosses are 'auto: they do not vary with...")
@@ -4936,18 +5123,14 @@
      ("*cchk-dist-prec*" "4" "decimal places Distances in prompts and the report go through (rtos d mode prec): mode 2 is decimal, 3 engi...")
      ("*cchk-same-pt*" "1e-8" "drawing units Two points closer than this are the SAME point: no construction line is drawn through them, n...")
      ("*cchk-planar-eps*" "1e-9" "dimensionless (normal components) How far an arc's extrusion normal (DXF 210) may lean from world +Z and st...")
-     ("*cchk-flat-eps*" "1e-12" "---------------------------------------------------------------------- Below this a polyline bulge is treat..."))
+     ("*cchk-flat-eps*" "1e-12" "Below this a polyline bulge is treated as straight, so the edge joins overlap detection, and three points a..."))
     ("CUSTBLOCK" "lisp/custblock/CUSTBLOCK.lsp"
      ("cbk:*layer*" "\"COVER\"" "the block itself")
      ("cbk:*laycolor*" "7" "")
      ("cbk:*dimlayer*" "\"DIMENSION\"" "its dimensions")
      ("cbk:*dimcolor*" "141" "")
      ("cbk:*style*" "\"STANDARD INCHES\"" "")
-     ("cbk:*dimoff*" "12.0" "dim line stand-off, units")
-     ("cbk:*sysold*" "nil" "sysvar snapshot, live mid-run")
-     ("cbk:*last-len*" "nil" "the previous block's sizes -")
-     ("cbk:*last-wid*" "nil" "session memory, offered as")
-     ("cbk:*last-hgt*" "nil" "<defaults> that Enter accepts"))
+     ("cbk:*dimoff*" "12.0" "dim line stand-off, units"))
     ("DIMCHECK" "lisp/dimcheck/dimcheck.lsp"
      ("*dchk-tol*" "1.0e-4" "drawing units A dimension point or an arc end within this distance of an object is ATTACHED and is not ques...")
      ("*dchk-anchor-tol*" "1.0e-4" "drawing units How close two dimension points must be to count as the same spot...")
@@ -4963,7 +5146,7 @@
      ("*dchk-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
      ("*dchk-flag-color*" "1" "ACI: dimensions you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than th...")
      ("*dchk-arc-color*" "6" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
-     ("*dchk-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) The three crosses are 'auto: they do not vary with the scre...")
+     ("*dchk-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
      ("*dchk-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) The three crosses are 'auto: they do not vary with the sc...")
      ("*dchk-sugg-color*" "'auto" "ACI: the + marking where DIMCHECK would put it (green) The three crosses are 'auto: they do not vary with t...")
      ("*dchk-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) The three crosses are 'auto: they do not vary with...")
@@ -4988,7 +5171,7 @@
      ("*dchk-dist-prec*" "4" "decimal places Distances in prompts and the report go through (rtos d mode prec): mode 2 is decimal, 3 engi...")
      ("*dchk-same-pt*" "1e-8" "drawing units Two points closer than this are the SAME point: no construction line is drawn through them, n...")
      ("*dchk-planar-eps*" "1e-9" "dimensionless (normal components) How far an arc's extrusion normal (DXF 210) may lean from world +Z and st...")
-     ("*dchk-flat-eps*" "1e-12" "---------------------------------------------------------------------- Below this a polyline bulge is treat..."))
+     ("*dchk-flat-eps*" "1e-12" "Below this a polyline bulge is treated as straight, so the edge joins overlap detection, and three points a..."))
     ("DIMSTAMP" "lisp/dimstamp/DIMSTAMP.lsp"
      ("ds:*layer*" "\"TEXT\"" "layer the stamped MTEXT lands on. Created when the drawing lacks it; thawed, unlocked and switched on when...")
      ("ds:*layer-color*" "7" "ACI colour that layer is CREATED with -- 7 is AutoCAD's own black-on-white/white-on-black swap. A layer alr...")
@@ -5092,7 +5275,7 @@
      ("fit:*ruler-ring-frac*" "0.26" "the ring round the current row, as a fraction of the row spacing a fraction of the row spacing")
      ("fit:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
      ("fit:*brk-deep-ladder*" "'(48.0 144.0 12.0)" "deep break off the wall The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per questio...")
-     ("fit:*brk-shal-ladder*" "'(144.0 360.0 24.0)" "shallow break, ditto 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a hopp...")
+     ("fit:*brk-shal-ladder*" "'(144.0 360.0 24.0)" "shallow break, ditto The LADDERS those prompts stand on, as (LOW HIGH STEP) in inches -- one per question,...")
      ("fit:*hop-side-ladder*" "'(24.0 72.0 6.0)" "hopper in from a side 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a hop...")
      ("fit:*hop-back-ladder*" "'(24.0 72.0 6.0)" "hopper in from the end 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a ho...")
      ("fit:*tol-ladder*" "'(0.25 2.0 0.25)" "the fit tolerance 2' to 6' by 6\" on both, which is what POOL and ABHD offer at the same question: a hopper...")
@@ -5140,11 +5323,7 @@
      ("hn:*dimoff*" "nil" "nil = one radius past the arc matches the dims beside it")
      ("hn:*dimrepeat*" "nil" "one callout plus \"Typ.\" is how the sheet reads; set T to dimension every corner matches the dims beside it")
      ("hn:*typ*" "t" "reads; set T to dimension every corner")
-     ("hn:*minang*" "0.02" "how far off straight (radians) two legs must be before there is a corner at all reads; set T to dimension e...")
-     ("hn:*sysold*" "nil" "sysvar snapshot, live only mid-run")
-     ("hn:*preview*" "nil" "every entity drawn as a preview")
-     ("hn:*picks*" "nil" "(preview-arc . radius), what a click means")
-     ("hn:*smallwarned*" "nil" "the missing-style note is said once"))
+     ("hn:*minang*" "0.02" "how far off straight (radians) two legs must be before there is a corner at all reads; set T to dimension e..."))
     ("LAZDIAG" "lisp/lazdiag/LAZDIAG.lsp"
      ("lzd:*max-ents*" "400" "How many entities a report will copy. A run that drew ten thousand things before falling over is a real fai...")
      ("lzd:*max-log*" "200" "How many transcript lines are kept. A tutorial loop can princ for ever; the last 200 lines are the ones tha...")
@@ -5305,7 +5484,7 @@
      ("*lfc-grey-color*" "'auto" "ACI: everything not under review, faded. 'auto fades it the way round the drawing needs -- darker than the...")
      ("*lfc-flag-color*" "1" "ACI: what you answered \"No\" to (red) 'auto fades it the way round the drawing needs -- darker than the work...")
      ("*lfc-arc-color*" "6" "ACI: arcs whose endpoints were moved (magenta) 'auto fades it the way round the drawing needs -- darker tha...")
-     ("*lfc-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) The three crosses are 'auto: they do not vary with the scre...")
+     ("*lfc-olap-color*" "4" "ACI: merged or flagged overlapping lines (cyan) 'auto fades it the way round the drawing needs -- darker th...")
      ("*lfc-orig-color*" "'auto" "ACI: the X marking where you drew the point (red) The three crosses are 'auto: they do not vary with the sc...")
      ("*lfc-sugg-color*" "'auto" "ACI: the + marking where LINFINCHECK would put it (green) The three crosses are 'auto: they do not vary wit...")
      ("*lfc-point-color*" "'auto" "ACI: the crosses marking an overlap's two ends (yellow) The three crosses are 'auto: they do not vary with...")
@@ -5330,7 +5509,7 @@
      ("*lfc-dist-prec*" "4" "decimal places Distances in prompts and the report go through (rtos d mode prec): mode 2 is decimal, 3 engi...")
      ("*lfc-same-pt*" "1e-8" "drawing units Two points closer than this are the SAME point: no construction line is drawn through them, n...")
      ("*lfc-planar-eps*" "1e-9" "dimensionless (normal components) How far an arc's extrusion normal (DXF 210) may lean from world +Z and st...")
-     ("*lfc-flat-eps*" "1e-12" "---------------------------------------------------------------------- Below this a polyline bulge is treat..."))
+     ("*lfc-flat-eps*" "1e-12" "Below this a polyline bulge is treated as straight, so the edge joins overlap detection, and three points a..."))
     ("LINGUTTER" "lisp/lingutter/LINGUTTER.lsp"
      ("lg:*poollayer*" "\"POOL\"" "layer the traced perimeter is drawn on; made if missing, and thawed / switched on / unlocked if it exists b...")
      ("lg:*poolcolor*" "4" "its colour when the layer has to be created -- ACI 4 = cyan, POOL's own. Ignored when the layer already exi...")
@@ -5378,18 +5557,18 @@
      ("lobf:*tiny*" "1.0e-10" "Anything smaller than this is zero: the guard on a degenerate fit (every point on one spot), on a zero-leng..."))
     ("MOHAMADDLE" "lisp/mohamaddle/MOHAMADDLE.lsp"
      ("*mohamaddle-sizes*" "'((\"24\" \"Pad24x24\" 24.0) (\"36\" \"Pad36x36\" 36.0))" "--- the pad itself --- Pad sizes MOHAMADDLE offers, in the order shown at the prompt. Each entry is (KEYWOR...")
-     ("*mohamaddle-defaultkw*" "\"36\"" "The dwg the block definitions are imported from when the drawing does not already hold them. Looked up with...")
-     ("*mohamaddle-blkfile*" "\"24inpad.dwg\"" "Layer the pads land on. Created when missing; an existing one is thawed, unlocked and turned on so the resu...")
-     ("*mohamaddle-layer*" "\"PADS\"" "AutoCAD colour index the layer is created with. An existing layer keeps whatever colour it already has. Lay...")
-     ("*mohamaddle-layer-color*" "7" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
+     ("*mohamaddle-defaultkw*" "\"36\"" "Which size the prompt defaults to the first time it is asked in a session. MOHAMADDLE remembers whatever wa...")
+     ("*mohamaddle-blkfile*" "\"24inpad.dwg\"" "The dwg the block definitions are imported from when the drawing does not already hold them. Looked up with...")
+     ("*mohamaddle-layer*" "\"PADS\"" "Layer the pads land on. Created when missing; an existing one is thawed, unlocked and turned on so the resu...")
+     ("*mohamaddle-layer-color*" "7" "AutoCAD colour index the layer is created with. An existing layer keeps whatever colour it already has.")
      ("*mohamaddle-align*" "nil" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
-     ("*mohamaddle-maxrad*" "48.0" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
-     ("*mohamaddle-cornertol*" "(/ (* 30.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
+     ("*mohamaddle-maxrad*" "48.0" "--- what counts as a feature --- Largest concave radius that still needs pads, 4'-0\". Concave arcs this tig...")
+     ("*mohamaddle-cornertol*" "(/ (* 30.0 pi) 180.0)" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
      ("*mohamaddle-arctol*" "(/ (* 10.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
      ("*mohamaddle-fuzz*" "0.05" "--- reading the perimeter --- Largest gap between the end of one loose line/arc and the start of the next t...")
-     ("*mohamaddle-gapmax*" "36.0" "Layer the gap arrow is drawn on, and the colour index it is created with. A plain ACI number rather than 'a...")
+     ("*mohamaddle-gapmax*" "36.0" "--- the gap in a perimeter that nearly closes --- Furthest apart two loose ends may be and still read as a...")
      ("*mohamaddle-gap-layer*" "\"PADDLE-GAP\"" "Layer the gap arrow is drawn on, and the colour index it is created with. A plain ACI number rather than 'a...")
-     ("*mohamaddle-gap-color*" "1" "Length of that arrow, tail to tip, in drawing units. Its head is a third of that long and three times as wi...")
+     ("*mohamaddle-gap-color*" "1" "Layer the gap arrow is drawn on, and the colour index it is created with. A plain ACI number rather than 'a...")
      ("*mohamaddle-arrow*" "36.0" "Length of that arrow, tail to tip, in drawing units. Its head is a third of that long and three times as wi..."))
     ("OASIS" "lisp/oasis/OASIS.lsp"
      ("oasis:*poollayer*" "\"POOL\"" "the arcs, and the pool bottom The three layers, created if the drawing has not got them and thawed, unlocke...")
@@ -5469,19 +5648,19 @@
     ("OSR" "lisp/osr/OSR.lsp"
      ("osr:*default*" "191" "The OSMODE OSR puts back when the drafter has not saved a preset of their own (LAZSET's Object snaps box, o..."))
     ("PADDLE" "lisp/paddle/PADDLE.lsp"
-     ("*paddle-blkname*" "\"Pad36x36\"" "Edge of the pad in drawing units (a 36\" x 36\" square). This one number sets the pitch of the flush rows alo...")
-     ("*paddle-padsize*" "36.0" "The dwg the block definitions are imported from when the drawing does not already hold them. Looked up with...")
-     ("*paddle-blkfile*" "\"24inpad.dwg\"" "Layer the pads land on. Created when missing; an existing one is thawed, unlocked and turned on so the resu...")
-     ("*paddle-layer*" "\"PADS\"" "AutoCAD colour index the layer is created with. An existing layer keeps whatever colour it already has. Lay...")
-     ("*paddle-layer-color*" "7" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
+     ("*paddle-blkname*" "\"Pad36x36\"" "--- the pad itself --- Name of the block inserted at every pad spot. *paddle-blkfile* ships two, Pad36x36 a...")
+     ("*paddle-padsize*" "36.0" "Edge of the pad in drawing units (a 36\" x 36\" square). This one number sets the pitch of the flush rows alo...")
+     ("*paddle-blkfile*" "\"24inpad.dwg\"" "The dwg the block definitions are imported from when the drawing does not already hold them. Looked up with...")
+     ("*paddle-layer*" "\"PADS\"" "Layer the pads land on. Created when missing; an existing one is thawed, unlocked and turned on so the resu...")
+     ("*paddle-layer-color*" "7" "AutoCAD colour index the layer is created with. An existing layer keeps whatever colour it already has.")
      ("*paddle-align*" "nil" "nil = every pad stays parallel to the X/Y axes (the shop standard). T = each pad rotates to follow its stre...")
-     ("*paddle-maxrad*" "48.0" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
-     ("*paddle-cornertol*" "(/ (* 30.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
+     ("*paddle-maxrad*" "48.0" "--- what counts as a feature --- Largest concave radius that still needs pads, 4'-0\". Concave arcs this tig...")
+     ("*paddle-cornertol*" "(/ (* 30.0 pi) 180.0)" "A connection point (line meets line, line meets arc, a polyline vertex) counts as a sharp inside corner onl...")
      ("*paddle-arctol*" "(/ (* 10.0 pi) 180.0)" "A concave arc counts as a feature only when its total bend is MORE than this many degrees; a gentler sweep...")
      ("*paddle-fuzz*" "0.05" "--- reading the perimeter --- Largest gap between the end of one loose line/arc and the start of the next t...")
-     ("*paddle-gapmax*" "36.0" "Layer the gap arrow is drawn on, and the colour index it is created with. A plain ACI number rather than 'a...")
+     ("*paddle-gapmax*" "36.0" "--- the gap in a perimeter that nearly closes --- Furthest apart two loose ends may be and still read as a...")
      ("*paddle-gap-layer*" "\"PADDLE-GAP\"" "Layer the gap arrow is drawn on, and the colour index it is created with. A plain ACI number rather than 'a...")
-     ("*paddle-gap-color*" "1" "Length of that arrow, tail to tip, in drawing units. Its head is a third of that long and three times as wi...")
+     ("*paddle-gap-color*" "1" "Layer the gap arrow is drawn on, and the colour index it is created with. A plain ACI number rather than 'a...")
      ("*paddle-arrow*" "36.0" "Length of that arrow, tail to tip, in drawing units. Its head is a third of that long and three times as wi...")
      ("*paddle-demo-layer*" "\"PADDLE-DEMO\"" "--- TUTORIALPADDLE --- Layer the tutorial draws its labelled sample perimeter on, and the colour index it i...")
      ("*paddle-demo-color*" "3" "--- TUTORIALPADDLE --- Layer the tutorial draws its labelled sample perimeter on, and the colour index it i..."))
@@ -5543,7 +5722,7 @@
      ("ptr:*filter*" "'((0 . \"POINT,INSERT,LWPOLYLINE,POLYLINE\"))" "What the highlight is allowed to keep, so a hatch or a dimension cannot be dragged in by a sloppy window. L...")
      ("ptr:*vertex-skip*" "16" "Which vertices of an old-style (heavy) POLYLINE are NOT on the drawn curve, as a mask over the vertex flags...")
      ("ptr:*band*" "6.0" "How far off the perimeter still counts as on it -- what the FIRST run of a session offers, before anyone ha...")
-     ("ptr:*dir*" "\"Clockwise\"" "Which way round the FIRST run of a session offers, on the same footing as the band. Spelled exactly as the...")
+     ("ptr:*dir*" "\"Clockwise\"" "Which way round the FIRST run of a session offers: \"Clockwise\" or \"Counterclockwise\", in any case, or CW /...")
      ("ptr:*first*" "1" "The number the count starts at, offered at every run. Unlike the band and the direction this one is NOT car...")
      ("ptr:*sysvars*" "'(\"CMDECHO\")" "The sysvars saved on the way in and put back on the way out, however the run ends. Add a name here if a cha...")
      ("ptr:*far-pick*" "12.0" "A start pick further than this off the perimeter is called out. The sweep still begins at the nearest spot...")
@@ -5649,9 +5828,6 @@
      ("pool:*hopoffset-ladder*" "'(24.0 72.0 6.0)" "...and the one the HOPPER OFFSETS stand on: M and K, the gap the hopper leaves to the top side and to the b..."))
     ("POOLSIDE" "lisp/poolside/POOLSIDE.lsp"
      ("psd:*base*" "(list 0.0 0.0)" "insertion base for this run")
-     ("psd:*sysold*" "nil" "the user's sysvars, pending restore")
-     ("psd:*pvents*" "nil" "live guide entities")
-     ("psd:*valnotes*" "nil" "validation problems, for the notes")
      ("psd:*pv-col*" "'auto" "guide outline color: 'auto picks it for the background (grey either way round), a number is used as given")
      ("psd:*pvx-col*" "7" "guide measuring-tie color (white) it for the background (grey either way round), a number is used as given")
      ("psd:*hi-col*" "1" "highlight color (red) it for the background (grey either way round), a number is used as given")
@@ -5695,11 +5871,7 @@
      ("sf:*dimoff*" "nil" "nil = one radius past the arc matches the dims beside it")
      ("sf:*dimrepeat*" "nil" "one callout plus \"Typ.\" is how the sheet reads; set T to dimension every corner matches the dims beside it")
      ("sf:*typ*" "t" "reads; set T to dimension every corner")
-     ("sf:*minang*" "0.02" "how far off straight (radians) two legs must be before there is a corner at all reads; set T to dimension e...")
-     ("sf:*sysold*" "nil" "sysvar snapshot, live only mid-run")
-     ("sf:*preview*" "nil" "every entity drawn as a preview")
-     ("sf:*picks*" "nil" "(preview-arc . radius), what a click means")
-     ("sf:*smallwarned*" "nil" "the missing-style note is said once"))
+     ("sf:*minang*" "0.02" "how far off straight (radians) two legs must be before there is a corner at all reads; set T to dimension e..."))
     ("SOCONV" "lisp/soconv/SOCONV.lsp"
      ("*soconv-map*" "'((\"Pool Perimeter\" \"*\" \"POOL\") (\"Obstacles\" \"*\" \"POOL\") (\"LEICA_DISTO_POINT_ENTITY\" \"POINT\" \"POINTS\") (\"Existing Anchorss\" \"POINT\" \"POINTS\") (\"Existing Anchors\" \"POINT\" \"POINTS\") (\"Dimensions\" \"TEXT,MTEXT\" \"TEXT\") (\"Dimensions\" \"*\" \"DIMENSION\"))" "The conversion itself, one row per rule: (source-layer entity-types destination-layer) Both patterns are wc...")
      ("*soconv-colors*" "'((\"POOL\" . 4) ; cyan, as POOL.LSP creates it (\"POINTS\" . 6) ; magenta - the pink survey points read as (\"TEXT\" . 4) (\"DIMENSION\" . 141))" "What to CREATE a destination layer with when the drawing has not got it. An existing layer is never recolou...")
@@ -5743,7 +5915,7 @@
      ("spa:*lay-cover*" "\"COVER\"" "cover size perimeter ---- output layers and their colours Made (or un-frozen, unlocked and switched back on...")
      ("spa:*lay-dim*" "\"DIMENSION\"" "every dimension and corner mark ---- output layers and their colours Made (or un-frozen, unlocked and switc...")
      ("spa:*lay-notes*" "\"SPA-NOTES\"" "the mini-model and its corner letters, the mode note, the report, and the grey input guide ---- output laye...")
-     ("spa:*lay-text*" "\"TEXT\"" "the Hinge / Velcro Hinge labels The hinges themselves are cover hardware, so they are drawn on the cover's...")
+     ("spa:*lay-text*" "\"TEXT\"" "the Hinge / Velcro Hinge labels letters, the mode note, the report, and the grey input guide")
      ("spa:*lay-hinge*" "\"COVER\"" "The hinges themselves are cover hardware, so they are drawn on the cover's layer even on a sheet that shows...")
      ("spa:*col-water*" "4" "cyan, and only when POOL is created The hinges themselves are cover hardware, so they are drawn on the cove...")
      ("spa:*col-cover*" "6" "magenta, ditto -- an existing layer keeps the colour the office gave it The hinges themselves are cover har...")
@@ -5778,7 +5950,7 @@
      ("spa:*map-size*" "24.0" "th multiples: the mini-model's fit box measurement ever runs into it")
      ("spa:*pv-col*" "'auto" "guide outline: 'auto picks the grey for the background (8 is nearly the stock dark one), a number is used e...")
      ("spa:*pvx-col*" "7" "measuring tie (white) grey for the background (8 is nearly the stock dark one), a number is used exactly as...")
-     ("spa:*hi-col*" "1" "the element being asked for (red) The RECTANGLE guide's nominal box. The octagon and round guides keep thei...")
+     ("spa:*hi-col*" "1" "the element being asked for (red) grey for the background (8 is nearly the stock dark one), a number is use...")
      ("spa:*pv-w*" "240.0" "nominal guide width The RECTANGLE guide's nominal box. The octagon and round guides keep their own ring in...")
      ("spa:*pv-l*" "200.0" "nominal guide length The RECTANGLE guide's nominal box. The octagon and round guides keep their own ring in...")
      ("spa:*pv-th*" "12.0" "guide corner-letter height The RECTANGLE guide's nominal box. The octagon and round guides keep their own r...")
@@ -5854,7 +6026,7 @@
      ("spachk:*grade-tag*" "\"GRADE\"" "The details block's two attribute tags, and how their values are recognised. GRADE and TAPER are matched as...")
      ("spachk:*taper-tag*" "\"TAPER\"" "The details block's two attribute tags, and how their values are recognised. GRADE and TAPER are matched as...")
      ("spachk:*grade-words*" "'((\"ECON\" . \"ECONOMY\") (\"ULTRA\" . \"ULTRA\") (\"FRP\" . \"ULTRA\") (\"THERMO\" . \"THERMOLIGHT\"))" "The details block's two attribute tags, and how their values are recognised. GRADE and TAPER are matched as...")
-     ("spachk:*grade-default*" "\"STANDARD\"" "the grade a value matching nothing takes ...and the taper vocabulary, matched the same way; an unrecognised...")
+     ("spachk:*grade-default*" "\"STANDARD\"" "the grade a value matching nothing takes")
      ("spachk:*taper-words*" "'((\"3-2\" . \"3-2\") (\"4-2\" . \"4-2\") (\"4-3\" . \"4-3\") (\"5-3\" . \"5-3\") (\"5-4\" . \"5-4\") (\"3-3\" . \"3-3\") (\"3/8\" . \"1-3/8\"))" "...and the taper vocabulary, matched the same way; an unrecognised taper measures against no foam row at al...")
      ("spachk:*grade-short*" "'((\"ECONOMY\" . \"ECO\") (\"STANDARD\" . \"STD\") (\"ULTRA\" . \"ULTRA\") (\"THERMOLIGHT\" . \"THERMO\"))" "The short grade names the report prints, keyed by the canonical name.")
      ("spachk:*outline-types*" "'(\"LWPOLYLINE\" \"POLYLINE\" \"CIRCLE\" \"ELLIPSE\")" "Entity types, by the job each does in the audit: what may be an outline at all, which of those are closed b...")
@@ -6034,9 +6206,7 @@
      ("*xft-keep*" "'((\"LINE\" (10 11)) (\"POINT\" (10 50)) (\"CIRCLE\" (10 40)) (\"TEXT\" (1 7 10 11 40 41 50 51 71 72 73)) (\"MTEXT\" (1 3 7 10 40 41 50 71 72)))" "And the groups it carries per type: what an export writes on the five kinds of object XFTCONV erases. An ex..."))
     ("XYPLOT" "lisp/xyplot/XYPLOT.lsp"
      ("xyp:*gutter*" "0.35" "Gap between the two graphs, as a share of graph 1's width. Wide enough that graph 2's Y dimension chain nev...")
-     ("xyp:*same*" "0.0625" "Two points whose X (or Y) differ by less than this share one rung of the dimension chain - a chain rung of...")
-     ("xyp:*dirty*" "nil" "set T whenever a value needed cleaning")
-     ("xyp:*fixes*" "nil" "running list of cleanup / warning messages"))
+     ("xyp:*same*" "0.0625" "Two points whose X (or Y) differ by less than this share one rung of the dimension chain - a chain rung of..."))
    ))
 
 ;; One shop decision, and every knob that spells it.  See
@@ -6202,7 +6372,6 @@
     ("orig-color" ("*cchk-orig-color*" "*dchk-orig-color*" "*lfc-orig-color*"))
     ("out-layer" ("*PF-OUT-LAYER*" "*CAB-OUT-LAYER*" "fit:*out-layer*"))
     ("padsize" ("*cchk-pad-size*" "*paddle-padsize*" "upad:*padsize*"))
-    ("picks" ("hn:*picks*" "sf:*picks*"))
     ("planar-eps" ("*cfchk-planar-eps*" "*cchk-planar-eps*" "*dchk-planar-eps*" "*lfc-planar-eps*"))
     ("point-block" ("abcdef:*point-block*" "abf:*point-block*" "*PF-POINT-BLOCK*" "*ABL-POINT-BLOCK*" "bp:*point-block*" "*CAB-POINT-BLOCK*" "cdo:*point-block*" "cst:*point-block*" "fit:*point-block*" "*LH-POINT-BLOCK*" "pm:*point-block*" "upad:*point-block*"))
     ("point-color" ("*cchk-point-color*" "*dchk-point-color*" "*lfc-point-color*"))
@@ -6213,7 +6382,6 @@
     ("poolcolor" ("lg:*poolcolor*" "oasis:*poolcolor*"))
     ("poollayer" ("lg:*poollayer*" "oasis:*poollayer*"))
     ("prec" ("abf:*prec*" "cdo:*prec*"))
-    ("preview" ("hn:*preview*" "sf:*preview*"))
     ("pt-block" ("abp:*pt-block*" "lobf:*pt-block*" "ptr:*pt-block*"))
     ("pt-layer" ("abp:*pt-layer*" "lobf:*pt-layer*" "ptr:*pt-layer*"))
     ("pt-prefix" ("bp:*pt-prefix*" "pm:*pt-prefix*" "upad:*pt-prefix*"))
@@ -6260,7 +6428,6 @@
     ("sheet-chars" ("*dchk-sheet-chars*" "*lfc-sheet-chars*"))
     ("smalldim" ("hn:*smalldim*" "pool:*smalldim*" "sf:*smalldim*"))
     ("smallstyle" ("hn:*smallstyle*" "pool:*smallstyle*" "sf:*smallstyle*"))
-    ("smallwarned" ("hn:*smallwarned*" "sf:*smallwarned*"))
     ("snap" ("abf:*snap*" "*PF-SNAP*" "*ABL-SNAP*" "bp:*snap*" "*CAB-SNAP*" "fit:*snap*" "*LH-SNAP*" "pm:*snap*" "upad:*snap*"))
     ("snap-eps" ("*PF-SNAP-EPS*" "*ABL-SNAP-EPS*" "*CAB-SNAP-EPS*" "fit:*snap-eps*" "*LH-SNAP-EPS*"))
     ("solve-iters" ("abcdef:*solve-iters*" "altabcdef:*solve-iters*"))
@@ -6274,7 +6441,6 @@
     ("style" ("abf:*style*" "cdo:*style*" "cdc:*style*"))
     ("style-order" ("*cchk-style-order*" "*dchk-style-order*" "*lfc-style-order*"))
     ("sugg-color" ("*cchk-sugg-color*" "*dchk-sugg-color*" "*lfc-sugg-color*"))
-    ("sysold" ("cbk:*sysold*" "hn:*sysold*" "psd:*sysold*" "sf:*sysold*"))
     ("tabbudget" ("lzf:*tabbudget*" "lzs:*tabbudget*"))
     ("tag-drop" ("abcdef:*tag-drop*" "altabcdef:*tag-drop*"))
     ("tag-gap" ("abcdef:*tag-gap*" "altabcdef:*tag-gap*"))
@@ -6359,6 +6525,64 @@
   (foreach k (lzp:knob-index) (write-line (strcat k "=" (lzp:knob-get k)) fh))
   (list na nc (length (lzp:backup-keys)) (length (lzp:knob-index))))
 
+;; The file a typed answer names, as a FULL path.  A bare name used to
+;; be opened as typed, so it landed in whatever folder AutoCAD's
+;; current directory happened to be and was reported back bare -- a
+;; backup nobody could find again.  So a name with no drive and no
+;; leading \ is taken inside the drafter's Documents folder
+;; (MYDOCUMENTSPREFIX), both ways, so an Import of the same bare name
+;; reads back what Export wrote.  nil when there is no such folder.
+(defun lzp:backup-fullpath (path / docs)
+  (cond
+    ((or (= (substr path 2 1) ":")
+         (member (substr path 1 1) '("\\" "/")))
+     path)
+    ((and (setq docs (getvar "MYDOCUMENTSPREFIX"))
+          (= (type docs) 'STR) (/= docs ""))
+     (strcat docs
+             (if (member (substr docs (strlen docs) 1) '("\\" "/")) "" "\\")
+             path))))
+
+;; Export's half of the command: the file question, and the one after
+;; it when that file is already there.  (open path "w") replaces a
+;; file without a word, and this used to reach it for whatever was
+;; typed -- last month's backup, a job's takeoff.txt -- then report
+;; "Wrote ..." over the loss.  Its own defun so the Replace question's
+;; Back can come back to the file question.
+(defun lzp:backup-export-ask ( / path full ans)
+  (setq path (getstring T "\nFile to write the backup to, Back to leave it: "))
+  (if lzd:ask (lzd:ask "File to write" path) path)
+  (cond
+    ((member (strcase path) '("B" "BACK" "U" "UNDO")) (c:LAZBACKUP))
+    ((= path "") (princ "\nNothing written."))
+    ((null (setq full (lzp:backup-fullpath path)))
+     (princ (strcat "\nNo Documents folder to put " path
+                    " in -- type the whole path, C:\\...  Nothing written.")))
+    ((findfile full)
+     (initget "Yes No Back Undo")
+     (setq ans (getkword (strcat "\n" full " is already there.  Replace it?"
+                                 " [Yes/No/Back] <No>: ")))
+     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") ans) ans)
+     (cond
+       ((member ans '("Back" "Undo")) (lzp:backup-export-ask))
+       ((= ans "Yes") (lzp:backup-export-say full))
+       (t (princ (strcat "\nNothing written -- " full " is as it was.")))))
+    (t (lzp:backup-export-say full))))
+
+;; Write FULL and say so, naming the whole path it went to.
+(defun lzp:backup-export-say (full / counts)
+  (if (setq counts (lzp:backup-export full))
+    (princ (strcat "\nWrote " (itoa (car counts)) " name"
+                   (if (= (car counts) 1) "" "s") ", "
+                   (itoa (cadr counts)) " caption"
+                   (if (= (cadr counts) 1) "" "s") ", "
+                   (itoa (caddr counts)) " setting"
+                   (if (= (caddr counts) 1) "" "s") " and "
+                   (itoa (cadddr counts)) " default"
+                   (if (= (cadddr counts) 1) "" "s")
+                   " of yours to " full "."))
+    (princ (strcat "\nCould not write " full "."))))
+
 (defun lzp:backup-export (path / fh counts)
   (setq fh (vl-catch-all-apply 'open (list path "w")))
   (cond
@@ -6377,8 +6601,9 @@
   (cond
     ((= key "CalofinTheme")
      (cond
+       ;; through the one writer, so the palette's copy moves with it
        ((member (strcase val) '("" "AUTO" "DARK" "LIGHT"))
-        (setenv key (strcase val)) "")
+        (lzp:theme-write (strcase val)) "")
        (t (strcat key "=" val " (not Auto, Dark or Light)"))))
     ((member key '("CalofinErrorDir" "StockCover_Folder"))
      (setenv key val) "")
@@ -6449,7 +6674,7 @@
 ;; Theme/Errordir/Stockdir question already does -- "Backup [...]" is
 ;; the first question of the command and does not, matching
 ;; tools/back_baseline.txt's reason for CALSET's own first prompt.
-(defun c:LAZBACKUP ( / *error* pick path counts res n skipped s)
+(defun c:LAZBACKUP ( / *error* pick path full res n skipped s)
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -6462,38 +6687,24 @@
   (setq pick (getkword "\nBackup [Export/Import/Quit] <Quit>: "))
   (if lzd:ask (lzd:ask "Backup" pick) pick)
   (cond
-    ((= pick "Export")
-     (setq path (getstring T "\nFile to write the backup to, Back to leave it: "))
-     (if lzd:ask (lzd:ask "File to write" path) path)
-     (cond
-       ((member (strcase path) '("B" "BACK" "U" "UNDO")) (c:LAZBACKUP))
-       ((= path "") (princ "\nNothing written."))
-       ((setq counts (lzp:backup-export path))
-        (princ (strcat "\nWrote " (itoa (car counts)) " name"
-                       (if (= (car counts) 1) "" "s") ", "
-                       (itoa (cadr counts)) " caption"
-                       (if (= (cadr counts) 1) "" "s") ", "
-                       (itoa (caddr counts)) " setting"
-                       (if (= (caddr counts) 1) "" "s") " and "
-                       (itoa (cadddr counts)) " default"
-                       (if (= (cadddr counts) 1) "" "s")
-                       " of yours to " path ".")))
-       (t (princ (strcat "\nCould not write " path ".")))))
+    ((= pick "Export") (lzp:backup-export-ask))
     ((= pick "Import")
      (setq path (getstring T "\nFile to read the backup from, Back to leave it: "))
      (if lzd:ask (lzd:ask "File to read" path) path)
+     ;; a bare name is looked for where Export would have put it
+     (setq full (if (/= path "") (lzp:backup-fullpath path)))
      (cond
        ((member (strcase path) '("B" "BACK" "U" "UNDO")) (c:LAZBACKUP))
        ((= path "") (princ "\nNothing read."))
-       ((setq res (lzp:backup-import path))
+       ((and full (setq res (lzp:backup-import full)))
         (setq n (car res) skipped (cadr res))
         (princ (strcat "\n" (itoa n) " line" (if (= n 1) "" "s")
-                       " applied from " path "."))
+                       " applied from " full "."))
         (if skipped
           (progn
             (princ (strcat "\n" (itoa (length skipped)) " skipped:"))
             (foreach s skipped (princ (strcat "\n  " s))))))
-       (t (princ (strcat "\nCould not read " path ".")))))
+       (t (princ (strcat "\nCould not read " (if full full path) ".")))))
     (t (princ "\nNothing changed.")))
   (if lzd:end (lzd:end "LAZBACKUP"))
   (princ))
@@ -6661,10 +6872,26 @@
           (member kn '("a symbol" "a whole number"))) nil)
     (t (strcat "Alec's choice is " ks ", this is " kn))))
 
+;; T for a global a tool keeps its RUN in rather than a shop choice --
+;; the sysvar snapshot its handler restores from, a preview's entities,
+;; the picks so far, a note said once, the last size offered as a
+;; default.  Several sit in their tool's tunables block, so the
+;; generated catalog lists them.  A value stored on one was applied at
+;; every panel open: HONEFILLET's snapshot then read as already taken,
+;; the restore walked a string as a list and threw, first on the clean
+;; path and again inside *error*, and OSMODE stayed 0 after every run.
+(defun lzp:knob-state-p (sym)
+  (wcmatch (strcase sym)
+           (strcat "*:`*SYSOLD`*,*:`*PREVIEW`*,*:`*PICKS`*,*:`*PVENTS`*,"
+                   "*:`*VALNOTES`*,*:`*SMALLWARNED`*,*:`*DIRTY`*,"
+                   "*:`*FIXES`*,*:`*LAST-*`*")))
+
 ;; Why TEXT cannot be SYM's value, or nil when it can.
 (defun lzp:knob-why (sym text / p s)
   (cond
     ((not (lzp:knob-entry sym)) "not a knob this build has")
+    ((lzp:knob-state-p sym)
+     "the tool's own run-time state, not a setting -- it cannot be set")
     ((not (setq p (lzp:knob-parse text)))
      "not a value: a number, \"a string\", 'a-symbol or '(a list)")
     ((not (setq s (lzp:knob-shipped sym))) nil)
@@ -7015,9 +7242,10 @@
 ;; Put the button up as the file loads, quietly: in a session where
 ;; the COM menu API (or the blackboard) is missing the panel still
 ;; loads and LAZPANEL still runs -- the button is a convenience, never
-;; a gate.
+;; a gate.  Made the first time, re-iced after that, and NOT reopened
+;; if the drafter closed it (nil: see lzp:button-init).
 (vl-catch-all-apply
-  '(lambda () (if (lzp:first-load-p) (lzp:button-init))) nil)
+  '(lambda () (if (lzp:first-load-p) (lzp:button-init nil))) nil)
 (vl-catch-all-apply 'lzp:pins-read nil)
 ;; The drafter's own names, and the wrappers that make them answer.
 ;; Per DOCUMENT, not per session: a defun lives in the drawing's own
@@ -7026,7 +7254,7 @@
 ;; vl-catch-all-apply beside the rest: a file that throws as it loads
 ;; takes the panel and the toolbar with it.
 (vl-catch-all-apply 'lzp:names-read nil)
-(vl-catch-all-apply 'lzp:aliases-apply nil)
+(vl-catch-all-apply 'lzp:aliases-load nil)
 ;; The drafter's own defaults (LAZTUNE), over every tool's block.  This
 ;; file loads LAST in LAZPASS.lsp, which is what makes the load-time
 ;; pass enough there; the panel re-applies on every open and launch for

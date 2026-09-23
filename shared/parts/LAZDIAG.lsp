@@ -103,7 +103,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.4")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.5")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -149,6 +149,8 @@
 (setq lzd:*step* nil)      ; the last breadcrumb
 (setq lzd:*watch* nil)     ; enames the tool registered as its input
 (setq lzd:*pts* nil)       ; (label . point) for every point picked
+(setq lzd:*inner* nil)     ; ((TOOL . VER) ...) of commands begun INSIDE
+                           ; this run, innermost first -- lzd:begin
 (setq lzd:*inside* nil)    ; the reporter is running -- refuse re-entry
 (setq lzd:*last* nil)      ; the last report, for LAZDIAG to write again
 (setq lzd:*lastfile* nil)  ; where it went, nil if it could not be written
@@ -243,6 +245,29 @@
 ;;   transcript that does span two runs of one tool says so rather than
 ;;   running them together.
 (defun lzd:begin (tool ver)
+  (cond
+    ;; ...unless the run standing is still GOING: a command that runs
+    ;; another as a function -- XYPLOT and ABCDEF handing over to ABHD,
+    ;; a tutorial running its tool's scan, AUTODIM finishing with PADDLE
+    ;; -- begins that one from inside its own run.  Dropped, the outer
+    ;; run was logged "ok" before it had finished, and a failure in the
+    ;; inner one was filed under a command the drafter never typed, with
+    ;; none of the answers that led to it, so the report could not be
+    ;; replayed.  Joined, the transcript runs on across the hand-over and
+    ;; the inner command is remembered by name (lzd:*inner*) for its end
+    ;; and its report to find.
+    ((lzd:nested-p tool)
+     (if (not (lzd:inner-p tool))
+       (setq lzd:*inner* (cons (cons (strcase (lzd:str tool)) ver)
+                               lzd:*inner*)))
+     (lzd:say (strcat "--- " (lzd:str tool)
+                      (if ver (strcat " " (lzd:str ver)) "")
+                      " started inside " lzd:*tool*)))
+    (t (lzd:begin-1 tool ver)))
+  tool)
+
+;; lzd:begin for a run that is not joining another.
+(defun lzd:begin-1 (tool ver)
   ;; A context still standing when a DIFFERENT tool begins belongs to a
   ;; run that finished without failing -- lzd:report and lzd:end both
   ;; clear it -- so this is where that run gets its "ok" line.  The
@@ -252,18 +277,61 @@
   (if (and lzd:*tool* (not (lzd:mine-p tool)))
     (lzd:log "ok" nil nil))
   (if (not (lzd:mine-p tool))
-    (setq lzd:*tool*    (lzd:str tool)
-          lzd:*started* (cal:datestr)
-          lzd:*mark*    (entlast)
-          lzd:*log*     nil
-          lzd:*answers* nil
-          lzd:*step*    nil
-          lzd:*watch*   nil
-          lzd:*pts*     nil))
+    (progn
+      (setq lzd:*tool*    (lzd:str tool)
+            lzd:*started* (cal:datestr)
+            lzd:*mark*    (entlast)
+            lzd:*log*     nil
+            lzd:*answers* nil
+            lzd:*step*    nil
+            lzd:*watch*   nil
+            lzd:*pts*     nil
+            lzd:*inner*   nil)
+      ;; ERRNO is sticky: AutoCAD sets it on a failed call and nothing
+      ;; clears it, so the code a report printed could be a missed pick
+      ;; from a command an hour ago, sending whoever read it after a
+      ;; failure this run never had.  Cleared here, a run's report can
+      ;; only show one of its own.  Only when it holds a code: a begin
+      ;; is the top of every command, and one that writes a sysvar it
+      ;; had no need to move is one more thing a run changes behind the
+      ;; drafter.  Under a catch, because nothing in lzd: may throw.
+      (if (not (member (getvar "ERRNO") '(nil 0)))
+        (vl-catch-all-apply 'setvar (list "ERRNO" 0)))))
   (setq lzd:*ver* ver)
   (lzd:say (strcat "--- " (lzd:str tool) " started"
-                   (if ver (strcat " " (lzd:str ver)) "")))
-  tool)
+                   (if ver (strcat " " (lzd:str ver)) ""))))
+
+;; The commands AutoCAD has running, uppercased, as a list: CMDNAMES
+;; reads "XYPLOT" while that command runs -- a (c:ABHD) it calls as a
+;; function adds nothing -- "XYPLOT'ZOOM" inside a transparent one, and
+;; "" at the command line.
+(defun lzd:cmdnames ( / s i out)
+  (setq s (getvar "CMDNAMES") out nil)
+  (if (= (type s) 'STR)
+    (progn
+      (setq s (strcase s))
+      (while (setq i (vl-string-search "'" s))
+        (setq out (cons (substr s 1 i) out)
+              s   (substr s (+ i 2))))
+      (setq out (cons s out))))
+  (vl-remove "" out))
+
+;; T when TOOL is beginning INSIDE the run that is standing rather than
+;; after it.  From here the two look alike -- a run that finished
+;; without reaching its lzd:end leaves its context standing too -- and
+;; what tells them apart is AutoCAD's own CMDNAMES, which still names
+;; the outer command while it runs and has let go of it once it has
+;; returned.  Where CMDNAMES cannot say (a command begun under another
+;; name than the one typed), this answers nil and the run standing is
+;; taken as finished, which is what every begin did before.
+(defun lzd:nested-p (tool)
+  (and lzd:*tool* tool (not (lzd:mine-p tool))
+       (member (strcase lzd:*tool*) (lzd:cmdnames))
+       T))
+
+;; The (TOOL . VER) entry of a command begun inside this run, or nil.
+(defun lzd:inner-p (tool)
+  (and tool lzd:*inner* (assoc (strcase (lzd:str tool)) lzd:*inner*)))
 
 ;; There is deliberately no lazy "open a context on the first prompt"
 ;; here.  One mechanism opens a context -- lzd:begin, at the top of a
@@ -279,11 +347,18 @@
 ;; Through lzd:mine-p, so "is this my context" is decided in ONE place
 ;; and case-insensitively -- a tool that ended a context it did not own
 ;; would throw away the prompts of the run still going on around it.
-(defun lzd:end (tool)
-  (if (and lzd:*tool* (or (null tool) (lzd:mine-p tool)))
-    (lzd:log "ok" nil nil))
-  (if (or (null tool) (null lzd:*tool*) (lzd:mine-p tool))
-    (lzd:disown))
+(defun lzd:end (tool / in)
+  (cond
+    ;; a command begun inside this run has finished: the run it was
+    ;; called from goes on, and gets its line when IT ends
+    ((setq in (lzd:inner-p tool))
+     (setq lzd:*inner* (vl-remove in lzd:*inner*))
+     (lzd:say (strcat "--- " (lzd:str tool) " finished")))
+    (t
+     (if (and lzd:*tool* (or (null tool) (lzd:mine-p tool)))
+       (lzd:log "ok" nil nil))
+     (if (or (null tool) (null lzd:*tool*) (lzd:mine-p tool))
+       (lzd:disown))))
   nil)
 
 ;; One line of transcript.  The list is NEWEST first, so capping it is
@@ -360,6 +435,17 @@
   (lzd:say (strcat "  ? " (lzd:str prompt)
                    "   -> " (lzd:enc answer)))
   (setq lzd:*answers* (cons (cons (lzd:str prompt) answer) lzd:*answers*))
+  ;; A CLICK is also a labelled point on the report's CALOFIN-PICKS
+  ;; layer.  Every input reaches this line -- check_lazdiag sees to that
+  ;; -- so this is the one place that can say so for all of them: lzd:pt
+  ;; had no caller at all, and every report carried an empty picks layer
+  ;; and "picked points 0" under a header promising each click labelled.
+  ;; A getpoint answer is 2 or 3 REALS; an entsel one is (ename point).
+  (cond
+    ((lzd:clickp answer) (lzd:pt prompt answer))
+    ((and (listp answer) (= (type (car answer)) 'ENAME)
+          (lzd:clickp (cadr answer)))
+     (lzd:pt prompt (cadr answer))))
   (if (> (length lzd:*answers*) lzd:*max-log*)
     (setq lzd:*answers* (lzd:firstn lzd:*answers* lzd:*max-log*)))
   answer)
@@ -402,10 +488,24 @@
 
 ;; A point the user picked, with the prompt it answered.  These are
 ;; drawn into the report as labelled points: for half the tools here the
-;; picks ARE the geometry that caused the failure.
-(defun lzd:pt (label p)
+;; picks ARE the geometry that caused the failure.  Kept in WORLD, as
+;; the copied geometry is, and translated NOW, while the UCS it was
+;; picked in is still the current one; P itself goes back untouched.
+;; lzd:ask calls it for every answer that is a click, so no tool has to;
+;; the transcript keeps the answer as given (UCS), and THE DRAWING's
+;; UCSORG / UCSXDIR lines say how to read it.
+(defun lzd:clickp (v)
+  (and (listp v) (<= 2 (length v) 3)
+       (vl-every 'numberp v)
+       (vl-some '(lambda (x) (= (type x) 'REAL)) v)))
+
+(defun lzd:pt (label p / w)
   (if (and p (listp p) (numberp (car p)))
-    (setq lzd:*pts* (cons (cons (lzd:str label) p) lzd:*pts*)))
+    (progn
+      (setq w (vl-catch-all-apply 'trans (list p 1 0)))
+      (setq lzd:*pts* (cons (cons (lzd:str label)
+                                  (if (vl-catch-all-error-p w) p w))
+                            lzd:*pts*))))
   p)
 
 ;;; -------------------- gathering the geometry --------------------------
@@ -974,7 +1074,8 @@
       (lzd:pair "message" msg)
       (lzd:pair "last step" (if lzd:*step* lzd:*step*
                                 "(none - it failed before the first prompt)"))
-      (lzd:pair "ERRNO" (getvar "ERRNO"))
+      (lzd:pair "ERRNO" (strcat (lzd:str (getvar "ERRNO"))
+                                "  (the last one set since this run began)"))
       (lzd:pair "CMDNAMES" (getvar "CMDNAMES"))
       (lzd:pair "LASTPROMPT" (getvar "LASTPROMPT"))
       ""
@@ -989,6 +1090,21 @@
       (lzd:pair "DIMSCALE" (getvar "DIMSCALE"))
       (lzd:pair "CMDECHO" (getvar "CMDECHO"))
       (lzd:pair "UNDOCTL" (getvar "UNDOCTL"))
+      ;; The frame the clicks were answered in.  A pick is a UCS point
+      ;; and the geometry copied below is World, so without these a
+      ;; failure under a UCS on a pool corner arrives with its clicks
+      ;; a thousand units off the drawing and nothing to say why --
+      ;; and a sweep run from a layout viewport looks like one that
+      ;; found nothing.
+      (lzd:pair "WORLDUCS" (getvar "WORLDUCS"))
+      (lzd:pair "UCSORG" (lzd:enc (getvar "UCSORG")))
+      (lzd:pair "UCSXDIR" (lzd:enc (getvar "UCSXDIR")))
+      (lzd:pair "CTAB" (getvar "CTAB"))
+      (lzd:pair "TILEMODE" (getvar "TILEMODE"))
+      (lzd:pair "CVPORT" (getvar "CVPORT"))
+      (lzd:pair "AUNITS" (getvar "AUNITS"))
+      (lzd:pair "ANGBASE" (getvar "ANGBASE"))
+      (lzd:pair "ANGDIR" (getvar "ANGDIR"))
       ""
       "GEOMETRY COPIED INTO THIS FILE"
       (lzd:pair "entities" (strcat (itoa nents)
@@ -1014,6 +1130,18 @@
       "  the prompt it died at, which is the question a line number"
       "  would have answered."
       ""))
+  ;; a failure in a command this run called: named, right under the
+  ;; command it is filed as (lzd:report-1)
+  (if lzd:*inner*
+    (setq out (append (lzd:firstn out 4)
+                      (list (lzd:pair "failed inside"
+                                      (strcat (lzd:str (car (car lzd:*inner*)))
+                                              (if (cdr (car lzd:*inner*))
+                                                (strcat " " (lzd:str (cdr (car lzd:*inner*))))
+                                                "")
+                                              ", which " (lzd:str tool)
+                                              " ran")))
+                      (cdr (cdr (cdr (cdr out)))))))
   (setq out (append out (lzd:oddities)))
   (setq out (append out (list "" "THE RUN, PROMPT BY PROMPT")))
   (setq out (append out
@@ -1193,15 +1321,25 @@
   (strcat "calofin-" (itoa (fix (/ dd 10000))) "-"
           (cal:zeropad2 (rem (fix (/ dd 100)) 100)) ".log"))
 
+;; An environment string that names a folder, or nil.  EMPTY is nil
+;; too, the same rule lzd:addcand keeps for CalofinErrorDir: there is
+;; no unsetenv, so (setenv "CalofinLogDir" "") is how anybody undoes
+;; the setenv LAZLOG tells them to type -- and taken as a folder, ""
+;; put every run's log line into a bare file name in whatever folder
+;; AutoCAD's working directory happened to be that day.
+(defun lzd:envdir (name / u)
+  (setq u (getenv name))
+  (if (and u (= (type u) 'STR) (/= (vl-string-trim " \t" u) "")) u))
+
 ;; Where the log lives: a calofin folder beside the profile if there is
 ;; one, else wherever a report would go.  Its own folder on purpose --
 ;; Downloads is for the one file you send, and a log that accumulated
 ;; there would be mistaken for one of them every month.
 (defun lzd:logfolder ( / u)
   (cond
-    ((setq u (getenv "CalofinLogDir")) u)
-    ((setq u (getenv "USERPROFILE")) (strcat u "\\" lzd:*logdir*))
-    ((setq u (getenv "LOCALAPPDATA")) (strcat u "\\" lzd:*logdir*))
+    ((lzd:envdir "CalofinLogDir"))
+    ((setq u (lzd:envdir "USERPROFILE")) (strcat u "\\" lzd:*logdir*))
+    ((setq u (lzd:envdir "LOCALAPPDATA")) (strcat u "\\" lzd:*logdir*))
     ((car (lzd:candidates)))))
 
 ;; The month's file, rolled when it has outgrown lzd:*logmax*.  A log
@@ -1366,10 +1504,19 @@
 
 (defun lzd:disown ()
   (setq lzd:*tool* nil lzd:*ver* nil lzd:*log* nil lzd:*answers* nil
-        lzd:*step* nil lzd:*watch* nil lzd:*pts* nil lzd:*mark* nil)
+        lzd:*step* nil lzd:*watch* nil lzd:*pts* nil lzd:*mark* nil
+        lzd:*inner* nil)
   nil)
 
 (defun lzd:report-1 (tool ver msg / prims name path)
+  ;; A failure in a command this run called is this run's failure: an
+  ;; error runs only the innermost handler and then ends everything, so
+  ;; the command the drafter typed has failed too.  Filed under THAT
+  ;; one, at its version -- the transcript holds its answers as well as
+  ;; the inner command's, so it replays from where the drafter began --
+  ;; and the inner command is named on a line of its own.
+  (if (lzd:inner-p tool)
+    (setq tool lzd:*tool* ver lzd:*ver*))
   (if (not (lzd:mine-p tool)) (lzd:disown))
   (setq prims (lzd:build-prims tool ver msg)
         name  (lzd:filename tool ver)
@@ -1390,7 +1537,8 @@
     ;; same prompt is the clearest thing anybody ever says about a
     ;; question that cannot be answered.
     ((lzd:cancel-p msg)
-     (if (lzd:mine-p tool) (lzd:log "quit" nil nil))
+     ;; an Esc inside a command this run called ends this run too
+     (if (or (lzd:mine-p tool) (lzd:inner-p tool)) (lzd:log "quit" nil nil))
      ;; disown, NOT lzd:end -- end logs an "ok" of its own, and a run
      ;; the drafter backed out of would have gone into the log twice,
      ;; once as the quit it was and once as a clean run it was not
@@ -1437,6 +1585,11 @@
   (if (null p)
     (progn (princ "\n[calofin] Nothing placed.") nil)
     (progn
+      ;; the click is in the CURRENT UCS and entmakex takes WORLD
+      ;; numbers: under a UCS on a pool corner the untranslated pick
+      ;; put the report back onto the drawing it was told to keep clear
+      ;; of.  Translated once, and the lines step down in World.
+      (setq p (trans p 1 0))
       (cal:ensure-layer lzd:*errlayer* 1)
       (setq h (/ (getvar "VIEWSIZE") 90.0))
       (if (or (null h) (<= h 0.0)) (setq h 1.0))

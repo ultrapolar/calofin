@@ -771,7 +771,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "092226 REV24") ; announced on load.  The
+(setq pf:*version*      "092226 REV25") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -949,6 +949,45 @@
 ;; ---- entity -> segment extraction ----------------------------------
 ;; A segment is (startPt endPt bulge), 2D points.
 
+;; ---- the entity's own plane ----------------------------------------
+;; An ARC, CIRCLE or polyline keeps its numbers in its OWN plane -- the
+;; OCS its 210 names -- not the world's.  Flat work carries no 210, or
+;; (0 0 1), and passes through untouched.  One on the underside of the
+;; plane, (0 0 -1), is what exploding a mirrored block or some survey
+;; exporters leave: every X is the other way round, so read raw the
+;; outline lands mirrored through the Y axis, and the "not drawn in the
+;; world plane" warning never fires because the plane IS the world's.
+;; So the plane is read once per entity (nil when flat), each end is
+;; taken to world through it, and each bulge turns the other way when
+;; the plane is seen from below.  A genuinely tilted plane is still only
+;; flattened here -- that one is warned about where it is read.
+(defun pf:ocs-n (ed / nz)
+  (setq nz (cdr (assoc 210 ed)))
+  (if (and nz (not (equal nz '(0.0 0.0 1.0) 1.0e-10))) nz))
+
+;; SEGS as read in EN's plane NZ at elevation Z, taken to the world's.
+(defun pf:segs-w (segs en nz z)
+  (if nz
+    (mapcar '(lambda (s)
+               (list (cal:2d (trans (list (car (car s)) (cadr (car s)) z)
+                                   en 0))
+                     (cal:2d (trans (list (car (cadr s)) (cadr (cadr s)) z)
+                                   en 0))
+                     (if (< (caddr nz) 0.0) (- (caddr s)) (caddr s))))
+            segs)
+    segs))
+
+;; Where a survey point sits, in the world's numbers.  A block's (or a
+;; TEXT's) insertion point is kept in its own plane just as an ARC's
+;; centre is, so an ab_pt inserted from below, (0 0 -1), read raw lands
+;; mirrored through the Y axis - off the outline it was shot on, with
+;; nothing said.  A POINT's 10 is in world numbers already and is left
+;; alone, as is anything flat.
+(defun pf:ins-w (ed)
+  (if (and (/= (cdr (assoc 0 ed)) "POINT") (pf:ocs-n ed))
+    (trans (cdr (assoc 10 ed)) (cdr (assoc -1 ed)) 0)
+    (cdr (assoc 10 ed))))
+
 (defun pf:lw-segs (ed / pts bls item segs n closed)
   ;; collect (10) vertices and their (42) bulges, in order
   (setq pts nil bls nil)
@@ -970,17 +1009,25 @@
                (< (cal:dist (last pts) (car pts)) *PF-CHAIN-FUZZ*)))
     (if (>= (cal:dist (last pts) (car pts)) *PF-CHAIN-FUZZ*)
       (setq segs (cons (list (last pts) (car pts) (last bls)) segs))))
-  (reverse segs))
+  (pf:segs-w (reverse segs) (cdr (assoc -1 ed)) (pf:ocs-n ed)
+             (cond ((cdr (assoc 38 ed))) (0.0))))
 
-(defun pf:pl-segs (en / ed sub pts bls segs n closed)
+(defun pf:pl-segs (en / ed sub pts bls segs n closed nz z)
   ;; heavy (old-style) 2D POLYLINE: walk its VERTEX sub-entities
   (setq ed (entget en)
         closed (= 1 (logand 1 (cdr (assoc 70 ed))))
+        ;; a 3D polyline or mesh (bits 8, 16) keeps world numbers
+        nz     (if (= 0 (logand 24 (cdr (assoc 70 ed)))) (pf:ocs-n ed))
+        z      (cond ((caddr (cdr (assoc 10 ed)))) (0.0))
         pts nil bls nil
         sub (entnext en))
   (while (and sub (= "VERTEX" (cdr (assoc 0 (setq ed (entget sub))))))
-    ;; skip spline/fit control vertices (flag bits 1 and 16)
-    (if (= 0 (logand 17 (cond ((cdr (assoc 70 ed))) (0))))
+    ;; skip the spline FRAME points (flag 16) only: they are the
+    ;; control net, off the curve.  A curve-fit extra vertex (flag 1)
+    ;; is ON the curve -- PEDIT Fit joins an arc pair there -- and
+    ;; dropping it while keeping its neighbours' bulges read arcs that
+    ;; do not follow the outline
+    (if (= 0 (logand 16 (cond ((cdr (assoc 70 ed))) (0))))
       (setq pts (cons (cal:2d (cdr (assoc 10 ed))) pts)
             bls (cons (cond ((cdr (assoc 42 ed))) (0.0)) bls)))
     (setq sub (entnext sub)))
@@ -990,11 +1037,13 @@
           n    (1+ n)))
   (if (and closed (> (length pts) 2))
     (setq segs (cons (list (last pts) (car pts) (last bls)) segs)))
-  (reverse segs))
+  (pf:segs-w (reverse segs) en nz z))
 
-(defun pf:ent-segs (en / ed typ c r a1 a2 delta)
+(defun pf:ent-segs (en / ed typ c r a1 a2 delta nz z)
   (setq ed  (entget en)
-        typ (cdr (assoc 0 ed)))
+        typ (cdr (assoc 0 ed))
+        nz  (pf:ocs-n ed)
+        z   (cond ((caddr (cdr (assoc 10 ed)))) (0.0)))
   (cond
     ((= typ "LINE")
      (list (list (cal:2d (cdr (assoc 10 ed)))
@@ -1009,18 +1058,22 @@
      (if (< delta 1.0e-10) (setq delta (* 2.0 pi)))
      ;; a full-circle arc cannot be one bulged segment (its bulge is
      ;; infinite): hand back two semicircles instead
-     (if (> delta (- (* 2.0 pi) 1.0e-9))
-       (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
-             (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
-       (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0))))))
+     (pf:segs-w
+       (if (> delta (- (* 2.0 pi) 1.0e-9))
+         (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
+               (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
+         (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0)))))
+       en nz z))
     ;; a CIRCLE is a legitimate pool perimeter (round spa): two
     ;; semicircles, so the chaining and fitting code sees a normal
     ;; closed loop instead of reporting a gap
     ((= typ "CIRCLE")
      (setq c (cal:2d (cdr (assoc 10 ed)))
            r (cdr (assoc 40 ed)))
-     (list (list (polar c 0.0 r) (polar c pi r) 1.0)
-           (list (polar c pi r) (polar c 0.0 r) 1.0)))
+     (pf:segs-w
+       (list (list (polar c 0.0 r) (polar c pi r) 1.0)
+             (list (polar c pi r) (polar c 0.0 r) 1.0))
+       en nz z))
     ((= typ "LWPOLYLINE") (pf:lw-segs ed))
     ((= typ "POLYLINE") (pf:pl-segs en))
     (T nil)))
@@ -1479,7 +1532,7 @@
              (progn
                (setq nm (pf:block-number en))
                (if (not (pf:moved-p nm))
-                 (setq out (cons (list (cal:2d (cdr (assoc 10 ed)))
+                 (setq out (cons (list (cal:2d (pf:ins-w ed))
                                        (if (and nm (/= nm "")) nm "?"))
                                  out))))))
           ((= typ "POINT")
@@ -2202,9 +2255,14 @@
   (foreach en pf-temp
     (if (and en (entget en)) (entdel en)))
   ;; the length ruler is scaffolding too, and this is the one call
-  ;; every handler and every clean exit already makes
+  ;; every handler and every clean exit already makes.  Its STATE goes
+  ;; with it: taking the rows down keeps the style, the ft-in family and
+  ;; the hint-said flag, so without the reset a ruler colour retuned in
+  ;; LAZTUNE looked ignored until the drawing was reopened, and an
+  ;; inch drafter's next run labelled its rows in ft-in
   (pf:rulerkill)
-  (setq pf-temp nil))
+  (setq pf:*ruler* nil
+        pf-temp    nil))
 
 ;; Scaffolding removed early - when a Back re-opens the step that
 ;; drew it - rather than at command end.
@@ -2219,10 +2277,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -2264,6 +2326,14 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The ruler standing beside one of the hopper offsets -- RUN STATE,
@@ -2279,12 +2349,25 @@
 ;; The scratch layer the rows are drawn on, made if it is missing.  A
 ;; layer of its own is what lets a drafter turn the ruler off without
 ;; turning anything of the fit off with it.
-(defun pf:rulerlayer ()
+;; LOCKED is not left alone: entmake draws onto a locked layer but
+;; entdel refuses there, so every ruler drawn stayed in the drawing
+;; for good and each redraw added another copy -- and LAYISO's
+;; lock-and-fade locks this layer with everything else.  It is
+;; calofin scratch, so it is unlocked, said once, and left unlocked.
+(defun pf:rulerlayer ( / ed fl)
   (if (not (tblsearch "LAYER" *PF-RULER-LAYER*))
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 *PF-RULER-LAYER*) '(70 . 0) '(62 . 7)
-                   (cons 6 "CONTINUOUS"))))
+                   (cons 6 "CONTINUOUS")))
+    (progn
+      (setq ed (entget (tblobjname "LAYER" *PF-RULER-LAYER*))
+            fl (cdr (assoc 70 ed)))
+      (if (and fl (= 4 (logand 4 fl))
+               (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed)))
+        (princ (strcat "\nABHD: layer " *PF-RULER-LAYER*
+                       " was locked - unlocked so the ruler can be"
+                       " taken down again.")))))
   *PF-RULER-LAYER*)
 
 ;; This file's knobs, in the order the ruler reads them.
@@ -2337,8 +2420,8 @@
 
 ;; Erase only ABHD's own objects on a layer; anything the user drew
 ;; there is left alone.  Returns how many went.
-(defun pf:purge-mine (name / ss i n en)
-  (setq n 0)
+(defun pf:purge-mine (name / ss i n en mine stuck ed flags)
+  (setq n 0 stuck 0 mine nil)
   (if (tblsearch "LAYER" name)
     (progn
       (setq ss (ssget "_X" (list (cons 8 name))))
@@ -2348,8 +2431,27 @@
           (repeat (sslength ss)
             (setq en (ssname ss i))
             (if (assoc -3 (entget en '("ABHD")))
-              (progn (entdel en) (setq n (1+ n))))
-            (setq i (1+ i)))))))
+              (setq mine (cons en mine)))
+            (setq i (1+ i)))))
+      ;; entdel answers nil on a locked layer and erases nothing, and
+      ;; this layer can be the drafter's own, locked on purpose.  So the
+      ;; lock is lifted for the erase and put back after it, and only an
+      ;; erase that took is counted: counting the attempts said
+      ;; "cleared" over markers still on screen, and the next run wrote
+      ;; its own markers over them
+      (if mine
+        (progn
+          (setq ed    (entget (tblobjname "LAYER" name))
+                flags (cond ((cdr (assoc 70 ed))) (0)))
+          (if (= 4 (logand 4 flags))
+            (entmod (subst (cons 70 (- flags 4)) (assoc 70 ed) ed)))
+          (foreach en mine
+            (if (entdel en) (setq n (1+ n)) (setq stuck (1+ stuck))))
+          (if (= 4 (logand 4 flags)) (entmod ed))
+          (if (> stuck 0)
+            (princ (strcat "\nABHD: " (itoa stuck)
+                           " of its own object(s) on layer " name
+                           " could not be erased - NOT removed.")))))))
   n)
 
 ;; Make sure the DASHED linetype exists (pure entmake, no command
@@ -2913,17 +3015,36 @@
 (defun pf:compare (tour loop pts dpts tol allow simp
                    / prior vars v e ent lab st onv segs bad allbad first
                      i pick idx keep ce bb hgt sel picked keyed pr res
-                     tbl nfit defl kws word marks okeyed omit names)
+                     tbl nfit defl kws word marks okeyed omit names nums)
   (setq prior (pf:prior-fits))
   (cal:ensure-layer *PF-OUT-LAYER* *PF-OUT-COLOUR*)
   (setq tbl  (if simp *PF-SIMP-COMPARE* *PF-COMPARE*)
         nfit (length tbl)
         defl (if simp *PF-SIMP-DEFAULT-FIT* *PF-DEFAULT-FIT*)
         word (if simp "Five" "Three")
-        kws  "")
+        kws  ""
+        nums nil)
   (setq i 1)
-  (repeat nfit (setq kws (strcat kws (itoa i) " ") i (1+ i)))
+  (repeat nfit
+    (setq kws  (strcat kws (itoa i) " ")
+          nums (cons (itoa i) nums)
+          i    (1+ i)))
   (setq kws (strcat kws "All None Redo"))
+  ;; The default is a LAZTUNE knob, and LAZTUNE and LAZBACKUP put their
+  ;; values in AFTER the load-time check near the top of the file, so it
+  ;; is checked again here where it is used.  A "tight" or a "4" would
+  ;; otherwise make Enter keep no fit at all: every outline erased, no
+  ;; report, no bottom question, and nothing said.
+  (if (= (type defl) 'INT) (setq defl (itoa defl)))
+  (if (not (member defl nums))
+    (progn
+      (princ (strcat "\n  (the default-fit setting"
+                     (if (= (type defl) 'STR)
+                       (strcat " \"" defl "\"")
+                       "")
+                     " is not one of 1-" (itoa nfit)
+                     " - Enter keeps fit 2)"))
+      (setq defl "2")))
   ;; every candidate is judged against the distance the user typed (or,
   ;; in SIMPABHD, the one the table is read against), so "off the line"
   ;; means the same thing in every row
@@ -3059,10 +3180,23 @@
         ;; no keyword typed: give them a click, and fall back to the
         ;; standing default
         (progn
-          (setq sel (entsel (strcat "\n  Pick the outline to keep (or"
-                                    " Enter for " defl "): ")))
-          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
-          (if lzd:watch (lzd:watch sel) sel)
+          ;; entsel answers nil for Enter AND for a click that landed
+          ;; between the thin preview lines; ERRNO 7 tells them apart.
+          ;; Without asking again, a near-miss on fit 3 quietly kept the
+          ;; default and erased the one they reached for.  ERRNO is
+          ;; sticky, so it is cleared before each pick it is read after
+          (setq sel 'RETRY)
+          (while (eq sel 'RETRY)
+            (vl-catch-all-apply 'setvar (list "ERRNO" 0))
+            (setq sel (entsel (strcat "\n  Pick the outline to keep (or"
+                                      " Enter for " defl "): ")))
+            (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
+            (if lzd:watch (lzd:watch sel) sel)
+            (if (and (null sel) (= 7 (getvar "ERRNO")))
+              (progn
+                (princ (strcat "\n  (nothing there - click one of the"
+                               " outlines, or press Enter for " defl ")"))
+                (setq sel 'RETRY))))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -3100,7 +3234,16 @@
          (princ (strcat "\nAll " (strcase word T)
                         " erased - nothing was added to the drawing.")))
         (T
-         (setq idx (atoi pick) i 1)
+         (setq idx (atoi pick))
+         ;; a number no row carries would match nothing below, and the
+         ;; losers loop would then erase every fit - so it never gets
+         ;; that far unannounced
+         (if (not (member pick nums))
+           (progn
+             (princ (strcat "\n  (\"" pick "\" is not one of the "
+                            (strcase word T) " - keeping " defl ")"))
+             (setq pick defl idx (atoi defl))))
+         (setq i 1)
          (foreach v vars
            (if (= i idx)
              (setq keep v)
@@ -4425,7 +4568,9 @@
            (if (pf:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
-               (setq wp1 (cal:2d wp1) best nil bd nil)
+               ;; a UCS click against walls held in world numbers:
+               ;; untranslated, a moved UCS removed some other wall
+               (setq wp1 (cal:2d (trans wp1 1 0)) best nil bd nil)
                (foreach w pf-walls
                  (setq d (pf:seg-dist wp1 (list (car w) (cadr w) 0.0)))
                  (if (or (null bd) (< d bd)) (setq best w bd d)))
@@ -4903,7 +5048,11 @@
               ext (cdr (assoc 210 ed))
               i   (1+ i))
         ;; geometry drawn in a tilted UCS reads back in its own plane,
-        ;; so a flat 2D fit of it would be wrong - count and warn
+        ;; so a flat 2D fit of it would be wrong - count and warn.  The
+        ;; plane seen from below, (0 0 -1), is no tilt: the outline's
+        ;; ends (pf:ent-segs) and a point block's insertion (pf:ins-w)
+        ;; are both taken to world, so it is neither warned about nor
+        ;; mirrored
         (if (and ext (< (abs (caddr ext)) 0.999)) (setq nocs (1+ nocs)))
         (cond
           ;; survey points stored as block references (e.g. "ab_pt"):
@@ -4913,7 +5062,7 @@
           ;; blocks are never mistaken for perimeter geometry.
           ((and (= typ "INSERT")
                 (= (strcase (cdr (assoc 2 ed))) (strcase *PF-POINT-BLOCK*)))
-           (pf:add-point (cal:2d (cdr (assoc 10 ed)))
+           (pf:add-point (cal:2d (pf:ins-w ed))
                          (pf:block-number en)))
           ;; curve types we cannot fit, sitting on the POOL layer: count
           ;; them so the user gets told what to do, instead of a
@@ -4934,7 +5083,7 @@
            (pf:add-point (cal:2d (cdr (assoc 10 ed))) nil))
           ;; any other block dropped on the POINTS layer -> a point too
           ((and (= typ "INSERT") (= lay (strcase *PF-POINT-LAYER*)))
-           (pf:add-point (cal:2d (cdr (assoc 10 ed)))
+           (pf:add-point (cal:2d (pf:ins-w ed))
                          (pf:block-number en)))))
       (if (> nunsup 0)
         (princ (strcat "\n" cmd ": warning - " (itoa nunsup)
@@ -5405,7 +5554,7 @@
           ;; ab_pt blocks are survey points wherever they sit
           ((and (= typ "INSERT")
                 (= (strcase (cdr (assoc 2 ed))) (strcase *PF-POINT-BLOCK*)))
-           (pf:add-point (cal:2d (cdr (assoc 10 ed)))
+           (pf:add-point (cal:2d (pf:ins-w ed))
                          (pf:block-number en)))
           ;; a plain POINT counts on any layer here - the selection
           ;; is explicit, so there is no guessing involved
@@ -5414,7 +5563,7 @@
           ;; other blocks only count as points on the points layer
           ((= typ "INSERT")
            (if (= lay (strcase *PF-POINT-LAYER*))
-             (pf:add-point (cal:2d (cdr (assoc 10 ed)))
+             (pf:add-point (cal:2d (pf:ins-w ed))
                            (pf:block-number en))))
           ;; ABHD's own scaffolding and results must never be read
           ;; back as perimeter: miss rings, dashed markers, and an
@@ -5466,7 +5615,7 @@
                          ed  (entget en)
                          typ (cdr (assoc 0 ed))
                          i   (1+ i))
-                   (pf:add-point (cal:2d (cdr (assoc 10 ed)))
+                   (pf:add-point (cal:2d (pf:ins-w ed))
                                  (if (= typ "INSERT")
                                    (pf:block-number en))))))
              (setq dpts (if pts (cal:dedupe pts *PF-EXACT-EPS*))
@@ -5706,7 +5855,10 @@
       ;; runs a tutorial, got an empty tour.  pf:compare gates the same
       ;; layer for the same reason
       (cal:ensure-layer *PF-OUT-LAYER* *PF-OUT-COLOUR*)
-      (setq cp   (cal:2d cp)
+      ;; the click is in the drafter's UCS and the tour is entmade in
+      ;; world numbers - taken raw, a moved UCS drew it away from the spot
+      ;; that was picked for it
+      (setq cp   (cal:2d (trans cp 1 0))
             npt  0
             pf-nmoved 0
             tour (pf:tut-survey cp)

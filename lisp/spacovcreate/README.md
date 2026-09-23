@@ -66,7 +66,10 @@ Three ways to answer, and the third is the one that matters:
 * **Click the Spa Cover Details block** and its `GRADE` and `TAPER`
   tags are read (`Taper: 4-2 Flat` and `4-2` are the same answer -- the
   value is matched as a substring, so a tag nobody trimmed still
-  reads). A block of some other name is read anyway, and says so.
+  reads). A block of some other name is read anyway, and says so. A
+  click that hits **nothing** is not a Skip: it says `Nothing there`
+  and asks again, so a pick just beside the block cannot quietly
+  become a Standard 4-2.
 * **`Type`** and type the taper: `3-2`, `4-2`, `4-3`, `5-3`, `5-4`,
   `3-3` or `1-3/8`.
 * **`Skip`, or just Enter** -- and a **Standard 4-2 is assumed**, the

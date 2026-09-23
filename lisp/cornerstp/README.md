@@ -33,10 +33,14 @@ Common to all three:
   feet, and `*cs-drop-ladder*`, whole inches -- and the tape takes
   over the moment it can be built, the finer offer being the better
   one. Click a row and that is the answer; type one and it reads the
-  way `DIMSTAMP` reads (`24`, `24.5`, `24 1/8`, `2'`, `1'4-1/2"`, kept
-  exactly as typed); click empty space and it is the first of two
-  points to measure between, as `getdist` always offered. Enter, `Back`
-  and `Same` mean what they always did. The prompt's wording does not
+  way `DIMSTAMP` reads (`24`, `24.5`, `24-1/8`, `2'`, `1'4-1/2"`, kept
+  exactly as typed). Write a fraction with a dash: the prompt also
+  takes a click, so the spacebar is Enter there -- `24 1/8` enters
+  `24` and hands the `1/8` to the next question, which takes it
+  without a word (in CORNERSTP, a step width of 1/8"). Click empty
+  space and it is the first of two points to measure between, as
+  `getdist` always offered. Enter, `Back` and `Same` mean what they
+  always did. The prompt's wording does not
   change, so the `LAZSTEP` form is untouched. The ruler is scratch on
   the current layer, down again before the width prompt (which cannot
   take it) and before the profile's pick, and swept on every way out,
@@ -70,7 +74,13 @@ Common to all three:
   closes the run: it has no riser behind it, so it goes over to
   AUTOBEAD as a step line (it still works as a breakline) but is held
   back there unbeaded. `None` at the side-wall question leaves the
-  walls bare and beads the step faces only. AUTOBEAD does the work on
+  walls bare and beads the step faces only. `Some` asks for the step
+  numbers -- `1 3`, `1, 3 and 4`, or a range, `1-3`, as PERPPTS takes
+  one -- reads back the steps it took, names any number this run did
+  not draw, and asks again (`B` steps back) when nothing in the answer
+  names a step drawn, rather than beading every wall. An answer it
+  cannot read at all (`1 thru 3`, or a number past 999) is said to be
+  unreadable and asked again the same way. AUTOBEAD does the work on
   its own rules (2" toward the click, onto its `Bead Track` layer), so
   `AUTOBEAD.lsp` has to be loaded; when it is not, the run says so and
   finishes without beading. The beads are their own undo group, so one
@@ -263,6 +273,11 @@ without editing this file.
   contingencies: UNDO off, the dim styles missing, a dim layer that
   cannot be drawn on, a frozen current layer, AUTOBEAD absent, and
   selections that cannot be made into a run.
+* `python3 tests/test_fix_steps.py` -- the bead pass: step numbers
+  (ranges, the readback, a number not drawn, an answer that names no
+  step asked again, off a sheet too), a bead failure filed under the
+  step run with the form store spent, and AUTOBEAD's own handler,
+  OFFSET settings and tutorial demo.
 
 Each VM-driven one reruns against the grouped build with
 `CALOFIN_LISP_ROOT=shared`.

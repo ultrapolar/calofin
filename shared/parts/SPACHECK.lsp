@@ -81,15 +81,23 @@
 ;;;      write nothing and say NEEDS UPDATING instead.  The block is
 ;;;      looked for in the selection and then across the drawing;
 ;;;      with none in reach the report says the date was not checked
-;;;      rather than flagging it.  LITESPACHECKSCAN keeps this one.
+;;;      rather than flagging it.  With several, the one nearest the
+;;;      spa is read, named, and never written.  LITESPACHECKSCAN
+;;;      keeps this one.
 ;;;
 ;;;   8. THE TITLE BLOCK.  Everything on the border layer is measured
 ;;;      together, so a frame drawn as one polyline and one drawn as
-;;;      four lines both measure the same.  A spa sheet's title block is
-;;;      exactly 0.6x the liner block: the liner nominal is 704 x
-;;;      543.625, so the spa nominal is 422.4 x 326.175.  Anything else
-;;;      is reported with the factor it actually came out at, and a
-;;;      border out of proportion is reported separately as STRETCHED.
+;;;      four lines -- corners closed or left a little open -- both
+;;;      measure the same; one frame per sheet: with several sheets,
+;;;      the one around or nearest the spa.  A border not in the
+;;;      selection is looked for in the space the drafter is working in
+;;;      only (model space from a layout viewport), unlike the Tech
+;;;      Title in 7, which may live in paper space.  A spa
+;;;      sheet's title block is exactly 0.6x the liner block: the liner
+;;;      nominal is 704 x 543.625, so the spa nominal is 422.4 x
+;;;      326.175.  Anything else is reported with the factor it actually
+;;;      came out at, and a border out of proportion is reported
+;;;      separately as STRETCHED.
 ;;;
 ;;;   9. A SPACHECK REPORT (MTEXT) is placed to the RIGHT of the
 ;;;      drawing, sized to scale with it: a large title, the date and
@@ -113,7 +121,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.20")
+(setq *spacheck-version* "v1.21")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -350,6 +358,21 @@
     (setq out (if out (strcat out sep s) s)))
   (if out out ""))
 
+;; "MM/DD/YYYY HH:MM" off the computer clock, for the report's stamp --
+;; the sheet's own MM/DD/YYYY, the form the Tech Title date is held to.
+;; CDATE is decoded arithmetically, as spachk:today-mdy does: rtos of
+;; it is trimmed by DIMZIN 8 (which SPA sets), so a sliced
+;; (rtos CDATE 2 6) read "20260923.1" at ten o'clock and stamped " 1:".
+;; Kept local rather than swapped for cal:datestr, whose YYYY-MM-DD is
+;; the other review tools' form -- the one-file build printed that one
+;; and the standalone this, for the same report.
+(defun spachk:datestr ( / d tt)
+  (setq d  (getvar "CDATE")
+        tt (- d (fix d)))
+  (strcat (spachk:mdy-str (spachk:today-mdy)) " "
+          (spachk:pad2 (fix (+ (* tt 100) 1e-6))) ":"
+          (spachk:pad2 (rem (fix (+ (* tt 10000) 1e-4)) 100))))
+
 ;; Everything after the last colon, trimmed: "Taper: 4-2" -> "4-2".
 (defun spachk:aftercolon (s / i out)
   (setq i (strlen s) out s)
@@ -449,6 +472,65 @@
        (>= (- (cadar inner) (cadar outer)) (- slack))
        (>= (- (caadr outer) (caadr inner)) (- slack))
        (>= (- (cadadr outer) (cadadr inner)) (- slack))))
+
+;; Do two boxes overlap or touch, with slack?
+(defun spachk:touch-p (a b slack)
+  (and (<= (caar a) (+ (caadr b) slack)) (<= (caar b) (+ (caadr a) slack))
+       (<= (cadar a) (+ (cadadr b) slack)) (<= (cadar b) (+ (cadadr a) slack))))
+
+(defun spachk:bbunion (a b)
+  (list (list (min (caar a) (caar b)) (min (cadar a) (cadar b)))
+        (list (max (caadr a) (caadr b)) (max (cadadr a) (cadadr b)))))
+
+;; Boxes that come within slack of each other merged into one, until
+;; no two left do: one sheet's frame -- a polyline, four lines, a double
+;; rule -- comes out as one box, and each separate sheet as a box of its
+;; own.  The slack is what tells a sheet from a gap: a hand-drawn frame's
+;; corners are open by a thousandth or half a unit, sheets sit hundreds
+;; apart, and joining only boxes that met to 1e-4 split one correct
+;; four-line frame into four "borders" and measured a single line.
+(defun spachk:clusters (bbs slack / out hit rest merged bb c)
+  (setq merged T)
+  (while merged
+    (setq merged nil out nil)
+    (foreach bb bbs
+      (setq hit bb rest nil)
+      (foreach c out
+        (if (spachk:touch-p c hit slack)
+          (setq hit (spachk:bbunion c hit) merged T)
+          (setq rest (cons c rest))))
+      (setq out (cons hit rest)))
+    (setq bbs out))
+  bbs)
+
+;; How far a point is from a box: 0 inside it.
+(defun spachk:box-dist (p bb / dx dy)
+  (setq dx (max 0.0 (- (caar bb) (car p)) (- (car p) (caadr bb)))
+        dy (max 0.0 (- (cadar bb) (cadr p)) (- (cadr p) (cadadr bb))))
+  (sqrt (+ (* dx dx) (* dy dy))))
+
+;; The middle of the spa being checked -- its cover outline, or failing
+;; that the whole selection -- which is what "nearest the spa" means
+;; when a drawing holds more than one sheet.  nil with nothing to measure.
+(defun spachk:focus (ss / bb ents i)
+  (setq bb (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*)))
+  (if (and (null bb) ss)
+    (progn
+      (setq i 0)
+      (repeat (sslength ss)
+        (setq ents (cons (ssname ss i) ents) i (1+ i)))
+      (setq bb (spachk:bbox-of ents))))
+  (if bb
+    (list (* 0.5 (+ (caar bb) (caadr bb)))
+          (* 0.5 (+ (cadar bb) (cadadr bb))))))
+
+;; The space the drafter is working in, as group 410 names it.  CTAB
+;; alone is wrong from inside a layout viewport: it names the layout
+;; while every pick lands in model space.
+(defun spachk:space ()
+  (if (and (= 0 (getvar "TILEMODE")) (= 1 (getvar "CVPORT")))
+    (getvar "CTAB")
+    "Model"))
 
 (defun spachk:closed-p (ent / f)
   (cond ((member (spachk:etype ent) spachk:*closed-types*) t)
@@ -655,8 +737,13 @@
                      (rtos tw) " x " (rtos th) ")") nil))))))))
 
 ;; Everything on the border layer, from the selection when it holds the
-;; border and from the whole drawing when it does not.
-(defun spachk:border-box (ss / ents ss2 i e out)
+;; border and from the space the drafter is in when it does not.  A
+;; drawing with more than one sheet has one frame per sheet, and all of
+;; them measured together gave a verdict for a box no sheet has -- two
+;; correct sheets side by side read STRETCHED.  So the frames are told
+;; apart (spachk:clusters) and the one around, or nearest, the spa is
+;; measured.  Returns (box . number-of-frames), nil with no border.
+(defun spachk:border-box (ss / ents ss2 i e bb bbs cl f best bestd d)
   (setq ents nil i 0)
   (if ss
     (repeat (sslength ss)
@@ -665,11 +752,37 @@
         (setq ents (cons e ents)))))
   (if (null ents)
     (progn
-      (setq ss2 (ssget "_X" (list (cons 8 spachk:*border-layer*))) i 0)
+      (setq ss2 (ssget "_X" (list (cons 8 spachk:*border-layer*)
+                                  (cons 410 (spachk:space))))
+            i   0)
       (if ss2
         (repeat (sslength ss2)
           (setq e (ssname ss2 i) i (1+ i) ents (cons e ents))))))
-  (if ents (spachk:bbox-of ents)))
+  (foreach e ents
+    (if (setq bb (cal:bbox-ent e)) (setq bbs (cons bb bbs))))
+  ;; the slack: 2% of a spa sheet's width (8.4 units) -- far wider than
+  ;; any corner a drafter leaves open, far narrower than the room
+  ;; between two sheets
+  (setq cl (spachk:clusters bbs (* 0.02 spachk:*title-frac*
+                                   spachk:*liner-w*))
+        f  (if (cdr cl) (spachk:focus ss)))
+  (foreach bb cl
+    (setq d (if f (spachk:box-dist f bb) 0.0))
+    (if (or (null bestd) (< d bestd))
+      (setq bestd d best bb)))
+  ;; a nearest "frame" with no size of its own -- one stray line, or a
+  ;; frame whose corners are open wider than the slack -- says nothing
+  ;; about any sheet, and reporting it as the border read a correct
+  ;; sheet as broken.  Everything on the layer is then measured
+  ;; together, which is what a lone frame always was.
+  (if (and (cdr cl)
+           (or (<= (spachk:bw best) spachk:*tiny*)
+               (<= (spachk:bh best) spachk:*tiny*)))
+    (progn
+      (setq best (car cl))
+      (foreach bb (cdr cl) (setq best (spachk:bbunion best bb)))
+      (setq cl (list best))))
+  (if best (cons best (length cl))))
 
 ;;; ======================================================================
 ;;;  THE AUDIT
@@ -1220,12 +1333,19 @@
 
 ;;; --- 6. the title block -------------------------------------------------
 
-(defun spachk:audit-title (ss / bb v)
-  (setq bb (spachk:border-box ss)
-        v  (spachk:title-verdict bb))
+(defun spachk:audit-title (ss / r v)
+  (setq r (spachk:border-box ss)
+        v (spachk:title-verdict (car r)))
   (spachk:res
-    (list (spachk:row (strcat "Title block: " (car v))
-                      (if (cdr v) nil 1)))
+    (append
+      (list (spachk:row (strcat "Title block: " (car v))
+                        (if (cdr v) nil 1)))
+      (if (and r (> (cdr r) 1))
+        (list (spachk:row (strcat "Title block: " (itoa (cdr r))
+                                  " separate borders on layer '"
+                                  spachk:*border-layer*
+                                  "' - the one nearest the spa was measured")
+                          2))))
     nil))
 
 ;;; --- feet-and-inch text -------------------------------------------------
@@ -1470,33 +1590,47 @@
   (if done (entupd ent))
   done)
 
-;; The Tech Title block: the first INSERT whose name carries it, looked
-;; for in the selection and then across the drawing, since the title
-;; block sits outside the area someone highlights as often as not.
-(defun spachk:find-title (ss / pat i e out ss2)
-  (setq pat (strcat "*" (spachk:squash spachk:*techtitle-block*) "*") i 0)
+;; Every Tech Title block in a selection set, in order.
+(defun spachk:titles-in (ss pat / i e out)
+  (setq i 0)
   (if ss
     (repeat (sslength ss)
       (setq e (ssname ss i) i (1+ i))
-      (if (and (null out) (entget e) (= "INSERT" (spachk:etype e))
+      (if (and (entget e) (= "INSERT" (spachk:etype e))
                (wcmatch (spachk:squash (spachk:block-name e)) pat))
-        (setq out e))))
-  (if (null out)
-    (progn
-      (setq ss2 (ssget "_X" '((0 . "INSERT"))) i 0)
-      (if ss2
-        (repeat (sslength ss2)
-          (setq e (ssname ss2 i) i (1+ i))
-          (if (and (null out)
-                   (wcmatch (spachk:squash (spachk:block-name e)) pat))
-            (setq out e))))))
-  out)
+        (setq out (cons e out)))))
+  (reverse out))
+
+;; The Tech Title block, looked for in the selection and then across
+;; the drawing, since the title block sits outside the area someone
+;; highlights as often as not.  Returns (title number-in-reach).  Of
+;; several, the one nearest the spa is read: the FIRST one found used
+;; to win, so in a drawing with two sheets the date was read off --
+;; and SPACHECK wrote today's into -- whichever sheet's title the
+;; database listed first.
+(defun spachk:title-pick (ss / pat all f best bestd d e p)
+  (setq pat (strcat "*" (spachk:squash spachk:*techtitle-block*) "*")
+        all (spachk:titles-in ss pat))
+  (if (null all)
+    (setq all (spachk:titles-in (ssget "_X" '((0 . "INSERT"))) pat)))
+  (setq f (if (cdr all) (spachk:focus ss)))
+  (foreach e all
+    (setq p (spachk:dxf 10 e)
+          d (if (and f p) (distance f (list (car p) (cadr p))) 0.0))
+    (if (or (null bestd) (< d bestd))
+      (setq bestd d best e)))
+  (if best (list best (length all))))
 
 ;; With no Tech Title in reach there is nothing to read, and that is
 ;; said plainly rather than flagged -- a spa sheet may well be checked
-;; on its own, away from the sheet it will sit on.
-(defun spachk:audit-date (ss dofix / blk raw bad wrote)
-  (setq blk (spachk:find-title ss))
+;; on its own, away from the sheet it will sit on.  With more than one
+;; in reach the nearest is read and named, and nothing is WRITTEN: the
+;; nearest is a good guess for reading and a bad one for rewriting
+;; another sheet's title block.
+(defun spachk:audit-date (ss dofix / pick blk n raw bad wrote p)
+  (setq pick (spachk:title-pick ss)
+        blk  (car pick)
+        n    (cadr pick))
   (if (null blk)
     (spachk:res
       (list (spachk:row (strcat "Tech Title: no '" spachk:*techtitle-block*
@@ -1512,23 +1646,36 @@
       ;; writes today's over it in the same MM/DD/YYYY form, keeping any
       ;; label in front of it.  Only an attribute can be written, and
       ;; only when the caller is the fixing command -- the scans read.
-      (if (and bad dofix)
+      (if (and bad dofix (= n 1))
         (setq wrote (spachk:set-attrib blk spachk:*date-tag*
                                      (spachk:date-fixed (if raw raw "")))))
+      (setq p (spachk:dxf 10 blk))
       (spachk:res
-        (list (spachk:row
-                (cond
-                  (wrote (strcat "Tech Title: " spachk:*date-tag* " " bad
-                               " - UPDATED to "
-                               (spachk:mdy-str (spachk:today-mdy))))
-                  ((and bad dofix)
-                   (strcat "Tech Title: " spachk:*date-tag* " " bad
-                           " - fix it in the block"))
-                  (bad (strcat "Tech Title: " spachk:*date-tag* " " bad
-                               " - NEEDS UPDATING (run SPACHECK)"))
-                  (t (strcat "Tech Title: " spachk:*date-tag* " = '"
-                             (cal:trim (spachk:datenorm raw)) "' - OK")))
-                (if bad 1 nil)))
+        (append
+          (if (> n 1)
+            (list (spachk:row
+                    (strcat "Tech Title: " (itoa n) " '"
+                            spachk:*techtitle-block* "' blocks in reach -"
+                            " read the one at " (rtos (car p) 2 1) ","
+                            (rtos (cadr p) 2 1) ", nearest the spa")
+                    2)))
+          (list (spachk:row
+                  (cond
+                    (wrote (strcat "Tech Title: " spachk:*date-tag* " " bad
+                                 " - UPDATED to "
+                                 (spachk:mdy-str (spachk:today-mdy))))
+                    ((and bad (> n 1))
+                     (strcat "Tech Title: " spachk:*date-tag* " " bad
+                             " - NOT UPDATED: highlight the spa with its"
+                             " own Tech Title and run SPACHECK"))
+                    ((and bad dofix)
+                     (strcat "Tech Title: " spachk:*date-tag* " " bad
+                             " - fix it in the block"))
+                    (bad (strcat "Tech Title: " spachk:*date-tag* " " bad
+                                 " - NEEDS UPDATING (run SPACHECK)"))
+                    (t (strcat "Tech Title: " spachk:*date-tag* " = '"
+                               (cal:trim (spachk:datenorm raw)) "' - OK")))
+                  (if bad 1 nil))))
         nil))))
 
 ;;; ======================================================================
@@ -1678,7 +1825,7 @@
                                       (readonly "SPACHECKSCAN REPORT")
                                       (t "SPACHECK REPORT")))
                     "\\P"
-                    (spachk:small (strcat (cal:datestr)
+                    (spachk:small (strcat (spachk:datestr)
                                           "  -  SPACHECK "
                                           *spacheck-version*))
                     "\\P"
@@ -1738,54 +1885,105 @@
 (defun spachk:regapp ()
   (if (not (tblsearch "APPID" "SPACHECK")) (regapp "SPACHECK")))
 
+;; T when the layer named is LOCKED, where entmod answers nil and
+;; entdel refuses.
+(defun spachk:layer-locked-p (lay / rec)
+  (setq rec (if lay (tblsearch "LAYER" lay)))
+  (and rec (= 4 (logand 4 (cdr (assoc 70 rec))))))
+
+;; T when ent sits on a LOCKED layer.
+(defun spachk:locked-p (ent)
+  (spachk:layer-locked-p (spachk:layer ent)))
+
+;; The tail a completion line carries for writes AutoCAD refused:
+;; ", 2 NOT recoloured (their layers are locked)".  n were refused and
+;; nlock of them sit on a locked layer -- a refusal is blamed on a lock
+;; only when the layer really is locked, since entmod answers nil for
+;; other reasons too.  "" when nothing was refused.
+(defun spachk:refused-tail (n nlock what)
+  (if (> n 0)
+    (strcat ", " (itoa n) " NOT " what
+            (cond ((<= nlock 0) "")
+                  ((and (= nlock n) (= n 1)) " (its layer is locked)")
+                  ((= nlock n) " (their layers are locked)")
+                  (t (strcat " (" (itoa nlock) " on "
+                             (if (= nlock 1) "a locked layer"
+                                             "locked layers")
+                             ")"))))
+    ""))
+
 ;; Remember the entity's own colour in xdata so SPACHECKRESCUE can put
 ;; it back even after a crash; an existing stash (from an interrupted
-;; run - the TRUE original) is never overwritten.
-(defun spachk:stash-color (ent col / ed cur)
+;; run - the TRUE original) is never overwritten.  Non-nil only when
+;; the item really went red: on a locked layer both writes are refused,
+;; and the walk used to count "1 item marked red" over an item that
+;; never changed colour.  The stash and the colour go in together or
+;; not at all -- a colour with no stash is one RESCUE cannot put back.
+(defun spachk:stash-color (ent col / ed cur ok fresh)
   (spachk:regapp)
   (setq ed  (entget ent '("SPACHECK"))
-        cur (cdr (assoc 62 (entget ent))))
-  (if (and ed (not (assoc -3 ed)))
-    (entmod (append ed (list (list -3 (list "SPACHECK"
-                                            '(1000 . "COLOR")
-                                            (cons 1071 (if cur cur 256))))))))
+        cur (cdr (assoc 62 (entget ent)))
+        ok  (and ed (not (spachk:locked-p ent))))
+  (if (and ok (not (assoc -3 ed)))
+    (setq fresh T
+          ok    (entmod (append ed (list (list -3 (list "SPACHECK"
+                                                  '(1000 . "COLOR")
+                                                  (cons 1071
+                                                        (if cur cur 256)))))))))
   ;; now recolour it
-  (setq ed (entget ent))
-  (entmod (if (assoc 62 ed)
-              (subst (cons 62 col) (assoc 62 ed) ed)
-              (append ed (list (cons 62 col)))))
-  (entupd ent))
+  (if ok
+    (progn
+      (setq ed (entget ent)
+            ok (entmod (if (assoc 62 ed)
+                           (subst (cons 62 col) (assoc 62 ed) ed)
+                           (append ed (list (cons 62 col))))))
+      ;; a stash this call wrote for a colour that did not go in comes
+      ;; out again, so RESCUE never counts an item it never changed
+      (if (and fresh (not ok))
+        (progn
+          (setq ed (entget ent '("SPACHECK")))
+          (entmod (subst (list -3 (list "SPACHECK")) (assoc -3 ed) ed))))
+      (entupd ent)))
+  ok)
 
-;; Put a stashed colour back and drop the xdata.  T when it did.
-(defun spachk:unstash (ent / ed xd old)
+;; Put a stashed colour back and drop the xdata.  T when it did both,
+;; 'refused when the entity's layer would not take the writes -- the
+;; stash is then left in place, so a RESCUE run after the layer is
+;; unlocked still finds it -- and nil when there was nothing stashed.
+(defun spachk:unstash (ent / ed xd old ok)
   (setq ed (entget ent '("SPACHECK"))
         xd (if (assoc -3 ed) (cdadr (assoc -3 ed)) nil))
   (if xd
     (progn
-      (setq old (cdr (assoc 1071 xd)))
-      (if old
+      (setq old (cdr (assoc 1071 xd))
+            ok  (not (spachk:locked-p ent)))
+      (if (and ok old)
         (progn
-          (setq ed (entget ent))
-          (entmod (if (= old 256)
-                      (if (assoc 62 ed)
-                          (vl-remove (assoc 62 ed) ed)
-                          ed)
-                      (if (assoc 62 ed)
-                          (subst (cons 62 old) (assoc 62 ed) ed)
-                          (append ed (list (cons 62 old))))))))
-      (setq ed (entget ent '("SPACHECK")))
-      (entmod (subst (list -3 (list "SPACHECK")) (assoc -3 ed) ed))
-      (entupd ent)
-      T)))
+          (setq ed (entget ent)
+                ok (entmod (if (= old 256)
+                               (if (assoc 62 ed)
+                                   (vl-remove (assoc 62 ed) ed)
+                                   ed)
+                               (if (assoc 62 ed)
+                                   (subst (cons 62 old) (assoc 62 ed) ed)
+                                   (append ed (list (cons 62 old)))))))))
+      (if ok
+        (progn
+          (setq ed (entget ent '("SPACHECK"))
+                ok (entmod (subst (list -3 (list "SPACHECK"))
+                                  (assoc -3 ed) ed)))
+          (entupd ent)))
+      (if ok T 'refused))))
 
 (defun spachk:zoom-ent (ent / bb p1 p2 m)
   (if (setq bb (cal:bbox-ent ent))
     (progn
       (setq m  (* spachk:*zoom-margin*
                   (max (spachk:bw bb) (spachk:bh bb) 1.0))
-            p1 (list (- (caar bb) m) (- (cadar bb) m))
-            p2 (list (+ (caadr bb) m) (+ (cadadr bb) m)))
-      (command "_.ZOOM" "_Window" p1 p2))))
+            p1 (list (- (caar bb) m) (- (cadar bb) m) 0.0)
+            p2 (list (+ (caadr bb) m) (+ (cadadr bb) m) 0.0))
+      ;; the box is WCS and ZOOM reads the current UCS
+      (command "_.ZOOM" "_Window" (trans p1 0 1) (trans p2 0 1)))))
 
 ;;; -------------------- asking ------------------------------------------
 ;;;  The section-4 helpers, embedded under this file's own prefix.
@@ -1832,7 +2030,11 @@
                       " block to " name " (Enter = whole drawing): "))
       (setq ss (ssget))
       (if lzd:watch (lzd:watch ss) ss)))
-  (if (null ss) (setq ss (ssget "_X")))
+  ;; Enter: the space the drafter is working in.  A bare "_X" took every
+  ;; layout's paper-space ink as well, and a sheet border or a paper
+  ;; dimension crossing the spa's coordinates could make a stray point
+  ;; read as attached
+  (if (null ss) (setq ss (ssget "_X" (list (cons 410 (spachk:space))))))
   (if (null ss)
     (prompt "\nNothing to scan.")
     (progn
@@ -1861,7 +2063,7 @@
 ;;; --- SPACHECK: the audits, then a walk of what they flagged ------------
 
 (defun c:SPACHECK ( / *error* oldecho undo-open ss res rows drows ents bb n
-                      e k tot ans marked)
+                      e k tot ans marked nref nlock)
   (defun *error* (msg)
     (cal:sysrestore)
     (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -1881,7 +2083,8 @@
                       " block to SPACHECK (Enter = whole drawing): "))
       (setq ss (ssget))
       (if lzd:watch (lzd:watch ss) ss)))
-  (if (null ss) (setq ss (ssget "_X")))
+  ;; Enter: the space the drafter is working in (see spachk:scan)
+  (if (null ss) (setq ss (ssget "_X" (list (cons 410 (spachk:space))))))
   (if (null ss)
     (prompt "\nNothing to check.")
     (progn
@@ -1900,7 +2103,7 @@
             ents  (caddr res)
             bb    (spachk:bbox-of (spachk:outline-ents ss spachk:*lay-cover*)))
       ;; walk what was flagged, one at a time
-      (setq tot (length ents) k 0 marked 0)
+      (setq tot (length ents) k 0 marked 0 nref 0 nlock 0)
       (if (> tot 0)
         (progn
           (princ (strcat "\n" (itoa tot) " item"
@@ -1917,8 +2120,20 @@
                             "Yes No Skip" "Yes/No/Skip" "No" nil))
                 (cond
                   ((= ans "Yes")
-                   (spachk:stash-color e spachk:*flag-color*)
-                   (setq marked (1+ marked)))
+                   (if (spachk:stash-color e spachk:*flag-color*)
+                     (setq marked (1+ marked))
+                     (progn
+                       (setq nref (1+ nref))
+                       (if (spachk:locked-p e)
+                         (progn
+                           (setq nlock (1+ nlock))
+                           (princ (strcat "\n  On locked layer "
+                                          (spachk:layer e)
+                                          " - listed in the report, NOT"
+                                          " recoloured.")))
+                         (princ (strcat "\n  AutoCAD would not recolour"
+                                        " it (layer " (spachk:layer e)
+                                        ") - listed in the report."))))))
                   ((= ans "Skip") (setq k tot))))))))
       (setq n (spachk:write-report rows drows bb nil nil))
       (command "_.ZOOM" "_Extents")
@@ -1941,6 +2156,7 @@
                      (if (= 1 (cadr n)) "y" "ies")
                      "\n" (itoa marked) " item"
                      (if (= 1 marked) "" "s") " marked red"
+                     (spachk:refused-tail nref nlock "recoloured")
                      "\nReport written on layer " spachk:*report-layer*
                      ".  SPACHECKRESCUE puts the colours back."))))
   (if lzd:end (lzd:end "SPACHECK"))
@@ -1948,7 +2164,7 @@
 
 ;;; --- SPACHECKRESCUE: put every colour back -----------------------------
 
-(defun c:SPACHECKRESCUE ( / *error* oldecho ss i e n)
+(defun c:SPACHECKRESCUE ( / *error* oldecho ss i e n r nref nlock kept)
   (defun *error* (msg)
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg)
@@ -1959,20 +2175,36 @@
   (if lzd:begin (lzd:begin "SPACHECKRESCUE" *spacheck-version*))
   (setq oldecho (getvar "CMDECHO"))
   (setvar "CMDECHO" 0)
-  (setq ss (ssget "_X") i 0 n 0)
+  (setq ss (ssget "_X") i 0 n 0 nref 0 nlock 0 kept 0)
   (if ss
     (repeat (sslength ss)
-      (setq e (ssname ss i) i (1+ i))
-      (if (spachk:unstash e) (setq n (1+ n)))))
-  ;; and the report itself
+      (setq e (ssname ss i) i (1+ i)
+            r (spachk:unstash e))
+      (cond ((eq r 'refused)
+             (setq nref (1+ nref))
+             (if (spachk:locked-p e) (setq nlock (1+ nlock))))
+            (r (setq n (1+ n))))))
+  ;; and the report itself -- entdel refuses on a locked layer too,
+  ;; and a refusal is counted rather than allowed to end the run
   (setq ss (ssget "_X" (list (cons 8 spachk:*report-layer*))) i 0)
   (if ss
     (repeat (sslength ss)
-      (entdel (ssname ss i))
+      (setq r (vl-catch-all-apply 'entdel (list (ssname ss i))))
+      (if (or (null r) (vl-catch-all-error-p r)) (setq kept (1+ kept)))
       (setq i (1+ i))))
   (setvar "CMDECHO" oldecho)
+  ;; only what really changed is counted: a colour on a locked layer is
+  ;; still wrong on the sheet, and the drafter has to be told where
   (princ (strcat "\nSPACHECKRESCUE: " (itoa n) " colour"
-                 (if (= 1 n) "" "s") " put back, report removed."))
+                 (if (= 1 n) "" "s") " put back"
+                 (spachk:refused-tail nref nlock "put back")
+                 (if (> nlock 0)
+                   " - unlock and run SPACHECKRESCUE again"
+                   "")
+                 (cond ((= kept 0) ", report removed.")
+                       ((spachk:layer-locked-p spachk:*report-layer*)
+                        ", report NOT removed (its layer is locked).")
+                       (t ", report NOT removed."))))
   (if lzd:end (lzd:end "SPACHECKRESCUE"))
   (princ))
 
@@ -2030,7 +2262,8 @@
     ""
     "6. THE TITLE BLOCK"
     (strcat "   Everything on layer '" spachk:*border-layer*
-            "' measured together.")
+            "' measured together, one frame")
+    "     per sheet: with several sheets, the one nearest the spa."
     (strcat "   A spa title block is exactly "
             (rtos spachk:*title-frac* 2 2) "x the liner block "
             (rtos spachk:*liner-w*) " x " (rtos spachk:*liner-h*))
@@ -2080,15 +2313,22 @@
     (entmakex (list '(0 . "LINE") '(100 . "AcDbEntity") (cons 8 layer)
                     '(100 . "AcDbLine") (cons 10 p) (cons 11 q)))))
 
-;; An aligned dim carrying a note, drawn the way SPA draws one.
+;; An aligned dim carrying a note, drawn the way SPA draws one.  The
+;; points are WORLD, like everything else the demo entmakes, and a
+;; command reads the current UCS -- so each goes through trans, or
+;; under a moved UCS every practice dim floated off its rectangle and
+;; the scan reported faults nobody planted.
 (defun spachk:demo-dim (p1 p2 at note style / e)
   (spachk:dimstyle-set style)
   (setvar "CLAYER" spachk:*lay-dim*)
   ;; _non on every point: the whole demo turns on a dim that DISAGREES
   ;; with the geometry under it, and a live osnap would quietly pull it
   ;; onto the true corner and plant nothing at all
-  (command "_.DIMALIGNED" "_non" p1 "_non" p2 "_T" (strcat "<>" note)
-           "_non" at)
+  (command "_.DIMALIGNED"
+           "_non" (trans (list (car p1) (cadr p1) 0.0) 0 1)
+           "_non" (trans (list (car p2) (cadr p2) 0.0) 0 1)
+           "_T" (strcat "<>" note)
+           "_non" (trans (list (car at) (cadr at) 0.0) 0 1))
   (if (setq e (entlast)) (spachk:demo-ent e))
   e)
 
@@ -2181,7 +2421,12 @@
   (if (null base)
     (princ "\nNo spot picked - demo skipped.")
     (progn
-      (setq x (car base) y (cadr base))
+      ;; the pick is a UCS point; the demo is built in WORLD numbers
+      ;; (entmake takes nothing else) and each dim point goes back to the
+      ;; UCS for its command in spachk:demo-dim
+      (setq base (trans base 1 0)
+            x    (car base)
+            y    (cadr base))
       (spachk:dimstysave)
       ;; only when undo is recording - _Begin in a drawing with UNDO
       ;; off (bit 1 of UNDOCTL clear) errors out of the command
@@ -2270,7 +2515,15 @@
                                  "Yes No" "Yes/No" "Yes" nil))
         (progn
           ;; the real command, not a rehearsal of it -- so it asks for a
-          ;; selection exactly as it always does
+          ;; selection exactly as it always does.  And it has a handler of
+          ;; its own: an Esc inside it runs THAT one and unwinds straight
+          ;; to the command line, past TUTORIALSPACHECK's, which left the
+          ;; drafter on the dimension layer with CMDECHO off.  So the
+          ;; tutorial's oldlay and oldecho -- seen here by dynamic scope,
+          ;; like undo-open above -- go back BEFORE the hand-off.  The
+          ;; group and the dim style are already closed.
+          (if oldlay (setvar "CLAYER" oldlay))
+          (if oldecho (setvar "CMDECHO" oldecho))
           (princ (strcat "\n(SPACHECKSCAN asks what to scan - press Enter"
                          " to take the whole drawing.)"))
           (c:SPACHECKSCAN)))

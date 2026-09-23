@@ -72,8 +72,12 @@ about the same base point.
   micron on a survey in inches. The record writes coordinates through `rtos`
   at `*xft-num-prec*` decimals, so one string keeps the whole record readable
   in a DXF dump; the tests measure that figure rather than assuming it.
-- **A locked `POINTS` stops the run**, and the message names it, exactly as
-  `XFTCONV`'s does. A layer the rebuild writes *to* is an output layer and is
+- **Locked layers stop the run**, and the message names them, exactly as
+  `XFTCONV`'s does: any layer carrying anything highlighted, `POINTS`
+  included. The erase refuses a block on a locked layer, and the scale back
+  passes over everything else on one -- which the run used to count as
+  scaled back all the same, leaving it twelve times too big beside a survey
+  back in feet. A layer the rebuild writes *to* is an output layer and is
   unlocked for good instead (STANDARDS 5) -- including one that was `PURGE`d
   since the conversion, which is re-created.
 - **`*xft-record*` `nil` turns the record off.** `XFTCONV` then converts
@@ -120,7 +124,9 @@ Scaling 39 objects by 12.0000 about the middle of the selection ...
 The whole run is a single `U` step, so one undo puts the drawing back if the
 import turns out to be worse than usual. (In a drawing with undo recording
 switched off -- `UNDO` `Control` `None` -- it runs without a group rather than
-dying on the group it could not open; it used to.)
+dying on the group it could not open; it used to. A run that fails part-way
+there says so, since `U` has nothing to take back.) An Esc at the highlight
+changes nothing and says nothing more.
 
 Notes:
 
@@ -139,9 +145,19 @@ Notes:
 - **A marker with no name nearby** still gets a block, with a blank number.
 - Points nested inside a block reference are not touched — explode first.
 - **Locked layers stop the run**, and the message names the ones that are
-  actually in the way: any layer carrying something highlighted that the swap
-  has to erase, plus `POINTS`. A locked layer with none of the selection on it
-  is not in the way and is not mentioned.
+  actually in the way: any layer carrying ANYTHING highlighted, plus `POINTS`.
+  All of it, not only the survey's own layers, because the ×12 applies to the
+  whole highlight and `SCALE` quietly passes over what sits on a locked layer
+  -- with Enter-for-everything a locked title-block or note layer would stay at
+  its old size and position while the report read as a clean conversion. A
+  locked layer with none of the selection on it is not in the way and is not
+  mentioned. A locked layer that is not part of the survey -- a north arrow,
+  a sheet border -- does not need unlocking: unlocked, it would be scaled ×12
+  with the survey. Highlight only the survey instead, and the run says so.
+- **Enter means the space you are working in.** From inside a layout's
+  viewport that is model space -- the survey behind the viewport, not the
+  sheet's own viewport and title block. Only paper space proper (a layout with
+  no viewport active) sweeps the layout.
 - If layer `POINTS` or block `ab_pt` are missing (a bare DXF rather than the
   template), they are created to match the template — a `POINT` at the origin
   plus the `number` attribute definition.
@@ -155,7 +171,7 @@ shop's own conventions.
 
 | variable | default | meaning |
 | --- | --- | --- |
-| `*xft-scale*` | `12.0` | scale factor applied to the whole selection (feet → inches); `1.0` skips the SCALE step |
+| `*xft-scale*` | `12.0` | scale factor applied to the whole selection (feet → inches); `1.0` skips the SCALE step. Anything that is not a positive number -- `SCALE` refuses a zero or a negative and waits for another -- is read as `12.0`, and the run says so |
 | `*xft-block*` | `"ab_pt"` | block that replaces the marker; built to match the template if missing |
 | `*xft-block-layer*` | `"POINTS"` | layer the block goes on; created if missing, repaired if frozen or off |
 | `*xft-block-layer-color*` | `6` | colour a missing `POINTS` is **created** with (magenta, as `SOCONV`, `VSCONV` and `DRONE` create it); an existing layer is never recoloured |

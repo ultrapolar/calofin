@@ -204,8 +204,13 @@
 ;;;
 ;;;  Distances may be typed in the current drawing units, e.g. 6'10-1/2"
 ;;;  as well as plain inches -- or in MILLIMETRES by putting the unit on
-;;;  the number: 600mm, 1524 MM.  Object snaps stay live, so a distance
-;;;  can still be picked off existing geometry instead of typed.
+;;;  the number, touching it: 600mm, 1524mm.  No space: the spacebar is
+;;;  Enter at a distance prompt, so "300 mm" would hand in 300 INCHES
+;;;  and leave the "mm" to answer the next question (one over 30 ft, a
+;;;  spaced "1524 mm" among them, is refused as longer than any spa,
+;;;  typed or off the form, and asked again).  Object snaps stay
+;;;  live, so a distance can still be picked off existing geometry
+;;;  instead of typed.
 ;;;
 ;;;  Each outline is drawn as ONE CLOSED POLYLINE, so the cover and the
 ;;;  water's edge are each a single bounded entity: one click selects
@@ -231,7 +236,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092226 REV31")
+(setq spa:*version* "092226 REV32")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -1115,10 +1120,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -1160,17 +1169,38 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The scratch layer the rows are drawn on, made if it is missing.  A
 ;; layer of its own is what lets a drafter turn the ruler off without
 ;; turning anything of the spa off with it.
-(defun spa:rulerlayer ()
+;; LOCKED is not left alone: entmake draws onto a locked layer but
+;; entdel refuses there, so every ruler drawn stayed in the drawing
+;; for good and each redraw added another copy -- and LAYISO's
+;; lock-and-fade locks this layer with everything else.  It is
+;; calofin scratch, so it is unlocked, said once, and left unlocked.
+(defun spa:rulerlayer ( / ed fl)
   (if (not (tblsearch "LAYER" spa:*ruler-layer*))
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 spa:*ruler-layer*) '(70 . 0) '(62 . 7)
-                   (cons 6 "CONTINUOUS"))))
+                   (cons 6 "CONTINUOUS")))
+    (progn
+      (setq ed (entget (tblobjname "LAYER" spa:*ruler-layer*))
+            fl (cdr (assoc 70 ed)))
+      (if (and fl (= 4 (logand 4 fl))
+               (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed)))
+        (princ (strcat "\nSPA: layer " spa:*ruler-layer*
+                       " was locked - unlocked so the ruler can be"
+                       " taken down again.")))))
   spa:*ruler-layer*)
 
 ;; Take the ruler down -- the one call *error* and the clean exit both
@@ -1259,10 +1289,14 @@
 (defun spa:fclear () (setq spa:*form* nil))
 
 ;; Could V have been typed at a spa:asks prompt of this KIND?  A number
-;; above zero -- every kind's initget refuses zero and negatives -- or
-;; nil, NA, anywhere but on a REQ question, which offers no NA.
+;; above zero -- every kind's initget refuses zero and negatives -- and
+;; no longer than any spa (spa:toobig, which spa:asks refuses, and
+;; which says so), or nil, NA, anywhere but on a REQ question, which
+;; offers no NA.
 (defun spa:fok (kind v)
-  (if (null v) (not (eq kind 'REQ)) (and (numberp v) (> v 0))))
+  (if (null v)
+      (not (eq kind 'REQ))
+      (and (numberp v) (> v 0) (not (spa:toobig v)))))
 
 ;; V as the question would spell it, or nil when the question does not
 ;; accept it at all -- so a form answer the prompt would reject falls
@@ -1405,6 +1439,7 @@
       ((and back (= (type v) 'STR) (member v '("Back" "Undo"))) (setq out 'CAL-BACK))
       ((and (not (eq kind 'REQ)) (= (type v) 'STR) (= v "NA")) (setq out 'SPA-NA))
       ((and (null v) (eq kind 'SUG)) (setq out dflt))   ; Enter took it
+      ((spa:toobig (spa:dval v)))                       ; said why; again
       ((setq out (spa:dval v)))
       (t (princ "\nNot a measurement -- type inches, 6'10\", or 600mm."))))
   (cal:osdown)
@@ -1422,8 +1457,14 @@
     (if (= u (strcase w)) (setq out w)))
   out)
 
-;; Millimetres, typed with the unit on the number: 600mm, 600 MM,
+;; Millimetres, typed with the unit on the number: 600mm, 600MM,
 ;; 1524.5mm.  The drawing is in inches, so the value is converted.
+;; The unit has to TOUCH the number: the spacebar is Enter at getdist
+;; and getpoint, so "600 mm" hands in 600 inches and the "mm" answers
+;; whatever is asked next.  Nothing that reaches here can carry a space
+;; -- its callers are the typed prompts and the ruler's typed answer,
+;; and the SPA form's boxes are read by LAZSPA with distof, which does
+;; not know mm at all -- so the trim below is defensive only.
 ;; Returns the distance in inches, or nil when the text is not that --
 ;; which is how the callers tell a mm answer from a typo.
 ;;
@@ -1446,6 +1487,30 @@
 (defun spa:dval (v)
   (cond ((= (type v) 'STR) (spa:mmval v))
         (t v)))
+
+;; A measurement no spa has, refused with the spelling that was likely
+;; meant.  The usual way to type one is millimetres with a space before
+;; the unit: "1524 mm" is cut at the space and comes back as 1524
+;; INCHES -- a 127-ft side taken without a word -- while the "mm" is
+;; left over to answer the next question.  30 ft is past any spa or
+;; swim spa, so it is a sanity bound, not a shop setting.  T when V was
+;; refused (the caller asks again), nil for anything else.
+;;
+;; The FORM takes are read through it too (spa:fok, spa:askdf, a
+;; corner's size, the round diameter): checked at the prompts only, a
+;; sheet carrying 1524 -- millimetres typed into a box that reads
+;; inches -- drew a 127-ft spa the same number typed would have been
+;; refused as.  There it is said out loud as well, because the drafter
+;; filled that box in: a question asked again with no reason given
+;; looks like the form lost it, and the hint is right for the prompt
+;; that follows, where 1524mm does work.
+(defun spa:toobig (v)
+  (if (and (numberp v) (> v 360.0))
+      (progn
+        (princ (strcat "\nThat is " (rtos v) " -- longer than any spa."
+                       "  Millimetres go with the unit touching the"
+                       " number, no space: 1524mm."))
+        T)))
 
 ;; A typed distance prompt that follows the repo's Back convention: a
 ;; getdist DOES take keywords, so Back (and its unlisted synonym Undo)
@@ -1492,6 +1557,7 @@
           ((and (null v) dflt) (setq out dflt))
           ((null v)
            (princ "\nA size is required - type it, or click a ruler row."))
+          ((spa:toobig v))
           (t (setq out v))))
       (progn
         ;; 128 = arbitrary input, so a mm answer reaches us as text
@@ -1505,6 +1571,7 @@
            (setq out 'CAL-BACK))
           ((and (= (type v) 'STR) xkw (= v xkw)) (setq out v))
           ((and (null v) dflt) (setq out dflt))
+          ((spa:toobig (spa:dval v)))
           ((setq out (spa:dval v)))
           (t (princ "\nNot a measurement -- type inches, 6'10\", or 600mm."))))))
   (cal:osdown)
@@ -1513,14 +1580,16 @@
 ;; The typed-distance question a form can answer, for the keyed
 ;; distances asked OUTSIDE the measurement sequences (the cover lap).
 ;; Same consume-once contract as the keyword wrapper above: only a
-;; measurement the prompt itself would accept -- a positive number --
-;; is taken, and anything else (an NA, a keyword, a wrong type) is
-;; consumed and the question is asked as always.
+;; measurement the prompt itself would accept -- a positive number, no
+;; longer than any spa -- is taken, and anything else (an NA, a
+;; keyword, a wrong type, a 1524) is consumed and the question is asked
+;; as always.
 (defun spa:askdf (key msg xkw dflt back / v)
   (if (and (spa:fhas key)
            (setq v (spa:ftake key))
            (numberp v)
-           (> v 0.0))
+           (> v 0.0)
+           (not (spa:toobig v)))
       v
       (spa:askd msg xkw dflt back nil)))
 
@@ -2513,12 +2582,25 @@
 ;; The offer is recorded whether or not it read anything: skipping it,
 ;; or picking a block with no tags on it, is an answer, and asking again
 ;; later is the same question a second time.
-(defun spa:readblock ( / sel ed bn att v got)
+(defun spa:readblock ( / sel ed bn att v got done)
   (setq spa:*blockasked* t)
   (cal:osup)
-  (setq sel (entsel "\nSelect the Spa Cover Details block <Enter to skip>: "))
-  (if lzd:ask (lzd:ask "\nSelect the Spa Cover Details block <Enter to skip>: " sel) sel)
-  (if lzd:watch (lzd:watch sel) sel)
+  ;; entsel answers nil for Enter AND for a click that hit nothing, and
+  ;; a miss taken for the skip spent the one offer this run makes: the
+  ;; GRADE went unread and a Thermo-Light cover was drawn as a Standard
+  ;; one, with nothing said.  ERRNO 7 tells the two apart.  It is
+  ;; sticky, so it is cleared before each pick and read straight after;
+  ;; the clear is wrapped because an engine that makes ERRNO read-only
+  ;; would otherwise kill the command at its first prompt.
+  (while (not done)
+    (vl-catch-all-apply 'setvar (list "ERRNO" 0))
+    (setq sel (entsel "\nSelect the Spa Cover Details block <Enter to skip>: "))
+    (if lzd:ask (lzd:ask "\nSelect the Spa Cover Details block <Enter to skip>: " sel) sel)
+    (if lzd:watch (lzd:watch sel) sel)
+    (if (and (null sel) (= 7 (getvar "ERRNO")))
+        (princ (strcat "\nNothing there - click the Spa Cover Details"
+                       " block, or press Enter to skip."))
+        (setq done t)))
   (cal:osdown)
   (if sel
       (progn
@@ -3134,8 +3216,6 @@
        ;; treatment -- a radius is not a cut face
        (setq dsz (if (or (null dfltsz) (<= dfltsz 0.0) (/= ty dflty))
                      nil dfltsz)
-             ;; the form's size stands in the same way -- once; the
-             ;; too-large loop below re-asks at the keyboard
              ;; the LADDER this size is picked from: a radius and a
              ;; diagonal face are both read off the order sheet in
              ;; quarter feet, so the rungs stand whether or not corner
@@ -3143,7 +3223,14 @@
              ;; last corner are not what the next corner wants
              lad (if (= ty "Radius") spa:*radius-ladder*
                      spa:*cutface-ladder*)
-             sz (if fsz fsz
+             ;; the form's size stands in the same way -- once; the
+             ;; too-large loop below re-asks at the keyboard.  One
+             ;; longer than any spa is refused first, as spa:askd would
+             ;; refuse it typed, and said HERE, beside the size prompt
+             ;; it goes to: at the take it would be said ahead of a
+             ;; treatment question, or for a Square that uses no size
+             sz (if (and fsz (not (spa:toobig fsz)))
+                    fsz
                     (spa:askd (spa:cornersizemsg ty label) nil dsz t lad))
              fsz nil)
        ;; Back at the size re-asks the type, its previous question
@@ -3901,11 +3988,13 @@
   ;; were measured -- the Outofround branch -- and is only PEEKED at
   ;; here: the sequence below is what consumes it.  A stored numeric B
   ;; alone is the diameter itself, consumed now.  A (b . nil) is an NA:
-  ;; consumed, and the diameter is prompted for as always.
+  ;; consumed, and the diameter is prompted for as always -- as is a
+  ;; B the prompt would refuse, a diameter longer than any spa included.
   (setq bov (cond ((spa:fhas 'a) "Outofround")
                   ((and (spa:fhas 'b)
                         (numberp (setq bov (spa:ftake 'b)))
-                        (> bov 0.0))
+                        (> bov 0.0)
+                        (not (spa:toobig bov)))
                    bov)
                   (t (spa:askd "Overall diameter" "Outofround" nil nil
                                 nil))))
@@ -4089,7 +4178,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:SPA ( / *error* undo-open stype base sstep)
+(defun c:SPA ( / *error* stype base sstep)
 
   (defun *error* (msg)
     (if (and msg
@@ -4104,12 +4193,17 @@
     (spa:fclear)
     (spa:pvkill)
     (spa:rulerkill)
-    (if undo-open (setq undo-open (cal:undoend)))
+    ;; a global, not a local: this handler runs with the stack unwound
+    ;; (the mode pushed below), so a local of c:SPA reads nil here
+    (if spa:*undo-open* (setq spa:*undo-open* (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "SPA" spa:*version* msg))
     (princ))
   (if lzd:begin (lzd:begin "SPA" spa:*version*))
 
+  ;; before the push: a flag some earlier run left standing must never
+  ;; let this run's handler close an undo group it did not open
+  (setq spa:*undo-open* nil)
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
   (if *push-error-using-command* (*push-error-using-command*))
@@ -4130,7 +4224,7 @@
         spa:*taper* nil
         spa:*blockasked* nil)
   (setvar "CMDECHO" 0)
-  (setq undo-open (cal:undobegin))
+  (setq spa:*undo-open* (cal:undobegin))
   ;; architectural units while prompting so every distance can be typed
   ;; as 6'10", 6'-10-1/2" or 6'10.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -4232,7 +4326,7 @@
 
   ;; ------------------------------------------------ finish
   (command "_.ZOOM" "_Extents")
-  (if undo-open (setq undo-open (cal:undoend)))
+  (if spa:*undo-open* (setq spa:*undo-open* (cal:undoend)))
   (cal:sysrestore)
   (cal:dimstyrestore)
   (spa:fclear)

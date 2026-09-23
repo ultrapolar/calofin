@@ -164,7 +164,8 @@ short list a shop builds to -- so `Radius for <subject>` and
 drawn down a strip near the right edge of the view, offering 3" to
 2'-0" in 3" steps (`pool:*radius-ladder*`, `pool:*cutface-ladder*`).
 Click a row and that is the size; type one and it reads the way
-`DIMSTAMP` reads (`24`, `24.5`, `2'`, `1'-4 1/2"`); click empty space
+`DIMSTAMP` reads (`24`, `24.5`, `2'`, `1'-4-1/2"` -- a dash, not a
+space, since a space is Enter at this prompt); click empty space
 and it is the first of two points to measure between. The remembered
 size is ringed among the rungs when there is one, Enter still takes
 it, and a size over the corner's cap is refused and asked again with
@@ -180,7 +181,9 @@ else POOL asks is a MEASUREMENT -- a wall, a diagonal, a cross dim, a
 station along the pool, the hopper's own width -- and stays the plain
 typed question it was, there being no short list of what one comes
 to. The ruler is scratch on `POOL-RULER`, down before the next
-question and swept on every way out, Esc included.
+question and swept on every way out, Esc included. A `POOL-RULER`
+found locked is unlocked (and POOL says so): a locked layer takes the
+ruler but will not give it back. Off or frozen is left as it is.
 
 **`NotGiven` is built square but never drawn as a 90.** Its geometry is
 the plain sharp corner, but the sheet marks it with a circled, **boxed**

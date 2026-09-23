@@ -16,7 +16,9 @@ has to work the positions out.
    land inside. It is asked first because it also sets the **scale** of
    the first guess: without it the solver has no idea whether this is a
    12-foot spa or a 60-foot pool. The base point is the rectangle's
-   lower-left corner.
+   lower-left corner, in the **current UCS**: the whole drawing is laid
+   out square to the UCS from the point clicked, and Enter at
+   `<0,0>` is the UCS origin — the same point typing `0,0` gives.
 2. **Asks how many points**, labelled `A`, `B`, `C` … up to `Z`.
 3. **Draws the starting layout**, before a single dim is asked for: the
    points evenly spaced round the oval inscribed in the space, running

@@ -64,7 +64,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.12")
+(setq *poolside-version* "v1.13")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -157,6 +157,9 @@
 ;;;  at a depth is the likeliest way out of the question, and a ruler
 ;;;  left standing is scratch in somebody's drawing.
 (setq psd:*ruler* nil)
+;;  T while c:POOLSIDE's own undo group is open.  A global for the same
+;;  reason, and reset at the top of every run -- see psd:undobegin.
+(setq psd:*undo-open* nil)
 
 ;;; -------------------- small vector helpers ---------------------------
 ;;; Copies of the CALOFIN-LIB originals (STANDARDS.md section 4); the
@@ -251,10 +254,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -296,17 +303,38 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The scratch layer the rows are drawn on, made if it is missing.  A
 ;; layer of its own is what lets a drafter turn the ruler off without
-;; turning anything of the section off with it.
-(defun psd:rulerlayer ()
+;; turning anything of the section off with it, so OFF and FROZEN are left
+;; the way they are found.  LOCKED is not: entmake draws onto a locked
+;; layer but entdel refuses there, so every ruler drawn stayed in the
+;; drawing for good and each redraw added another copy -- and LAYISO's
+;; lock-and-fade locks this layer with everything else.  It is calofin
+;; scratch, so it is unlocked, said once, and left unlocked.
+(defun psd:rulerlayer ( / ed fl)
   (if (not (tblsearch "LAYER" psd:*ruler-layer*))
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 psd:*ruler-layer*) '(70 . 0) '(62 . 7)
-                   (cons 6 "CONTINUOUS"))))
+                   (cons 6 "CONTINUOUS")))
+    (progn
+      (setq ed (entget (tblobjname "LAYER" psd:*ruler-layer*))
+            fl (cdr (assoc 70 ed)))
+      (if (and fl (= 4 (logand 4 fl))
+               (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed)))
+        (princ (strcat "\nPOOLSIDE: layer " psd:*ruler-layer*
+                       " was locked - unlocked so the ruler can be"
+                       " taken down again.")))))
   psd:*ruler-layer*)
 
 ;; Take the ruler down -- the one call *error* and the clean exit both
@@ -812,7 +840,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOLSIDE ( / *error* undo-open style base total doff th chain pv ans
+(defun c:POOLSIDE ( / *error* style base total doff th chain pv ans
                       wh dp c2 runs cv fixed sta segs mir sgn i s p q
                       maxd ydim odl xc xd xb y m fv bdflt mdflt)
 
@@ -825,12 +853,18 @@
     ;; nothing to put DIMSTYLE back to: POOLSIDE never switches it
     (psd:pvkill)
     (psd:rulerkill)
-    (if undo-open (setq undo-open (cal:undoend)))
+    ;; the undo flag is a GLOBAL (see psd:undobegin): after the pushed
+    ;; mode resets the evaluator, a local of c:POOLSIDE reads nil here
+    (if psd:*undo-open* (setq psd:*undo-open* (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (psd:fclear)                        ; both exits clear the form store
     (if lzd:report (lzd:report "POOLSIDE" *poolside-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "POOLSIDE" *poolside-version*))
+
+  ;; nothing is open yet: a flag an earlier run left set must not let
+  ;; this run's handler close somebody else's undo group
+  (setq psd:*undo-open* nil)
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
@@ -842,7 +876,7 @@
   (setq psd:*valnotes* nil
         psd:*ruler* nil)
   (setvar "CMDECHO" 0)
-  (setq undo-open (cal:undobegin))
+  (setq psd:*undo-open* (cal:undobegin))
   ;; architectural units while prompting so every distance can be typed
   ;; as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -1004,7 +1038,7 @@
   (princ (strcat "  C " (rtos wh) "  D " (rtos dp)))
   (if (= style "SHallow") (princ (strcat "  C2 " (rtos c2))))
 
-  (if undo-open (setq undo-open (cal:undoend)))
+  (if psd:*undo-open* (setq psd:*undo-open* (cal:undoend)))
   (cal:sysrestore)
   (psd:rulerkill)
   (if *pop-error-mode* (*pop-error-mode*))

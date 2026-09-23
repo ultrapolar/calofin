@@ -415,6 +415,50 @@ check("...and a later run does not sweep them away",
       len(live(vm, 'XLINE', 'LOBF')) == n_kept,
       len(live(vm, 'XLINE', 'LOBF')))
 
+# A click that lands between the thin preview lines is not an Enter.
+# entsel answers nil to both, and only ERRNO 7 tells them apart; taken
+# as Enter, the miss kept fit 2 and erased the line reached for.
+def miss(vm):
+    vm.sysvars['ERRNO'] = 7
+    return None
+
+
+def click_fit(n):
+    """A click on candidate N, whose ename exists only once it is drawn."""
+    def pick(vm):
+        fits = live(vm, 'XLINE', 'LOBF-PREVIEW')
+        return [fits[n - 1][0], [0.0, 0.0, 0.0]] if len(fits) >= n else None
+    return pick
+
+
+vm = vm_with(DRAWING)
+try:
+    txt = run(vm, [None, None, miss, click_fit(1)])
+    err = ''
+except AssertionError as e:
+    txt, err = said(vm), str(e).splitlines()[0]
+kept = live(vm, 'XLINE', 'LOBF')
+check("a click that misses every line is asked again, not taken as Enter",
+      not err and 'nothing there - click one of the lines' in txt, err)
+check("...and the line then clicked is the one kept (fit 1, not fit 2)",
+      len(kept) == 1 and abs(grp(kept[0][1], 10)[1] - 1.0) < 1e-9,
+      repr([grp(d, 10) for _, d in kept]))
+
+# ...and Enter after a miss is still Enter.  ERRNO is sticky -- nothing
+# but a setvar puts it back to 0 -- so the 7 the miss left would make
+# the Enter that follows read as a second miss, and the prompt would
+# never let go, unless it is cleared before every pick
+vm = vm_with(DRAWING)
+try:
+    txt = run(vm, [None, None, miss, None])
+    err = ''
+except AssertionError as e:
+    txt, err = said(vm), str(e).splitlines()[0]
+check("Enter after a miss keeps the default fit",
+      not err and 'nothing there - click one of the lines' in txt
+      and txt.index('nothing there') < txt.rindex('Keeping fit 2')
+      and len(live(vm, 'XLINE', 'LOBF')) == 1, err or txt[-300:])
+
 # ----------------------------------------------------------------------
 # 7. the file's own rules
 # ----------------------------------------------------------------------

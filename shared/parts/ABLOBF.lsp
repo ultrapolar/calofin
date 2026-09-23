@@ -98,7 +98,7 @@
 ;;  this block, and nowhere else in the file.  Edit one and APPLOAD the
 ;;  file again; to try a value for one session, type the setq at the
 ;;  command line, because every knob is read when the command runs.
-(setq *ablobf-version*   "v1.4")     ; announced on load; release_lisp.py
+(setq *ablobf-version*   "v1.5")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *ABL-POOL-LAYER*   "POOL")     ; layer the kept run ends up on -
@@ -615,6 +615,19 @@
 ;; is what the fitter holds, and what a declaration made before the
 ;; selection is matched to once the selection is in hand.
 
+;; Where a survey point sits, in the world's numbers.  A block's
+;; insertion point is kept in its own plane, so an ab_pt inserted
+;; from below, (0 0 -1), read raw lands mirrored through the Y axis -
+;; off the outline it was shot on, with nothing said.  A POINT's 10
+;; is in world numbers already and is left alone, as is anything
+;; flat.
+(defun abl:ins-w (ed / nz)
+  (setq nz (cdr (assoc 210 ed)))
+  (if (and nz (/= (cdr (assoc 0 ed)) "POINT")
+           (not (equal nz '(0.0 0.0 1.0) 1.0e-10)))
+    (trans (cdr (assoc 10 ed)) (cdr (assoc -1 ed)) 0)
+    (cdr (assoc 10 ed))))
+
 ;; Every survey point in the DRAWING as a candidate, for the
 ;; declarations asked before the selection exists (step 4).  The
 ;; classifier is the selection's own: an ab_pt INSERT wherever it
@@ -640,7 +653,7 @@
                       (strcase *ABL-POINT-LAYER*)))
              (progn
                (setq nm (cal:block-number en *ABL-PT-TAG*))
-               (setq out (cons (list (cal:2d (cdr (assoc 10 ed)))
+               (setq out (cons (list (cal:2d (abl:ins-w ed))
                                      (if (and nm (/= nm "")) nm "?"))
                                out)))))
           ((= typ "POINT")
@@ -1253,8 +1266,8 @@
   en)
 
 ;; Erase only ABLOBF's own objects on a layer.  Returns how many went.
-(defun abl:purge-mine (name / ss i n en)
-  (setq n 0)
+(defun abl:purge-mine (name / ss i n en mine stuck ed flags)
+  (setq n 0 stuck 0 mine nil)
   (if (tblsearch "LAYER" name)
     (progn
       (setq ss (ssget "_X" (list (cons 8 name))))
@@ -1264,8 +1277,27 @@
           (repeat (sslength ss)
             (setq en (ssname ss i))
             (if (assoc -3 (entget en '("ABLOBF")))
-              (progn (entdel en) (setq n (1+ n))))
-            (setq i (1+ i)))))))
+              (setq mine (cons en mine)))
+            (setq i (1+ i)))))
+      ;; entdel answers nil on a locked layer and erases nothing, and
+      ;; this layer can be the drafter's own, locked on purpose.  So the
+      ;; lock is lifted for the erase and put back after it, and only an
+      ;; erase that took is counted: counting the attempts said
+      ;; "cleared" over markers still on screen, and the next run wrote
+      ;; its own markers over them
+      (if mine
+        (progn
+          (setq ed    (entget (tblobjname "LAYER" name))
+                flags (cond ((cdr (assoc 70 ed))) (0)))
+          (if (= 4 (logand 4 flags))
+            (entmod (subst (cons 70 (- flags 4)) (assoc 70 ed) ed)))
+          (foreach en mine
+            (if (entdel en) (setq n (1+ n)) (setq stuck (1+ stuck))))
+          (if (= 4 (logand 4 flags)) (entmod ed))
+          (if (> stuck 0)
+            (princ (strcat "\nABLOBF: " (itoa stuck)
+                           " of its own object(s) on layer " name
+                           " could not be erased - NOT removed.")))))))
   n)
 
 ;; Make sure the DASHED linetype exists (pure entmake).
@@ -1837,9 +1869,22 @@
       (if lzd:ask (lzd:ask "\n  Keep which fit - click one, or [1/2/3/All/None/Redo] <2>: " pick) pick)
       (if (null pick)
         (progn
-          (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
-          (if lzd:ask (lzd:ask "\n  Pick the outline to keep (or Enter for 2): " sel) sel)
-          (if lzd:watch (lzd:watch sel) sel)
+          ;; entsel answers nil for Enter AND for a click that landed
+          ;; between the thin preview lines; ERRNO 7 tells them apart.
+          ;; Without asking again, a near-miss quietly kept the default
+          ;; and erased the fit they reached for.  ERRNO is sticky, so
+          ;; it is cleared before each pick it is read after
+          (setq sel 'RETRY)
+          (while (eq sel 'RETRY)
+            (vl-catch-all-apply 'setvar (list "ERRNO" 0))
+            (setq sel (entsel "\n  Pick the outline to keep (or Enter for 2): "))
+            (if lzd:ask (lzd:ask "\n  Pick the outline to keep (or Enter for 2): " sel) sel)
+            (if lzd:watch (lzd:watch sel) sel)
+            (if (and (null sel) (= 7 (getvar "ERRNO")))
+              (progn
+                (princ (strcat "\n  (nothing there - click one of the"
+                               " outlines, or press Enter for 2)"))
+                (setq sel 'RETRY))))
           (if sel
             (progn
               (setq picked (car sel) i 1)
@@ -2070,7 +2115,9 @@
            (if (abl:back-kw wp1) (setq wp1 nil))
            (if wp1
              (progn
-               (setq wp1 (cal:2d wp1) best nil bd nil)
+               ;; a UCS click against walls held in world numbers:
+               ;; untranslated, a moved UCS removed some other wall
+               (setq wp1 (cal:2d (trans wp1 1 0)) best nil bd nil)
                (foreach w abl-walls
                  (setq d (abl:seg-dist wp1 (list (car w) (cadr w) 0.0)))
                  (if (or (null bd) (< d bd)) (setq best w bd d)))
@@ -2439,7 +2486,7 @@
             ;; the survey point block is ALWAYS a point, on any layer
             ((and (= typ "INSERT")
                   (= (strcase (cdr (assoc 2 ed))) (strcase *ABL-POINT-BLOCK*)))
-             (abl:add-point (cal:2d (cdr (assoc 10 ed)))
+             (abl:add-point (cal:2d (abl:ins-w ed))
                             (cal:block-number en *ABL-PT-TAG*)))
             ;; a plain POINT counts on ANY layer - the selection is
             ;; explicit, so there is no guessing involved
@@ -2447,7 +2494,7 @@
              (abl:add-point (cal:2d (cdr (assoc 10 ed))) nil))
             ;; any other block dropped on the POINTS layer -> a point
             ((and (= typ "INSERT") (= lay (strcase *ABL-POINT-LAYER*)))
-             (abl:add-point (cal:2d (cdr (assoc 10 ed)))
+             (abl:add-point (cal:2d (abl:ins-w ed))
                             (cal:block-number en *ABL-PT-TAG*)))))
         (if (> nocs 0)
           (princ (strcat "\nABLOBF: warning - " (itoa nocs)

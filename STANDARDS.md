@@ -480,8 +480,12 @@ library) is one length prompt that draws a column of nearby values
 down a strip near the right edge of the view, graded like a tape, and
 then takes any of: a click on a row (that row's value), a typed
 measurement in any spelling `tool:parse-len` reads (`44`, `44.5`,
-`44 1/2`, `4'4.5`, `4'-4 1/2"` -- kept exactly as typed, only the
-ruler rounds to the eighth), Enter (nil back, meaning what it always
+`44-1/2`, `4'4.5`, `4'-4-1/2"` -- kept exactly as typed, only the
+ruler rounds to the eighth; the fraction is DASHED because this is a
+click-or-type `getpoint`, where the spacebar is Enter -- a spaced
+`44 1/2` would enter 44 and hand the `1/2` to the next question, so no
+hint, README or tooltip may teach the spaced form for this prompt),
+Enter (nil back, meaning what it always
 meant at that prompt), a keyword out of the list handed in, or a click
 on empty space as the first of two points to measure between. Zero, a
 leading minus and text that is not a length are refused where they
@@ -967,9 +971,30 @@ both). The mode is stacked for the document, not the command: a clean
 run that pops only from its handler leaves it stacked for the rest of
 the session, and a stacked mode refuses `command-s` inside every later
 handler -- so the next tool's Esc leaves its undo group open.
+
+**A pushed handler sees only globals.** Under
+`*push-error-using-command*` "all local symbols on the AutoLISP call
+stack are pushed out of scope because the AutoLISP evaluator is reset
+before entering the `*error*` handler" (AutoLISP reference): the
+command's locals read their GLOBAL value -- normally nil -- and a
+helper `defun` declared in the command's arglist is undefined. So a
+command that pushes keeps everything its handler reads in prefixed
+globals (`tool:*undo-open*`, `tool:*sysold*`, `tool:*tmp*`), reset at
+the top of every run BEFORE the push, and its cleanup helpers are
+top-level defuns. The default mode is the reverse: locals are
+visible, `command-s` works, a bare `(command)` is refused -- which is
+why a command that does not push keeps its saves in its own locals.
+Eleven tools shipped the mix (a push plus a handler reading locals);
+every one of them left OSMODE, the layer or an undo group behind on
+Esc, and four wrote no report, with every test green because the VM
+kept the frames alive. `tools/check_handlers.py` is the referee.
 `check_lisp.py` fails a push with no pop outside the handler. `DIMSTYLE` cannot be `setvar`'d back
--- restore it with
-`(vl-catch-all-apply 'command-s (list "_.-DIMSTYLE" "_Restore" old))`.
+-- restore it through ActiveX,
+`(vla-put-ActiveDimStyle doc (vla-item (vla-get-DimStyles doc) old))`
+under `vl-catch-all-apply`: no command at all, so it is legal in
+either error mode (the `command-s "_.-DIMSTYLE"` spelling this line
+used to give is refused under a push, uncatchably -- SPA's handler died
+on it).
 
 **Locals.** Every variable a defun sets is a parameter or declared
 after ` / ` (space each side) in the arglist -- `check_scope.py` is

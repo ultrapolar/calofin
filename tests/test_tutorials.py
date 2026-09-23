@@ -158,6 +158,28 @@ for label, path, cmd, layer, scan, faults in [
           not live and "Practice drawing erased" in out, f"{len(live)} left")
     check(f"{label}: every sysvar is back", vm.sysvars == before)
 
+    print(f"TUTORIAL{label} -- the erase takes THIS report, not every one")
+    # the report layer is where every scan in the drawing writes: the
+    # cleanup swept it whole, and a drafter's own report from an
+    # earlier scan went with the practice drawing, under "Practice
+    # drawing erased."
+    vm = load(path)
+    vm.loads('(entmakex (list \'(0 . "MTEXT") (cons 8 "%s") '
+             '\'(10 -900.0 0.0 0.0) \'(40 . 1.0) \'(1 . "an earlier report")))'
+             % layer)
+    prior = vm.entities[-1]
+    try:
+        vm.run(cmd, DEMO + [None] * faults)
+    except LispError as e:
+        raise AssertionError(f"[{cmd}] {e}") from None
+    out = "".join(vm.printed)
+    live = [e for e in vm.entities if e not in vm.deleted]
+    check(f"{label}: the practice drawing and its report are erased",
+          "Practice drawing erased" in out and live == [prior],
+          f"{len(live)} left")
+    check(f"{label}: the report that was already there is kept",
+          prior not in vm.deleted)
+
     print(f"TUTORIAL{label} -- No at the last question keeps the drawing")
     vm, live, out, before = tour(path, cmd,
                                  DEMO + [None] * (faults - 1) + ["No"])

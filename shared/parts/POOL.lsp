@@ -127,7 +127,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092226 REV40")
+(setq pool:*version* "092226 REV41")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -555,9 +555,11 @@
 (setq pool:*valnotes*    nil)             ; validation problems, for the report
 (setq pool:*giveask*     nil)             ; T = mark held/failed rows "Given"
                                           ; this run (pool:askgiven); read by
-                                          ; pool:report, cleared by pool:givendone
+                                          ; pool:report, cleared by pool:givereset
 (setq pool:*giventxts*   nil)             ; (ename . target) per Given mark
                                           ; drawn this run, for pool:givendone
+(setq pool:*undo-open*   nil)             ; T = c:POOL's own undo group is open;
+                                          ; reset at the top of every run
 (setq pool:*formrun*     nil)             ; T = pool:*form* was non-empty when
                                           ; this run started -- a fully filled
                                           ; sheet draws with NO questions at
@@ -957,10 +959,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -1002,17 +1008,38 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The scratch layer the rows are drawn on, made if it is missing.  A
 ;; layer of its own is what lets a drafter turn the ruler off without
-;; turning anything of the pool off with it.
-(defun pool:rulerlayer ()
+;; turning anything of the pool off with it, so OFF and FROZEN are left
+;; the way they are found.  LOCKED is not: entmake draws onto a locked
+;; layer but entdel refuses there, so every ruler drawn stayed in the
+;; drawing for good and each redraw added another copy -- and LAYISO's
+;; lock-and-fade locks this layer with everything else.  It is calofin
+;; scratch, so it is unlocked, said once, and left unlocked.
+(defun pool:rulerlayer ( / ed fl)
   (if (not (tblsearch "LAYER" pool:*ruler-layer*))
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 pool:*ruler-layer*) '(70 . 0) '(62 . 7)
-                   (cons 6 "CONTINUOUS"))))
+                   (cons 6 "CONTINUOUS")))
+    (progn
+      (setq ed (entget (tblobjname "LAYER" pool:*ruler-layer*))
+            fl (cdr (assoc 70 ed)))
+      (if (and fl (= 4 (logand 4 fl))
+               (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed)))
+        (princ (strcat "\nPOOL: layer " pool:*ruler-layer*
+                       " was locked - unlocked so the ruler can be"
+                       " taken down again.")))))
   pool:*ruler-layer*)
 
 ;; Take the ruler down -- the one call *error* and the clean exit both
@@ -1639,9 +1666,12 @@
   ;; asked.  Only a real measurement is taken: every caller here range
   ;; checks what it gets and none of them can do anything with nil, so
   ;; an NA in the store falls through to the keyboard (having been
-  ;; consumed, so it cannot come back round again).
+  ;; consumed, so it cannot come back round again).  So does zero or
+  ;; less, which the typed prompt refuses: the callers check only D
+  ;; against C, so a sheet that wrote C as -3'4" (an elevation) and D
+  ;; as -10" drew a wall standing above the waterline without a word.
   (setq k (pool:fkeyof msg))
-  (if (and k (pool:fhas k) (numberp (setq v (pool:ftake k))))
+  (if (and k (pool:fhas k) (numberp (setq v (pool:ftake k))) (> v 0.0))
       v
       (progn
         (setq cols (mapcar 'pool:getcol ents))
@@ -3960,6 +3990,16 @@
            "Mark the dimension(s) that could not be held at their original value as \"Given\""
            "No" nil))))
 
+;; The Given opt-in and the marks it drew, forgotten.  pool:givendone
+;; does this when it finishes, but an Esc at its pick never gets there:
+;; left set, the next POOL -- or the report TUTORIALPOOL and POOLDEMO
+;; draw through pool:report -- put Given marks on rows nobody had asked
+;; about, and offered to flip the dead run's marks.  So c:POOL calls it
+;; at both ends too, and the two sheets that draw with POOL's report
+;; call it before they start.
+(defun pool:givereset ()
+  (setq pool:*giveask* nil pool:*giventxts* nil))
+
 ;; A row earns a Given mark once the drafter has opted in: any row
 ;; already flagged red by the fit, or -- cross dims carry no red flag
 ;; of their own -- a cross-dimension row's label ("X " / "CROSS ").
@@ -3991,21 +4031,33 @@
 ;; "best of both" without asking the format up front for every one.
 ;; A pick that lands on anything else is named and ignored, never an
 ;; error, and clears pool:*giveask*/*giventxts* either way so the next
-;; run starts clean.
-(defun pool:givendone ( / sel en)
+;; run starts clean.  A click on empty space is said and asked again:
+;; entsel answers it with the same nil as Enter, and ERRNO 7 is the
+;; only difference -- read as Enter, a click just beside a mark's text
+;; ended the loop and cleared the list, and the marks not yet flipped
+;; could then only be retyped by hand.
+(defun pool:givendone ( / sel en done)
   (if pool:*giventxts*
       (progn
         (princ (strcat "\n" (itoa (length pool:*giventxts*))
                        " dimension(s) marked Given."))
-        (while (setq sel
-                 ((lambda (v) (if lzd:ask (lzd:ask "Select a Given dimension to switch ft-in/in (Enter when done)" v) v))
-                   (entsel
-                     "\nSelect a Given dimension to switch ft-in/in (Enter when done): ")))
-          (setq en (car sel))
-          (if (assoc en pool:*giventxts*)
-              (pool:flipgiven en)
-              (princ "\n  Not a Given mark from this run -- ignored.")))))
-  (setq pool:*giveask* nil pool:*giventxts* nil)
+        (while (not done)
+          (setvar "ERRNO" 0)
+          (setq sel (entsel
+                      "\nSelect a Given dimension to switch ft-in/in (Enter when done): "))
+          (if lzd:ask (lzd:ask "\nSelect a Given dimension to switch ft-in/in (Enter when done): " sel) sel)
+          (if lzd:watch (lzd:watch sel) sel)
+          (cond
+            (sel
+             (setq en (car sel))
+             (if (assoc en pool:*giventxts*)
+                 (pool:flipgiven en)
+                 (princ "\n  Not a Given mark from this run -- ignored.")))
+            ((= 7 (getvar "ERRNO"))
+             (princ (strcat "\n  Nothing there - click the dimension text,"
+                            " or press Enter when done.")))
+            (T (setq done T))))))
+  (pool:givereset)
   (princ))
 
 ;; Returns the table's box as (xr ytop y0) so the caller can hang the
@@ -8735,7 +8787,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOL ( / *error* undo-open ptype base pstep)
+(defun c:POOL ( / *error* ptype base pstep)
 
   (defun *error* (msg)
     (if (and msg
@@ -8760,17 +8812,28 @@
     ;; next pool with no bottom and never asks why
     (pool:fclear)
     (setq pool:*nobottom* nil pool:*hasbottom* nil pool:*formrun* nil)
-    (if undo-open (setq undo-open (cal:undoend)))
+    ;; an Esc at the Given-dimension pick never reaches pool:givendone
+    (pool:givereset)
+    ;; the undo flag is a GLOBAL (see pool:undobegin): after the pushed
+    ;; mode resets the evaluator, a local of c:POOL reads nil in here
+    (if pool:*undo-open* (setq pool:*undo-open* (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
     (if lzd:report (lzd:report "POOL" pool:*version* msg))
     (princ))
   (if lzd:begin (lzd:begin "POOL" pool:*version*))
+
+  ;; nothing is open yet: a flag an earlier run left set must not let
+  ;; this run's handler close somebody else's undo group
+  (setq pool:*undo-open* nil)
 
   ;; AutoCAD 2012+ requires this so *error* may call (command);
   ;; harmless no-op guard on older releases where it doesn't exist
   (if *push-error-using-command* (*push-error-using-command*))
 
   (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER" "AUNITS" "ANGBASE" "ANGDIR"))
+  ;; last run's Given opt-in and marks, if it died before
+  ;; pool:givendone cleared them
+  (pool:givereset)
   (setq pool:*valnotes* nil
         pool:*smallwarned* nil
         ;; a fresh run, so a fresh ruler: the hint is said once a run,
@@ -8786,7 +8849,7 @@
         pool:*ftin* (member (cdr (assoc "LUNITS" cal:*sysold*)) '(3 4))
         pool:*formrun* (if pool:*form* t nil))
   (setvar "CMDECHO" 0)
-  (setq undo-open (cal:undobegin))
+  (setq pool:*undo-open* (cal:undobegin))
   ;; architectural units while prompting so every distance can be
   ;; typed as 25'6", 25'-6-1/2" or 25'6.5 as well as plain inches
   (setvar "LUNITS" 4)
@@ -8870,7 +8933,7 @@
 
   ;; ------------------------------------------------ finish
   (command "_.ZOOM" "_Extents")
-  (if undo-open (setq undo-open (cal:undoend)))
+  (if pool:*undo-open* (setq pool:*undo-open* (cal:undoend)))
   (cal:sysrestore)
   (pool:fclear)
   (pool:rulerkill)

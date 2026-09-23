@@ -292,12 +292,12 @@ table here.
 | `*PF-DIM-FTIN*` / `*PF-DIM-IN*` | `"SIDE DIMENSION"` / `"STANDARD INCHES"` | Dim style picked by how an offset was typed |
 | `*PF-DIM-OFF*` | `12.0` | How far off the deep break the K/L/M string sits |
 | `*PF-LABEL-FRAC*` | `20.0` | On-screen text height = the shape's larger extent ÷ this |
-| `*PF-DEFAULT-FIT*` | `"2"` | The candidate `Enter` keeps at the choose prompt |
+| `*PF-DEFAULT-FIT*` | `"2"` | The candidate `Enter` keeps at the choose prompt; anything but `"1"`-`"3"` (a LAZTUNE value included) is named and `Enter` keeps 2 |
 | `*PF-SLOW-NOTE*` | `150` | Above this many points it warns the fit will take a while |
 | `*PF-COMPARE*` | 3 rows | The three aims, their colours and their wording |
 | `*PF-SIMP-COMPARE*` | 5 rows | `SIMPABHD`'s five: the same two ends, plus three ready-made answers, each with its own share, distance and curve cap |
 | `*PF-SIMP-TOL*` | `1.0` | The distance `SIMPABHD` fits and measures to, in place of step 1 |
-| `*PF-SIMP-DEFAULT-FIT*` | `"2"` | The candidate `Enter` keeps at `SIMPABHD`'s choose prompt |
+| `*PF-SIMP-DEFAULT-FIT*` | `"2"` | The candidate `Enter` keeps at `SIMPABHD`'s choose prompt; anything but `"1"`-`"5"` is named and `Enter` keeps 2 |
 
 **2. Fitter tuning** — how the perimeter and the bottom come out.
 (The three answers a session remembers — `*PF-TOL*`, `*PF-MAX-ARCS*`

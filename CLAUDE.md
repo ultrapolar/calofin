@@ -326,6 +326,23 @@ not touched. The click-into-your-drawing path exists, is reached only
 by typing `LAZDIAG` after a report no folder would take, and is never
 reached automatically.
 
+**A command that runs another is one run.** XYPLOT and ABCDEF hand
+over to ABHD, the tutorials run their tool's scan, AUTODIM and
+LINGUTTER finish with PADDLE -- each a `(c:INNER)` called as a
+function. The inner `lzd:begin` JOINS the run standing when
+AutoCAD's `CMDNAMES` still names that run's command, so the outer is
+not logged `ok` before it has finished, and a failure inside is filed
+under the command the drafter typed, with a `failed inside` line and
+every answer from both, so it replays from the top. Two things follow
+for new code: begin a command's run under the command's OWN name (a
+run begun under another cannot be told from a finished one), and a
+helper that begins a run for a DIALOG ends it when the dialog closes
+(`lzp:show`, `lzf:show`) -- left standing, the tool the dialog then
+launches joins it and is filed under a dialog no report can replay.
+`check_handlers` rule H5 still asks whether the outer command has
+anything open at the hand-over; that half is editorial, with its
+reasons in `tools/handler_baseline.txt`.
+
 Three rules for anything added to LAZDIAG itself. It runs from inside
 `*error*`, so **nothing may throw** -- the work happens under
 `vl-catch-all-apply` and a re-entry is refused, not nested. **Nothing
@@ -413,7 +430,14 @@ nested inside it see the value; a save kept in a helper's own local is
 out of the handler's reach, which is exactly how the three check
 tutorials (`TUTORIALCOVERCHECK`, `TUTORIALDIMCHECK`,
 `TUTORIALLINFINCHECK`) sat muting OSMODE round a `DIMLINEAR` with no
-handler that could put it back. The table-driven form counts too --
+handler that could put it back. **Unless the command pushes
+`*push-error-using-command*`**: then AutoCAD resets the evaluator
+before `*error*` runs and the handler sees globals ONLY -- every local,
+and every helper defun declared in the arglist, is gone. A command that
+pushes keeps what its handler reads in prefixed globals reset at the
+top of each run, before the push (STANDARDS section 5; enforced by
+`tools/check_handlers.py`). Eleven tools had the mix and left OSMODE,
+the layer or an undo group behind on Esc with every test green. The table-driven form counts too --
 `(tool:sysrestore)` over a snapshot whose list names `OSMODE`, with
 `OSMODE` first in that list -- and is what the bigger tools use.
 
@@ -543,6 +567,18 @@ python3 tools/check_lazdiag.py   # every command REPORTS its failures: the
                                  # setq that is a statement, wrapped where
                                  # the answer is read in place; --fix
                                  # wires what is missing
+python3 tools/check_handlers.py  # every *error* handler reaches its END --
+       [--tier T] [--all]        # undo close, pop, lzd:report -- in the
+                                 # error mode its command set: under
+                                 # *push-error-using-command* AutoCAD
+                                 # resets the evaluator first, so a
+                                 # handler that reads a command local or
+                                 # calls an arglist helper dies or skips
+                                 # its cleanup, silently -- eleven tools
+                                 # did, SPA among them, all tests green.
+                                 # H5 pairs (nested handlers) that are
+                                 # right on purpose live in
+                                 # tools/handler_baseline.txt
 python3 tools/check_osnap.py     # the drafter's OBJECT SNAPS survive every
        [--list] [--tier T]       # run, the failed ones included -- read over
                                  # all THREE tiers, releases/ included,

@@ -193,12 +193,16 @@ notes. LINGUTTER guts one pool back in a single pass, straight through
    hatches, the geometry the perimeter was traced from, and dimensions
    in any other style. `VIEWPORT` entities are never erased, and a layer
    named in `lg:*keeplayers*` is spared even inside the highlight.
-6. **Hands the new perimeter to `PADDLE`** as a pickfirst selection, and
-   PADDLE pads its concave features without asking anything. *Handed,
-   not hunted:* PADDLE's own auto-detect reads the **whole** drawing for
-   its largest closed loop, which after a scoped gut may well be a title
-   block border rather than the pool. (This is why `PADDLE` v1.3 takes a
-   pickfirst selection as-is.)
+6. **Hands the new perimeter to `PADDLE`**, and PADDLE pads its
+   concave features without asking anything. *Handed, not hunted:*
+   PADDLE's own auto-detect reads the **whole** drawing for its largest
+   closed loop, which after a scoped gut may well be a title block
+   border rather than the pool. The polyline goes over in the global
+   `*calofin-handoff*`, which PADDLE reads before its pickfirst probe
+   and clears -- not as a pickfirst set, which `ssget "_I"` reads only
+   with `PICKFIRST` at 1: a drafter who works at 0 used to get PADDLE's
+   perimeter prompt instead, where Enter auto-detects the very border
+   the handoff exists to avoid.
 
 Before erasing anything it prints exactly what it found in the
 highlight — how many
@@ -434,9 +438,9 @@ rectangle with its own clutter — a title block border is exactly this
 shape of problem — highlighting only the pool, and checking that every
 object outside the highlight is still standing, that the perimeter is
 the pool's and not the bigger loop, and that handed the whole drawing
-instead it *would* have taken the bigger loop. Then that `PADDLE`'s
-pickfirst probe finds exactly the one new polyline, so it never
-auto-detects past the highlight.
+instead it *would* have taken the bigger loop. Then that `PADDLE` is
+handed exactly the one new polyline, so it never auto-detects past the
+highlight.
 
 It also loads `PADDLE.lsp` alongside and runs both chaining
 implementations on the same geometry, so the port cannot drift: when

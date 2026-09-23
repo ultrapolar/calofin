@@ -66,7 +66,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *lobf-version* "v1.3")
+(setq *lobf-version* "v1.4")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value LOBF reads that someone might want to
@@ -206,6 +206,19 @@
 (defun lobf:pt (p nm) (list (car p) (cadr p) nm))
 (defun lobf:pt-name (q) (if (caddr q) (caddr q) "?"))
 
+;; Where a survey point sits, in the world's numbers.  A block's
+;; insertion point is kept in its own plane, so an ab_pt inserted
+;; from below, (0 0 -1), read raw lands mirrored through the Y axis -
+;; off the outline it was shot on, with nothing said.  A POINT's 10
+;; is in world numbers already and is left alone, as is anything
+;; flat.
+(defun lobf:ins-w (ed / nz)
+  (setq nz (cdr (assoc 210 ed)))
+  (if (and nz (/= (cdr (assoc 0 ed)) "POINT")
+           (not (equal nz '(0.0 0.0 1.0) 1.0e-10)))
+    (trans (cdr (assoc 10 ed)) (cdr (assoc -1 ed)) 0)
+    (cdr (assoc 10 ed))))
+
 ;; Every point in the selection: POINT entities and "ab_pt" blocks
 ;; wherever they sit, other blocks only on the points layer.  Returns
 ;; the deduped list; LOBF's own preview objects are never read back.
@@ -230,7 +243,7 @@
                      (strcase lobf:*pt-block*)))
              (setq npt (1+ npt)
                    nm  (cal:block-number en lobf:*pt-tag*)
-                   pts (cons (lobf:pt (cdr (assoc 10 ed))
+                   pts (cons (lobf:pt (lobf:ins-w ed)
                                       (if (and nm (/= nm "")) nm (itoa npt)))
                              pts)))
             ;; a plain POINT counts on any layer - the selection is
@@ -243,7 +256,7 @@
              (if (= lay (strcase lobf:*pt-layer*))
                (setq npt (1+ npt)
                      nm  (cal:block-number en lobf:*pt-tag*)
-                     pts (cons (lobf:pt (cdr (assoc 10 ed))
+                     pts (cons (lobf:pt (lobf:ins-w ed)
                                         (if (and nm (/= nm "")) nm (itoa npt)))
                                pts)))))))))
   (cal:dedupe (reverse pts) lobf:*exact-eps*))
@@ -615,8 +628,8 @@
 
 ;; Erase only LOBF's own objects on a layer; anything the user drew
 ;; there is left alone.  Returns how many went.  (abp:purge-mine.)
-(defun lobf:purge-mine (name / ss i en n)
-  (setq n 0)
+(defun lobf:purge-mine (name / ss i en n mine stuck ed flags)
+  (setq n 0 stuck 0 mine nil)
   (if (tblsearch "LAYER" name)
     (progn
       (setq ss (ssget "_X" (list (cons 8 name))))
@@ -626,8 +639,27 @@
           (repeat (sslength ss)
             (setq en (ssname ss i))
             (if (assoc -3 (entget en (list lobf:*appid*)))
-              (progn (entdel en) (setq n (1+ n))))
-            (setq i (1+ i)))))))
+              (setq mine (cons en mine)))
+            (setq i (1+ i)))))
+      ;; entdel answers nil on a locked layer and erases nothing, and
+      ;; this layer can be the drafter's own, locked on purpose.  So the
+      ;; lock is lifted for the erase and put back after it, and only an
+      ;; erase that took is counted: counting the attempts said
+      ;; "cleared" over markers still on screen, and the next run wrote
+      ;; its own markers over them
+      (if mine
+        (progn
+          (setq ed    (entget (tblobjname "LAYER" name))
+                flags (cond ((cdr (assoc 70 ed))) (0)))
+          (if (= 4 (logand 4 flags))
+            (entmod (subst (cons 70 (- flags 4)) (assoc 70 ed) ed)))
+          (foreach en mine
+            (if (entdel en) (setq n (1+ n)) (setq stuck (1+ stuck))))
+          (if (= 4 (logand 4 flags)) (entmod ed))
+          (if (> stuck 0)
+            (princ (strcat "\nLOBF: " (itoa stuck)
+                           " of its own object(s) on layer " name
+                           " could not be erased - NOT removed.")))))))
   n)
 
 (defun lobf:erase (en)
@@ -668,10 +700,23 @@
     ;; no keyword typed: give them a click, and fall back to the
     ;; default this run worked out
     (progn
-      (setq sel (entsel (strcat "\n  Pick the line to keep (or Enter for "
-                                dflt "): ")))
-      (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
-      (if lzd:watch (lzd:watch sel) sel)
+      ;; entsel answers nil for Enter AND for a click that landed
+      ;; between the thin preview lines; ERRNO 7 tells them apart.
+      ;; Without asking again, a near-miss quietly kept the default
+      ;; and erased the fit they reached for.  ERRNO is sticky, so
+      ;; it is cleared before each pick it is read after
+      (setq sel 'RETRY)
+      (while (eq sel 'RETRY)
+        (vl-catch-all-apply 'setvar (list "ERRNO" 0))
+        (setq sel (entsel (strcat "\n  Pick the line to keep (or Enter for "
+                                  dflt "): ")))
+        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
+        (if lzd:watch (lzd:watch sel) sel)
+        (if (and (null sel) (= 7 (getvar "ERRNO")))
+          (progn
+            (princ (strcat "\n  (nothing there - click one of the"
+                           " lines, or press Enter for " dflt ")"))
+            (setq sel 'RETRY))))
       (if sel
         (progn
           (setq picked (car sel) i 1)

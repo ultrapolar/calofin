@@ -737,6 +737,40 @@ check('...and the run is still fitted', 'written to layer POOL' in dup,
       dup[-200:])
 
 # ----------------------------------------------------------------------
+print('ablobf -- a click that misses the outlines is asked again')
+# ----------------------------------------------------------------------
+# entsel answers nil for Enter AND for a click on empty space; only
+# ERRNO 7 tells them apart.  Taken as Enter, a near-miss kept fit 2 and
+# erased the fit reached for.
+
+
+def miss(vm):
+    vm.sysvars['ERRNO'] = 7
+    return None
+
+
+def click_fit(n):
+    """A click on candidate N, whose ename exists only once it is drawn."""
+    def pick(vm):
+        fits = live(vm, 'LWPOLYLINE', 'ABLOBF-FIT')
+        return [fits[n - 1][0], [0.0, 0.0, 0.0]] if len(fits) >= n else None
+    return pick
+
+
+vm = newvm()
+pts = points(vm, BOW)
+vm.pickfirst = ['<ss>'] + pts
+try:
+    txt = run(vm, WIZARD + [None, None, None, miss, click_fit(3)])
+    err = ''
+except AssertionError as e:
+    txt, err = said(vm), str(e).splitlines()[0]
+check('the miss is named and the pick asked again',
+      not err and 'nothing there - click one of the outlines' in txt, err)
+check('...and the fit then clicked is the one kept',
+      'Keeping fit 3' in txt, txt[-400:])
+
+# ----------------------------------------------------------------------
 print('ablobf -- the README quotes the values the code actually holds')
 # ----------------------------------------------------------------------
 # A knob table is only worth having if its middle column is the value in

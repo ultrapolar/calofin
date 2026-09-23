@@ -93,7 +93,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cdcallout-version* "v1.11")  ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.12")  ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -407,6 +407,10 @@
 ;; the point it is, which is how the AB tools take both at one prompt
 ;; too.  A click takes the NEAREST - there is nothing else on that layer
 ;; to hit - and what was taken is read back before anything is drawn.
+;; The click answers in the UCS and the points are WORLD data, so it is
+;; moved into the world before it is measured against them: untranslated,
+;; a UCS off the world origin took whichever point sat nearest the bare
+;; UCS numbers rather than the one under the cursor.
 ;; Returns the point, 'CDO-BACK, or nil for Enter.
 (defun cdo:ask-pick (nm hits / ans best bd n d c)
   (initget 128)
@@ -418,7 +422,8 @@
     ((null ans) nil)
     ((and (not (listp ans)) (cal:back-word-p ans)) 'CDO-BACK)
     ((listp ans)
-     (setq best nil bd nil n 0)
+     (setq ans  (trans ans 1 0)
+           best nil bd nil n 0)
      (foreach c hits
        (setq n (1+ n)
              d (distance (list (car ans) (cadr ans) 0.0) (car c)))

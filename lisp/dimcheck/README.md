@@ -56,6 +56,20 @@ does.
 
 A single `U` undoes an entire `DIMCHECK` run, including the report.
 
+`DIMSCAN`'s Enter (no highlight) scans the whole of the space you are
+working in -- model space from the Model tab or a layout viewport,
+the sheet itself only from paper space -- never every layout at once.
+
+**Locked layers.** When the selection holds items on locked layers,
+DIMCHECK offers to unlock them for the run and re-locks them at the
+end (or on Esc). Answer No and it still reviews those items, but it
+never claims a change the layer refused: a stray dimension point is
+reported as `NOT ATTACHED, layer locked, NOT moved` without the
+Move/Keep/Pick question, a detached arc as `NOT ATTACHED - layer
+locked`, an overlap you ask to Merge as `could NOT merge - layer
+locked`, and a dimension you answer No to as `FLAGGED to fix - layer
+locked, NOT coloured`. The dashboard counts each of these on its own.
+
 ## Tunables
 
 Every value DIMCHECK reads that you might want to change sits in one

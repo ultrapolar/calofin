@@ -6,9 +6,10 @@ A survey comes back numbered in the order the crew shot it, which is no
 order at all by the time the pool is drawn.  `POINTRENAMER` reprograms
 the numbers so they run round the pool instead:
 
-1. **Highlight the area** (Enter = everything in the tab you are
-   looking at -- the same scope the clash warning sweeps).  Points and
-   polylines are all it keeps.
+1. **Highlight the area** (Enter = everything in the space you are
+   working in -- the same scope the clash warning sweeps; from inside
+   a layout viewport that is model space).  Points and polylines are
+   all it keeps.
 2. **The perimeter is found** -- the biggest closed polyline on layer
    `POOL` in the highlight (the shape `ABHD` and `LINGUTTER` leave
    behind), or the only closed polyline there when `POOL` has none.
@@ -19,7 +20,8 @@ the numbers so they run round the pool instead:
    and then stops being offered.
 3. **Pick where the count starts.**  The pick is dropped onto the
    nearest spot on the perimeter (and the command says so when it had
-   to travel more than a foot).
+   to travel more than a foot).  It is taken out of the current UCS
+   first, so a moved UCS starts the count where you clicked.
 4. **Say which way round** -- `Clockwise` or `COunterclockwise`,
    meaning on the sheet: the polyline's own winding is measured (bulges
    included) and the sweep runs against its drawn order when it has to.
@@ -101,7 +103,7 @@ offers, before anyone has answered:
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `ptr:*band*` | `6.0` | the band; later runs offer the last answer instead |
-| `ptr:*dir*` | `"Clockwise"` | the direction, on the same footing |
+| `ptr:*dir*` | `"Clockwise"` | the direction, on the same footing: `Clockwise` or `Counterclockwise` in any case, or `CW` / `CCW`; anything else is offered as `Clockwise` |
 | `ptr:*first*` | `1` | the number the count is offered at, every run (not carried between them) |
 | `ptr:*sysvars*` | `'("CMDECHO")` | saved on the way in, restored however the run ends |
 
@@ -147,9 +149,11 @@ one by hand is not a way to configure anything.
   not cover them, and the pick says so instead of guessing.  A heavy
   `POLYLINE` that has been *fitted* is walked along the fitted curve
   (see `ptr:*vertex-skip*`).
-* `Enter` at the highlight means the current tab, not every tab: points
-  in a layout you are not looking at are left alone, which is also the
-  only scope the clash warning can see.
+* `Enter` at the highlight means the space you are working in, not
+  every tab: points in a layout you are not looking at are left alone,
+  which is also the only scope the clash warning can see.  Working
+  through a layout viewport is working in model space, and both sweeps
+  say so.
 * Two shots on the same spot get consecutive numbers (nothing is
   deduplicated -- every block must end up with a number).
 * The renumber rewrites attribute text only: layers, colours, scales
@@ -168,6 +172,10 @@ picked by hand), the Back chain, answering `No`, the skip counts, and
 the clash warning -- plus the contingencies: a mis-click at the
 perimeter pick, a perimeter with no length, a fitted heavy `POLYLINE`
 walked both ways round `ptr:*vertex-skip*`, a write that cannot land, a
-band that catches nothing, the current-tab scope, what the numeric
-prompts refuse, the band edge, and every knob above set to something
-else and followed.
+band that catches nothing, the current-space scope (another layout's
+points left alone), what the numeric prompts refuse, the band edge,
+and every knob above set to something else and followed.
+`tests/test_fix_survey_b.py` adds the rest: the direction knob in
+every spelling a shop types (bracket text, Enter and the remembered
+keyword), the scope from inside a layout viewport and from paper
+space, and a start pick under a moved UCS.

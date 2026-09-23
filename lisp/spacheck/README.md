@@ -55,14 +55,25 @@ on-drawing MTEXT report — with the spa rules in place of the liner ones.
    impossible day (`02/30`), a blank, and a stale-but-valid date are
    all reported. The block is looked for in the selection and then
    across the drawing; with none in reach the report says the date was
-   not checked rather than flagging it. `LITESPACHECKSCAN` keeps this.
+   not checked rather than flagging it. With more than one in reach
+   (a drawing holding several sheets), the one nearest the spa is read
+   and the report says which. `SPACHECK` then writes nothing, because
+   rewriting another sheet's title on a guess is worse than a stale date.
+   Highlight the spa together with its own Tech Title to have it
+   updated. `LITESPACHECKSCAN` keeps this.
 9. **The title block.** Everything on the `border` layer is measured
    together, so a frame drawn as one polyline and one drawn as four
-   lines both measure the same. **A spa title block is exactly 0.6× the
-   liner block**: the liner nominal is 704 × 543.625, so the spa nominal
-   is **422.4 × 326.175**. Anything else is reported with the factor it
-   actually came out at, and a border out of proportion is reported
-   separately as `STRETCHED`.
+   lines both measure the same, whether the lines meet at the corners
+   or stop a little short. When the drawing holds more than one sheet,
+   each separate frame is told apart. The one around (or nearest) the
+   spa is measured, and the report says how many there were. A border
+   that is not in the selection is looked for only in the space you
+   are working in (model space from a layout viewport), unlike the Tech
+   Title in item 8, which may sit in paper space. **A spa title block
+   is exactly 0.6× the liner block**: the liner nominal is 704 ×
+   543.625, so the spa nominal is **422.4 × 326.175**. Anything else is
+   reported with the factor it actually came out at, and a border out
+   of proportion is reported separately as `STRETCHED`.
 
 The report is an MTEXT placed to the right of the drawing and sized to
 scale with it: problems in **red** at full size, advice in **cyan**,
@@ -83,8 +94,18 @@ all-clear in green at 75%.
 | `SPACHECKVER` | Prints the loaded version and the title-block size it is checking for. |
 | `TUTORIALSPACHECK` | Teaches the tool — see below. |
 
-Pressing Enter at the selection prompt takes the whole drawing. A single
-`U` undoes an entire `SPACHECK` run, including the report.
+Pressing Enter at the selection prompt takes the whole drawing: every
+object in the space you are working in. That is model space from the
+Model tab or from inside a layout viewport, and the layout only when you
+are on the paper itself. A single `U` undoes an entire `SPACHECK` run,
+including the report.
+
+An item on a **locked layer** cannot be recoloured. `SPACHECK` says so at
+the item and counts it apart (`1 NOT recoloured (its layer is locked)`)
+rather than as marked; one AutoCAD refused for some other reason is
+counted the same way but not blamed on a lock. `SPACHECKRESCUE`
+likewise counts a colour it could not put back, and keeps the stash for
+a run after the layer is unlocked.
 
 ## TUTORIALSPACHECK
 

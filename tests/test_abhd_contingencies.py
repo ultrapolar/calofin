@@ -591,6 +591,79 @@ check("moving *PF-DEFAULT-FIT* moves what Enter keeps",
       'Keeping fit 3' in said(vm), said(vm)[-200:])
 
 
+def attempt(vm, cmd, script):
+    """Run CMD; a LispError comes back as its first line, '' if none."""
+    try:
+        run(vm, cmd, script)
+        return ''
+    except LispError as e:
+        return str(e).splitlines()[0]
+
+
+# ...but LAZTUNE and LAZBACKUP set that knob AFTER the file has loaded,
+# past the check near its top, so it is checked again where Enter
+# reads it.  A "tight" or a "4" used to make Enter keep NO fit: every
+# outline erased, no report, no bottom question, and nothing said
+for bad in ('"tight"', '"4"'):
+    vm, ents = survey_vm()
+    vm.loads('(setq *PF-DEFAULT-FIT* %s)' % bad)
+    err = attempt(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, None, None,
+                                            'No'])
+    check("a default of %s set after load still keeps a fit, and says so"
+          % bad,
+          not err and 'is not one of 1-3 - Enter keeps fit 2' in said(vm)
+          and 'Keeping fit 2' in said(vm)
+          and len(live(vm, 'LWPOLYLINE', 'POOL')) == 1,
+          err or said(vm)[-300:])
+
+# SIMPABHD reads its own knob through the same check, against five
+vm, ents = survey_vm()
+vm.loads('(setq *PF-SIMP-DEFAULT-FIT* "7")')
+err = attempt(vm, 'c:SIMPABHD', SIMP + [ents, NO_OMITS, None, None, 'No'])
+check("SIMPABHD's default of \"7\" still keeps a fit, and says so",
+      not err and 'is not one of 1-5 - Enter keeps fit 2' in said(vm)
+      and 'Keeping fit 2' in said(vm), err or said(vm)[-300:])
+
+
+def miss(vm):
+    """A click that hit nothing: entsel answers nil, as Enter does, and
+    AutoCAD sets ERRNO 7 to say which of the two it was."""
+    vm.sysvars['ERRNO'] = 7
+    return None
+
+
+def click_fit(n):
+    """A click on candidate N, whose ename exists only once it is drawn."""
+    def pick(vm):
+        fits = live(vm, 'LWPOLYLINE', 'POOL-FIT')
+        return [fits[n - 1], [0.0, 0.0, 0.0]] if len(fits) >= n else None
+    return pick
+
+
+# a click that lands between the thin preview lines is not an Enter:
+# taken as one, it kept the default and erased the fit reached for
+vm, ents = survey_vm()
+err = attempt(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, None, miss,
+                                        click_fit(3), 'No'])
+check("a click that misses every outline is asked again, not kept as 2",
+      not err and 'nothing there - click one of the outlines' in said(vm)
+      and 'Keeping fit 3' in said(vm), err or said(vm)[-300:])
+
+# ...and Enter after a miss is still Enter.  ERRNO is sticky -- only a
+# setvar puts it back to 0 -- so the 7 the miss left would read the
+# Enter that follows as a second miss, and the prompt would never let
+# go, unless it is cleared before every pick
+vm, ents = survey_vm()
+err = attempt(vm, 'c:ABHD', SETTINGS + [ents, NO_OMITS, None, miss,
+                                        None, 'No'])
+txt = said(vm)
+check("Enter after a miss keeps the default fit",
+      not err and 'nothing there - click one of the outlines' in txt
+      and 'Keeping fit 2' in txt
+      and txt.index('nothing there') < txt.rindex('Keeping fit 2'),
+      err or txt[-300:])
+
+
 # ------------------------------------------------------- 6. the pool bottom
 
 print("\nthe pool bottom, over a perimeter that already exists (ADAB)")

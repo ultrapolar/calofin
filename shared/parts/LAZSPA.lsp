@@ -83,7 +83,7 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.7")
+(setq *lazspa-version* "v1.8")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -1453,6 +1453,12 @@
   (setq dcl nil)
   (if f (vl-file-delete f))
   (setq f nil)
+  ;; the dialog's run ends with the dialog.  What the command does with
+  ;; the answer -- runs POOL off the form, launches the tool picked -- is
+  ;; a run of its own: left standing, this one was JOINED by it (the
+  ;; command is still what CMDNAMES names), and a failure in the tool
+  ;; was filed under a dialog no report can replay
+  (if lzd:end (lzd:end "LAZSPA"))
   out)
 
 ;;; -------------------- commands ----------------------------------------

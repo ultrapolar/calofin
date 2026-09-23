@@ -23,7 +23,9 @@ INSERT wherever it sits, any other INSERT on the `POINTS` layer, and a
 plain `POINT` on that layer, numbered by its `number` attribute (or, on
 an export that does not use that tag, by the first attribute that reads
 as a number). A point whose number cannot be read is carried as `?`: it
-can still be clicked, it just cannot be typed.
+can still be clicked, it just cannot be typed. Only model space is read:
+a survey-point block pasted onto a layout, on a key plan or a detail, is
+not one of the pool's points and is never offered.
 
 ## What it does
 

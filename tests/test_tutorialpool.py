@@ -16,7 +16,7 @@ import sys
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_DIR = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, TESTS_DIR)
-from lispvm import VM, LispError  # noqa: E402
+from lispvm import VM, LispError, Sym  # noqa: E402
 
 POOL = os.path.join(REPO_DIR, 'lisp', 'pool', 'POOL.LSP')
 TUT = os.path.join(REPO_DIR, 'lisp', 'pool', 'TUTORIALPOOL.LSP')
@@ -118,8 +118,10 @@ check('every sysvar is back where it started', vm.sysvars == before)
 check('the run is one undo group',
       [c for c in vm.commands if c and c[0] == '_.UNDO']
       == [['_.UNDO', '_Begin'], ['_.UNDO', '_End']])
-check('and the flag it tracked was a local, not pool:*undogrp*',
+check('and the flag it tracked was its own, not pool:*undogrp*',
       not any(str(k) == 'pool:*undogrp*' for k in vm.globals))
+check('...and that flag is down once the run is over',
+      vm.globals.get(Sym('pooldemo:*undo-open*')) is None)
 
 print('pooldemo -- without POOL.LSP it says so and draws nothing')
 #: the real path for someone who APPLOADs POOLDEMO on its own

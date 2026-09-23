@@ -7,7 +7,7 @@ plus Python re-implementations and never runs a command.
 Three builtins the VM does not carry are stubbed here, one process per
 suite so the registrations leak nowhere: vlax-ldata-get/-put (the
 per-drawing store) and vl-cmdf (logged like command, with a switchable
-failure mode for the locked-layer branch).
+failure mode for the failed-SCALE branch).
 
 DDALT is deliberately not covered: its one flow is a getfiled file
 pick plus an alert box, neither of which the VM models -- the getfiled
@@ -55,7 +55,7 @@ reg('vlax-ldata-put',
     lambda vm, a: (LDATA.__setitem__((a[0], a[1]), a[2]), a[2])[1])
 
 # vl-cmdf: logged like command; CMDF_OK[0] = False exercises the
-# locked-layer branch (vl-cmdf returns nil on failure)
+# failed-SCALE branch (vl-cmdf returns nil on failure)
 CMDF_OK = [True]
 reg('vl-cmdf',
     lambda vm, a: (vm.commands.append(list(a)), T if CMDF_OK[0] else NIL)[1])
@@ -199,8 +199,14 @@ vm = newvm([CIRCLE])
 c = vm.entities[-1]
 CMDF_OK[0] = False
 vm.run('c:DDFIX', [None, [c], 60.0, "2'"])
-check("a failed SCALE names the locked-layer suspicion",
-      'locked layer' in ''.join(vm.printed))
+# the pick already refuses a locked layer (stage 1), so a SCALE that
+# still fails is not that, and the line no longer sends the drafter
+# looking for one
+check("a failed SCALE says nothing was scaled, without the locked-layer "
+      "guess the pick has already ruled out",
+      'SCALE did not run - nothing was scaled.' in ''.join(vm.printed)
+      and 'locked layer' not in ''.join(vm.printed),
+      ''.join(vm.printed)[-200:])
 
 # ----------------------------------------------------------------------
 # 4. the siblings: DDSET, DDINFO, DDCAL

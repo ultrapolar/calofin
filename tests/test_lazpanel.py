@@ -1342,10 +1342,10 @@ for w in COM['wrote']:
 # not on that path -- is exactly the "?" placeholder the button showed.
 # the stub folder carries no trailing separator, so the code adds the
 # Windows one -- which is the point of the guard
-assert COM.get('saves') == ['/stub/support\\lazpanel-16.bmp',
-                            '/stub/support\\lazpanel-32.bmp'], COM.get('saves')
+assert COM.get('saves') == ['/stub/support\\lazpanel-16-dark.bmp',
+                            '/stub/support\\lazpanel-32-dark.bmp'], COM.get('saves')
 bitmaps = [str(x) for x in vm.globals.get('stub:*bitmaps*') or []]
-assert bitmaps == ['lazpanel-16.bmp', 'lazpanel-32.bmp'], (
+assert bitmaps == ['lazpanel-16-dark.bmp', 'lazpanel-32-dark.bmp'], (
     "SetBitmaps must get support-resolvable NAMES, not paths: %r" % bitmaps)
 
 grid = [str(r) for r in vm.globals.get('lzp:*icon16*')]
@@ -1507,8 +1507,8 @@ print("   a real run reports %r" % str(mv.globals.get('lzp:*icontype*')))
 print("== certutil: the fallback that asks AutoLISP for text only ==")
 cv = stubbed()
 COM['fail_at'] = 'write'          # exactly the field failure
-cv.loads('(setq test:*w* (lzp:bmp-write "/stub/x/lazpanel-16.bmp" 16 lzp:*icon16*))')
-assert str(cv.globals['test:*w*']) == '/stub/x/lazpanel-16.bmp', \
+cv.loads('(setq test:*w* (lzp:bmp-write "/stub/x/lazpanel-16-dark.bmp" 16 lzp:*icon16*))')
+assert str(cv.globals['test:*w*']) == '/stub/x/lazpanel-16-dark.bmp', \
     "the stream route failed and certutil did not pick it up"
 assert str(cv.globals.get('lzp:*iconroute*')) == 'certutil', \
     "route says %r" % cv.globals.get('lzp:*iconroute*')
@@ -1525,7 +1525,7 @@ print("   Write refused -> certutil -decode ran, base64 scratch deleted")
 
 # and when the stream route works, certutil is never reached
 cv2 = stubbed()
-cv2.loads('(setq test:*w2* (lzp:bmp-write "/stub/x/lazpanel-16.bmp" 16 lzp:*icon16*))')
+cv2.loads('(setq test:*w2* (lzp:bmp-write "/stub/x/lazpanel-16-dark.bmp" 16 lzp:*icon16*))')
 assert str(cv2.globals.get('lzp:*iconroute*')) == 'ADODB.Stream', \
     cv2.globals.get('lzp:*iconroute*')
 assert not COM.get('shell'), "certutil ran even though the stream worked"
@@ -1538,7 +1538,7 @@ vmf.loads('(setq stub:*nosupport* t)'
           '(setvar "TEMPPREFIX" "/tmp/acad/")'
           '(setq t:*b* (lzp:write-bmps))')
 fb = [str(x) for x in (vmf.globals.get('t:*b*') or [])]
-assert fb == ['/tmp/acad/lazpanel-16.bmp', '/tmp/acad/lazpanel-32.bmp'], fb
+assert fb == ['/tmp/acad/lazpanel-16-dark.bmp', '/tmp/acad/lazpanel-32-dark.bmp'], fb
 assert str(vmf.globals.get('lzp:*iconref*')) == 'path', \
     vmf.globals.get('lzp:*iconref*')
 print("   support path unreadable -> temp folder and full paths")
@@ -1548,12 +1548,12 @@ print("== a stable icon path, so a surviving toolbar keeps its picture ==")
 vm2 = stubbed(preload=True)
 for prefix, want in (
         # the usual shape: AutoCAD hands back a folder with a separator
-        ('C:\\Temp\\', 'C:\\Temp\\lazpanel-16.bmp'),
-        ('/tmp/acad/', '/tmp/acad/lazpanel-16.bmp'),
+        ('C:\\Temp\\', 'C:\\Temp\\lazpanel-16-dark.bmp'),
+        ('/tmp/acad/', '/tmp/acad/lazpanel-16-dark.bmp'),
         # and the shape the guard exists for: no separator at all, which
         # silently turns a folder called Temp into a file called
-        # Templazpanel-16.bmp that SetBitmaps then cannot read
-        ('C:\\Temp', 'C:\\Temp\\lazpanel-16.bmp')):
+        # Templazpanel-16-dark.bmp that SetBitmaps then cannot read
+        ('C:\\Temp', 'C:\\Temp\\lazpanel-16-dark.bmp')):
     vm2.loads('(setvar "TEMPPREFIX" "%s") (setq t:*p* (lzp:icon-path "16"))'
               % prefix.replace('\\', '\\\\'))
     got = str(vm2.globals['t:*p*'])
@@ -1565,7 +1565,7 @@ print("== reuse: the toolbar is kept, but re-iced and re-shown ==")
 vm3 = stubbed(preload=True)
 vm3.loads('(setq stub:*events* nil stub:*bitmaps* nil stub:*visible* nil'
           '      stub:*float* nil)'
-          '(setq t:*tb* (lzp:button-init))')
+          '(setq t:*tb* (lzp:button-init T))')
 tbs = [str(x) for x in vm3.globals.get('stub:*tbs*') or []]
 assert tbs == ['LazPanel'], "a second init duplicated the toolbar: %r" % tbs
 ev = events(vm3)
@@ -1606,15 +1606,15 @@ print("   the second drawing of a session does no toolbar work; LAZBUTTON still 
 
 print("== icons already on disk are left alone ==")
 _reset_com()
-COM['ondisk'].update({'/stub/support\\lazpanel-16.bmp',
-                      '/stub/support\\lazpanel-32.bmp'})
+COM['ondisk'].update({'/stub/support\\lazpanel-16-dark.bmp',
+                      '/stub/support\\lazpanel-32-dark.bmp'})
 vm7 = VM()
 vm7.loads(STUB)
 vm7.load(LSP)
 assert not COM.get('saves'), "icons on disk were rewritten: %r" % COM.get('saves')
 assert 'setbitmaps' in events(vm7), "the button still has to be iced from the files on disk"
 bm7 = [str(x) for x in vm7.globals.get('stub:*bitmaps*') or []]
-assert bm7 == ['lazpanel-16.bmp', 'lazpanel-32.bmp'], bm7
+assert bm7 == ['lazpanel-16-dark.bmp', 'lazpanel-32-dark.bmp'], bm7
 assert str(vm7.globals.get('lzp:*iconref*')) == 'name'
 assert vm7.globals.get('lzp:*iconwrote*') in (None, lispvm.NIL), \
     "iconwrote should be nil when nothing was written"
@@ -1623,18 +1623,18 @@ out7 = ''.join(str(p) for p in vm7.printed)
 assert 'on disk at' in out7 and 'written to' not in out7, out7
 # one file missing: the pair is written again
 _reset_com()
-COM['ondisk'].add('/stub/support\\lazpanel-16.bmp')
+COM['ondisk'].add('/stub/support\\lazpanel-16-dark.bmp')
 vm8 = VM()
 vm8.loads(STUB)
 vm8.load(LSP)
-assert COM.get('saves') == ['/stub/support\\lazpanel-16.bmp',
-                            '/stub/support\\lazpanel-32.bmp'], COM.get('saves')
+assert COM.get('saves') == ['/stub/support\\lazpanel-16-dark.bmp',
+                            '/stub/support\\lazpanel-32-dark.bmp'], COM.get('saves')
 print("   a pair on disk is reused, LAZICON says so, and a missing half rewrites both")
 
 
 print("== a toolbar that cannot get its button does not survive ==")
 vm4 = stubbed()
-vm4.loads('(setq stub:*addfail* t) (setq t:*tb* (lzp:button-init))')
+vm4.loads('(setq stub:*addfail* t) (setq t:*tb* (lzp:button-init T))')
 tbs = [str(x) for x in vm4.globals.get('stub:*tbs*') or []]
 assert tbs == [], (
     "an empty LazPanel toolbar was left behind: lzp:toolbar-find would hand "
@@ -2497,18 +2497,20 @@ print("== LAZNAME: names of the drafter's own, end to end ==")
 # shipped tables, so everything make check reads is unchanged -- which
 # is exactly why the rules have to be enforced here instead.
 
-# an alias is a wrapper defun, the shape DCE already is, built as data
+# an alias is a wrapper defun, the shape DCE already is, built as data.
+# PX and not PL throughout: PL is PLINE's acad.pgp shortcut, which
+# LAZNAME refuses (tests/test_fix_panel.py)
 nv = fresh()
-nv.loads('(setq t:*made* (lzp:alias-make "PL" "POOL"))')
+nv.loads('(setq t:*made* (lzp:alias-make "PX" "POOL"))')
 assert nv.globals.get('t:*made*'), "alias-make refused a good name"
 assert str(nv.globals.get('t:*x*') or '') == ''
-nv.loads('(setq t:*bound* (lzp:alias-taken-p "PL"))')
+nv.loads('(setq t:*bound* (lzp:alias-taken-p "PX"))')
 assert nv.globals.get('t:*bound*'), "the alias did not define a command"
 # the wrapper resolves its target at CALL time, so the alias may be
 # applied before the tool it names is loaded -- the standalone tier
 # gives no load-order guarantee and this is what makes that safe
 nv.loads('(defun c:POOL () (setq t:*ran* "POOL") (princ))')
-nv.loads('(c:PL)')
+nv.loads('(c:PX)')
 assert str(nv.globals.get('t:*ran*')) == 'POOL', \
     "the alias did not reach its tool: %r" % nv.globals.get('t:*ran*')
 print("   an alias is a wrapper defun and resolves its tool when it is called")
@@ -2567,7 +2569,7 @@ print("   a renamed caption reaches the grid, Find and CALHELP, table untouched"
 # the store: NAME=VALUE joined on ';', filtered through the roster on
 # read exactly as a stale pin is, and an empty value is not written
 kv = setvm([0])
-kv.loads('(defun vl-registry-read (k n) "POOL=PL;NOSUCHTOOL=XX")')
+kv.loads('(defun vl-registry-read (k n) "POOL=PX;NOSUCHTOOL=XX")')
 kv.loads('(setq t:*a* (lzp:kv-read "Alias"))')
 # a cons pair is not a Python list, so the shape is asserted in Lisp
 kv.loads('(setq t:*n* (length t:*a*)'
@@ -2575,11 +2577,11 @@ kv.loads('(setq t:*n* (length t:*a*)'
          '      t:*v* (cdr (car t:*a*)))')
 assert str(kv.globals['t:*n*']) == '1', \
     "a stale name survived the roster filter: %r" % kv.globals['t:*n*']
-assert str(kv.globals['t:*k*']) == 'POOL' and str(kv.globals['t:*v*']) == 'PL', \
+assert str(kv.globals['t:*k*']) == 'POOL' and str(kv.globals['t:*v*']) == 'PX', \
     "the pair did not come back intact: %r=%r" % (kv.globals['t:*k*'], kv.globals['t:*v*'])
 kv.loads('(setq t:*w* "") (defun vl-registry-write (k n s) (setq t:*w* s) s)')
-kv.loads('(lzp:kv-write "Alias" (list (cons "POOL" "PL") (cons "SPA" "")))')
-assert str(kv.globals['t:*w*']) == 'POOL=PL', \
+kv.loads('(lzp:kv-write "Alias" (list (cons "POOL" "PX") (cons "SPA" "")))')
+assert str(kv.globals['t:*w*']) == 'POOL=PX', \
     "an empty value was written: %r" % kv.globals['t:*w*']
 print("   the map stores NAME=VALUE, drops a stale name and skips an empty one")
 
@@ -2606,18 +2608,18 @@ fv = fresh()
 fv.loads('(setq t:*first* (car (lzp:commands)))')
 FIRST = str(fv.globals['t:*first*'])
 
-vm = namevm(1, click='name_alias', val='PL')
+vm = namevm(1, click='name_alias', val='PX')
 run(vm, 'c:LAZNAME', 'name-accept')
 assert str(vm.globals.get('stub:*dlgname*')) == 'lazpanel_names', \
     "LAZNAME opened %r" % vm.globals.get('stub:*dlgname*')
-assert ('Alias|%s=PL' % FIRST) in writes(vm), \
+assert ('Alias|%s=PX' % FIRST) in writes(vm), \
     "the alias was not stored against %s: %r" % (FIRST, writes(vm))
 assert any('answer to a name of yours' in str(p) for p in vm.printed), vm.printed
 print("   typing a name and accepting stores it against the tool that was picked")
 
-vm = namevm(0, click='name_alias', val='PL')
+vm = namevm(0, click='name_alias', val='PX')
 run(vm, 'c:LAZNAME', 'name-cancel')
-assert not [w for w in writes(vm) if 'PL' in w], \
+assert not [w for w in writes(vm) if 'PX' in w], \
     "cancel stored the edit: %r" % writes(vm)
 print("   cancel re-reads the store, as the pin and hide editors do")
 
@@ -2629,7 +2631,7 @@ gn.loads('(setq lzp:*aliases* (list (cons "POOL" "2BAD")))')
 gn.loads('(setq stub:*done* nil) (lzp:name-ok)')
 assert gn.globals.get('stub:*done*') is None, \
     "OK accepted a name that cannot be a command"
-gn.loads('(setq lzp:*aliases* (list (cons "POOL" "PL"))) (lzp:name-ok)')
+gn.loads('(setq lzp:*aliases* (list (cons "POOL" "PX"))) (lzp:name-ok)')
 assert str(gn.globals.get('stub:*done*')) == '1', \
     "OK refused a good name: %r" % gn.globals.get('stub:*done*')
 print("   OK re-checks rather than trusting the greying")
@@ -2642,7 +2644,7 @@ print("== LAZBACKUP: names and settings, out to a file and back ==")
 # previous test happened to leave in memory
 bv = fresh()
 bv.loads('(defun vl-registry-read (k n)'
-         ' (cond ((= n "Alias") "POOL=PL;SPA=SP2")'
+         ' (cond ((= n "Alias") "POOL=PX;SPA=SP2")'
          '       ((= n "Caption") "POOL=My own pool")'
          '       (t "")))')
 bv.env['CalofinTheme'] = 'DARK'
@@ -2653,7 +2655,7 @@ assert 'Wrote 2 names, 1 caption, 10 settings and 0 defaults of yours to C:\\bac
 content = bv.files.get('C:\\backup.txt')
 assert content is not None, "nothing was written"
 assert content.splitlines()[0].startswith('; calofin LAZBACKUP'), content
-assert '[Alias]' in content and 'POOL=PL' in content and 'SPA=SP2' in content
+assert '[Alias]' in content and 'POOL=PX' in content and 'SPA=SP2' in content
 assert '[Caption]' in content and 'POOL=My own pool' in content
 assert '[Settings]' in content and 'CalofinTheme=DARK' in content
 assert 'CalofinInk-ORIG=3' in content
@@ -2675,7 +2677,7 @@ iv = fresh()
 iv.files['C:\\backup.txt'] = (
     '; calofin LAZBACKUP -- v3.37\n'
     '[Alias]\n'
-    'POOL=PL\n'
+    'POOL=PX\n'
     'BOGUS=XX\n'
     '[Caption]\n'
     'POOL=My own pool\n'
@@ -2705,11 +2707,11 @@ assert 'CalofinInk-SUGG' not in iv.env, \
 assert 'CalofinInk-FLAG' not in iv.env, \
     "a retired role was written as a key nothing reads: %r" % iv.env
 writes = [str(x) for x in (iv.globals.get('t:*writes*') or [])]
-assert any(w.startswith('Alias=') and 'POOL=PL' in w for w in writes), writes
+assert any(w.startswith('Alias=') and 'POOL=PX' in w for w in writes), writes
 assert any(w.startswith('Caption=') and 'POOL=My own pool' in w for w in writes), writes
 # the alias works from the next command typed, not only after a reload
-iv.loads('(setq t:*f* (car (atoms-family 1 (list "C:PL"))))')
-assert str(iv.globals.get('t:*f*')) == 'C:PL', \
+iv.loads('(setq t:*f* (car (atoms-family 1 (list "C:PX"))))')
+assert str(iv.globals.get('t:*f*')) == 'C:PX', \
     "an imported alias did not define its wrapper"
 print("   Import applies what it can, skips and names what it cannot")
 

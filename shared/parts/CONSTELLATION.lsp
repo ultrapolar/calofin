@@ -92,7 +92,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.8")
+(setq *constellation-version* "v1.9")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -441,10 +441,14 @@
 ;;;  strip near the right edge of the view, graded like a tape with the
 ;;;  last length ringed in the middle -- and one prompt then takes a
 ;;;  click on a row (that row's value), a typed measurement in any
-;;;  spelling (44, 44.5, 44 1/2, 4'4.5, 4'-4 1/2"), Enter, a keyword,
+;;;  spelling (44, 44.5, 44-1/2, 4'4.5, 4'-4-1/2"), Enter, a keyword,
 ;;;  or a click on empty space as the first of two points to measure
 ;;;  between, which is what getdist always offered.  A run of
 ;;;  near-equal lengths is clicked rather than typed over and over.
+;;;  The fractions are DASHED because the prompt is a getpoint, where
+;;;  the spacebar is Enter: 44 1/2 is two answers there, 44 to this
+;;;  question and 1/2 to the next, so a bare fraction is refused
+;;;  rather than taken as a length of its own.
 ;;;
 ;;;  PERPPTS, CPERPPTS, PERPMARK, CORNERSTP, HEMISTEP and NORMIESTEP
 ;;;  ask their lengths through it.  Each carries this block under its
@@ -486,17 +490,38 @@
 ;;;  Values are INCHES, the unit this shop draws in, and the ruler
 ;;;  steps in eighths of one, which is what a tape reads in.
 
+;; The ruler is laid out in the UCS -- VIEWCTR is a UCS point, and so
+;; is every click the hit test reads -- and entmake takes the WORLD.
+;; So each point goes through trans on its way into the drawing: under
+;; a UCS whose origin a drafter has moved to the pool's corner, the
+;; ruler was drawn that far away from the view it was measured off,
+;; out of sight, while the prompt still answered clicks on the empty
+;; strip where it should have been.
+
 ;;; -------------------- end of the length ruler -------------------------
 
 ;; The scratch layer the rows are drawn on, made if it is missing.  A
 ;; layer of its own is what lets a drafter turn the ruler off without
 ;; turning anything of the chart off with it.
-(defun cst:rulerlayer ()
+;; LOCKED is not left alone: entmake draws onto a locked layer but
+;; entdel refuses there, so every ruler drawn stayed in the drawing
+;; for good and each redraw added another copy -- and LAYISO's
+;; lock-and-fade locks this layer with everything else.  It is
+;; calofin scratch, so it is unlocked, said once, and left unlocked.
+(defun cst:rulerlayer ( / ed fl)
   (if (not (tblsearch "LAYER" cst:*ruler-layer*))
     (entmake (list '(0 . "LAYER") '(100 . "AcDbSymbolTableRecord")
                    '(100 . "AcDbLayerTableRecord")
                    (cons 2 cst:*ruler-layer*) '(70 . 0) '(62 . 7)
-                   (cons 6 "CONTINUOUS"))))
+                   (cons 6 "CONTINUOUS")))
+    (progn
+      (setq ed (entget (tblobjname "LAYER" cst:*ruler-layer*))
+            fl (cdr (assoc 70 ed)))
+      (if (and fl (= 4 (logand 4 fl))
+               (entmod (subst (cons 70 (- fl 4)) (assoc 70 ed) ed)))
+        (princ (strcat "\nCONSTELLATION: layer " cst:*ruler-layer*
+                       " was locked - unlocked so the ruler can be"
+                       " taken down again.")))))
   cst:*ruler-layer*)
 
 ;; Take the ruler down -- the one call *error* and the clean exit both
@@ -1341,6 +1366,25 @@
 (defun cst:dotr  (w h) (max cst:*dotr-min*  (* cst:*dotr*  (min w h))))
 (defun cst:dimoff (w h) (* cst:*dimoff* (min w h)))
 
+;; A point of the drawing as the WORLD point entmake wants.  The base
+;; point is a click, and a click answers in the current UCS, so the
+;; whole drawing -- the space, the points, the dims, the outline -- is
+;; laid out in the UCS and moved into the world only here, where it is
+;; written.  Without this a UCS off the world origin drew everything
+;; that far from the base point clicked, and a turned one drew the
+;; space square to the world instead of to the UCS it was sized in.
+(defun cst:wcs (p)
+  (trans (list (car p) (cadr p) 0.0) 1 0))
+
+;; How far the current UCS is turned from the world X axis, so text and
+;; blocks read along it.  Taken off the UCS X axis moved into the world
+;; -- not off UCSXDIR run back into the UCS, which is (1 0 0) there
+;; however far the UCS is turned, so it would always answer zero.
+;; 0 in the world UCS.
+(defun cst:ucsang ( / v)
+  (setq v (trans '(1.0 0.0 0.0) 1 0 T))
+  (atan (cadr v) (car v)))
+
 ;; entmake and hand back the ename, so the preview can erase what it
 ;; drew.  (cal:mtext does the same dance for the same reason -- entmake
 ;; returns the entity list, not a name.)
@@ -1349,7 +1393,7 @@
 (defun cst:circle (p r lay)
   (entmakex (list '(0 . "CIRCLE") '(100 . "AcDbEntity") (cons 8 lay)
                   '(100 . "AcDbCircle")
-                  (list 10 (car p) (cadr p) 0.0) (cons 40 r))))
+                  (cons 10 (cst:wcs p)) (cons 40 r))))
 
 ;; Closed polyline through the points given, in order.  BULGES is one
 ;; number per vertex or nil for a straight run; a bulge bends the
@@ -1359,7 +1403,7 @@
                   '(100 . "AcDbPolyline") (cons 90 (length pts)) '(70 . 1))
         i   0)
   (foreach p pts
-    (setq dxf (append dxf (list (cons 10 (cal:2d p))))
+    (setq dxf (append dxf (list (cons 10 (cal:2d (cst:wcs p)))))
           dxf (if (and bulges (/= 0.0 (nth i bulges)))
                 (append dxf (list (cons 42 (nth i bulges))))
                 dxf)
@@ -1415,12 +1459,12 @@
 (defun cst:dim (p1 p2 loc lay)
   (entmakex (list '(0 . "DIMENSION") '(100 . "AcDbEntity") (cons 8 lay)
                   '(100 . "AcDbDimension")
-                  (list 10 (car loc) (cadr loc) 0.0)
-                  (list 11 (car loc) (cadr loc) 0.0)
+                  (cons 10 (cst:wcs loc))
+                  (cons 11 (cst:wcs loc))
                   '(70 . 33) '(1 . "")
                   '(100 . "AcDbAlignedDimension")
-                  (list 13 (car p1) (cadr p1) 0.0)
-                  (list 14 (car p2) (cadr p2) 0.0))))
+                  (cons 13 (cst:wcs p1))
+                  (cons 14 (cst:wcs p2)))))
 
 ;; The ab_pt survey block, built if this drawing has never seen one.
 ;; (ABCDEF's definition, made the same way, so a drawing can hold
@@ -1450,17 +1494,20 @@
                      "\" was not in this drawing - created it."))))
   (tblsearch "BLOCK" cst:*point-block*))
 
-(defun cst:insert-pt (pt name th)
+(defun cst:insert-pt (pt name th / rot)
+  (setq rot (cst:ucsang))
   (entmake (list '(0 . "INSERT") '(100 . "AcDbEntity")
                  (cons 8 cst:*point-layer*)
                  '(100 . "AcDbBlockReference") '(66 . 1)
                  (cons 2 cst:*point-block*)
-                 (list 10 (car pt) (cadr pt) 0.0)
-                 (cons 41 th) (cons 42 th) (cons 43 th)))
+                 (cons 10 (cst:wcs pt))
+                 (cons 41 th) (cons 42 th) (cons 43 th) (cons 50 rot)))
   (entmake (list '(0 . "ATTRIB") '(100 . "AcDbEntity")
                  (cons 8 cst:*point-layer*) '(100 . "AcDbText")
-                 (list 10 (+ (car pt) th) (- (cadr pt) (* 2.0 th)) 0.0)
-                 (cons 40 th) (cons 1 name) '(100 . "AcDbAttribute")
+                 (cons 10 (cst:wcs (list (+ (car pt) th)
+                                         (- (cadr pt) (* 2.0 th)))))
+                 (cons 40 th) (cons 50 rot) (cons 1 name)
+                 '(100 . "AcDbAttribute")
                  (cons 2 cst:*point-tag*) '(70 . 0)))
   (entmake (list '(0 . "SEQEND") '(100 . "AcDbEntity")
                  (cons 8 cst:*point-layer*))))
@@ -1492,7 +1539,8 @@
     (setq p   (cal:v+ base p)
           cst:*preview* (cons (cst:circle p r cst:*guide-layer*)
                               cst:*preview*)
-          lab (cst:made (cal:text (list (+ (car p) r) (+ (cadr p) r))
+          lab (cst:made (cal:text (cst:wcs (list (+ (car p) r)
+                                                 (+ (cadr p) r)))
                                   th (cst:letter i) cst:*guide-layer*))
           cst:*preview* (if lab (cons lab cst:*preview*) cst:*preview*)
           i   (1+ i)))
@@ -1557,6 +1605,11 @@
          (cst:askcount))
         (t v)))
 
+;; The base point, in the CURRENT UCS: a click answers in it, and so
+;; does Enter -- <0,0> is the UCS origin, the same point typing 0,0
+;; gives, rather than a world origin the drafter cannot see from the
+;; prompt.  The drawing is laid out off it in the UCS and moved into
+;; the world where it is written (cst:wcs).
 (defun cst:askbase ( / v)
   (initget "Back Undo")
   (setq v (getpoint "\nInsertion base point [Back] <0,0>: "))

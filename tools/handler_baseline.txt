@@ -1,0 +1,14 @@
+# Nested handlers a person has READ and decided about (rule H5 only).
+# One line per accepted pair:  OUTER-COMMAND|inner-defun|reason
+# Rules H1-H4 and H6 take no baseline: each is a handler that dies, or a
+# cleanup that cannot run, on the path the handler exists for.
+C:AUTODIM|c:paddle|the pads go in LAST: layer, style, CMDECHO and the undo group are back before ad:paddle, and the PICKFIRST left on by an Esc inside PADDLE is documented in the file header
+C:LINGUTTER|c:paddle|undo group closed and lg:sysrestore run before lg:paddle hands over; nothing of LINGUTTER's is open when PADDLE's handler takes over
+C:CALSET|c:lazhide|CALSET's handler has nothing to restore; a LAZHIDE failure joins CALSET's LAZDIAG run and is filed under CALSET with LAZHIDE named
+C:CORNERSTP|autobead-build|the steps' undo group is closed and CMDECHO/CLAYER/LUNITS are back (step 10) before step 11 hands the treads to the build, and the build joins CORNERSTP's LAZDIAG run -- nothing of the step run is open for its handler to miss
+C:HEMISTEP|autobead-build|as CORNERSTP: undo closed and CLAYER/CMDECHO restored before the bead hand-off; the build reports under HEMISTEP
+C:NORMIESTEP|autobead-build|as CORNERSTP: undo closed and CLAYER/CMDECHO restored before the bead hand-off; the build reports under NORMIESTEP
+C:TUTORIALAUTOBEAD|autobead-build|the tutorial opens no group and moves no setting; the demo pool it draws is swept by the build's own handler (autobead:*in-demo*), which is the one that runs when the build fails
+C:TUTORIALSPACHECK|spachk:scan|spachk:demo ends its undo group and puts CLAYER/CMDECHO back before (c:SPACHECKSCAN); the practice drawing is left on purpose, as it is on a clean run
+C:ABCDEF|c:abhd|ABCDEF's handler only closes its undo group, and the group is closed before abcdef:to-abhd runs; the ABHD run joins ABCDEF's LAZDIAG run, so a failure in it is filed under ABCDEF with both commands' answers
+C:XYPLOT|c:abhd|as ABCDEF: the plot's undo group is closed before xyp:to-abhd, XYPLOT's handler has nothing else to put back, and the ABHD run joins XYPLOT's LAZDIAG run

@@ -66,7 +66,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.8")
+(setq *abpcheck-version* "v1.9")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value ABPCHECK reads that someone might want to
@@ -185,6 +185,9 @@
 ;;;  END TUNABLES.  What follows is STATE, not settings: what one run
 ;;;  has to put back, and what the session remembers you answered.
 (setq abp:*asked*        nil)     ; the limit you last answered, this session
+(setq abp:*stuck*        0)       ; own objects a purge could NOT erase, so
+                                  ; ABPCHECKRESCUE never says "nothing left"
+                                  ; over objects still standing
 ;;; ======================================================================
 
 ;;; -------------------- generic helpers ----------------------------------
@@ -270,6 +273,45 @@
 
 ;;; -------------------- entity -> segments ------------------------------
 
+;; ---- the entity's own plane ----------------------------------------
+;; An ARC, CIRCLE or polyline keeps its numbers in its OWN plane -- the
+;; OCS its 210 names -- not the world's.  Flat work carries no 210, or
+;; (0 0 1), and passes through untouched.  One on the underside of the
+;; plane, (0 0 -1), is what exploding a mirrored block or some survey
+;; exporters leave: every X is the other way round, so read raw the
+;; outline lands mirrored through the Y axis, and the "not drawn in the
+;; world plane" warning never fires because the plane IS the world's.
+;; So the plane is read once per entity (nil when flat), each end is
+;; taken to world through it, and each bulge turns the other way when
+;; the plane is seen from below.  A genuinely tilted plane is still only
+;; flattened here -- that one is warned about where it is read.
+(defun abp:ocs-n (ed / nz)
+  (setq nz (cdr (assoc 210 ed)))
+  (if (and nz (not (equal nz '(0.0 0.0 1.0) 1.0e-10))) nz))
+
+;; SEGS as read in EN's plane NZ at elevation Z, taken to the world's.
+(defun abp:segs-w (segs en nz z)
+  (if nz
+    (mapcar '(lambda (s)
+               (list (cal:2d (trans (list (car (car s)) (cadr (car s)) z)
+                                   en 0))
+                     (cal:2d (trans (list (car (cadr s)) (cadr (cadr s)) z)
+                                   en 0))
+                     (if (< (caddr nz) 0.0) (- (caddr s)) (caddr s))))
+            segs)
+    segs))
+
+;; Where a survey point sits, in the world's numbers.  A block's (or a
+;; TEXT's) insertion point is kept in its own plane just as an ARC's
+;; centre is, so an ab_pt inserted from below, (0 0 -1), read raw lands
+;; mirrored through the Y axis - off the outline it was shot on, with
+;; nothing said.  A POINT's 10 is in world numbers already and is left
+;; alone, as is anything flat.
+(defun abp:ins-w (ed)
+  (if (and (/= (cdr (assoc 0 ed)) "POINT") (abp:ocs-n ed))
+    (trans (cdr (assoc 10 ed)) (cdr (assoc -1 ed)) 0)
+    (cdr (assoc 10 ed))))
+
 (defun abp:lw-segs (ed / pts bls item segs n closed)
   ;; collect (10) vertices and their (42) bulges, in order
   (setq pts nil bls nil)
@@ -294,18 +336,26 @@
            (> (length pts) 2)
            (> (cal:dist (last pts) (car pts)) abp:*exact-eps*))
     (setq segs (cons (list (last pts) (car pts) (last bls)) segs)))
-  (reverse segs))
+  (abp:segs-w (reverse segs) (cdr (assoc -1 ed)) (abp:ocs-n ed)
+             (cond ((cdr (assoc 38 ed))) (0.0))))
 
-(defun abp:pl-segs (en / ed sub pts bls segs n closed)
+(defun abp:pl-segs (en / ed sub pts bls segs n closed nz z)
   ;; heavy (old-style) 2D POLYLINE: walk its VERTEX sub-entities
   (setq ed     (entget en)
         closed (= 1 (logand 1 (cdr (assoc 70 ed))))
+        ;; a 3D polyline or mesh (bits 8, 16) keeps world numbers
+        nz     (if (= 0 (logand 24 (cdr (assoc 70 ed)))) (abp:ocs-n ed))
+        z      (cond ((caddr (cdr (assoc 10 ed)))) (0.0))
         pts    nil
         bls    nil
         sub    (entnext en))
   (while (and sub (= "VERTEX" (cdr (assoc 0 (setq ed (entget sub))))))
-    ;; skip spline/fit control vertices (flag bits 1 and 16)
-    (if (= 0 (logand 17 (cond ((cdr (assoc 70 ed))) (0))))
+    ;; skip the spline FRAME points (flag 16) only: they are the
+    ;; control net, off the curve.  A curve-fit extra vertex (flag 1)
+    ;; is ON the curve -- PEDIT Fit joins an arc pair there -- and
+    ;; dropping it while keeping its neighbours' bulges read arcs that
+    ;; do not follow the outline
+    (if (= 0 (logand 16 (cond ((cdr (assoc 70 ed))) (0))))
       (setq pts (cons (cal:2d (cdr (assoc 10 ed))) pts)
             bls (cons (cond ((cdr (assoc 42 ed))) (0.0)) bls)))
     (setq sub (entnext sub)))
@@ -315,11 +365,13 @@
           n    (1+ n)))
   (if (and closed (> (length pts) 2))
     (setq segs (cons (list (last pts) (car pts) (last bls)) segs)))
-  (reverse segs))
+  (abp:segs-w (reverse segs) en nz z))
 
-(defun abp:ent-segs (en / ed typ c r a1 a2 delta)
+(defun abp:ent-segs (en / ed typ c r a1 a2 delta nz z)
   (setq ed  (entget en)
-        typ (cdr (assoc 0 ed)))
+        typ (cdr (assoc 0 ed))
+        nz  (abp:ocs-n ed)
+        z   (cond ((caddr (cdr (assoc 10 ed)))) (0.0)))
   (cond
     ((= typ "LINE")
      (list (list (cal:2d (cdr (assoc 10 ed)))
@@ -334,15 +386,19 @@
      (if (< delta 1.0e-10) (setq delta (* 2.0 pi)))
      ;; a full-circle arc cannot be one bulged segment (its bulge is
      ;; infinite): hand back two semicircles instead
-     (if (> delta (- (* 2.0 pi) 1.0e-9))
-       (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
-             (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
-       (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0))))))
+     (abp:segs-w
+       (if (> delta (- (* 2.0 pi) 1.0e-9))
+         (list (list (polar c a1 r) (polar c (+ a1 pi) r) 1.0)
+               (list (polar c (+ a1 pi) r) (polar c a1 r) 1.0))
+         (list (list (polar c a1 r) (polar c a2 r) (cal:tan (/ delta 4.0)))))
+       en nz z))
     ((= typ "CIRCLE")
      (setq c (cal:2d (cdr (assoc 10 ed)))
            r (cdr (assoc 40 ed)))
-     (list (list (polar c 0.0 r) (polar c pi r) 1.0)
-           (list (polar c pi r) (polar c 0.0 r) 1.0)))
+     (abp:segs-w
+       (list (list (polar c 0.0 r) (polar c pi r) 1.0)
+             (list (polar c pi r) (polar c 0.0 r) 1.0))
+       en nz z))
     ((= typ "LWPOLYLINE") (abp:lw-segs ed))
     ((= typ "POLYLINE") (abp:pl-segs en))
     (T nil)))
@@ -405,6 +461,10 @@
                 (assoc -3 (entget en (list abp:*appid*))))
           (setq nmine (1+ nmine))
           (progn
+            ;; a tilt is counted and warned about; the plane seen from
+            ;; below, (0 0 -1), is no tilt - abp:ent-segs takes a line's
+            ;; numbers to world and abp:ins-w a point block's, so each
+            ;; is measured where it is drawn
             (if (and ext (< (abs (caddr ext)) abp:*plane-min*))
               (setq nocs (1+ nocs)))
             (cond
@@ -414,7 +474,7 @@
                        (strcase abp:*pt-block*)))
                (setq npt (1+ npt)
                      nm  (cal:block-number en abp:*pt-tag*)
-                     pts (cons (abp:pt (cdr (assoc 10 ed))
+                     pts (cons (abp:pt (abp:ins-w ed)
                                        (if (and nm (/= nm ""))
                                          nm
                                          (itoa npt)))
@@ -430,7 +490,7 @@
                (if (= lay (strcase abp:*pt-layer*))
                  (setq npt (1+ npt)
                        nm  (cal:block-number en abp:*pt-tag*)
-                       pts (cons (abp:pt (cdr (assoc 10 ed))
+                       pts (cons (abp:pt (abp:ins-w ed)
                                          (if (and nm (/= nm ""))
                                            nm
                                            (itoa npt)))
@@ -645,8 +705,8 @@
 
 ;; Erase only ABPCHECK's own objects on a layer; anything the user drew
 ;; there is left alone.  Returns how many went.
-(defun abp:purge-mine (name / ss i en n)
-  (setq n 0)
+(defun abp:purge-mine (name / ss i en n mine stuck ed flags)
+  (setq n 0 stuck 0 mine nil)
   (if (tblsearch "LAYER" name)
     (progn
       (setq ss (ssget "_X" (list (cons 8 name))))
@@ -656,8 +716,28 @@
           (repeat (sslength ss)
             (setq en (ssname ss i))
             (if (assoc -3 (entget en (list abp:*appid*)))
-              (progn (entdel en) (setq n (1+ n))))
-            (setq i (1+ i)))))))
+              (setq mine (cons en mine)))
+            (setq i (1+ i)))))
+      ;; entdel answers nil on a locked layer and erases nothing, and
+      ;; this layer can be the drafter's own, locked on purpose.  So the
+      ;; lock is lifted for the erase and put back after it, and only an
+      ;; erase that took is counted: counting the attempts said
+      ;; "cleared" over markers still on screen, and the next run wrote
+      ;; its own markers over them
+      (if mine
+        (progn
+          (setq ed    (entget (tblobjname "LAYER" name))
+                flags (cond ((cdr (assoc 70 ed))) (0)))
+          (if (= 4 (logand 4 flags))
+            (entmod (subst (cons 70 (- flags 4)) (assoc 70 ed) ed)))
+          (foreach en mine
+            (if (entdel en) (setq n (1+ n)) (setq stuck (1+ stuck))))
+          (if (= 4 (logand 4 flags)) (entmod ed))
+          (setq abp:*stuck* (+ abp:*stuck* stuck))
+          (if (> stuck 0)
+            (princ (strcat "\nABPCHECK: " (itoa stuck)
+                           " of its own object(s) on layer " name
+                           " could not be erased - NOT removed.")))))))
   n)
 
 ;; Ring every point that is too far off, on its own layer, so the
@@ -798,12 +878,16 @@
     (progn
       (command "_.UNDO" "_Begin")
       (setq undo-open T)))
-  (setq n (+ (abp:purge-mine abp:*miss-layer*)
+  (setq abp:*stuck* 0
+        n (+ (abp:purge-mine abp:*miss-layer*)
              (abp:purge-mine abp:*report-layer*)))
-  (if (> n 0)
-    (princ (strcat "\nABPCHECKRESCUE: " (itoa n)
-                   " ABPCHECK object(s) removed."))
-    (princ "\nABPCHECKRESCUE: nothing of ABPCHECK's left to remove."))
+  (cond
+    ((> n 0)
+     (princ (strcat "\nABPCHECKRESCUE: " (itoa n)
+                    " ABPCHECK object(s) removed.")))
+    ;; the purge has already named what it could not erase
+    ((= abp:*stuck* 0)
+     (princ "\nABPCHECKRESCUE: nothing of ABPCHECK's left to remove.")))
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)

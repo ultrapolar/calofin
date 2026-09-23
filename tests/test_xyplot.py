@@ -57,10 +57,39 @@ STUBS = r'''
 (defun getfiled (title dflt ext flags) "C:\\jobs\\xy.csv")
 (defun alert (s) (setq *alert* s))
 (defun sssetfirst (a b) (setq *preselect* b))
-(defun open (path mode) (setq *rpt-path* path *rpt* '()) 'FP)
+(setq *csv* '())
+(defun open (path mode)
+  (if (= mode "r")
+    (progn (setq *csv-left* *csv*) 'FPR)
+    (progn (setq *rpt-path* path *rpt* '()) 'FP)))
+(defun read-line (fp / l)
+  (if *csv-left*
+    (progn (setq l (car *csv-left*) *csv-left* (cdr *csv-left*)) l)))
 (defun write-line (s fp) (setq *rpt* (cons s *rpt*)) s)
 (defun close (fp) nil)
 '''
+
+#: ABHD as the build defines it -- a c: function -- counting its calls and
+#: noting what it was handed and how many undo groups were still open when
+#: it started.  A call is the only way in: the command processor does not
+#: know AutoLISP commands, so (vl-cmdf "_.ABHD") is Unknown command in
+#: AutoCAD, and a test that looked for that string in vm.commands passed
+#: over a handoff that never started anything.
+ABHD_STUB = """
+(defun c:ABHD ()
+  (setq *abhd-ran* (1+ (cond (*abhd-ran*) (0)))
+        *abhd-saw* *preselect*
+        *abhd-undo* (test:undo-groups)))"""
+lispvm.BUILTINS[Sym('test:undo-groups')] = lambda vm, a: vm.undo_groups
+
+
+def abhd_ran(vm):
+    return vm.globals.get(Sym('*abhd-ran*')) or 0
+
+
+def lstr(v):
+    return '"' + v.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
 
 #: a survey with the awkward bits in it on purpose: the origin itself, two
 #: points sharing an X, two sharing a Y, and one in negative X
@@ -70,7 +99,9 @@ SHEET = [("1", 0.0, 0.0), ("2", 120.0, 18.5), ("3", 240.25, 96.0),
 
 
 def run(pts=SHEET, answer="No", with_abhd=True, origin=(0.0, 0.0),
-        undoctl=None):
+        undoctl=None, csv=None, post=''):
+    """CSV, when given, is the sheet as the lines of a .csv file, and the
+    command's OWN reader parses it; otherwise PTS go in as parsed rows."""
     vm = VM()
     lispvm.BUILTINS[Sym('vl-cmdf')] = lispvm.BUILTINS[Sym('command')]
     vm.loads(STUBS)
@@ -78,12 +109,19 @@ def run(pts=SHEET, answer="No", with_abhd=True, origin=(0.0, 0.0),
     if undoctl is not None:
         vm.sysvars['UNDOCTL'] = undoctl
     if with_abhd:
-        vm.loads('(defun c:ABHD () nil)')
-    body = " ".join('(list "%s" %s %s)'
-                    % (nm, 'nil' if x is None else repr(x),
-                       'nil' if y is None else repr(y)) for nm, x, y in pts)
-    # the sheet reader is Excel COM and file I/O; the rows go in directly
-    vm.loads("(defun xyp:read-file (file) (list %s))" % body)
+        vm.loads(ABHD_STUB)
+    if csv is None:
+        body = " ".join('(list "%s" %s %s)'
+                        % (nm, 'nil' if x is None else repr(x),
+                           'nil' if y is None else repr(y))
+                        for nm, x, y in pts)
+        # the sheet reader is Excel COM and file I/O; the rows go in
+        # directly
+        vm.loads("(defun xyp:read-file (file) (list %s))" % body)
+    else:
+        vm.loads("(setq *csv* '(%s))" % " ".join(lstr(l) for l in csv))
+    if post:
+        vm.loads(post)
     vm.run('c:XYPLOT', [[origin[0], origin[1], 0.0], answer])
     return vm
 
@@ -309,18 +347,71 @@ def test_report_carries_both_readings_of_every_value():
 def test_abhd_handoff_takes_graph1_only():
     print("\nthe handoff offers ABHD graph 1's points, and only those")
     vm = run(answer="Yes")
-    check("ABHD is started", ['_.ABHD'] in vm.commands)
-    ss = vm.globals.get(Sym('*preselect*'))
+    check("ABHD is started -- its c: function, called once",
+          abhd_ran(vm) == 1)
+    check("and never sent to the command processor, which does not know it",
+          not any(c and str(c[0]).upper().lstrip('._') == 'ABHD'
+                  for c in vm.commands))
+    ss = vm.globals.get(Sym('*abhd-saw*'))
     check("with graph 1's points and no others (%s of %d)"
           % (len(ss) - 1 if ss else None, len(SHEET)),
           ss is not None and len(ss) - 1 == len(SHEET))
+    check("after XYPLOT's own undo group was closed",
+          vm.globals.get(Sym('*abhd-undo*')) == 0)
 
     vm = run(answer="No")
-    check("answering No starts nothing", ['_.ABHD'] not in vm.commands)
+    check("answering No starts nothing", abhd_ran(vm) == 0)
 
     vm = run(answer="Yes", with_abhd=False)
-    check("ABHD not loaded: nothing is started",
-          ['_.ABHD'] not in vm.commands)
+    check("ABHD not loaded: nothing is started, and it says so",
+          'ABHD is not loaded' in ''.join(vm.printed)
+          and not any(c and str(c[0]).upper().lstrip('._') == 'ABHD'
+                      for c in vm.commands))
+
+    vm = run(answer="Yes", post='(setvar "PICKFIRST" 0)')
+    check("PICKFIRST off: ABHD still starts, told nothing can be handed over",
+          abhd_ran(vm) == 1 and 'PICKFIRST is off' in ''.join(vm.printed)
+          and vm.globals.get(Sym('*abhd-saw*')) is None)
+
+
+def test_the_real_reader_keeps_the_origin_and_negatives():
+    print("\nthe sheet's own reader keeps 0 and negatives, as the header says")
+    # Every other test here hands XYPLOT parsed rows.  This one writes
+    # SHEET out as the .csv a drafter exports and lets the command read
+    # it: the reader had kept ABCDEF's rule that 0 or less is unreadable,
+    # so the origin and both negative-X points never reached the plot.
+    lines = ["POINT,X,Y"] + ["%s,%r,%r" % p for p in SHEET]
+    vm = run(csv=lines)
+    got = survey_points(vm)
+    check("all %d rows are plotted (%d)" % (len(SHEET), len(got)),
+          len(got) == len(SHEET))
+    for nm, x, y in SHEET:
+        check("%s read as (%g, %g)" % (nm, x, y),
+              nm in got and abs(got[nm][0] - x) < 1e-6
+              and abs(got[nm][1] - y) < 1e-6)
+    said = ''.join(vm.printed)
+    check("and none of them is called unreadable",
+          'could not be read' not in said)
+
+    # the spellings a sheet writes 0 and a negative in, and the one a
+    # sheet writes "not measured" in, which must stay blank
+    # (a field holding an inch mark is quoted, its quote doubled, the way
+    # a spreadsheet writes one out)
+    vm = run(csv=["POINT,X,Y", "O,0,0", "A,-36,12",
+                  'B,"-4\'-0""","0\'-6"""',
+                  'C,-0.5,"-1\'-0 1/2"""', "D,-,24", 'E," - ",24'])
+    got = survey_points(vm)
+    check("0 is the origin", got.get("O") == (0.0, 0.0))
+    check("-36 is 36 inches the other side", got.get("A") == (-36.0, 12.0))
+    check("-4'-0\" reads as feet-and-inches, negative",
+          got.get("B") == (-48.0, 6.0))
+    check("-0.5 and -1'-0 1/2\" both read", got.get("C") == (-0.5, -12.5))
+    check("a lone - is not measured: those rows are skipped, not plotted "
+          "on the axis (%s)" % sorted(got), "D" not in got and "E" not in got)
+    text = "\n".join(report(vm))
+    check("and the report names them as missing X",
+          any('D' in l and 'no X' in l for l in report(vm))
+          and '2 row(s) skipped' in text)
 
 
 def test_the_view_reset_runs():
@@ -366,6 +457,7 @@ def main():
                test_rows_missing_a_coordinate_are_named_not_guessed,
                test_report_carries_both_readings_of_every_value,
                test_abhd_handoff_takes_graph1_only,
+               test_the_real_reader_keeps_the_origin_and_negatives,
                test_the_view_reset_runs,
                test_undo_off_closes_no_group):
         try:

@@ -13,7 +13,9 @@
 ;;; What it stamps is an MTEXT written the way this shop's dimension
 ;;; text already is: the TEXT layer, the Attributes style, 6" high,
 ;;; attached TOP LEFT at the point clicked, unwrapped, ByLayer colour,
-;;; no rotation.  Every one of those is a knob in the block below.
+;;; upright in the current UCS.  The layer, the style, the height and
+;;; the wrap are knobs in the block below; the attachment, the ByLayer
+;;; colour and the turn are not -- they are how the shop's text is.
 ;;;
 ;;; Beside it, a little vertical RULER appears -- a column of nearby
 ;;; values, each drawn as a tick and a label, graded like a real ruler:
@@ -126,11 +128,27 @@
 ;;;   4'4.5    4'-4 1/2"    4' 4-1/2    4'4 1/2    52.5    52 1/2
 ;;;
 ;;; all read, and the first four all mean 4'-4 1/2".  Anything not a
-;;; whole eighth is rounded to the nearest one.  What is STAMPED is
-;;; always the canonical spelling above, never the keystrokes: type
-;;; 4'4.5 and the line back reads "read as 4'-4 1/2"", which is
-;;; where a mis-typed value is caught by eye rather than in the
-;;; drawing.  Feet spelled means feet written, so 52.5 stays 52 1/2"
+;;; whole eighth is rounded to the nearest one.
+;;;
+;;; A SPACE is only read at the FIRST text prompt, which takes a whole
+;;; line.  The click-or-type prompt after it is a getpoint, and there
+;;; the spacebar is Enter: 4'-6 1/2" typed at it arrives as two
+;;; answers, 4'-6 and then 1/2", and the second used to be adopted on
+;;; its own -- the next click stamped half an inch where 4'-6 1/2" was
+;;; meant, and only two "read as" lines said so.  So the prompts teach
+;;; the dashed spelling, 4'-4-1/2", which is one answer anywhere; and a
+;;; typed answer that can only be the tail of the one typed just
+;;; before it, with no click between -- a bare fraction after a value
+;;; with none, or the inches after a bare 4' -- is read back together
+;;; with it and said so, not adopted as a value of its own.  Somebody
+;;; who did mean 4'-6 and then half an inch alone types 1/2" once more:
+;;; the same answer again is never the tail of the join it just made,
+;;; and the line that reports the join says so.
+;;;
+;;; What is STAMPED is always the canonical spelling above, never the
+;;; keystrokes: type 4'4.5 and the line back reads "read as 4'-4 1/2"",
+;;; which is where a mis-typed value is caught by eye rather than in
+;;; the drawing.  Feet spelled means feet written, so 52.5 stays 52 1/2"
 ;;; rather than becoming 4'-4 1/2".
 ;;;
 ;;; The ruler offers, around whatever the current value is, the four
@@ -150,7 +168,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.8")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.9")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -668,6 +686,24 @@
                      " so the stamps have a style to carry."))))
   name)
 
+;; A point in the current UCS as the WORLD point entmake wants.  Every
+;; point this tool draws at is a UCS one -- a click answers in the UCS,
+;; and the ruler is laid out from VIEWCTR, which is in the UCS too --
+;; and entmake reads group 10 as WORLD.  Without this a UCS moved off
+;; the world origin put every stamp that far from its click, and the
+;; ruler that far off the screen, while the run said "placed".
+(defun ds:wcs (x y)
+  (trans (list x y 0.0) 1 0))
+
+;; How far the current UCS is turned from the world X axis, so text
+;; reads along the UCS the drafter is drawing in.  Taken off the UCS X
+;; axis moved into the world -- not off UCSXDIR run back into the UCS,
+;; which is (1 0 0) there however far the UCS is turned, so it would
+;; always answer zero.  0 in the world UCS.
+(defun ds:ucsang ( / v)
+  (setq v (trans '(1.0 0.0 0.0) 1 0 T))
+  (atan (cadr v) (car v)))
+
 ;; One MTEXT, written the way the shop's dimension text is: the tool's
 ;; own style, unwrapped, upright, attached at PT by ATT -- 1 top left,
 ;; 3 top right, AutoCAD's own codes.  A stamp is always 1, the way the
@@ -681,14 +717,14 @@
   (entmakex
     (append dxf
             (list '(100 . "AcDbMText")
-                  (cons 10 (list (car pt) (cadr pt) 0.0))
+                  (cons 10 (ds:wcs (car pt) (cadr pt)))
                   (cons 40 hgt)
                   (cons 41 ds:*text-width*)   ; 0 = no wrap
                   (cons 71 att)               ; 1 top left, 3 top right
                   '(72 . 5)                   ; direction: by style
                   (cons 1 str)
                   (cons 7 ds:*style*)
-                  '(50 . 0.0)                 ; rotation
+                  (cons 50 (ds:ucsang))       ; upright in the UCS
                   '(73 . 1)                   ; line spacing: at least
                   (cons 44 ds:*line-space*)))))
 
@@ -710,8 +746,8 @@
                           (cons 8 lay))
                     (if col (list (cons 62 col)))
                     (list '(100 . "AcDbLine")
-                          (cons 10 (list x1 y1 0.0))
-                          (cons 11 (list x2 y2 0.0))))))
+                          (cons 10 (ds:wcs x1 y1))
+                          (cons 11 (ds:wcs x2 y2))))))
 
 ;; The ring that marks the current row, same layer and colour rule.
 (defun ds:ruler-ring (x y r lay col)
@@ -719,7 +755,7 @@
                           (cons 8 lay))
                     (if col (list (cons 62 col)))
                     (list '(100 . "AcDbCircle")
-                          (cons 10 (list x y 0.0))
+                          (cons 10 (ds:wcs x y))
                           (cons 40 r)))))
 
 ;; Draw the ruler down its strip of the CURRENT VIEW for the current
@@ -853,15 +889,59 @@
 ;; The very first text of a run: no default, no ruler yet -- nothing
 ;; exists to build one around.
 (defun ds:ask-first ()
-  (ds:ask-raw "\nText - 4'-4 1/2\", just 4'4.5, or a letter like A: "))
+  (ds:ask-raw "\nText - 4'-4-1/2\", just 4'4.5, or a letter like A: "))
+
+;; S with its inch mark taken off the end, however it was spelled --
+;; a double quote or two apostrophes -- and trimmed.
+(defun ds:no-inch-mark (s / n)
+  (setq s (vl-string-trim " \t" s)
+        n (strlen s))
+  (cond
+    ((and (>= n 2) (= (substr s (1- n) 2) "''")) (substr s 1 (- n 2)))
+    ((and (>= n 1) (= (substr s n 1) "\"")) (substr s 1 (1- n)))
+    (T s)))
+
+;; The one answer PREV and NEW were typed as, when NEW can only be the
+;; tail the spacebar cut off PREV -- nil when NEW is an answer of its
+;; own.  At a getpoint a space is Enter, so 4'-6 1/2" arrives as 4'-6
+;; and then 1/2", and 4' 4-1/2 as 4' and then 4-1/2.  PREV is the raw
+;; text of a typed answer with no click after it (nil otherwise), and
+;; it has to be a measurement left OPEN: no inch mark closing it and
+;; no fraction in it yet.  NEW has to be inches with no feet in it,
+;; and either a bare fraction under an inch or -- after a PREV that
+;; stops at its feet mark -- under a foot.  34 then 36 is somebody
+;; changing their mind, and is left to be exactly that.
+(defun ds:rejoin (prev new / p nb toks joined q)
+  (if prev
+    (progn
+      (setq p      (vl-string-trim " \t" prev)
+            nb     (ds:no-inch-mark new)
+            toks   (ds:split nb)
+            joined (strcat p " " (vl-string-trim " \t" new)))
+      (if (and (= p (ds:no-inch-mark p))
+               (not (vl-string-search "/" p))
+               (setq q (ds:parse p))
+               (not (eq (cadr q) 'letter))
+               (not (vl-string-search "'" nb))
+               (ds:inches nb)
+               (or (and (= 1 (length toks))
+                        (vl-string-search "/" (car toks))
+                        (< (ds:inches nb) 1.0))
+                   (and (= (substr p (strlen p) 1) "'")
+                        (< (ds:inches nb) 12.0)))
+               (ds:read joined))
+        joined))))
 
 ;; The second-and-later prompt: one click or one typed line does every
 ;; job.  Returns nil for Enter (done), (adopt TEXT) for a new current
-;; value picked off the ruler or typed fresh, or (stamp PT) for a
-;; point to stamp the CURRENT text at.  BOX and ROWS are the live
-;; ruler's hit-test data from ds:draw-ruler/ds:redraw-ruler; HASFEET is
-;; the current value's family, for formatting a ruler pick.
-(defun ds:next-action (box rows hasfeet / pk hitval canon)
+;; value picked off the ruler, (adopt TEXT TYPED) for one typed fresh
+;; -- TYPED being what was typed, for the next prompt's PREV -- or
+;; (stamp PT) for a point to stamp the CURRENT text at.  BOX and ROWS
+;; are the live ruler's hit-test data from ds:draw-ruler/
+;; ds:redraw-ruler; HASFEET is the current value's family, for
+;; formatting a ruler pick.  PREV is the text typed at the prompt just
+;; before this one when that was a typed answer, for ds:rejoin.
+(defun ds:next-action (box rows hasfeet prev / pk hitval canon joined)
   (initget 128)
   (setq pk (getpoint (strcat "\nClick to place text, click the ruler to"
                              " change it, or type new text (Enter when"
@@ -870,14 +950,31 @@
   (cond
     ((null pk) nil)
     ((= (type pk) 'STR)
-     (if (setq canon (ds:read pk))
-       (progn
-         (if (/= canon (vl-string-trim " \t" pk))
-           (princ (strcat "\n  read as " canon)))
-         (list 'adopt canon))
-       (progn
-         (ds:say-unread pk)
-         (ds:next-action box rows hasfeet))))
+     (cond
+       ;; the tail of the answer before it: read the two together and
+       ;; say why, since the drafter typed one value and the spacebar
+       ;; made it two.  And say how to get the tail ALONE, for the one
+       ;; who did mean 4'-6 and then half an inch by itself: the same
+       ;; answer again, which can never be the tail of the join it has
+       ;; just made: that join is closed by the fraction or inch mark it
+       ;; took, or no longer stops at its feet mark
+       ((setq joined (ds:rejoin prev pk))
+        (setq canon (ds:read joined))
+        (princ (strcat "\n  A space ends the answer at this prompt, so \""
+                       (vl-string-trim " \t" prev) "\" and \""
+                       (vl-string-trim " \t" pk) "\" came in as two -"
+                       " read together as " canon ".  Type "
+                       (vl-string-translate " " "-" canon)
+                       " to give it in one, or " (vl-string-trim " \t" pk)
+                       " again to take it on its own."))
+        (list 'adopt canon joined))
+       ((setq canon (ds:read pk))
+        (if (/= canon (vl-string-trim " \t" pk))
+          (princ (strcat "\n  read as " canon)))
+        (list 'adopt canon pk))
+       (T
+        (ds:say-unread pk)
+        (ds:next-action box rows hasfeet nil))))
     (T
      (setq hitval (ds:ruler-hit pk box rows))
      (if hitval
@@ -890,7 +987,7 @@
 ;; the whole call, so a local called "last" turns every (last ...) in
 ;; the body into "no function definition: LAST" at runtime.
 (defun c:DIMSTAMP (/ *error* undo-open pk lasttext count parsed
-                    rulerents rulerbox rulerrows action rr)
+                    rulerents rulerbox rulerrows action rr typed)
   (defun *error* (msg)
     (ds:erase-ents rulerents)
     (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
@@ -908,7 +1005,8 @@
   (princ (strcat "\nDIMSTAMP " *dimstamp-version*
                  " - click a point, then give the text.  After that,"
                  " click to stamp again, click the ruler to change the"
-                 " value, or type a new one; Enter when done."))
+                 " value, or type a new one - dashed, 4'-6-1/2\", since a"
+                 " space there is Enter; Enter when done."))
   (setq count 0 rulerents nil)
   (setq pk (getpoint "\nClick a point to place text (Enter when done): "))
   (if lzd:ask (lzd:ask "\nClick a point to place text (Enter when done): " pk) pk)
@@ -927,7 +1025,12 @@
           (princ (strcat " Next: " lasttext "."))))
       (setq rr (ds:redraw-ruler parsed rulerents)
             rulerents (car rr) rulerbox (cadr rr) rulerrows (caddr rr))
-      (while (setq action (ds:next-action rulerbox rulerrows (cadr parsed)))
+      (setq typed nil)
+      (while (setq action (ds:next-action rulerbox rulerrows (cadr parsed)
+                                          typed))
+        ;; what was typed, when this answer was typed: a click -- a
+        ;; stamp or a ruler pick -- ends any answer the spacebar split
+        (setq typed (caddr action))
         (cond
           ((= (car action) 'stamp)
            (cal:ensure-layer ds:*layer* ds:*layer-color*)

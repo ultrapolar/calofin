@@ -214,8 +214,14 @@ def why_of(lines, i):
             parts.append(ln[j:].strip('; ').strip())
             break
         j += 1
+    # the ; lines CONTINUING the remark are indented under it; a comment
+    # back at column 0 is the paragraph that opens the NEXT knob, and
+    # taking it here put every PADDLE and MOHAMADDLE row in LAZTUNE under
+    # the explanation of the knob below it (*paddle-padsize* described
+    # as the block file, the block files as the pad layer)
     k = i + 1
-    while k < len(lines) and lines[k].lstrip().startswith(';'):
+    while k < len(lines) and lines[k][:1] in (' ', '\t') \
+            and lines[k].lstrip().startswith(';'):
         parts.append(lines[k].strip().lstrip(';').strip())
         k += 1
     k = i - 1
@@ -254,6 +260,21 @@ def knobs_of(path):
     return out
 
 
+#: RUN-TIME STATE a tunables block happens to declare -- a sysvar
+#: snapshot, a preview's entity list, the last answers, a dirty flag --
+#: is not a setting.  Offered in LAZTUNE it could be "set", re-applied
+#: by lzp:knobs-apply over a live run's snapshot at the next panel open,
+#: and grouped by "Set everywhere" across tools as one shop decision
+#: ('sysold').  The same name patterns as LAZPANEL's lzp:knob-state-p,
+#: which refuses them at apply time for a profile that already holds one.
+STATE = re.compile(r'^[a-z0-9]+:\*(?:sysold|preview|picks|pvents|valnotes|'
+                   r'smallwarned|dirty|fixes|last-[a-z0-9-]*)\*$', re.I)
+
+
+def is_state(name):
+    return bool(STATE.match(name))
+
+
 def catalog(lisp_dir=LISP_DIR):
     """[(file relative to the repo, [(name, literal, meaning), ...]), ...]
     for every file with a block, in path order; files with none are
@@ -270,7 +291,8 @@ def catalog(lisp_dir=LISP_DIR):
         # it and skipped in the rest.  Listing it three times would
         # offer the same setting under three tools and fail the
         # uniqueness that keying by name depends on.
-        ks = [k for k in knobs_of(p) if k[0].lower() not in seen]
+        ks = [k for k in knobs_of(p)
+              if k[0].lower() not in seen and not is_state(k[0])]
         seen.update(k[0].lower() for k in ks)
         if ks:
             out.append((str(p.relative_to(ROOT)), ks))

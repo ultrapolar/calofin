@@ -58,7 +58,8 @@ if os.path.basename(LISP_ROOT) == "shared":
     UPADOVER = os.path.join(PARTS, "UPADOVER.lsp")
     LIB = os.path.join(PARTS, "CALOFIN-LIB.lsp")
 
-from lispvm import VM, Ent, Dot, LispError  # noqa: E402
+import lispvm  # noqa: E402
+from lispvm import VM, Ent, Dot, LispError, Sym  # noqa: E402
 
 PAD = 36.0
 HALF = PAD / 2.0
@@ -730,6 +731,83 @@ run(vm, [per, [0.0, 0.0, 0.0], [120.0, 0.0, 0.0]], "clean exit")
 check("a clean run hands the session back too",
       vm.sysvars == before and vm.undo_groups == 0,
       f"{vm.sysvars} / {vm.undo_groups}")
+
+
+print("UPADOVER -- from inside a layout's viewport, model space is the space")
+# From a viewport CTAB and the active layout both name the SHEET.  The
+# VM has one space, so the two halves of AutoCAD are modelled here: the
+# active layout's block is the sheet's paper while TILEMODE is 0, model
+# space is what vla-get-ModelSpace hands back, and every insert records
+# the space it was aimed at.  The sheet carries a title block's point
+# numbered 1 as well: a sweep of every space found two points numbered 1
+# and asked which was meant, with only one of them anywhere near the
+# pool.
+PAPER = "<paper-space>"
+
+
+def with_spaces(run_it):
+    B = lispvm.BUILTINS
+    saved = {k: B[Sym(k)] for k in ("vla-get-block", "vla-insertblock")}
+    aimed = []
+
+    def get_block(vm, a):
+        saved["vla-get-block"](vm, a)
+        return PAPER if vm.sysvars.get("TILEMODE") == 0 else lispvm.MODEL_SPACE
+
+    def insert(vm, a):
+        aimed.append(a[0])
+        return saved["vla-insertblock"](vm, [lispvm.MODEL_SPACE] + list(a[1:]))
+    B[Sym("vla-get-block")] = get_block
+    B[Sym("vla-insertblock")] = insert
+    B[Sym("vla-get-modelspace")] = lambda vm, a: lispvm.MODEL_SPACE
+    try:
+        run_it()
+    finally:
+        B.update({Sym(k): v for k, v in saved.items()})
+        B.pop(Sym("vla-get-modelspace"), None)
+    return aimed
+
+
+vm = fresh()
+per = rect(vm)
+ab_pt(vm, 0, 0, 1)
+ab_pt(vm, 240, 0, 2)
+title = ab_pt(vm, 900, 600, 1)                  # the sheet's own point 1
+vm.entdata[title].append(Dot(410, "Layout1"))
+vm.sysvars.update({"TILEMODE": 0, "CTAB": "Layout1", "CVPORT": 2})
+n0 = len(vm.entities)
+err = []
+
+
+def _viewport_run():
+    try:
+        vm.run("c:UPADOVER", [per, "1", "2"])
+    except LispError as e:
+        err.append(str(e).splitlines()[0])
+
+
+aimed = with_spaces(_viewport_run)
+check("a typed 1 is the model space point, not asked about",
+      not err and not said(vm, "points are numbered"), f"{err}")
+check("the eight pads of the straight wall went in",
+      len(pad_ents(vm, n0)) == 8, f"{len(pad_ents(vm, n0))}")
+check("and every insert was aimed at model space, where the pool is",
+      aimed and set(aimed) == {lispvm.MODEL_SPACE}, f"{aimed[:3]}")
+
+# the paper itself active: the sheet is the space read, and padded
+vm = fresh()
+per = rect(vm)
+for e in (per, ab_pt(vm, 0, 0, 1), ab_pt(vm, 240, 0, 2)):
+    vm.entdata[e].append(Dot(410, "Layout1"))
+ab_pt(vm, 900, 600, 1)                          # a model space point 1
+vm.sysvars.update({"TILEMODE": 0, "CTAB": "Layout1", "CVPORT": 1})
+n0 = len(vm.entities)
+err = []
+aimed = with_spaces(_viewport_run)
+check("paper active: a typed 1 is the sheet's point",
+      not err and len(pad_ents(vm, n0)) == 8, f"{err}")
+check("and the pads are aimed at the sheet",
+      aimed and set(aimed) == {PAPER}, f"{aimed[:3]}")
 
 
 print("UPADOVERVER -- reports its own banner")

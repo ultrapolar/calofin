@@ -39,8 +39,10 @@ keeps it; the ones that are on something go around it.
 ## What it does
 
 1. **Highlight the drawing** (Enter takes everything in the space you
-   are looking at). A selection made before the command was typed is
-   used as it stands, without asking.
+   are working in: model space from the Model tab or from inside a
+   layout viewport, and the layout only when you are on the paper
+   itself). A selection made before the command was typed is used as
+   it stands, without asking.
 
 2. **Every dimension in the sweep is measured.** The text box comes off
    the dimension itself -- its letters live in an anonymous block that

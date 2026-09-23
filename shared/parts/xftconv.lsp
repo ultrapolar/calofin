@@ -66,7 +66,7 @@
 
 
 
-(setq *xft-version* "v1.18") ; printed on load and at command start so a
+(setq *xft-version* "v1.19") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -80,9 +80,11 @@
 ;; Scale factor applied to EVERYTHING highlighted, about the middle of
 ;; its bounding box, before any point is read.  12 is feet -> inches,
 ;; which is how both exports arrive.  1.0 skips the SCALE step entirely
-;; (an import that is already in inches); any other factor is applied
-;; as given.  Every distance below that is NOT counted in text heights
-;; is measured AFTER this scale, in drawing units.
+;; (an import that is already in inches); any other positive factor is
+;; applied as given, and anything else -- SCALE refuses a zero or a
+;; negative -- is read as 12, and the run says so.  Every distance below
+;; that is NOT counted in text heights is measured AFTER this scale, in
+;; drawing units.
 (setq *xft-scale* 12.0)
 
 ;; --- the block every marker becomes ---------------------------------
@@ -667,32 +669,42 @@
        (= 4 (logand 4 (cdr (assoc 70 tb)))))
 )
 
-;; Every locked layer that would be in the way, named so the message can
-;; say which one to unlock: the layer of anything highlighted that the
-;; swap has to erase, plus the block layer it inserts onto.  The
-;; SELECTION is walked rather than the layer table because
-;; *xft-dot-layer* is a comma list of three names and tblsearch takes
-;; one name, no wildcards - and because a locked layer with nothing of
-;; ours on it is not in the way at all.
-(defun xft:locked-layers (ss / i lay pats out)
+;; Every locked layer ANYTHING highlighted sits on, named so the message
+;; can say which one to unlock.  The whole highlight, not just the
+;; survey's own layers: SCALE takes all of it and quietly passes over
+;; whatever sits on a locked layer, and the text sweep erases every
+;; leftover text in it.  Checking the marker and name layers alone let
+;; Enter-for-everything catch a locked title-block or note layer, leave
+;; it unscaled and unerased, and still report a clean conversion; the
+;; revert checked only the layers of its own blocks, and counted what
+;; SCALE had skipped as "scaled back".  The SELECTION is walked rather
+;; than the layer table because a locked layer with nothing highlighted
+;; on it is not in the way at all.
+(defun xft:ss-locked (ss / i lay seen out)
   (setq i    0
         out  '()
-        pats (strcat (strcase *xft-marker-layer*) ","
-                     (strcase *xft-name-layer*) ","
-                     (strcase *xft-dot-layer*) ","
-                     (strcase *xft-dot-name-layer*)))
+        seen '())
   (while (< i (sslength ss))
     (setq lay (cdr (assoc 8 (entget (ssname ss i)))))
-    (if (and (not (member (strcase lay) (mapcar 'strcase out)))
-             (wcmatch (strcase lay) pats)
-             (xft:locked lay))
-      (setq out (cons lay out)))
+    ;; each layer looked up once: a survey is thousands of entities on
+    ;; a handful of layers
+    (if (and lay (not (member (strcase lay) seen)))
+      (progn
+        (setq seen (cons (strcase lay) seen))
+        (if (xft:locked lay)
+          (setq out (cons lay out)))))
     (setq i (1+ i))
   )
+  (reverse out)
+)
+
+;; ...and for the conversion, the block layer the swap inserts onto too.
+(defun xft:locked-layers (ss / out)
+  (setq out (xft:ss-locked ss))
   (if (and (xft:locked *xft-block-layer*)
            (not (member (strcase *xft-block-layer*) (mapcar 'strcase out))))
-    (setq out (cons *xft-block-layer* out)))
-  (reverse out)
+    (setq out (append out (list *xft-block-layer*))))
+  out
 )
 
 (defun xft:namelist (items / out s)          ; "A, B, C" for a message
@@ -701,6 +713,48 @@
     (setq out (if (= out "") s (strcat out ", " s))))
   out
 )
+
+;; The refusal, for either command.  Unlocking is the answer for the
+;; survey's own layers, but over a locked north arrow or sheet border
+;; that Enter-for-everything swept in, it had the drafter unlock it and
+;; get it scaled with the survey.  So any layer but the block layer --
+;; which has to be unlocked whatever is highlighted -- is offered the
+;; other way out as well.
+(defun xft:say-locked (locked cmd)
+  (princ (strcat "\nUnlock " (xft:namelist locked)
+                 " first, then run " cmd " again."))
+  (if (or (cdr locked)
+          (/= (strcase (car locked)) (strcase *xft-block-layer*)))
+    (princ (strcat "\n  A layer that is not part of the survey can stay"
+                   " locked - highlight only the survey instead.")))
+)
+
+;; The space Enter-for-everything means: the one the drafter is working
+;; in.  CTAB alone names the LAYOUT while the drafter works inside one
+;; of its viewports, and the sweep then took the sheet's viewport and
+;; title block instead of the survey behind them.  Inside a viewport,
+;; and on the Model tab, that is model space; only paper space proper
+;; (a layout with no viewport active, CVPORT 1) is the layout itself.
+(defun xft:space ()
+  (if (and (= 0 (getvar "TILEMODE")) (= 1 (getvar "CVPORT")))
+    (getvar "CTAB")
+    "Model"))
+
+;; The factor the run scales by: *xft-scale* when it is a positive
+;; number, the shipped 12 when it is not, and said so.  It is a LAZTUNE
+;; knob and the panel checks only that it is a number, so a 0 or a
+;; negative reached SCALE, which refuses the factor and sits asking for
+;; another -- and took the UNDO _End sent next as its answer, leaving
+;; the run's group open and the survey unscaled under a report of a
+;; clean conversion.  Checked here, at the run, because an override
+;; applied after the file loads never meets a check made at load.
+(defun xft:factor ()
+  (if (and (numberp *xft-scale*) (> *xft-scale* 0))
+    (float *xft-scale*)
+    (progn
+      (princ (strcat "\n*xft-scale* is " (vl-princ-to-string *xft-scale*)
+                     ", not a positive number - scaling by 12 instead."))
+      12.0)))
 
 (defun xft:style ()
   (if (tblsearch "STYLE" *xft-att-style*)
@@ -879,63 +933,55 @@
 ;;;  XFTCONV
 ;;; -------------------------------------------------------------------
 
-(defun c:XFTCONV ( / *error* xft:restore xft:sysback oscm osos osclay undone guard
-                     ss base wbase i en ed typ locked
-                     markers names dots dotnames r recs
+(defun c:XFTCONV ( / *error* xft:restore oscm osos osclay undone begun
+                     ss base wbase scale i en ed typ locked
+                     markers names dots dotnames r recs lspec
                      nmade nblank ndots nleft)
 
-  ;; The sysvars alone, OSMODE first.  Three setvars of values this run
-  ;; captured itself: nothing here can throw, which is the point -- the
-  ;; handler calls it BEFORE its (command) drain, so a drain that dies
-  ;; cannot take the drafter's object snaps with it.  The pop below
-  ;; cannot move up with them: the drain needs the pushed mode.
-  (defun xft:sysback ()
-    (if oscm   (setvar "CMDECHO" oscm))
+  ;; The sysvars, OSMODE first.  Three setvars of values this run
+  ;; captured itself: nothing here can throw, so the handler reaches
+  ;; everything after it.
+  (defun xft:restore ()
     (if osos   (setvar "OSMODE"  osos))
+    (if oscm   (setvar "CMDECHO" oscm))
     (if osclay (setvar "CLAYER"  osclay)))
 
-  (defun xft:restore ()
-    (xft:sysback)
-    ;; The error mode pushed below is popped HERE, on every way out --
-    ;; the three quiet exits, the report, and the handler -- not in the
-    ;; handler alone.  A clean run used to leave the mode stacked for
-    ;; the rest of the session, and while it is stacked command-s is
-    ;; refused inside every later handler (AutoLISP reference,
-    ;; *push-error-using-command*), so the next tool's Esc left its
-    ;; undo group open without a word.
-    (if *pop-error-mode* (*pop-error-mode*))
-  )
-
+  ;; No *push-error-using-command* here, on purpose.  Under a push
+  ;; AutoCAD resets the evaluator before *error* runs, so every local of
+  ;; this command -- the snapshot, the undo flag, and the local helper
+  ;; that puts them back -- is gone by the time the handler looks.  With
+  ;; one, an Esc at the only prompt died on the handler's first line and
+  ;; left the mode pushed for the session, refusing command-s inside
+  ;; every LATER tool's handler; a failure mid-swap also left the object
+  ;; snaps at 0 and the undo group open, and nothing was reported.  The
+  ;; push only ever served a bare (command) drain, and there is nothing
+  ;; to drain: every command this run sends -- UNDO _Begin/_End, and
+  ;; SCALE with its set, its base and a factor xft:factor has checked
+  ;; is positive -- is handed all its input and cannot be left waiting.
+  ;; In the default mode the handler sees the locals, and command-s is
+  ;; the sanctioned way to close the group.
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTCONV error: " msg)))
-    ;; the drafter's settings come back FIRST, ahead of the drain below:
-    ;; that drain is a bare (command), the one form in this handler that
-    ;; can throw, and it used to sit in front of the only OSMODE restore
-    ;; there is -- so an Esc that died in the drain left every object
-    ;; snap unticked AND stranded the pop, which refuses command-s inside
-    ;; every later handler for the rest of the session
-    (xft:sysback)
-    ;; back out of SCALE etc.  Bounded: CMDACTIVE carries a
-    ;; "dialog is up" bit no keystroke from here can clear, and an
-    ;; unbounded drain against it would hang with no Esc out.
-    (setq guard 0)
-    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
-      (command)
-      (setq guard (1+ guard)))
     (xft:restore)
-    ;; through the catch: a throw here would strand the pop below, and
-    ;; error mode would stay pushed for the rest of the session
-    (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
-    (princ "\nNothing was left half done - use U to roll the run back.")
+    ;; the U hint only when there IS a group for U to take back.  It used
+    ;; to print on every way in here -- an Esc at the highlight, before
+    ;; anything was touched, told the drafter to U away the import they
+    ;; had just made.  With undo recording off there is no group, and a
+    ;; run stopped part-way is left part-way: said so, plainly.
+    (if undone
+      (progn
+        (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+        (setq undone nil)
+        (princ "\nNothing was left half done - use U to roll the run back."))
+      (if begun
+        (princ (strcat "\nXFTCONV stopped part-way with undo recording off,"
+                       " so U cannot take it back - some points may be"
+                       " swapped and some not.  Check the survey."))))
     (if lzd:report (lzd:report "XFTCONV" *xft-version* msg))
     (princ)
   )
   (if lzd:begin (lzd:begin "XFTCONV" *xft-version*))
-
-  ;; AutoCAD 2012+ requires this so *error* may call (command);
-  ;; harmless no-op guard on older releases where it doesn't exist
-  (if *push-error-using-command* (*push-error-using-command*))
 
   (setq oscm   (getvar "CMDECHO")
         osos   (getvar "OSMODE")
@@ -958,7 +1004,7 @@
       (setq ss (ssget))
       (if lzd:watch (lzd:watch ss) ss)))
   (if (not ss)
-    (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
+    (setq ss (ssget "_X" (list (cons 410 (xft:space)))))
   )
 
   (if (not ss)
@@ -966,14 +1012,13 @@
     (progn
 
       ;; ---- locked layers would break the swap --------------------
-      ;; only the ones actually in the way are named: entdel and entmake
-      ;; both refuse a locked layer, and a layer nothing in the
-      ;; selection sits on cannot stop the run.
+      ;; only the ones actually in the way are named: SCALE skips a
+      ;; locked layer, entdel and entmake both refuse one, and a layer
+      ;; nothing in the selection sits on cannot stop the run.
       (setq locked (xft:locked-layers ss))
       (if locked
         (progn
-          (princ (strcat "\nUnlock " (xft:namelist locked)
-                         " first, then run XFTCONV again."))
+          (xft:say-locked locked "XFTCONV")
           (xft:restore)
           (princ)
         )
@@ -989,6 +1034,9 @@
             (progn
               (command "_.UNDO" "_Begin")
               (setq undone t)))
+          ;; from here on the drawing changes: a failure past this line
+          ;; with no group open is one the handler has to own up to
+          (setq begun t)
 
           ;; ---- 0. the layer and the block have to be there --------
           (cal:ensure-layer *xft-block-layer* *xft-block-layer-color*)
@@ -1000,12 +1048,13 @@
           ;; UCS of the day would be read back under whatever UCS the
           ;; revert runs in, and land the survey somewhere else.
           (setq wbase (xft:centre ss)
-                base  (trans wbase 0 1))
-          (if (/= *xft-scale* 1.0)
+                base  (trans wbase 0 1)
+                scale (xft:factor))
+          (if (/= scale 1.0)
             (progn
               (princ (strcat "\nScaling " (itoa (sslength ss)) " objects by "
-                             (rtos *xft-scale* 2 4) " about the middle of the selection ..."))
-              (command "_.SCALE" ss "" base *xft-scale*)
+                             (rtos scale 2 4) " about the middle of the selection ..."))
+              (command "_.SCALE" ss "" base scale)
             )
           )
 
@@ -1095,12 +1144,18 @@
                   (progn
                     ;; read before erasing, and kept by the block it
                     ;; sat nearest: a leftover text belongs to no one
-                    ;; marker, so that is the only association there is
-                    (if *xft-record*
-                      (setq recs (xft:attach recs (xft:txtpt ed)
-                                             (xft:ser en))))
-                    (entdel en)
-                    (setq nleft (1+ nleft)))
+                    ;; marker, so that is the only association there is.
+                    ;; Recorded and counted only once the erase has
+                    ;; really gone through: a refused entdel answers nil,
+                    ;; and a text still on the sheet that the record also
+                    ;; carries comes back as a stray duplicate from
+                    ;; XFTRECONV, under a count that said it was erased.
+                    (setq lspec (if *xft-record* (xft:ser en)))
+                    (if (entdel en)
+                      (progn
+                        (if lspec
+                          (setq recs (xft:attach recs (xft:txtpt ed) lspec)))
+                        (setq nleft (1+ nleft)))))
                 )
                 (setq i (1+ i))
               )
@@ -1114,10 +1169,11 @@
           ;; xdata back to append to it.
           (if *xft-record*
             (foreach r recs
-              (xft:stamp (car r) wbase *xft-scale* (caddr r))))
+              (xft:stamp (car r) wbase scale (caddr r))))
 
           (if undone (command "_.UNDO" "_End"))
-          (setq undone nil)
+          (setq undone nil
+                begun  nil)
           (xft:restore)
 
           ;; ---- report --------------------------------------------
@@ -1189,65 +1245,38 @@
   (reverse out)
 )
 
-;; The locked layers in the way: the ones the blocks to be erased sit
-;; on.  A layer a rebuild writes TO is an output layer and goes through
-;; ensure-layer instead, which unlocks it for good and says so.
-(defun xft:locked-blocks (recs / lay out r)
-  (setq out '())
-  (foreach r recs
-    (setq lay (cdr (assoc 8 (entget (car r)))))
-    (if (and lay
-             (not (member (strcase lay) (mapcar 'strcase out)))
-             (xft:locked lay))
-      (setq out (cons lay out)))
-  )
-  (reverse out)
-)
-
-(defun c:XFTRECONV ( / *error* xft:restore xft:sysback oscm osos osclay undone guard
+(defun c:XFTRECONV ( / *error* xft:restore oscm osos osclay undone begun
                        ss recs runs locked r spec keep i en
                        scale base nback nrebuilt)
 
-  ;; The sysvars alone, OSMODE first.  Three setvars of values this run
-  ;; captured itself: nothing here can throw, which is the point -- the
-  ;; handler calls it BEFORE its (command) drain, so a drain that dies
-  ;; cannot take the drafter's object snaps with it.  The pop below
-  ;; cannot move up with them: the drain needs the pushed mode.
-  (defun xft:sysback ()
-    (if oscm   (setvar "CMDECHO" oscm))
+  ;; The sysvars, OSMODE first -- nothing here can throw.
+  (defun xft:restore ()
     (if osos   (setvar "OSMODE"  osos))
+    (if oscm   (setvar "CMDECHO" oscm))
     (if osclay (setvar "CLAYER"  osclay)))
 
-  (defun xft:restore ()
-    (xft:sysback)
-    ;; popped on every way out, not in the handler alone -- see the
-    ;; same note in c:XFTCONV
-    (if *pop-error-mode* (*pop-error-mode*))
-  )
-
+  ;; No error-mode push, for the reason c:XFTCONV gives: under one the
+  ;; handler finds this command's locals and its local helper gone and
+  ;; dies on its first line, and there is no pending command for a bare
+  ;; (command) to drain -- UNDO and SCALE are each handed all their input.
   (defun *error* (msg)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nXFTRECONV error: " msg)))
-    ;; the drafter's settings come back FIRST, ahead of the drain below:
-    ;; that drain is a bare (command), the one form in this handler that
-    ;; can throw, and it used to sit in front of the only OSMODE restore
-    ;; there is -- so an Esc that died in the drain left every object
-    ;; snap unticked AND stranded the pop, which refuses command-s inside
-    ;; every later handler for the rest of the session
-    (xft:sysback)
-    (setq guard 0)
-    (while (and (> (getvar "CMDACTIVE") 0) (< guard 10))
-      (command)
-      (setq guard (1+ guard)))
     (xft:restore)
-    (if undone (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
-    (princ "\nNothing was left half done - use U to roll the run back.")
+    ;; the U hint only over a group U can take back -- see c:XFTCONV
+    (if undone
+      (progn
+        (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+        (setq undone nil)
+        (princ "\nNothing was left half done - use U to roll the run back."))
+      (if begun
+        (princ (strcat "\nXFTRECONV stopped part-way with undo recording"
+                       " off, so U cannot take it back - some blocks may"
+                       " be put back and some not.  Check the survey."))))
     (if lzd:report (lzd:report "XFTRECONV" *xft-version* msg))
     (princ)
   )
   (if lzd:begin (lzd:begin "XFTRECONV" *xft-version*))
-
-  (if *push-error-using-command* (*push-error-using-command*))
 
   (setq oscm   (getvar "CMDECHO")
         osos   (getvar "OSMODE")
@@ -1265,7 +1294,7 @@
       (setq ss (ssget))
       (if lzd:watch (lzd:watch ss) ss)))
   (if (not ss)
-    (setq ss (ssget "_X" (list (cons 410 (getvar "CTAB")))))
+    (setq ss (ssget "_X" (list (cons 410 (xft:space)))))
   )
 
   (cond
@@ -1293,10 +1322,15 @@
      (xft:restore)
      (princ))
 
-    ;; ---- a locked layer would refuse the erase --------------------
-    ((setq locked (xft:locked-blocks recs))
-     (princ (strcat "\nUnlock " (xft:namelist locked)
-                    " first, then run XFTRECONV again."))
+    ;; ---- a locked layer would refuse the erase, or the scale -----
+    ;; anything highlighted, not only the blocks: the erase refuses a
+    ;; block on a locked layer, and SCALE passes over everything else on
+    ;; one and was counted as scaling it back all the same, leaving it
+    ;; twelve times too big beside a survey back in feet.  A layer a
+    ;; rebuild writes TO is an output layer and goes through
+    ;; ensure-layer instead, which unlocks it for good and says so.
+    ((setq locked (xft:ss-locked ss))
+     (xft:say-locked locked "XFTRECONV")
      (xft:restore)
      (princ))
 
@@ -1307,6 +1341,7 @@
        (progn
          (command "_.UNDO" "_Begin")
          (setq undone t)))
+     (setq begun t)
 
      (setq scale    (nth 2 (car recs))
            base     (nth 3 (car recs))
@@ -1342,7 +1377,10 @@
      )
 
      ;; ---- 3. and back down to the units it arrived in ------------
-     (if (and (/= scale 0.0) (/= scale 1.0) (> (sslength keep) 0))
+     ;; a factor that is not positive means the conversion's own SCALE
+     ;; refused it and never ran, so there is nothing to scale back --
+     ;; and handing SCALE its inverse would leave it waiting for another
+     (if (and (> scale 0.0) (/= scale 1.0) (> (sslength keep) 0))
        (progn
          (princ (strcat "\nScaling " (itoa (sslength keep)) " objects back by 1/"
                         (rtos scale 2 4) " about the conversion's own base ..."))
@@ -1357,6 +1395,7 @@
        (progn
          (command "_.UNDO" "_End")
          (setq undone nil)))
+     (setq begun nil)
      (xft:restore)
 
      ;; ---- report -------------------------------------------------

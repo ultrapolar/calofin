@@ -164,7 +164,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *honefillet-version* "v1.5")  ; announced on load; release_lisp.py
+(setq *honefillet-version* "v1.6")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -265,9 +265,27 @@
 (setq hn:*minang*     0.02)  ; how far off straight (radians) two legs
                              ; must be before there is a corner at all
 
+;;; -------------------- run-time state -------------------------------
+;;; Not knobs: what a run keeps while it runs, ruled off from the block
+;;; above so LAZTUNE does not offer them as settings.  A sysvar snapshot
+;;; offered as a knob is set again at every panel open, and every run
+;;; then skips taking its own and puts that stored value back instead of
+;;; the drafter's settings -- or throws on it, from inside the handler.
+;;;
+;;; The dim style and the undo flag live here, not in the command's
+;;; locals, because the command pushes the error mode for its handler's
+;;; (command) drain, and under a push AutoCAD resets the evaluator
+;;; before *error* runs: the handler sees globals only.  As locals they
+;;; read nil there, so a failure left the undo group open and, from
+;;; inside the radius dimension, the small style current.  Both are
+;;; cleared at the top of every run, before the push, so a run that died
+;;; without its handler cannot hand the next one a group to close.
+
 (setq hn:*preview*    nil)   ; every entity drawn as a preview
 (setq hn:*picks*      nil)   ; (preview-arc . radius), what a click means
 (setq hn:*smallwarned* nil)  ; the missing-style note is said once
+(setq hn:*odim*       nil)   ; the dim style the run opened with
+(setq hn:*undo-open*  nil)   ; T while this run's undo group is open
 
 ;;; -------------------- shared helpers ------------------------------
 ;;; The generic CALOFIN-LIB helpers this tool leans on.  Here they are
@@ -956,7 +974,7 @@
 
 ;;; -------------------- the command ---------------------------------
 
-(defun c:HONEFILLET ( / *error* olderr odim undo-open
+(defun c:HONEFILLET ( / *error*
                          one two geo rmax rads extra shown-extras note
                          span fines r arc dim1 made)
 
@@ -966,7 +984,15 @@
   ;;    the next tool to read as work.  Then the user's settings, then
   ;;    the undo group -- left open, the next U would swallow the
   ;;    user's own work
-  (setq olderr *error*)
+  ;;
+  ;;    *error* is a local of this command, so nothing here saves or
+  ;;    restores the global one: a copy taken here is the local nil, and
+  ;;    under the pushed mode, where the handler sees globals only,
+  ;;    writing it back wiped whatever handler another application had
+  ;;    installed.  The two run globals are cleared FIRST, before the
+  ;;    push, so nothing a dead run left behind is acted on.
+  (setq hn:*odim* nil
+        hn:*undo-open* nil)
   (defun *error* (m)
     (hn:clear)
     (cal:sysrestore)
@@ -982,10 +1008,12 @@
     ;; inside *error* with "INTERNAL error in FAIL", past any
     ;; vl-catch-all-apply, and the rest of the handler never runs
     (if *pop-error-mode* (*pop-error-mode*))
-    (hn:restyle odim)
-    (if undo-open
-      (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
-    (setq *error* olderr)
+    (hn:restyle hn:*odim*)
+    (setq hn:*odim* nil)
+    (if hn:*undo-open*
+      (progn
+        (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))
+        (setq hn:*undo-open* nil)))
     (if (and m (not (wcmatch (strcase m)
                              "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nHONEFILLET error: " m)))
@@ -993,14 +1021,16 @@
     (princ))
   (if lzd:begin (lzd:begin "HONEFILLET" *honefillet-version*))
 
-  ;; AutoCAD 2012+ requires this before *error* may call (command) --
-  ;; the CMDACTIVE drain and the undo close in the handler above; a
-  ;; harmless no-op guard on older releases, where it does not exist
+  ;; AutoCAD 2012+ requires this before *error* may call a bare
+  ;; (command), and the handler above has one: the hn:flush drain.  The
+  ;; style restore and the undo close after it are command-s, issued
+  ;; once the handler has popped the mode.  A harmless no-op guard on
+  ;; older releases, where it does not exist
   (if *push-error-using-command* (*push-error-using-command*))
 
   (vl-load-com)
   (cal:syssave '("OSMODE" "CMDECHO" "CLAYER" "FILLETRAD" "TRIMMODE"))
-  (setq odim (getvar "DIMSTYLE")
+  (setq hn:*odim* (getvar "DIMSTYLE")
         made 0)
   (setvar "CMDECHO" 0)
   (setvar "OSMODE"  0)
@@ -1048,7 +1078,7 @@
      (if (= 1 (logand 1 (getvar "UNDOCTL")))
        (progn
          (command "_.UNDO" "_Begin")
-         (setq undo-open t)))
+         (setq hn:*undo-open* t)))
      ;; rads is already the candidate list -- the cond arm above tested
      ;; it for a second size and left it set
      (setq extra (- (hn:howmany rmax) (length rads)))
@@ -1149,18 +1179,18 @@
      ;; (UNDOCTL bit 1 clear) none was, and an _End on nothing is an
      ;; error of its own -- and it lands HERE, with the corner already
      ;; cut and the settings restore below it never reached
-     (if undo-open
+     (if hn:*undo-open*
        (progn
          (command "_.UNDO" "_End")
-         (setq undo-open nil)))))
+         (setq hn:*undo-open* nil)))))
 
   ;; every path out drops the snapshot, the quiet ones included: a run
   ;; that found nothing to do and kept its snapshot would hand it to the
   ;; NEXT run, which would then put the user's settings back to what
   ;; they were two commands ago
-  (hn:restyle odim)
+  (hn:restyle hn:*odim*)
+  (setq hn:*odim* nil)
   (cal:sysrestore)
-  (setq *error* olderr)
   ;; ...and so does the error mode pushed at the top: every quiet exit
   ;; and the cut one come through here, and a mode left stacked refuses
   ;; command-s inside every later handler in the session (AutoLISP
