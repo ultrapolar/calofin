@@ -63,46 +63,9 @@ def lock_layer(vm, name):
              ' (cons 62 7)))' % name)
 
 
-def _layer_locked(vm, name):
-    if not isinstance(name, str):
-        return False
-    rec = BUILTINS[Sym('tblsearch')](vm, ['LAYER', name])
-    if not isinstance(rec, list):
-        return False
-    for g in rec:
-        if isinstance(g, Dot) and g.a == 70:
-            return bool(int(g.b) & 4)
-    return False
-
-
-class LockedLayers:
-    """entmod refuses -- nil, nothing written -- for an entity on a
-    locked layer, exactly as AutoCAD's does."""
-
-    def __enter__(self):
-        self.real = BUILTINS[Sym('entmod')]
-        real = self.real
-
-        def entmod(vm, a):
-            lay = None
-            ent = None
-            for g in a[0] or []:
-                if isinstance(g, Dot) and g.a == 8:
-                    lay = g.b
-                if isinstance(g, Dot) and g.a == -1:
-                    ent = g.b
-            if lay is None and ent is not None:
-                lay = grp(vm, ent, 8)
-            if _layer_locked(vm, lay):
-                return NIL
-            return real(vm, a)
-
-        BUILTINS[Sym('entmod')] = entmod
-        return self
-
-    def __exit__(self, *exc):
-        BUILTINS[Sym('entmod')] = self.real
-        return False
+# An entmod on a LOCKED layer answers nil and writes nothing: that is
+# tests/lispvm.py's own model now (test_lispvm_values.py pins it).  A
+# LockedLayers context used to patch it in round each run below.
 
 
 def said(vm):
@@ -150,8 +113,7 @@ def test_check_a_stray_point_on_a_locked_layer_is_not_passed_clean():
                  '(8 . "DIMS") '(100 . "AcDbDimension") '(70 . 1)
                  '(13 20.0 0.0 0.0) '(14 60.0 0.5 0.0)))''')
     ents += bad
-    with LockedLayers():
-        vm.run('c:CHECK', [None, ents])
+    vm.run('c:CHECK', [None, ents])
     txt = said(vm)
     check("[1] the point on the locked layer is left where it was",
           grp(vm, bad[0], 14) == [60.0, 0.5, 0.0], repr(grp(vm, bad[0], 14)))
@@ -182,8 +144,7 @@ def test_check_a_loose_arc_on_a_locked_layer_is_not_passed_clean():
                  '(10 %r %r 0.0) '(40 . %r) '(50 . %r) '(51 . %r)))'''
                % (c[0], c[1], r, a0, a1))
     ents += arc
-    with LockedLayers():
-        vm.run('c:CHECK', [None, ents])
+    vm.run('c:CHECK', [None, ents])
     txt = said(vm)
     check("[1] the arc on the locked layer is untouched",
           grp(vm, arc[0], 40) == r and grp(vm, arc[0], 62) is None)
@@ -203,8 +164,7 @@ def test_check_an_unlocked_drawing_still_fixes_and_says_nothing_new():
                  '(8 . "0") '(100 . "AcDbDimension") '(70 . 1)
                  '(13 20.0 0.0 0.0) '(14 60.0 0.5 0.0)))''')
     ents += bad
-    with LockedLayers():
-        vm.run('c:CHECK', [None, ents])
+    vm.run('c:CHECK', [None, ents])
     txt = said(vm)
     check("[1] an unlocked stray point is still shifted",
           'Dimensions: 1 checked, 1 shifted onto nearest object'
@@ -324,8 +284,7 @@ def test_spacheck_does_not_count_an_item_it_could_not_recolour():
     lock_layer(vm, 'JUNK')
     n = vm.loads('(length (caddr (spachk:audit (ssget "_X") nil nil)))')
     check("[2] the dimension on the wrong layer is flagged", n >= 1, repr(n))
-    with LockedLayers():
-        vm.run('c:SPACHECK', [None, None] + ['Yes'] * n)
+    vm.run('c:SPACHECK', [None, None] + ['Yes'] * n)
     txt = said(vm)
     red = [e for e in live(vm) if ent_dict(vm, e).get(62) == 1
            and ent_dict(vm, e).get(8) != 'SPACHECK-REPORT']
@@ -355,8 +314,7 @@ def test_spacheckrescue_does_not_count_a_colour_it_could_not_put_back():
           ent_dict(vm, d).get(62) == 1, repr(ent_dict(vm, d).get(62)))
     lock_layer(vm, 'JUNK')
     vm.printed.clear()
-    with LockedLayers():
-        vm.run('c:SPACHECKRESCUE', [])
+    vm.run('c:SPACHECKRESCUE', [])
     txt = said(vm)
     check("[2] the locked one is still red",
           ent_dict(vm, d).get(62) == 1, repr(ent_dict(vm, d).get(62)))

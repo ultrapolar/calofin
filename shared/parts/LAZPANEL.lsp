@@ -141,7 +141,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.60")
+(setq *lazpanel-version* "v3.61")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -2524,6 +2524,15 @@
                  (strcat lzp:*iconerr* "  certutil: WScript.Shell would not "
                          "start: " (vl-catch-all-error-message sh)))
            nil)
+          ;; vlax-create-object answers NIL, not an error, when the
+          ;; shell is not registered or is blocked.  Handed on, that nil
+          ;; died inside Run under the catch, and the icon report blamed
+          ;; a "bad argument type" instead of the shell that never started
+          ((null sh)
+           (vl-file-delete tmp)
+           (setq lzp:*iconerr*
+                 (strcat lzp:*iconerr* "  certutil: WScript.Shell came back nil."))
+           nil)
           (t
            ;; the third argument waits for it, so the file is there by
            ;; the time this returns rather than some moments later
@@ -4672,7 +4681,7 @@
      ("*PF-SIMP-COMPARE*" "'((\"tight\" 1 \"red\" \"most curves - least error\" nil nil nil) (\"pct\" 2 \"yellow\" \"10% off by 1in, a third as many curves\" 0.10 1.0 3.0) (\"hold\" 3 \"green\" \"all but the 3 worst held, half as many\" 3 1.0 2.0) (\"pct\" 4 \"cyan\" \"20% off by 1/2in, a third as many curves\" 0.20 0.5 3.0) (\"few\" 6 \"magenta\" \"fewest curves - still within the distance\" nil nil nil))" "the five candidates SIMPABHD draws measures to. SIMPABHD asks no numbers at all, so this is the one it uses...")
      ("*PF-SIMP-DEFAULT-FIT*" "\"2\"" "the candidate Enter keeps at SIMPABHD's choose prompt. \"2\" is the middle of the road - a tenth of the point...")
      ("*PF-TOL-MAX*" "2.0" "hard ceiling on the max-distance prompt (2 inches): further than that and the line is no longer a trace of...")
-     ("*PF-MISS-PCT*" "0.20" "share of the points (rounded UP to a whole point) that may sit off the result by up to the tolerance (an in...")
+     ("*PF-MISS-PCT*" "0.20" "share of the points, as a FRACTION from 0 to 1 (0.20 is 20%; anything else is offered as 0.20), rounded UP...")
      ("*PF-ARC-DIV*" "3.0" "the RECOMMENDED curve cap: one curve per this many survey points, rounded to the NEAREST whole curve and ne...")
      ("*PF-ON-EPS*" "0.25" "a point within this of the result counts as ON it; only points off by more than this eat into the miss allo...")
      ("*PF-ON-FRAC*" "0.25" "...and that threshold scales with the distance typed: this fraction of it, whichever of the two is the larg...")
@@ -4732,7 +4741,7 @@
      ("*ABL-EXACT-EPS*" "0.001" "\"exactly on\" threshold (units) target (units)")
      ("*ABL-FIT-EPS*" "0.01" "an arc through an interior point must pass within twice this of it to count as anchored target (units)")
      ("*ABL-ON-EPS*" "0.25" "a point within this of the result counts as ON it; only points off by more eat into the allowance must pass...")
-     ("*ABL-MISS-PCT*" "0.15" "share of the points (rounded UP) that may sit off the result by up to the tolerance counts as ON it; only p...")
+     ("*ABL-MISS-PCT*" "0.15" "share of the points, as a FRACTION from 0 to 1 (0.15 is 15%; anything else is offered as 0.15), rounded UP,...")
      ("*ABL-CORNER-ANG*" "(/ pi 4.0)" "a point that turns more than this (45 deg) is a sharp corner: it may start or end a span but never gets bur...")
      ("*ABL-NICE-RADII*" "'(12.0 6.0 1.0)" "preferred arc-radius tiers, tried in order: whole feet, half feet, whole inches (45 deg) is a sharp corner:...")
      ("*ABL-TANG-TOL*" "(/ pi 22.5)" "wiggle room from perfect tangency at each joint (8 degrees) tried in order: whole feet, half feet, whole in...")
@@ -4781,8 +4790,8 @@
      ("abp:*head-lines*" "4.5" "The title is written this many times the base height, and a section heading gets this much blank line above...")
      ("abp:*hdg-lines*" "1.4" "The title is written this many times the base height, and a section heading gets this much blank line above...")
      ("abp:*row-indent*" "\" \"" "Findings are indented under their heading by this string.")
-     ("abp:*dist-mode*" "4" "rtos mode Distances in the report go through (rtos d mode prec): mode 4 is architectural (feet-inches), so...")
-     ("abp:*dist-prec*" "4" "2^4 = sixteenths of an inch Distances in the report go through (rtos d mode prec): mode 4 is architectural...")
+     ("abp:*dist-mode*" "4" "rtos mode Distances in the report are spelled in MODE at PREC: modes 3 and 4 through abp:ftin, whatever the...")
+     ("abp:*dist-prec*" "4" "2^4 = sixteenths of an inch Distances in the report are spelled in MODE at PREC: modes 3 and 4 through abp:...")
      ("abp:*tiny*" "1.0e-8" "drawing units A bounding box smaller than this has nothing to scale a report to."))
     ("ALTABCDEF" "lisp/altabcdef/ALTABCDEF.lsp"
      ("altabcdef:*frame-layer*" "\"ALTABCDEF-FRAME\"" "The three output layers and the colours they are created with (AutoCAD colour numbers: 1 red, 2 yellow, 3 g...")
@@ -4884,7 +4893,7 @@
      ("*CAB-EXACT-EPS*" "0.001" "\"exactly on\" threshold (units) target (units) - what it fits to instead of the distance typed at step 2, or...")
      ("*CAB-FIT-EPS*" "0.01" "if a single arc misses any of its points by more than this, split it into several arcs that hit exactly tar...")
      ("*CAB-ON-EPS*" "0.25" "a point within this of the result counts as ON it; only points off by more than this eat into the miss allo...")
-     ("*CAB-MISS-PCT*" "0.20" "share of the points (rounded UP to a whole point) that may sit off the result by up to the tolerance (an in...")
+     ("*CAB-MISS-PCT*" "0.20" "share of the points, as a FRACTION from 0 to 1 (0.20 is 20%; anything else is offered as 0.20), rounded UP...")
      ("*CAB-ARC-DIV*" "3.0" "the RECOMMENDED curve cap: one curve per this many survey points the cutoff kept, rounded to the NEAREST wh...")
      ("*CAB-CORNER-ANG*" "(/ pi 4.0)" "a point that turns more than this (45 deg) is a sharp corner: it may start or end a span but never gets bur...")
      ("*CAB-NICE-RADII*" "'(12.0 6.0 1.0)" "preferred arc-radius increments, tried in order: whole feet, half feet, whole inches (drawing units are inc...")
@@ -5230,7 +5239,7 @@
      ("fit:*both-edge*" "0.8" "a both-ends cap fit must beat the best single-ended one by this factor: a big flat arc can always shave a l...")
      ("fit:*snap-eps*" "0.02" "a nice-dim snap may move the fit at most this far beyond where it already sat when a stray point is past th...")
      ("fit:*vsize-min*" "1.0" "a fitted corner easing smaller than this reads as sharp at most this far beyond where it already sat when a...")
-     ("fit:*miss-pct*" "0.15" "the standard share of the points allowed to sit beyond the distance; asked per run, and what a snap to a wh...")
+     ("fit:*miss-pct*" "0.15" "the standard share of the points allowed to sit beyond the distance, a FRACTION above 0 and up to 1 (0.15 i...")
      ("fit:*bow-min*" "1.0" "a bow shallower than this reads as a straight wall - an inch over thirty feet is drafting noise, and survey...")
      ("fit:*bow-max*" "12.0" "a wall bowed more than a foot is not a straight wall any more a straight wall - an inch over thirty feet is...")
      ("fit:*bow-max-frac*" "0.04" "nor one bowed more than this share of its own length not a straight wall any more")
@@ -5261,10 +5270,6 @@
      ("fit:*types*" "\"Rectangle Grecian ROman Oval L LAzyl ROUnd OAsis\"" "POOL's shape vocabulary, minus the shapes a template cannot say (Octagon rides Grecian, Mutt and freeform a...")
      ("fit:*oas-fams*" "\"Center TopRight CLoud Kidney NXTcloud\"" "OASIS's own first question, in OASIS's own words. The sub-type each of two of them asks for is NOT here: wh...")
      ("fit:*dim-off*" "12.0" "the K/L/M string sits this far off the deep break, on the shallow side OASIS's own first question, in OASIS...")
-     ("fit:*ptype*" "fit:*ptype*" "The rest of the answers a session remembers, so a second run is mostly Enter. Reading an unset symbol yield...")
-     ("fit:*treat*" "fit:*treat*" "The rest of the answers a session remembers, so a second run is mostly Enter. Reading an unset symbol yield...")
-     ("fit:*gtreat*" "fit:*gtreat*" "The rest of the answers a session remembers, so a second run is mostly Enter. Reading an unset symbol yield...")
-     ("fit:*oasfam*" "fit:*oasfam*" "The rest of the answers a session remembers, so a second run is mostly Enter. Reading an unset symbol yield...")
      ("fit:*ruler-layer*" "\"FITABHD-RULER\"" "scratch layer the rows go on The LENGTH RULER beside those four offsets, and the tolerance. They are not ta...")
      ("fit:*ruler-color*" "3" "ACI colour of the rows you can PICK The LENGTH RULER beside those four offsets, and the tolerance. They are...")
      ("fit:*ruler-current-color*" "7" "ACI colour of the ringed CURRENT row; 7 is AutoCAD's black/white swap The LENGTH RULER beside those four of...")
@@ -5416,7 +5421,7 @@
      ("*LH-EXACT-EPS*" "0.001" "\"exactly on\" threshold (units) target (units)")
      ("*LH-FIT-EPS*" "0.01" "an arc through an interior point must pass within twice this of it to count as anchored target (units)")
      ("*LH-ON-EPS*" "0.25" "a point within this of the result counts as ON it; only points off by more eat into the allowance must pass...")
-     ("*LH-MISS-PCT*" "0.15" "share of the points (rounded UP) that may sit off the result by up to the tolerance counts as ON it; only p...")
+     ("*LH-MISS-PCT*" "0.15" "share of the points, as a FRACTION from 0 to 1 (0.15 is 15%; anything else is offered as 0.15), rounded UP,...")
      ("*LH-CORNER-ANG*" "(/ pi 4.0)" "a point that turns more than this (45 deg) is a sharp corner: it may start or end a span but never gets bur...")
      ("*LH-NICE-RADII*" "'(12.0 6.0 1.0)" "preferred arc-radius tiers, tried in order: whole feet, half feet, whole inches (45 deg) is a sharp corner:...")
      ("*LH-TANG-TOL*" "(/ pi 22.5)" "wiggle room from perfect tangency at each joint (8 degrees) tried in order: whole feet, half feet, whole in...")
@@ -6150,7 +6155,7 @@
      ("wc:*min-segs*" "6" "fewest segments a selection may hold before it is sent back to be re-picked")
      ("wc:*min-chain*" "3" "fewest segments a traced side may have before the pick is sent back")
      ("wc:*min-rungs*" "2" "fewest rungs to find between the two sides, below which there is no width to measure")
-     ("wc:*maxfeat*" "20" "the darts+inserts cap the prompt offers, and what an out-of-range answer falls back to")
+     ("wc:*maxfeat*" "20" "the darts+inserts cap the prompt offers, and what an out-of-range answer falls back to - a whole number, 1...")
      ("wc:*dart-cap*" "4.0" "widest mouth ONE dart may open: lower it and a big bend splits across more darts side by side, raise it for...")
      ("wc:*dart-space*" "2.0" "bottom line left between two darts cut side by side for one bend, and between any two mouths: less packs th...")
      ("wc:*wmin-f*" "0.04" "smallest correction worth a cut, as a share of the band width - the floor that stops the refining pass cutt...")

@@ -705,7 +705,7 @@ holds this table and the block together, so neither can drift from the other.
 | `spa:*ds-cover*` | `"STANDARD INCHES"` | A style the drawing already defines is used exactly as it stands -- the office template wins -- and one that is missing is built from the standard-inches settings above, the wat... |
 | `spa:*ds-water*` | `"STANDARD INCHES 0.5"` | A style the drawing already defines is used exactly as it stands -- the office template wins -- and one that is missing is built from the standard-inches settings above, the wat... |
 | `spa:*wefactor*` | `0.5` | A style the drawing already defines is used exactly as it stands -- the office template wins -- and one that is missing is built from the standard-inches settings above, the wat... |
-| `spa:*gapdflt*` | `6.0` | suggested cover lap over the water's edge |
+| `spa:*gapdflt*` | `6.0` | suggested cover lap over the water's edge. Held to what the prompt takes typed -- more than 0, no longer than any spa -- or Enter takes 6.0: a 0 or a negative here once came back as the lap and turned the cover inward |
 | `spa:*diagoff*` | `0.82842712` | Offsetting a corner by g is not the same for every treatment: a radius stays concentric (r -> r + g) and a cut face lengthens by g * (2*sqrt2 - 2). That factor, once. |
 | `spa:*capfuzz*` | `1.0e-6` | How far a corner treatment may exceed its own setback cap before the size is refused and re-asked. Float noise only -- a millionth of an inch, orders below the 1/16" a tape read... |
 | `spa:*octeq*` | `0.125` | How far the eight sides of an octagon may differ and still count as "all equal" -- a rounded-off cut face like 39-3/8" must still read as the regular octagon it is, and get one... |

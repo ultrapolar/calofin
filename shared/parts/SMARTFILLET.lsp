@@ -144,7 +144,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.8")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.9")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -469,17 +469,25 @@
         (cal:v+ x (cal:v* u2 tl))))
 
 ;; EVERY radius this corner takes, ascending: sf:*first* up in
-;; sf:*step*s, with sf:*extras* merged in wherever they land.  vl-sort
-;; drops a duplicate, so an extra that is already on the series (a
-;; re-tuned sf:*first*) is not offered twice.
-(defun sf:fitting (rmax / r out)
+;; sf:*step*s, with sf:*extras* merged in wherever they land.  An extra
+;; that is already on the series (a re-tuned sf:*first* of 3, say) is
+;; weeded out here, by value.  vl-sort keeps two equal REALS -- it only
+;; throws out EQ items, and two reals made apart are not EQ -- so the
+;; corner was offered the same radius twice: two previews drawn over
+;; each other, each spending one of the sf:*maxshown* slots a real
+;; size should have had.
+(defun sf:fitting (rmax / r out prev keep)
   (setq r sf:*first*)
   (while (<= r rmax)
     (setq out (cons r out)
           r   (+ r sf:*step*)))
   (foreach r sf:*extras*
     (if (and (> r 0.0) (<= r rmax)) (setq out (cons r out))))
-  (if out (vl-sort out '<)))
+  (foreach r (vl-sort out '<)
+    (if (not (and prev (equal r prev 1e-9)))
+      (setq keep (cons r keep)))
+    (setq prev r))
+  (reverse keep))
 
 ;; the ones actually drawn: the first sf:*maxshown* of them
 (defun sf:candidates (rmax / all r out n)
@@ -675,17 +683,26 @@
 ;; what is tested for, and the <default> says what an empty answer
 ;; means.  OTHER is the line already picked for this corner, which
 ;; cannot be picked twice.  Returns (ename pick-point-in-WCS), or nil
-;; when the way out is taken.  Nothing has been drawn at this point, so
-;; a click that lands on empty paper costing the loop is a fair trade
-;; for Enter meaning what it says.
+;; when the way out is taken.  entsel answers nil to Enter AND to a
+;; click that lands just beside a line, and only ERRNO 7 tells them
+;; apart.  Taken as Enter, one near miss inside the repeat loop ended
+;; the whole "other corners at R?" session and threw away the first
+;; line already picked for that corner -- going on meant running the
+;; command again, previews, bracket and a second callout for a radius
+;; already dimensioned.  ERRNO is sticky, so it is zeroed before every
+;; pick, or the Enter after a miss would read as a second miss.
 (defun sf:askline (msg kw other / sel ans typ)
   (while (not ans)
+    (vl-catch-all-apply 'setvar (list "ERRNO" 0))
     (initget kw)
     (setq sel (entsel (strcat "\n" msg " [" kw "] <" kw ">: ")))
     (if lzd:ask (lzd:ask (getvar "LASTPROMPT") sel) sel)
     (if lzd:watch (lzd:watch sel) sel)
     (cond
       ((= (type sel) 'STR) (setq ans 'SF-NONE))
+      ((and (null sel) (= 7 (getvar "ERRNO")))
+       (princ (strcat "\n  (nothing there -- click a LINE, or press Enter for "
+                      kw ")")))
       ((null sel) (setq ans 'SF-NONE))
       ((and other (eq (car sel) other))
        (princ "\n  (that is the line you just picked -- click the OTHER leg)"))

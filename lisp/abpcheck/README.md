@@ -94,7 +94,7 @@ The tables below are the block, read off it:
 
 | Global | Default | Meaning |
 | --- | --- | --- |
-| `abp:*limit*` | `1.0` | How far off the nearest line is too far. The command asks every run and Enter takes the offered value, so this is the default the FIRST run of a session offers; what you answer is remembered in abp:*asked* below and offered from then on. Lower it and more points are called too far (drawing units (1 inch)) |
+| `abp:*limit*` | `1.0` | How far off the nearest line is too far. The command asks every run and Enter takes the offered value, so this is the default the FIRST run of a session offers; what you answer is remembered in abp:*asked* below and offered from then on. Lower it and more points are called too far; zero or less is offered as 1" (drawing units (1 inch)) |
 | `abp:*exact-eps*` | `1.0e-6` | Two points closer than this are the same shot, not two (drawing units) |
 | `abp:*plane-min*` | `0.999` | How far an entity's extrusion normal (DXF 210) may lean from world +Z before it is counted as "not in the world plane" and left out of the measurement. 0.999 is about 2.6 degrees of tilt (cosine of the tilt, so nearer 1 is stricter) |
 

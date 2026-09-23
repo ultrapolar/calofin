@@ -123,7 +123,8 @@ Asks up front — **Checks**, **Demo**, or **Both**:
 
   It then offers to run `SPACHECKSCAN` for a real report — which names
   those three and nothing else — and to erase the practice drawing
-  afterwards.
+  afterwards. The erase takes that run's report with it and no other:
+  an earlier report on `SPACHECK-REPORT` stays.
 * **Both** — the checklist, then the demo.
 
 The demo runs inside one UNDO group and never touches existing geometry.

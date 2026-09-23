@@ -17,10 +17,10 @@ went wrong without a word.
    a push AutoCAD resets the evaluator before *error* runs: the handler
    sees globals only.  It read the build's locals, so a failed or
    cancelled bead left OSMODE 0, PEDITACCEPT 1, CMDECHO 0, the undo
-   group open and the working chains in the drawing.  The VM runs every
-   handler with the stack live, so the reset is modelled here (the same
-   model as the audit's vmpatch): the failing run's frames are swapped
-   out for the handler call.  Stale globals -- what a run that died
+   group open and the working chains in the drawing.  The VM ran every
+   handler with the stack live; it models the reset itself now
+   (tests/test_lispvm_errmode.py), and this file used to.  Stale
+   globals -- what a run that died
    WITHOUT its handler would leave -- are seeded to show each build
    clears them before it acts on any.
 3. OFFSET's registry settings.  The build ran OFFSET under whatever
@@ -121,7 +121,7 @@ def dxf(vm, e, code):
 
 # ------------------------------------------------------ patching helpers
 class patched:
-    """Swap BUILTINS / VM attributes for the length of a with-block."""
+    """Swap BUILTINS for the length of a with-block."""
 
     def __init__(self, **kw):
         self.kw = kw
@@ -129,67 +129,13 @@ class patched:
     def __enter__(self):
         self.old = {}
         for k, v in self.kw.items():
-            if k == 'call_defun':
-                self.old[k] = VM.call_defun
-                VM.call_defun = v
-            else:
-                self.old[k] = BUILTINS[Sym(k)]
-                BUILTINS[Sym(k)] = v
+            self.old[k] = BUILTINS[Sym(k)]
+            BUILTINS[Sym(k)] = v
         return self
 
     def __exit__(self, *a):
         for k, v in self.old.items():
-            if k == 'call_defun':
-                VM.call_defun = v
-            else:
-                BUILTINS[Sym(k)] = v
-
-
-_stock_call_defun = VM.call_defun
-
-
-def unwinding_call_defun(self, name, fn, args):
-    """The pushed mode's reset: under *push-error-using-command* AutoCAD
-    unwinds the AutoLISP stack BEFORE it calls *error* -- the handler
-    function is the one in force at the failure, but every binding the
-    failing code made is gone, so its locals read their GLOBAL value.
-    (The audit's vmpatch.py model, minus its other two switches.)"""
-    _, params, locals_, body = fn
-    if len(args) != len(params):
-        raise LispError("%s: expected %d args, got %d"
-                        % (name, len(params), len(args)), self)
-    frame = dict(zip(params, args))
-    for l in locals_:
-        frame[l] = NIL
-    self.stack.append(frame)
-    self.calls.append(name)
-    try:
-        r = NIL
-        for form in body:
-            r = self.eval(form)
-        return r
-    except LispError as e:
-        if (self.handle_errors and not self._catch_depth
-                and not self._in_handler
-                and not getattr(e, 'handled', False)):
-            h = self.get(Sym('*error*'))        # captured BEFORE the unwind
-            if isinstance(h, tuple) and h[0] == 'defun':
-                e.handled = True
-                self.handled_errors.append(str(e).split('\n')[0])
-                self._in_handler = True
-                saved = self.stack
-                if self.error_mode_depth > 0:
-                    self.stack = []
-                try:
-                    self.call_defun(Sym('*error*'), h,
-                                    [str(e).split('\n')[0]])
-                finally:
-                    self.stack = saved
-                    self._in_handler = False
-        raise
-    finally:
-        self.stack.pop()
-        self.calls.pop()
+            BUILTINS[Sym(k)] = v
 
 
 _stock_command = BUILTINS[Sym('command')]
@@ -380,8 +326,7 @@ vm = pocket()
 vm.handle_errors = True
 originals = set(alive(vm))
 err = None
-with patched(call_defun=unwinding_call_defun,
-             command=lambda vm, a: fake_command(vm, a, fail_offset=True)):
+with patched(command=lambda vm, a: fake_command(vm, a, fail_offset=True)):
     try:
         vm.loads('(autobead-build ab-ss (list 120.0 200.0 0.0) "All" nil nil)')
     except LispError as e:
@@ -400,7 +345,7 @@ check("the working chains are swept, the originals untouched",
 
 vm = pocket()
 vm.handle_errors = True
-with patched(call_defun=unwinding_call_defun, command=fake_command):
+with patched(command=fake_command):
     vm.loads('(autobead-build ab-ss (list 120.0 200.0 0.0) "All" nil nil)')
     vm.loads('(defun autobead-copy (e) (autobead-no-such-helper e))')
     try:
@@ -437,7 +382,7 @@ vm.sysvars['UNDOCTL'] = 0             # this build opens no group of its own
 originals = set(alive(vm))
 vm.loads(STALE)
 vm.loads('(defun autobead-copy (e) (autobead-no-such-helper e))')
-with patched(call_defun=unwinding_call_defun, command=fake_command):
+with patched(command=fake_command):
     try:
         vm.loads('(autobead-build ab-ss (list 120.0 200.0 0.0) "All" nil nil)')
     except LispError:
@@ -454,7 +399,7 @@ check("stale globals: the drafter's settings, not the stale ones",
 vm = pocket()
 vm.handle_errors = True
 vm.loads(STALE)
-with patched(call_defun=unwinding_call_defun, command=fake_command,
+with patched(command=fake_command,
              getvar=dead_before_capture):
     try:
         vm.loads('(autobead-build ab-ss (list 120.0 200.0 0.0) "All" nil nil)')
@@ -652,23 +597,21 @@ check("...and nothing claims a cleanup it did not do",
 # 6c. a locked demo layer is said, not claimed.  The drafter locks
 #     POOL-TUTORIAL while the demo's last question is up, so the five
 #     sample lines are the ones entdel refuses
+#     (entdel refuses on a locked layer in the VM itself now --
+#     test_lispvm_values.py -- so the lock is a real one, set on the
+#     layer's record the way LAYER's Lock would)
 vm = demo_vm()
-vm.locked = False
 _stock_entdel = BUILTINS[Sym('entdel')]
 
 
-def locked_entdel(vm, a):
-    if vm.locked and dxf(vm, a[0], 8) == "POOL-TUTORIAL":
-        return NIL                       # refused, as on a locked layer
-    return _stock_entdel(vm, a)
-
-
 def lock_then_enter(vm):
-    vm.locked = True
+    vm.loads('(setq t:rec (entget (tblobjname "LAYER" "POOL-TUTORIAL")))'
+             '(entmod (subst (cons 70 (logior 4 (cdr (assoc 70 t:rec))))'
+             ' (assoc 70 t:rec) t:rec))')
     return None
 
 
-with patched(command=fake_command, entdel=locked_entdel):
+with patched(command=fake_command):
     vm.run('c:TUTORIALAUTOBEAD',
            ["Demo", (10.0, 10.0, 0.0), None, None, (150.0, 80.0, 0.0),
             None, lock_then_enter])
@@ -780,8 +723,7 @@ check("...four beads, and nothing else left over",
 vm = demo_vm()
 vm.handle_errors = True
 try:
-    with patched(call_defun=unwinding_call_defun,
-                 command=lambda vm, a: fake_command(vm, a, fail_offset=True)):
+    with patched(command=lambda vm, a: fake_command(vm, a, fail_offset=True)):
         vm.run('c:TUTORIALAUTOBEAD',
                ["Demo", (10.0, 10.0, 0.0), None, None, (150.0, 80.0, 0.0),
                 None])
@@ -804,8 +746,7 @@ vm = pocket()
 vm.handle_errors = True
 originals = set(alive(vm))
 vm.loads('(setq autobead:*demo* (list nil))')
-with patched(call_defun=unwinding_call_defun,
-             command=lambda vm, a: fake_command(vm, a, fail_offset=True)):
+with patched(command=lambda vm, a: fake_command(vm, a, fail_offset=True)):
     try:
         vm.loads('(autobead-build ab-ss (list 120.0 200.0 0.0) "All" nil nil)')
     except LispError:

@@ -72,10 +72,10 @@ line under them naming them all:
 
 ```
 POINTS OFF THE LINE (4)
-Pt.8    off by 1-7/8"
-Pt.7    off by 1-5/16"
-Pt.51   off by 1-1/16"
-Pt.23   off by 4-1/2"   (left out)
+Pt.8    off by 0'-1 7/8"
+Pt.7    off by 0'-1 5/16"
+Pt.51   off by 0'-1 1/16"
+Pt.23   off by 0'-4 1/2"   (left out)
 - Pt.8, Pt.7, Pt.51 and Pt.23 are bad.
 ```
 
@@ -115,7 +115,7 @@ All at the top of `CABHD.lsp`; the key ones:
 | `*CAB-OMIT-TAIL*` | `"   (left out)"` | What marks a left-out point's row apart from one the fit tried to hold and missed |
 | `*CAB-WALL-LAYER*` | `"POOL-WALLS"` | Layer for declared-wall markers |
 | `*CAB-TOL-MAX*` | `2.0` | Hard ceiling on the max-distance prompt (2") |
-| `*CAB-MISS-PCT*` | `0.20` | Recommended share of points allowed off (rounded up) |
+| `*CAB-MISS-PCT*` | `0.20` | Recommended share of points allowed off (rounded up) -- a fraction from 0 to 1; anything else is offered as 0.20 |
 | `*CAB-ARC-DIV*` | `3.0` | The recommended curve cap: one curve per this many kept points, rounded to nearest, never below 1 |
 | `*CAB-ON-EPS*` | `0.25` | Within this of the result counts as ON it |
 | `*CAB-CORNER-ANG*` | 45 deg | Turning more than this is a sharp corner |

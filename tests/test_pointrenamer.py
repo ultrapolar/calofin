@@ -248,8 +248,12 @@ check("the count carries on beyond the band, same sweep: the top stray "
       "before the centre",
       got[(230.0, 130.0)] == '5' and got[(120.0, 60.0)] == '6', repr(got))
 check("a block with no attribute keeps none", got.get((7.0, 7.0)) is None)
+# The band is command-line text, spelled by (rtos d 4 4) under the
+# drafter's DIMZIN: acad.dwt's DIMZIN 0 drops zero feet and zero inches,
+# so AutoCAD says 6" and 2' -- never the old DIMZIN-blind VM's 0'-6" and
+# 2'-0".  (Text left in the drawing is another matter: check_values.)
 check("the split is shown before anything is written",
-      '6 point(s) to renumber: 4 within 0\'-6" of the perimeter, 2 beyond'
+      '6 point(s) to renumber: 4 within 6" of the perimeter, 2 beyond'
       in txt, txt[-900:])
 check("what carries no number is counted out loud",
       '2 more carry no number at all' in txt, txt[-900:])
@@ -664,7 +668,7 @@ txt = run(vm, [None, None, (0.0, 0.0, 0.0), 'Clockwise', 6.0, 1, 'Yes'],
 check("with nothing near, the near heading is not printed",
       'Around the perimeter' not in txt, txt[-900:])
 check("only the one that describes the list that follows",
-      'Beyond 0\'-6" off the perimeter' in txt, txt[-900:])
+      'Beyond 6" off the perimeter' in txt, txt[-900:])
 check("and every point is still renumbered",
       '2 point(s) renumbered 1-2' in txt, txt[-900:])
 
@@ -722,7 +726,7 @@ check("*first* is the number the count is offered at",
       '<100>' in asked, asked[-700:])
 check("*dir* is the direction offered", '<COunterclockwise>' in asked,
       asked[-700:])
-check("*band* is the band offered", "<2'-0\">" in asked, asked[-700:])
+check("*band* is the band offered", "<2'>" in asked, asked[-700:])
 check("and Enter at all three takes them",
       '2 point(s) renumbered 100-101' in txt, txt[-500:])
 

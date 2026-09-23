@@ -266,10 +266,12 @@ def autodim_vm():
 
 
 def locked_world(run):
-    """AutoCAD's two halves the VM leaves out: an entmake with no group
-    8 lands on CLAYER, and entdel will not erase from a locked layer."""
+    """The half of AutoCAD the VM still leaves out: an entmake with no
+    group 8 lands on CLAYER.  (The other half this used to add -- entdel
+    will not erase from a locked layer -- is the VM's own now,
+    test_lispvm_values.py.)"""
     B = lispvm.BUILTINS
-    real_make, real_del = B[Sym('entmake')], B[Sym('entdel')]
+    real_make = B[Sym('entmake')]
 
     def make(vm, a):
         alist = a[0]
@@ -280,20 +282,11 @@ def locked_world(run):
             alist = list(alist) + [Dot(8, vm.sysvars.get('CLAYER', '0'))]
         return real_make(vm, [alist] + list(a[1:]))
 
-    def delete(vm, a):
-        lay = dxf(vm, a[0], 8)
-        rec = vm.tablerecs.get('LAYER', {}).get(str(lay or '').upper())
-        if rec is not None:
-            fl = [g.b for g in vm.recdata[rec]
-                  if isinstance(g, Dot) and g.a == 70]
-            if fl and fl[0] & 4 and a[0] not in vm.deleted:
-                return NIL                  # refused, without a word
-        return real_del(vm, a)
-    B[Sym('entmake')], B[Sym('entdel')] = make, delete
+    B[Sym('entmake')] = make
     try:
         return run()
     finally:
-        B[Sym('entmake')], B[Sym('entdel')] = real_make, real_del
+        B[Sym('entmake')] = real_make
 
 
 vm = autodim_vm()

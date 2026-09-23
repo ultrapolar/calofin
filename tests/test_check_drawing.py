@@ -480,8 +480,11 @@ vm.loads('(setq *cfchk-dist-mode* 4 *cfchk-dist-prec* 4)')
 ents = made(vm, LINE)
 ents += made(vm, dim("K12", (20.0, 0.0), (60.0, 0.5)))
 vm.run('c:CHECK', [None, ents])
+# command-line text under the drafter's DIMZIN: acad.dwt's 0 drops the
+# zero feet and zero inches, so AutoCAD prints 1/2" (the old VM's
+# DIMZIN-blind 0'-0 1/2" never reached a drafter's screen)
 check("*cfchk-dist-mode* 4: the shift prints in feet and inches",
-      'point 2 shifted 0\'-0 1/2"' in ''.join(vm.printed),
+      'point 2 shifted 1/2" onto' in ''.join(vm.printed),
       ''.join(vm.printed)[-300:])
 
 vm = newvm()

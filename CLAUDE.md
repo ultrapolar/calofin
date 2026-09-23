@@ -579,6 +579,45 @@ python3 tools/check_handlers.py  # every *error* handler reaches its END --
                                  # H5 pairs (nested handlers) that are
                                  # right on purpose live in
                                  # tools/handler_baseline.txt
+python3 tools/check_leaks.py     # what a run BORROWS is handed back on
+       [--tier T] [--all]        # every way out, the early ones too: undo
+                                 # group, error mode, LAZDIAG run, sysvars,
+                                 # from each exit (named) and from *error*
+                                 # -- over all three tiers -- and no flag a
+                                 # dead run left set is read first by the
+                                 # next (tools/leaks_baseline.txt)
+python3 tools/check_writes.py    # a write nobody looks at is never called
+       [--list] [--tier T]       # done: an entmod/entdel/edit command on the
+                                 # drafter's objects, answer thrown away, then
+                                 # "erased" or (1+ n) -- a locked layer refuses
+                                 # it silently.  W1: layer makers clear bit 4.
+                                 # write_baseline.txt lines name their needs=
+python3 tools/check_offered.py   # an answer handed back UNASKED -- Enter's
+       [--tier T] [--all]        # default, a LAZTUNE knob, a form's stored
+                                 # one -- is one the prompt offers: a keyword
+                                 # as spelt, a number above the floor its
+                                 # initget or its own code sets.  A miss
+                                 # percentage of 15 was 1500% on Enter
+python3 tools/check_input.py     # every input asks for what the drafter
+       [--list] [--tier T]       # can GIVE it: an entsel whose nil decides
+                                 # zeroes ERRNO right before the pick and
+                                 # tells a miss (7) from Enter; nothing
+                                 # teaches a spaced 44 1/2 where the space
+                                 # is Enter. tools/input_baseline.txt: why
+python3 tools/check_values.py    # values a builtin hands back that AutoCAD
+       [FILE] [--list] [--rule R]# does not promise: feet-inch rtos text
+                                 # that reaches the DRAWING follows DIMZIN
+                                 # (15' not 15'-0" -- route it through the
+                                 # tool's copy of cal:ftin), a shown max that
+                                 # rounds up and is refused (cal:floor-shown),
+                                 # vl-sort trusted to dedupe reals, a COM
+                                 # object's nil.  values_baseline.txt: why
+python3 tools/check_tier_parity.py # the grouped build READS what the
+       [--all] [--list TOOL]     # standalone one does: every helper the
+                                 # mirror swaps, closed over its tier -- same
+                                 # knobs, profile keys, sysvars, sentinels; no
+                                 # wrong cal: arity, dead slot or dropped knob;
+                                 # a hand twin differs in prose only
 python3 tools/check_osnap.py     # the drafter's OBJECT SNAPS survive every
        [--list] [--tier T]       # run, the failed ones included -- read over
                                  # all THREE tiers, releases/ included,

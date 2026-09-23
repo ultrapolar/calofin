@@ -88,7 +88,7 @@
 ;;; layer everything landed on.
 ;;; ======================================================================
 
-(setq *olauto-version* "v1.3")       ; announced on load; release_lisp.py
+(setq *olauto-version* "v1.4")       ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -1055,6 +1055,38 @@
     (setq i (1+ i)))
   typ)
 
+;; The locked layers a selection sits on, added to OUT, each once.
+;; OLAUTO writes to everything picked -- the moving perimeter is moved,
+;; both are put on the shop's layers -- and entmod refuses an object on
+;; a locked layer by answering nil.  Nothing read that answer, so the
+;; fit, the deviation dimensions and the report all went ahead off the
+;; copy in memory as if the perimeter had moved, while the drawing still
+;; showed it where it was.  The selection is walked, not the layer
+;; table: a locked layer with nothing picked on it is in nobody's way.
+(defun ola:ss-locked (ss out / i lay rec)
+  (setq i 0)
+  (repeat (sslength ss)
+    (setq lay (cdr (assoc 8 (entget (ssname ss i)))))
+    (if (and lay
+             (not (member (strcase lay) (mapcar 'strcase out)))
+             (setq rec (tblsearch "LAYER" lay))
+             (= 4 (logand 4 (cond ((cdr (assoc 70 rec))) (0)))))
+      (setq out (append out (list lay))))
+    (setq i (1+ i)))
+  out)
+
+;; "A", "B" and "C" -- layer names for a sentence.
+(defun ola:names (lst / out n lay)
+  (setq out "" n (length lst))
+  (foreach lay lst
+    (setq out (strcat out
+                      (cond ((= out "") "")
+                            ((= n 1) " and ")
+                            (T ", "))
+                      "\"" lay "\"")
+          n   (1- n)))
+  out)
+
 ;; The dominant layer of a selection -- what the new/original question
 ;; is answered with before it is asked.
 (defun ola:ss-layer (ss / i counts en lay hit best bestn p)
@@ -1242,7 +1274,7 @@
 (defun ola:run ( / ssa ssb newss ogss movss fixss laya layb qstep ans
                    whichnew whichmove segnew segog x prof pk drawn push
                    havestyle p dimlist mid shared flat lnew log_ warn w
-                   pcs mir mseg fseg ratio hint)
+                   pcs mir mseg fseg ratio hint locked)
   ;; The selections and the questions are ONE chain, walked with a step
   ;; counter (STANDARDS section 3).  A selection cannot be armed with
   ;; initget, so Back cannot be typed AT one -- which is why Back at the
@@ -1290,6 +1322,20 @@
                          "  Its points are kept in the object's own"
                          " plane, so reading them as world would fit a"
                          " mirrored outline.  Flatten it first.")))
+         ;; refused before a question is asked or anything is moved: a
+         ;; locked layer refuses the move and the re-layer both, and a
+         ;; run past it reported an overlay the drawing does not show
+         ((setq locked (ola:ss-locked ssb (ola:ss-locked ssa nil)))
+          (princ (strcat "\nOLAUTO: layer" (if (cdr locked) "s " " ")
+                         (ola:names locked)
+                         (if (cdr locked) " are" " is") " locked.  OLAUTO"
+                         " moves one perimeter and puts both on its own"
+                         " layers, and a locked layer refuses both -"
+                         " nothing would move, and the dimensions would"
+                         " be of an overlay the drawing does not show."
+                         "\nUnlock " (ola:names locked)
+                         " first, then run OLAUTO again."))
+          (setq qstep nil))
          (T
           (setq laya (ola:ss-layer ssa)
                 layb (ola:ss-layer ssb)

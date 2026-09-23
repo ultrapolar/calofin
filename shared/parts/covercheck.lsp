@@ -241,7 +241,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.27")
+(setq *cchk-version* "v1.28")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -538,9 +538,27 @@
 ;;;  the drawing is xdata under the "COVERCHECK" APPID.
 ;;; ======================================================================
 
-;; A distance as the prompts and the report print it.
+;; A distance as the prompts and the report print it.  Modes 3 and 4
+;; are feet and inches, and rtos spells those after DIMZIN: at 0 (the
+;; acad.dwt setting), 2 or 8 a whole foot came out 15' -- the notation
+;; COVERCHECK's own review rejects as feet with no inches -- in a report
+;; written into the drawing.  So a *cchk-dist-mode* tuned to either is
+;; spelled by arithmetic, the same in every drawing.
 (defun cchk:dist (d)
-  (rtos d *cchk-dist-mode* *cchk-dist-prec*))
+  (if (member *cchk-dist-mode* '(3 4))
+    (cal:ftin d *cchk-dist-mode* *cchk-dist-prec*)
+    (rtos d *cchk-dist-mode* *cchk-dist-prec*)))
+
+;; A length in the drawing's own units (LUNITS/LUPREC) -- how the report
+;; quotes a dimension's measurement, a point and an overlap.  A plain
+;; (rtos v) follows DIMZIN in a feet-inch drawing exactly as cchk:dist's
+;; modes 3 and 4 did, so LUNITS 3 and 4 are spelled by arithmetic
+;; (cal:ftin's); every other unit keeps rtos, which is what the drafter
+;; reads on the sheet.
+(defun cchk:dist-units (v)
+  (if (member (getvar "LUNITS") '(3 4))
+    (cal:ftin v (getvar "LUNITS") (getvar "LUPREC"))
+    (rtos v)))
 
 ;; The word for an ACI colour, so a message naming a colour follows the
 ;; knob instead of saying "red" whatever the knob holds.
@@ -588,20 +606,27 @@
   (if (and ed (assoc -3 ed))
     (entmod (subst (list -3 (list "COVERCHECK")) (assoc -3 ed) ed))))
 
-(defun cchk:clear-old (/ ss2 i e xd n)
+(defun cchk:clear-old (/ ss2 i e xd n stuck)
   ;; erase the report and marker lines left by an earlier COVERCHECK
-  ;; run, so a rerun replaces them instead of stacking on top
-  (setq ss2 (ssget "_X" '((-3 ("COVERCHECK")))) n 0 i 0)
+  ;; run, so a rerun replaces them instead of stacking on top.
+  ;; COVERSCAN unlocks only the report layer and TUTORIALCOVERCHECKCLEAN
+  ;; none, so a marker on a locked layer refuses the erase: it is
+  ;; counted as left, not as removed
+  (setq ss2 (ssget "_X" '((-3 ("COVERCHECK")))) n 0 stuck 0 i 0)
   (if ss2
     (repeat (sslength ss2)
       (setq e  (ssname ss2 i)
             i  (1+ i)
             xd (cchk:xd e))
       (if (member (cdr (assoc 1000 xd)) '("REPORT" "XLINE" "MARKER"))
-        (progn (entdel e) (setq n (1+ n))))))
+        (if (entdel e) (setq n (1+ n)) (setq stuck (1+ stuck))))))
   (if (> n 0)
     (princ (strcat "\n(Removed " (itoa n)
-                   " report/marker item(s) from an earlier COVERCHECK run.)"))))
+                   " report/marker item(s) from an earlier COVERCHECK run.)")))
+  (if (> stuck 0)
+    (princ (strcat "\n(" (itoa stuck)
+                   " report/marker item(s) from an earlier COVERCHECK run are"
+                   " on a locked layer - NOT removed.)"))))
 
 (defun cchk:layer-locked-p (name / ld)
   (setq ld (tblsearch "LAYER" name))
@@ -624,7 +649,7 @@
       (setq found T)))
   found)
 
-(defun c:COVERCHECKRESCUE ( / *error* undo-open ss i e xd n)
+(defun c:COVERCHECKRESCUE ( / *error* undo-open ss i e xd n stuck)
   ;; entdel/entmod over the whole drawing was N undos deep and
   ;; had no handler at all -- now one group, closed on both exits,
   ;; and a cancel that says nothing
@@ -642,8 +667,12 @@
     (progn (command "_.UNDO" "_Begin") (setq undo-open T)))
   ;; the way out after a crash or interrupted run: puts back every
   ;; colour COVERCHECK stashed (flag colours included) and removes its
-  ;; report and marker lines
-  (setq ss (ssget "_X" '((-3 ("COVERCHECK")))) n 0 i 0)
+  ;; report and marker lines.  Only a write that TOOK is counted: on a
+  ;; locked layer entdel and entmod answer nil and change nothing, and
+  ;; counting the attempts said "restored" over a dimension still red.
+  ;; A colour that would not go back keeps its stash, so a rerun once
+  ;; the layer is unlocked still knows the original
+  (setq ss (ssget "_X" '((-3 ("COVERCHECK")))) n 0 stuck 0 i 0)
   (if ss
     (repeat (sslength ss)
       (setq e  (ssname ss i)
@@ -651,15 +680,20 @@
             xd (cchk:xd e))
       (cond
         ((member (cdr (assoc 1000 xd)) '("REPORT" "XLINE" "MARKER"))
-         (entdel e)
-         (setq n (1+ n)))
+         (if (entdel e) (setq n (1+ n)) (setq stuck (1+ stuck))))
         ((assoc 1071 xd)
-         (cchk:set-color e (cdr (assoc 1071 xd)))
-         (cchk:unstash e)
-         (setq n (1+ n))))))
-  (if (> n 0)
-    (princ (strcat "\nCOVERCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
-    (princ "\nCOVERCHECKRESCUE: nothing to restore - no COVERCHECK markers in the drawing."))
+         (if (cchk:set-color e (cdr (assoc 1071 xd)))
+           (progn (cchk:unstash e) (setq n (1+ n)))
+           (setq stuck (1+ stuck)))))))
+  (cond
+    ((> n 0)
+     (princ (strcat "\nCOVERCHECKRESCUE: restored or removed " (itoa n) " item(s).")))
+    ((= stuck 0)
+     (princ "\nCOVERCHECKRESCUE: nothing to restore - no COVERCHECK markers in the drawing.")))
+  (if (> stuck 0)
+    (princ (strcat "\nCOVERCHECKRESCUE: " (itoa stuck)
+                   " item(s) on locked layer(s) NOT restored - unlock and"
+                   " run COVERCHECKRESCUE again.")))
   (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
   (if lzd:end (lzd:end "COVERCHECKRESCUE"))
   (princ))
@@ -742,7 +776,7 @@
 (defun cchk:ptstr (p)
   ;; formatted with the drawing's own unit settings (LUNITS/LUPREC),
   ;; same as every measurement elsewhere in the report
-  (strcat "(" (rtos (car p)) ", " (rtos (cadr p)) ")"))
+  (strcat "(" (cchk:dist-units (car p)) ", " (cchk:dist-units (cadr p)) ")"))
 
 (defun cchk:zoom-ent (ent / bb p1 p2 m)
   ;; zoom the current view onto ent with some breathing room
@@ -1909,7 +1943,7 @@
     ((= dtype 1)                              ; aligned: point-to-point
      (setq p13 (cdr (assoc 13 ed))
            p14 (cdr (assoc 14 ed)))
-     (if (and p13 p14) (rtos (distance p13 p14))))
+     (if (and p13 p14) (cchk:dist-units (distance p13 p14))))
     ((= dtype 0)                              ; rotated/linear: project the
      (setq p13 (cdr (assoc 13 ed))            ; points onto the dim direction
            p14 (cdr (assoc 14 ed))
@@ -1918,12 +1952,12 @@
        (progn
          (if (null ang) (setq ang 0.0))
          (setq v (mapcar '- p14 p13))
-         (rtos (abs (+ (* (car v) (cos ang))
+         (cchk:dist-units (abs (+ (* (car v) (cos ang))
                        (* (cadr v) (sin ang))))))))
     ((member dtype '(2 5))                    ; angular: show the angle
      (if (and meas (>= meas 0.0)) (angtos meas)))
     (t                                        ; radius/diameter/ordinate
-     (if (and meas (>= meas 0.0)) (rtos meas)))))
+     (if (and meas (>= meas 0.0)) (cchk:dist-units meas)))))
 
 (defun cchk:dim-def-pts (ent / ed dtype p13 p14)
   ;; the two definition points of a linear/aligned dimension (the ones
@@ -2319,7 +2353,7 @@
             kinds     (if (and (cchk:whole-line-p la) (cchk:whole-line-p lb))
                         "lines"
                         "segments")
-            label     (strcat h1 "+" h2 " (overlap " (rtos (caddr info)) ")"))
+            label     (strcat h1 "+" h2 " (overlap " (cchk:dist-units (caddr info)) ")"))
       (cchk:zoom-2ents ea eb)
       (redraw ea 3)
       (redraw eb 3)
@@ -4090,7 +4124,7 @@
                                  "+"
                                  (cdr (assoc 5 (entget (cchk:seg-ent (cadr pr)))))
                                  ": OVERLAP of "
-                                 (rtos (caddr (cchk:overlap-info (car pr) (cadr pr))))
+                                 (cchk:dist-units (caddr (cchk:overlap-info (car pr) (cadr pr))))
                                  " - flagged")
                          lines)))
 
@@ -4478,11 +4512,16 @@
   (if lzd:end (lzd:end "TUTORIALCOVERCHECK"))
   (princ))
 
-(defun c:TUTORIALCOVERCHECKCLEAN ( / *error* undo-open ss i e xd n)
+(defun c:TUTORIALCOVERCHECKCLEAN ( / *error* undo-open ss i e xd n mine lay
+                                     relock stuck held)
   ;; entdel/entmod over the whole drawing was N undos deep and
   ;; had no handler at all -- now one group, closed on both exits,
   ;; and a cancel that says nothing
   (defun *error* (msg)
+    ;; a lock lifted for the erase goes back first: the layer is the
+    ;; drafter's, locked on purpose
+    (foreach lay relock (cchk:set-layer-lock lay T))
+    (setq relock nil)
     (if undo-open (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (setq undo-open nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -4497,19 +4536,43 @@
   ;; erases everything TUTORIALCOVERCHECK built (tagged "TUTORIAL"),
   ;; then clears any COVERCHECK/COVERSCAN report and markers left on
   ;; it too, so a demo run leaves nothing behind
-  (setq ss (ssget "_X" '((-3 ("COVERCHECK")))) n 0 i 0)
+  (setq ss (ssget "_X" '((-3 ("COVERCHECK")))) n 0 stuck 0 i 0)
   (if ss
     (repeat (sslength ss)
       (setq e  (ssname ss i)
             i  (1+ i)
             xd (cchk:xd e))
       (if (= (cdr (assoc 1000 xd)) "TUTORIAL")
-        (progn (entdel e) (setq n (1+ n))))))
+        (setq mine (cons e mine)))))
+  ;; the demo sits partly on the drafter's own pool layer and on the
+  ;; layer that was current, either of which may be locked -- and entdel
+  ;; answers nil there and erases nothing, which this used to count as
+  ;; removed.  So a lock is lifted for the erase and put back after it,
+  ;; as ABHD's purge does, and only an erase that took is counted
+  (foreach e mine
+    (setq lay (cdr (assoc 8 (entget e))))
+    (if (and (not (member (strcase lay) (mapcar 'strcase relock)))
+             (cchk:layer-locked-p lay))
+      (progn (cchk:set-layer-lock lay nil) (setq relock (cons lay relock)))))
+  (foreach e mine
+    (setq lay (cdr (assoc 8 (entget e))))
+    (if (entdel e)
+      (setq n (1+ n))
+      (setq stuck (1+ stuck)
+            held  (if (member lay held) held (cons lay held)))))
+  (foreach lay relock (cchk:set-layer-lock lay T))
+  (setq relock nil)
   (cchk:clear-old)
-  (if (> n 0)
-    (princ (strcat "\nTUTORIALCOVERCHECKCLEAN: removed " (itoa n)
-                   " demo item(s), plus any report/markers left on them."))
-    (princ "\nTUTORIALCOVERCHECKCLEAN: nothing tagged TUTORIAL was found."))
+  (cond
+    ((> n 0)
+     (princ (strcat "\nTUTORIALCOVERCHECKCLEAN: removed " (itoa n)
+                    " demo item(s), plus any report/markers left on them.")))
+    ((= stuck 0)
+     (princ "\nTUTORIALCOVERCHECKCLEAN: nothing tagged TUTORIAL was found.")))
+  (if (> stuck 0)
+    (princ (strcat "\nTUTORIALCOVERCHECKCLEAN: " (itoa stuck)
+                   " demo item(s) could NOT be erased, on layer(s) "
+                   (cchk:join (reverse held) ", ") ".")))
   (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
   (if lzd:end (lzd:end "TUTORIALCOVERCHECKCLEAN"))
   (princ))

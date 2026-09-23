@@ -236,7 +236,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092226 REV32")
+(setq spa:*version* "092326 REV33")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -1493,8 +1493,9 @@
 ;; the unit: "1524 mm" is cut at the space and comes back as 1524
 ;; INCHES -- a 127-ft side taken without a word -- while the "mm" is
 ;; left over to answer the next question.  30 ft is past any spa or
-;; swim spa, so it is a sanity bound, not a shop setting.  T when V was
-;; refused (the caller asks again), nil for anything else.
+;; swim spa, so it is a sanity bound, not a shop setting (spa:askgap
+;; holds its knob to the same 360 inline).  T when V was refused (the
+;; caller asks again), nil for anything else.
 ;;
 ;; The FORM takes are read through it too (spa:fok, spa:askdf, a
 ;; corner's size, the round diameter): checked at the prompts only, a
@@ -1988,8 +1989,21 @@
   ;; Back here re-asks the question that chose Offset in the first
   ;; place, which spa:askother2 owns -- so it is returned as CAL-BACK
   ;; and the caller re-enters the offer.
+  ;; The knob is the Enter answer, and Enter skips every test a typed
+  ;; lap meets: a 0 or a negative came back as the lap, and the sign
+  ;; below then ran a negative the wrong way -- the cover inside the
+  ;; water's edge it laps.  So it is held to what the prompt takes typed
+  ;; (more than 0, no longer than any spa) and falls back to the
+  ;; shipped 6.  The 360 is spa:toobig's sanity bound, written out
+  ;; because calling it would print its refusal; move the two together.
   (setq g (spa:askdf 'gap "How far does the cover lap the water's edge"
-                     nil spa:*gapdflt* t))
+                     nil
+                     (if (and (numberp spa:*gapdflt*)
+                              (> spa:*gapdflt* 0.0)
+                              (<= spa:*gapdflt* 360.0))
+                         spa:*gapdflt*
+                         6.0)
+                     t))
   (if (eq g 'CAL-BACK) g (* g (spa:offsign))))
 
 ;; Offset every corner treatment by g (positive = outward).
@@ -3243,8 +3257,9 @@
                          (> (setq sb (if (= ty "Radius") sz (* sz 0.70711)))
                             (+ maxsb spa:*capfuzz*)))
                (princ (strcat "\nToo large for this corner's walls -- max "
-                              (rtos (if (= ty "Radius") maxsb
-                                        (/ maxsb 0.70711)))
+                              (rtos (cal:floor-shown
+                                      (if (= ty "Radius") maxsb
+                                          (/ maxsb 0.70711))))
                               ".  Re-enter."))
                ;; the same question again, so the same ruler: a rung
                ;; over the cap is still shown, since what will not fit

@@ -11,7 +11,20 @@ Deliberately AutoLISP-strict where it matters:
     exactly like AutoLISP at evaluation time;
   * symbols are case-insensitive; unbound symbols evaluate to nil;
   * dynamic scoping: a function's body sees its caller's locals;
-  * integer / is integer division; floats propagate.
+  * integer / is integer division; floats propagate;
+  * *error* (with vm.handle_errors on) runs in the error mode its
+    command put in force: after *push-error-using-command* it sees
+    globals only, without one a bare (command) in it is refused, and a
+    handler that throws is a failure, not a handled error (see
+    VM.__init__ and tests/test_lispvm_errmode.py);
+  * rtos, distof, vl-sort, entmod and entdel answer only what AutoCAD
+    promises: rtos follows DIMZIN and defaults to LUNITS / LUPREC (a
+    whole foot is 15' at DIMZIN 0), distof reads back every spelling
+    rtos writes and defaults to LUNITS too, vl-sort drops EQ duplicates
+    only (two equal integers, never two equal reals or lists), and
+    entmod / entdel refuse -- nil, nothing changed -- an entity on a
+    LOCKED layer (tests/test_lispvm_values.py).  angtos is NOT in that
+    list: it still ignores DIMZIN, AUNITS and AUPREC.
 
 Interaction is scripted: getdist / getint / getkword / getpoint / getreal pop
 answers from a queue.  Numbers are distances, strings are keywords,
@@ -47,6 +60,23 @@ class CaughtError:
 
     def __repr__(self):
         return f"<caught {self.msg!r}>"
+
+
+class HandlerDeath(LispError):
+    """The *error* handler itself threw.  AutoCAD abandons it at that
+    form: every line after it is skipped -- the restores, the undo
+    close, the pop, the LAZDIAG report -- and what the drafter sees is
+    a raw error line.  run() raises this instead of returning as if
+    the handler had done its job, and the VM runs the handler once per
+    error: an outer frame never runs it again.  The error that killed
+    it is __cause__; its first line is also in vm.handler_deaths."""
+
+
+class HandlerAbort(HandlerDeath):
+    """An error AutoCAD raises past vl-catch-all-apply: the whole
+    handler is abandoned ("INTERNAL error in FAIL / message lost, reset
+    to top"), so nothing after it runs -- not the undo close, not the
+    pop, not the report."""
 
 
 class Sym(str):
@@ -275,6 +305,8 @@ class VM:
         self.initget_bits = 0
         self.sysvars = {
             'CMDECHO': 1, 'OSMODE': 4133, 'CLAYER': '0', 'LUNITS': 2,
+            # acad.dwt's; (rtos v) with no precision reads it
+            'LUPREC': 4,
             'LTSCALE': 1.0, 'UNDOCTL': 5, 'MIRRTEXT': 1,
             'DIMSTYLE': 'STANDARD', 'INSUNITS': 1, 'ATTREQ': 1,
             'ATTDIA': 0, 'CMDACTIVE': 0,
@@ -324,14 +356,34 @@ class VM:
         }
         # *error* dispatch is OPT-IN (vm.handle_errors = True): with it
         # on, a LispError raised outside vl-catch-all-apply runs the
-        # *error* the failing code can see -- dynamically, with every
-        # frame still live, so a handler reads its command's locals the
-        # way AutoCAD's does -- and then aborts the command, which run()
-        # reports as a normal return.  Off, the error propagates as it
-        # always has, so the suites that assert on a raised LispError
-        # keep their footing.
+        # *error* in force at the failing code -- and then aborts the
+        # command, which run() reports as a normal return.  Off, the
+        # error propagates as it always has, so the suites that assert
+        # on a raised LispError keep their footing.
+        #
+        # The handler runs in the ERROR MODE the command put in force,
+        # as AutoCAD runs it (tests/test_lispvm_errmode.py pins each
+        # rule, with its source):
+        #   default  the stack is live, so the handler reads its
+        #            command's locals; command-s drives a command, and
+        #            a bare (command) is refused ("Cannot invoke
+        #            (command) from *error* without prior call to
+        #            (*push-error-using-command*)").
+        #   pushed   AutoCAD resets the evaluator BEFORE *error* runs:
+        #            the handler is still the one in force at the
+        #            failure (a local (defun *error* ...) included), but
+        #            it runs with every frame gone -- a command local
+        #            reads its GLOBAL value, a helper the command
+        #            defined in its arglist is undefined, a setq writes
+        #            the global.  (command) is allowed; command-s is
+        #            refused past vl-catch-all-apply (HandlerAbort).
+        # The VM used to run every handler with the frames live, which
+        # is how SPA's and ten other handlers passed here and died in
+        # AutoCAD.  An error INSIDE the handler ends it where it stands
+        # and run() raises HandlerDeath: the handler is not run again.
         self.handle_errors = False
         self.handled_errors = []   # the messages *error* was handed
+        self.handler_deaths = []   # first line of each error that killed one
         self._catch_depth = 0      # inside vl-catch-all-apply: no dispatch
         self._in_handler = False   # a throw inside *error* is not re-handled
         # *push-error-using-command* stacks an error-handling mode for
@@ -341,7 +393,11 @@ class VM:
         # and pops only from its handler leaves 1 behind after a clean
         # run, which is the defect five tools carried until v3.2.
         self.error_mode_depth = 0
-        self.error_mode_underflow = 0   # pops with nothing pushed
+        # pops with nothing pushed.  run() fails a command that makes
+        # one, as it fails one that leaves an undo group open: the pop
+        # takes off a mode somebody else pushed, or none at all
+        self.error_mode_underflow = 0
+        self._underflow_mark = 0   # the count when the current run() began
         self.globals[Sym('*push-error-using-command*')] = T
         self.globals[Sym('*pop-error-mode*')] = T
         #: the AutoCAD environment strings getenv/setenv read and write.
@@ -361,6 +417,9 @@ class VM:
         self.undo_marks = 0        # StartUndoMark / EndUndoMark balance
         self.undo_log = []         # 'start' / 'end', in order
         self.lock_log = []         # (layer name, locked?) per vla-put-Lock
+        # (builtin, ename) for every entmod / entdel a LOCKED layer
+        # refused -- nil back, nothing changed, as in AutoCAD
+        self.lock_refusals = []
         self.tablerecs = {}      # table -> {NAME: Ent} for tblobjname
         self.recdata = {}        # Ent -> alist for those records; kept
                                  # out of entdata, which is the DRAWING
@@ -475,6 +534,10 @@ class VM:
                                        [self.eval(a) for a in x[1:]])
             b = BUILTINS.get(head)
             if b is not None:
+                if self._in_handler and head in HANDLER_GATED:
+                    args = [self.eval(a) for a in x[1:]]
+                    self._handler_gate(head)
+                    return b(self, args)
                 return b(self, [self.eval(a) for a in x[1:]])
             raise LispError(f"undefined function: {head}", self)
         if isinstance(head, list) and head and head[0] == 'lambda':
@@ -497,30 +560,89 @@ class VM:
                 r = self.eval(form)
             return r
         except LispError as e:
-            # AutoCAD runs *error* at the point of failure, before any
-            # frame unwinds -- that is how the handler sees the locals
-            # (undo-open, the doc, the layers it unlocked) it has to
-            # put right.  The innermost defun is that point; the ones
-            # above see the error already handled and just unwind.
+            # The innermost defun is the point of failure, and the one
+            # place the handler is dispatched from; the frames above see
+            # the error already handled and just unwind.
             if (self.handle_errors and not self._catch_depth
                     and not self._in_handler
                     and not getattr(e, 'handled', False)):
-                h = self.get(Sym('*error*'))
-                if (isinstance(h, tuple) and h[0] == 'defun') or (
-                        isinstance(h, list) and h and h[0] == 'lambda'):
-                    e.handled = True
-                    msg = str(e).split('\n')[0]
-                    self.handled_errors.append(msg)
-                    self._in_handler = True
-                    try:
-                        self.call_value(h if isinstance(h, list)
-                                        else Sym('*error*'), [msg])
-                    finally:
-                        self._in_handler = False
+                self._run_handler(e)
             raise
         finally:
             self.stack.pop()
             self.calls.pop()
+
+    def _run_handler(self, e):
+        """Run the *error* in force for error E, in the error mode in
+        force (see __init__).  Returns when the handler finished; raises
+        HandlerDeath (HandlerAbort for the uncatchable refusal) when it
+        did not, marked handled so no outer frame runs it again."""
+        # resolved HERE, with the stack live: in either mode the handler
+        # AutoCAD calls is the one in force at the failure, a local
+        # (defun *error* ...) of the command included
+        h = self.get(Sym('*error*'))
+        if not ((isinstance(h, tuple) and h[0] == 'defun') or (
+                isinstance(h, list) and h and h[0] == 'lambda')):
+            return
+        e.handled = True
+        msg = str(e).split('\n')[0]
+        self.handled_errors.append(msg)
+        # the pushed mode resets the evaluator before *error* runs: the
+        # handler gets an EMPTY stack, so every binding the failing
+        # code made -- the command's locals, its local helpers, the
+        # locals of whatever it had called -- is out of scope, and a
+        # name reads (or setq writes) its global.  Decided on entry: a
+        # pop inside the handler does not bring the frames back.
+        live = self.stack
+        pushed = self.error_mode_depth > 0
+        if pushed:
+            self.stack = []
+        self._in_handler = True
+        try:
+            if isinstance(h, tuple):
+                self.call_defun(Sym('*error*'), h, [msg])
+            else:
+                self.call_lambda(h, [msg])
+        except HandlerAbort as inner:
+            inner.handled = True
+            self.handler_deaths.append(str(inner).split('\n')[0])
+            raise
+        except LispError as inner:
+            first = str(inner).split('\n')[0]
+            self.handler_deaths.append(first)
+            death = HandlerDeath(
+                "*error* handler died%s on %r: %s" % (
+                    " (pushed mode: the stack was reset)" if pushed else "",
+                    msg, first), self)
+            death.handled = True
+            raise death from inner
+        finally:
+            self.stack = live
+            self._in_handler = False
+
+    def _handler_gate(self, name):
+        """What AutoCAD refuses while *error* runs, by the error mode in
+        force at the CALL -- so a handler that pops first is in the
+        default mode from then on.  Called from eval and call_value, not
+        from the builtins, so a test's stand-in for (command) keeps the
+        rule."""
+        if name == 'command':
+            if self.error_mode_depth <= 0:
+                raise LispError(
+                    "Cannot invoke (command) from *error* without prior "
+                    "call to (*push-error-using-command*).  Converting "
+                    "(command) calls to (command-s) is recommended.", self)
+        elif name == 'command-s':
+            # the pushed mode is the one that says (command) is how
+            # this handler drives commands.  The refusal is not an
+            # ordinary error: vl-catch-all-apply does not catch it, and
+            # the handler dies where it stands.  SPA's -DIMSTYLE restore
+            # did exactly that on every Esc.
+            if self.error_mode_depth > 0:
+                raise HandlerAbort(
+                    "INTERNAL error in FAIL: command-s inside *error* "
+                    "while *push-error-using-command* is in effect -- "
+                    "message lost, reset to top", self)
 
     def call_lambda(self, lam, args):
         params, locals_ = split_params(lam[1])
@@ -535,6 +657,10 @@ class VM:
                 return self.call_defun(fnval, fn, args)
             b = BUILTINS.get(fnval)
             if b is not None:
+                # (vl-catch-all-apply 'command-s ...) is the spelling a
+                # handler uses, so the handler rules apply here too
+                if self._in_handler and fnval in HANDLER_GATED:
+                    self._handler_gate(fnval)
                 return b(self, args)
             raise LispError(f"apply: undefined function {fnval}", self)
         if isinstance(fnval, list) and fnval and fnval[0] == 'lambda':
@@ -712,12 +838,16 @@ class VM:
         was = self.sysvars.get('CMDNAMES', '')
         if name.lower().startswith('c:'):
             self.sysvars['CMDNAMES'] = name[2:].upper()
+        self._underflow_mark = self.error_mode_underflow
         try:
             r = self.call_defun(Sym(name.lower()), fn, [])
         except LispError as e:
             # the command went through its handler and was aborted --
-            # what the user sees is a prompt back, not a crash
-            if self.handle_errors and getattr(e, 'handled', False):
+            # what the user sees is a prompt back, not a crash.  A
+            # handler that DIED on the way is not that: the drafter got
+            # a raw error and none of the handler's cleanup
+            if (self.handle_errors and getattr(e, 'handled', False)
+                    and not isinstance(e, HandlerDeath)):
                 self._check_balanced(name)
                 return NIL
             raise
@@ -732,15 +862,20 @@ class VM:
 
     def _check_balanced(self, name):
         """A command hands the session back the way it found it: no
-        undo group of its own still open, no error mode still pushed.
-        Either leftover is the class of defect that only shows up in
-        the NEXT command a drafter runs, so every run() checks."""
+        undo group of its own still open, no error mode still pushed,
+        and no mode popped that it never pushed.  Each is the class of
+        defect that only shows up in the NEXT command a drafter runs,
+        so every run() checks."""
         if self.undo_groups:
             raise LispError(f"{name} returned with {self.undo_groups} undo "
                             f"group(s) still open", self)
         if self.error_mode_depth:
             raise LispError(f"{name} returned with the error mode still "
                             f"pushed ({self.error_mode_depth} deep)", self)
+        under = self.error_mode_underflow - self._underflow_mark
+        if under > 0:
+            raise LispError(f"{name} popped the error mode with nothing "
+                            f"pushed ({under} time(s))", self)
 
     def layer_of(self, e):
         for pair in self.entdata.get(e, []):
@@ -750,6 +885,10 @@ class VM:
                 return pair[1]
         return NIL
 
+
+#: builtins whose use inside *error* depends on the error mode; see
+#: VM._handler_gate
+HANDLER_GATED = frozenset({Sym('command'), Sym('command-s')})
 
 SPECIAL = {Sym(s) for s in
            ['quote', 'function', 'setq', 'if', 'progn', 'cond', 'and', 'or',
@@ -1169,9 +1308,22 @@ _ARCH = re.compile(r'''^\s*(?P<sign>[-+]?)\s*
                      \s*(?:"|\'\')?\s*$''', re.X)
 
 
+#: mode 5's spellings: a whole number, a fraction, or both -- 17, 1/2,
+#: and 17 1/2 as rtos writes it (17-1/2 as the keyboard types it).
+_FRAC5 = re.compile(r'''^\s*(?P<sign>[-+]?)\s*
+                      (?:(?P<whole>\d+(?:\.\d+)?)\s*$
+                       | (?:(?P<w>\d+)(?:\s+|\s*-\s*))?
+                         (?P<num>\d+)\s*/\s*(?P<den>\d+)\s*$)''', re.X)
+
+
 @bi('distof')
 def _distof(vm, a):
     """(distof string [mode]) -- nil when the text is not a distance.
+
+    The complement of rtos (AutoLISP Reference, distof: 'If you pass
+    distof a string created by rtos, distof is guaranteed to return a
+    valid value ... assuming the mode values are the same'), and a
+    mode left out is the current LUNITS, as it is for rtos.
 
     Modes 3 and 4 are engineering and architectural, and in those
     AutoCAD really does read the feet-and-inches spellings back --
@@ -1179,14 +1331,34 @@ def _distof(vm, a):
     back to mode 2 (LAZFORM, LAZSTEP, ABHD's hopper offsets).  Reading
     only the leading number here made 3'6 come back as 3, so every
     feet-inch answer in the tree was being tested at a twelfth of its
-    size, silently.  The other modes keep the lenient leading-number
-    read, because several tools use (distof s 2) as their "is this text
-    a number?" test and a stricter one would reclassify drawing text."""
+    size, silently.  Mode 1 reads rtos's 1.7500E+01 and mode 5 its
+    17 1/2, both of which the leading-number read took as 1.75 and 17.
+    Mode 2 keeps the lenient leading-number read, because several tools
+    use (distof s 2) as their "is this text a number?" test and a
+    stricter one would reclassify drawing text."""
     try:
         s = str(a[0])
     except (TypeError, ValueError):
         return NIL
-    mode = int(a[1]) if len(a) > 1 and isinstance(a[1], (int, float)) else 2
+    if len(a) > 1 and isinstance(a[1], (int, float)):
+        mode = int(a[1])
+    else:
+        mode = int(vm.sysvars.get('LUNITS') or 2)
+    if mode == 1:
+        m = re.match(r'\s*[-+]?(\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?', s)
+        return float(m.group(0)) if m else NIL
+    if mode == 5:
+        m = _FRAC5.match(s)
+        if not m:
+            return NIL
+        if m.group('whole'):
+            v = float(m.group('whole'))
+        else:
+            den = float(m.group('den'))
+            if den == 0:
+                return NIL
+            v = float(m.group('w') or 0) + float(m.group('num')) / den
+        return -v if m.group('sign') == '-' else v
     if mode in (3, 4):
         m = _ARCH.match(s)
         if not m or not (m.group('feet') or m.group('inch')
@@ -1207,28 +1379,102 @@ def _distof(vm, a):
         return NIL
 
 
+def _rtos_decimal(v, prec, dimzin):
+    """Mode 2: DIMZIN bit 8 trims the trailing zeros (and the point, when
+    nothing is left after it), bit 4 the leading zero -- 12.5000 is 12.5
+    and 0.5000 is .5000 (the DIMZIN reference's own examples)."""
+    s = f"{v:.{prec}f}"
+    if dimzin & 8 and '.' in s:
+        s = s.rstrip('0').rstrip('.')
+    if dimzin & 4:
+        if s.startswith('0.'):
+            s = s[1:]
+        elif s.startswith('-0.'):
+            s = '-' + s[2:]
+    return s
+
+
+def _frac(n, den):
+    g = math.gcd(n, den)
+    return f"{n // g}/{den // g}"
+
+
+def _rtos_feet_inches(v, mode, prec, dimzin):
+    """Modes 3 (engineering) and 4 (architectural), spelled after DIMZIN's
+    two low bits: 0 drops zero feet AND precisely zero inches, 1 keeps
+    both, 2 keeps zero feet and drops zero inches, 3 keeps zero inches
+    and drops zero feet.  So at 0 -- acad.dwt's setting -- a whole foot
+    is 15' and six inches is 6", where the VM used to write 15'-0" and
+    0'-6" whatever DIMZIN held.  DIMZIN's leading/trailing bits are NOT
+    applied to mode 3's decimal inches: whether AutoCAD does is not
+    documented, so the inches keep every digit of PREC."""
+    low = dimzin & 3
+    keep_feet = low in (1, 2)
+    keep_inch = low in (1, 3)
+    neg = v < 0
+    v = abs(v)
+    if mode == 4:
+        den = 2 ** prec
+        inches, frac = divmod(round(v * den), den)
+        feet, whole = divmod(inches, 12)
+        zero_in = whole == 0 and frac == 0
+        if frac:
+            ins = (f"{whole} {_frac(frac, den)}"
+                   if (whole or feet or keep_feet) else _frac(frac, den))
+        else:
+            ins = str(whole)
+    else:
+        feet = int(v // 12)
+        ins = f"{v - 12 * feet:.{prec}f}"
+        if float(ins) >= 12.0:          # rounded up to the next foot
+            feet += 1
+            ins = f"{0.0:.{prec}f}"
+        zero_in = float(ins) == 0.0
+    ins += '"'
+    if feet == 0 and not keep_feet:
+        s = ins
+    elif zero_in and not keep_inch and feet != 0:
+        s = f"{feet}'"
+    else:
+        s = f"{feet}'-{ins}"
+    return ('-' if neg else '') + s
+
+
 @bi('rtos')
 def _rtos(vm, a):
+    """(rtos number [mode [precision]]) -- the number as AutoCAD spells
+    it, which is NOT one spelling: it follows the system variables
+    (AutoLISP Reference, rtos: 'according to the settings of mode,
+    precision, and the AutoCAD UNITMODE, DIMZIN, LUNITS, and LUPREC
+    system variables').  A mode or precision left out is LUNITS /
+    LUPREC; the text follows DIMZIN -- feet and inches by its two low
+    bits, a decimal's leading zero by bit 4 and its trailing zeros by
+    bit 8.  The VM used to read none of them, so a tool that printed a
+    whole foot through rtos read 15'-0" here and 15' in the drafter's
+    drawing, and a CDATE sliced through rtos was whole here and
+    trimmed at DIMZIN 8.  UNITMODE 1's spelling is not modelled (0 is
+    assumed).  tests/test_lispvm_values.py pins each rule."""
     v = num(a[0])
-    mode = int(a[1]) if len(a) > 1 else 2
-    prec = int(a[2]) if len(a) > 2 else 4
-    if mode == 4:
-        # architectural: F'-I" with the fraction at 1/2^prec inches,
-        # matching AutoCAD's 25'-6 1/2" formatting
-        neg = v < 0
-        v = abs(v)
+    mode = int(a[1]) if len(a) > 1 else int(vm.sysvars.get('LUNITS') or 2)
+    if len(a) > 2:
+        prec = int(a[2])
+    else:
+        lup = vm.sysvars.get('LUPREC')
+        prec = 4 if lup is None else int(lup)
+    dimzin = int(vm.sysvars.get('DIMZIN') or 0)
+    if mode in (3, 4):
+        return _rtos_feet_inches(v, mode, prec, dimzin)
+    if mode == 1:                       # scientific: 1.7500E+01
+        return f"{v:.{prec}E}"
+    if mode == 5:                       # fractional: 17 1/2
         den = 2 ** prec
-        total = round(v * den)
-        inches, frac = divmod(total, den)
-        feet, whole = divmod(inches, 12)
-        s = f"{feet}'"
+        whole, frac = divmod(round(abs(v) * den), den)
         if frac:
-            g = math.gcd(frac, den)
-            s += f"-{whole} {frac // g}/{den // g}\""
+            s = (f"{whole} " if whole else '') + _frac(frac, den)
         else:
-            s += f"-{whole}\""
-        return ('-' if neg else '') + s
-    return f"{v:.{prec}f}"
+            s = str(whole)
+        return ('-' if v < 0 else '') + s
+    return _rtos_decimal(v, prec, dimzin)
 
 
 def _angtos(vm, a):
@@ -1549,12 +1795,47 @@ def _entget(vm, a):
     return head + data
 
 
+def _on_locked_layer(vm, e):
+    """True when drawing entity E sits on a LOCKED layer: its group 8
+    names a layer whose record has bit 4 of group 70 set (the bit
+    vla-put-Lock and an entmod of the record both write).  Always False
+    for a symbol-table record -- the record is how a layer is unlocked
+    -- and for an entity inside a block definition, where AutoCAD's
+    rule is not documented.  The layer that counts is the one the
+    entity is on NOW, so an entmod that would move it off the locked
+    layer is refused as well."""
+    if e not in vm.entdata or e in vm.blockof:
+        return False
+    lay = vm.layer_of(e)
+    if not isinstance(lay, str):
+        return False
+    rec = vm.tablerecs.get('LAYER', {}).get(lay.upper())
+    if rec is None:
+        return False
+    for g in vm.recdata.get(rec, ()):
+        if isinstance(g, Dot) and g.a == 70:
+            return isinstance(g.b, int) and bool(g.b & 4)
+    return False
+
+
 @bi('entmod')
 def _entmod(vm, a):
+    """(entmod alist) -- writes the list back to the entity its (-1 .
+    ename) names and returns the list; nil, and nothing written, when
+    it cannot (AutoLISP Reference: 'If entmod is unable to modify the
+    specified entity, the function returns nil').  An erased entity is
+    one such, and an entity on a LOCKED layer is the everyday other:
+    the VM used to write straight through the lock, so a tool that
+    counted every entmod as done read "updated" here over a date still
+    standing on the sheet in AutoCAD.  A refusal is logged in
+    vm.lock_refusals as ('entmod', ename)."""
     alist = a[0]
     for g in alist or []:
         if isinstance(g, Dot) and g.a == -1 and isinstance(g.b, Ent):
             if g.b in vm.deleted:
+                return NIL
+            if _on_locked_layer(vm, g.b):
+                vm.lock_refusals.append(('entmod', g.b))
                 return NIL
             store = vm.recdata if g.b in vm.recdata else vm.entdata
             store[g.b] = [x for x in alist
@@ -1575,9 +1856,18 @@ def _entdel(vm, a):
     it, and AutoCAD erases them with it -- the tests build such blocks
     as separate entmakes, so the run is toggled here as one, or a
     routine that erases a point block would leave its number attribute
-    behind as a live entity the next sweep trips over."""
+    behind as a live entity the next sweep trips over.
+
+    An entity on a LOCKED layer is not erased: entdel answers nil and it
+    stays, attributes and all (logged in vm.lock_refusals as ('entdel',
+    ename)).  Only the erase is refused -- whether AutoCAD un-erases on
+    a locked layer is not documented, so that toggle still goes
+    through."""
     e = a[0]
     if isinstance(e, Ent):
+        if e not in vm.deleted and _on_locked_layer(vm, e):
+            vm.lock_refusals.append(('entdel', e))
+            return NIL
         run = [e]
         if _dxf(vm, e, 0) == 'INSERT' and _dxf(vm, e, 66) == 1:
             try:
@@ -2202,26 +2492,11 @@ def _command(vm, a):
     return NIL
 
 
-class HandlerAbort(LispError):
-    """An error AutoCAD raises past vl-catch-all-apply: the whole
-    handler is abandoned ("INTERNAL error in FAIL / message lost, reset
-    to top"), so nothing after it runs -- not the undo close, not the
-    pop, not the report."""
-
-
 @bi('command-s')
 def _command_s(vm, a):
-    # Under *push-error-using-command* AutoCAD refuses command-s inside
-    # *error* -- the pushed mode is the one that says (command) is how
-    # this handler drives commands.  The refusal is not an ordinary
-    # error: vl-catch-all-apply does not catch it, and the handler dies
-    # where it stands.  SPA's -DIMSTYLE restore did exactly that on
-    # every Esc, and the VM, which let command-s through anywhere,
-    # never saw it.
-    if vm._in_handler and vm.error_mode_depth > 0:
-        raise HandlerAbort("INTERNAL error in FAIL: command-s inside "
-                           "*error* while *push-error-using-command* is "
-                           "in effect -- message lost, reset to top", vm)
+    # What command-s may do inside *error* is decided where it is
+    # CALLED (VM._handler_gate), not here: a test that swaps its own
+    # stand-in in for this builtin keeps the rule.
     return BUILTINS[Sym('command')](vm, a)
 
 
@@ -2511,23 +2786,38 @@ def _sort_lt(vm, fn, x, y):
     return truthy(vm.call_value(fn, [x, y]))
 
 
+def _sort_eq(x, y):
+    """The duplicates vl-sort drops: EQ ones.  Two equal integers are EQ
+    in AutoLISP, and so are two symbols of one name (nil included); two
+    equal reals, strings or lists are not, and survive the sort.  Two
+    references to the ONE list or string are EQ too, but whether vl-sort
+    drops those is not documented, so they are kept."""
+    if type(x) is int and type(y) is int:
+        return x == y
+    if isinstance(x, Sym) and isinstance(y, Sym):
+        return x == y
+    return x is NIL and y is NIL
+
+
 @bi('vl-sort')
 def _vl_sort(vm, a):
-    """(vl-sort lst less) -- sorted, with items that compare equal to
-    the one before them DROPPED, exactly as the real one does.  Routines
-    here lean on that to dedupe as they sort - so the VM has to drop
-    them too or a deduping sort would look like it kept everything.
-    (LISPLAB's lesson 2 teaches exactly this trap, and its test drives
-    this implementation.)"""
+    """(vl-sort lst less) -- sorted, with an item DROPPED when it is EQ to
+    the one before it: '(3 2 1 3) comes back (1 2 3) (the AutoLISP
+    Reference's own example), but '(3.0 1.0 3.0) keeps both 3.0s and two
+    points that tie on the key both stay -- 'only lists of plain
+    integers with duplicate numbers can fall victim'.  The VM used to
+    drop every item that merely COMPARED equal, so a sort of points by X
+    lost one of two points with the same X here and kept it in AutoCAD,
+    and a dedupe of reals that leaned on vl-sort held only here.
+    tests/test_lispvm_values.py pins it."""
     fn = a[1]
     ordered = sorted(list(a[0] or []), key=functools.cmp_to_key(
         lambda x, y: -1 if _sort_lt(vm, fn, x, y)
         else (1 if _sort_lt(vm, fn, y, x) else 0)))
     out = []
     for v in ordered:
-        if out and not _sort_lt(vm, fn, out[-1], v) \
-               and not _sort_lt(vm, fn, v, out[-1]):
-            continue                      # equal to its predecessor
+        if out and _sort_eq(out[-1], v):
+            continue                      # EQ to its predecessor
         out.append(v)
     return out or NIL
 
@@ -3595,4 +3885,4 @@ for _prop, _code in VLA_PROPS.items():
 # registration used to sit here that KEPT items comparing equal --
 # BUILTINS is a plain dict, so it silently won over the faithful one,
 # and the one test that cared had to patch the VM.  There is exactly one
-# vl-sort now, and it drops equal items like AutoCAD's.
+# vl-sort now, and it drops EQ duplicates like AutoCAD's.

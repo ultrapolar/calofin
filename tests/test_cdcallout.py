@@ -397,7 +397,11 @@ def test_the_to_prompt_asks_the_same_way():
     ds = dims(vm)
     assert len(ds) == 1 and ds[0][14] == [0.0, 240.0, 0.0], ds
     assert any('from Pt.1' in m for m in vm.printed), vm.printed
-    assert any("20'-0\"" in m for m in vm.printed), vm.printed
+    # 240" in feet and inches: the table is command-line text, spelled by
+    # (rtos d 4 ...) under the drafter's DIMZIN -- acad.dwt's 0 drops the
+    # zero inches, so AutoCAD prints 20' (the old VM's 20'-0" was
+    # DIMZIN-blind)
+    assert any(m.split() == ['P2', "20'"] for m in vm.printed), vm.printed
     print("ok  duplicate    -> the TO table measures each candidate's tie")
 
 

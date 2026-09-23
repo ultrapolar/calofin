@@ -35,7 +35,7 @@
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
 
-(setq *wcalst-version* "v2.1")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v2.2")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 ;;; -------------------- tunables ----------------------------------------
@@ -84,7 +84,7 @@
 
 ;; ---- how many cuts, and how wide -------------------------------------
 
-(setq wc:*maxfeat* 20)              ; the darts+inserts cap the prompt offers, and what an out-of-range answer falls back to
+(setq wc:*maxfeat* 20)              ; the darts+inserts cap the prompt offers, and what an out-of-range answer falls back to - a whole number, 1 or more (anything else is offered as 20)
 (setq wc:*dart-cap* 4.0)            ; widest mouth ONE dart may open: lower it and a big bend splits across more darts side by side, raise it for fewer, wider Vs
 (setq wc:*dart-space* 2.0)          ; bottom line left between two darts cut side by side for one bend, and between any two mouths: less packs them tighter, more spreads a wide correction along the band
 (setq wc:*wmin-f* 0.04)             ; smallest correction worth a cut, as a share of the band width - the floor that stops the refining pass cutting hair-width darts
@@ -581,8 +581,21 @@
   (rtos v 2 wc:*dec-places*)
 )
 
-(defun wc:arch (v)
-  (rtos v 4 wc:*arch-frac*)
+;; Spelled by arithmetic (cal:ftin's), not rtos: rtos spells feet and
+;; inches after DIMZIN, and at 0 (acad.dwt's) the summary on the sheet
+;; read 15' for 15'-0" -- the notation the review tools reject.
+;; wc:*arch-frac* is a DENOMINATOR (8 = eighths) and the precision is a
+;; power of two (3 = eighths), so it is turned into one here: handed
+;; over as it was, the shipped 8 wrote 12'-3 77/256".  A denominator
+;; between two powers of two takes the coarser; anything below 1 is the
+;; shipped eighths.
+(defun wc:arch (v / d p)
+  (setq d (if (and (numberp wc:*arch-frac*) (>= wc:*arch-frac* 1))
+            wc:*arch-frac*
+            8)
+        p 0)
+  (while (and (< p 8) (<= (expt 2 (1+ p)) d)) (setq p (1+ p)))
+  (cal:ftin v 4 p)
 )
 
 ;; A length as a percentage of the bottom-before length.  botb is
@@ -615,7 +628,7 @@
 (defun c:WCALST (/ *error* oldlay ss segs nodes pick en pk seed sg d2min
                  d2c i r ids pts chainkeys s n p0 p1 dch j far ang rungs
                  widths w mid side cross ni f k turns d0 d1
-                 total wmin maxfeat feats farlay fseed fsum
+                 total wmin maxfeat cap feats farlay fseed fsum
                  fsegs cands rfar rr farpts farids fk seen ordered devpts
                  minx miny maxx maxy sgp x0 y0 wpt a b ld hz cw x
                  dl dr yb enda endb lay2 inundo conns nmk sgm dp1 dp2
@@ -855,14 +868,21 @@
 
       ;; ---- 7. feature threshold (conservative, capped) ---------------
       ((= stage 4)
+       ;; the knob is held to the bound a typed cap is held to, BEFORE
+       ;; it is offered: Enter and a typed 0 both fall back to it, and a
+       ;; LAZTUNE override of 0 died dividing by it, one of -3 cut
+       ;; nothing and reported the band OVER TARGET
+       (setq cap (if (and (= (type wc:*maxfeat*) 'INT) (>= wc:*maxfeat* 1))
+                   wc:*maxfeat*
+                   20))
        (initget "Back Undo")
        (setq maxfeat (getint (strcat "\nMaximum darts + inserts [Back] <"
-                                     (itoa wc:*maxfeat*) ">: ")))
+                                     (itoa cap) ">: ")))
        (if lzd:ask (lzd:ask (getvar "LASTPROMPT") maxfeat) maxfeat)
        (if (= (type maxfeat) 'STR)
          (setq stage 2)
          (progn
-           (if (or (not maxfeat) (< maxfeat 1)) (setq maxfeat wc:*maxfeat*))
+           (if (or (not maxfeat) (< maxfeat 1)) (setq maxfeat cap))
            (setq stage 5)
          )
        ))

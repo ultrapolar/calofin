@@ -37,7 +37,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 import lispvm  # noqa: E402
-from lispvm import VM, LispError, Dot, Sym, BUILTINS, NIL  # noqa: E402
+from lispvm import VM, LispError, Dot, Sym, BUILTINS  # noqa: E402
 
 HERE = os.path.dirname(__file__)
 # lispvm's _remap_root sends this to shared/parts/ when
@@ -523,29 +523,29 @@ print("   COVERCHECK set it to today, MM/DD/YYYY, label and all")
 # ...and on a LOCKED layer, where AutoCAD's entmod answers nil and
 # changes nothing.  The write used to be counted done whatever entmod
 # said, so the report read "UPDATED to <today>" over a date still
-# standing on the sheet.  Modelled here by an entmod that refuses every
-# ATTRIB, which is what a title block on its usual locked layer does.
-_entmod = BUILTINS[Sym('entmod')]
+# standing on the sheet.  The VM refuses an entmod on a locked layer
+# itself now (test_lispvm_values.py), so the title block's ATTRIBs are
+# simply put on a locked layer of their own -- an attribute keeps its
+# ATTDEF's layer, not its INSERT's, so the selection's lock scan (which
+# reads the INSERT) does not see it and the write is the first to know.
+def lock_attribs(vm, ins, layer='TITLE'):
+    vm.loads('(entmake (list (cons 0 "LAYER") (cons 2 "%s") (cons 70 4)'
+             ' (cons 62 7) (cons 6 "Continuous")))' % layer)
+    for e in vm.entities[vm.entities.index(ins) + 1:]:
+        if grp(vm, e, 0) != 'ATTRIB':
+            break
+        vm.entdata[e] = [Dot(8, layer) if isinstance(g, Dot) and g.a == 8
+                         else g for g in vm.entdata[e]]
 
 
-def _locked_attribs(vm, a):
-    if any(isinstance(g, Dot) and g.a == 0 and g.b == 'ATTRIB'
-           for g in (a[0] or [])):
-        return NIL
-    return _entmod(vm, a)
-
-
-BUILTINS[Sym('entmod')] = _locked_attribs
-try:
-    vm, ents = build_vm(with_text=False, date='Date = 01/02/2020')
-    vm.run('c:COVERCHECK', [
-        None, selectable(vm),
-        'Move', 'Yes',      # dbad: take the suggested point
-        'Yes',              # dok: correct
-        'No',               # not a replacement
-    ])
-finally:
-    BUILTINS[Sym('entmod')] = _entmod
+vm, ents = build_vm(with_text=False, date='Date = 01/02/2020')
+lock_attribs(vm, ents['title'])
+vm.run('c:COVERCHECK', [
+    None, selectable(vm),
+    'Move', 'Yes',      # dbad: take the suggested point
+    'Yes',              # dok: correct
+    'No',               # not a replacement
+])
 assert attrib_value(vm, ents['title'], 'Date') == 'Date = 01/02/2020', \
     attrib_value(vm, ents['title'], 'Date')
 txt = '\n'.join(report_texts(vm))

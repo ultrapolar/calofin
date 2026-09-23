@@ -138,7 +138,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v3.6")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.7")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -223,9 +223,12 @@
 (setq fit:*vsize-min*   1.0)       ; a fitted corner easing smaller
                                    ; than this reads as sharp
 (setq fit:*miss-pct*    0.15)      ; the standard share of the points
-                                   ; allowed to sit beyond the distance;
-                                   ; asked per run, and what a snap to a
-                                   ; whole foot is allowed to spend
+                                   ; allowed to sit beyond the distance,
+                                   ; a FRACTION above 0 and up to 1
+                                   ; (0.15 is 15%; anything else is
+                                   ; offered as 0.15); asked per run,
+                                   ; and what a snap to a whole foot is
+                                   ; allowed to spend
 (setq fit:*bow-min*     1.0)       ; a bow shallower than this reads as
                                    ; a straight wall - an inch over
                                    ; thirty feet is drafting noise, and
@@ -359,12 +362,16 @@
                                    ; the deep break, on the shallow side
 (if (null fit:*tol*) (setq fit:*tol* 1.0))       ; remembered per session
 ;; The rest of the answers a session remembers, so a second run is
-;; mostly Enter.  Reading an unset symbol yields nil, so this declares
-;; them beside the others without clobbering what a run put there.
-(setq fit:*ptype*  fit:*ptype*)
-(setq fit:*treat*  fit:*treat*)
-(setq fit:*gtreat* fit:*gtreat*)
-(setq fit:*oasfam* fit:*oasfam*)
+;; mostly Enter.  They start unset (nil) and the questions fill them
+;; in.  Declared under (if (null ...)) like the two below it, never as
+;; a bare (setq ...): a bare setq in this block is a LAZTUNE knob, and
+;; offered as one, an override was re-applied over the drafter's own
+;; answer at every panel launch and reached the prompt unchecked as
+;; its Enter answer.
+(if (null fit:*ptype*)  (setq fit:*ptype*  nil))
+(if (null fit:*treat*)  (setq fit:*treat*  nil))
+(if (null fit:*gtreat*) (setq fit:*gtreat* nil))
+(if (null fit:*oasfam*) (setq fit:*oasfam* nil))
 (if (null fit:*oos*) (setq fit:*oos* T))  ; as-builts are never true
 (if (null fit:*bowed*) (setq fit:*bowed* T))  ; nor are their walls
 (if (null fit:*brk-deep*) (setq fit:*brk-deep* (cons 96.0 T)))
@@ -427,6 +434,31 @@
 ;; Copies of the CALOFIN-LIB helpers this tool uses, under its own
 ;; prefix so the file loads alone with APPLOAD (the shared/ twin calls
 ;; cal: instead).  Bodies identical to the library's.
+
+;; The canonical spelling S stands for among KWS -- a list, or an
+;; initget string such as fit:*types* -- in any case, or nil for
+;; anything that is not one of them.  What a remembered answer is read
+;; through before it is offered: fit:askkw hands a default straight
+;; back on Enter without checking it, and a session memory set from
+;; outside a run (LAZTUNE, a setq at the command line) is not an
+;; answer.  A "radius" there went past every (= treat "Radius") branch,
+;; the symbol RADIUS killed the prompt's strcat, and a pool type of
+;; "rectangle" skipped the corner question and forced Square.
+(defun fit:kw-canon (s kws / u out w i ch)
+  (if (= (type kws) 'STR)
+    (progn
+      (setq i 1 w "" out nil)
+      (while (<= i (strlen kws))
+        (setq ch (substr kws i 1) i (1+ i))
+        (if (= ch " ")
+          (if (/= w "") (setq out (cons w out) w ""))
+          (setq w (strcat w ch))))
+      (if (/= w "") (setq out (cons w out)))
+      (setq kws out out nil)))
+  (setq u (if (= (type s) 'STR) (strcase s) ""))
+  (foreach w kws
+    (if (= u (strcase w)) (setq out w)))
+  out)
 
 ;; ---- circle / arc geometry -------------------------------------------
 ;; The 2-element circumcenter abhd and lhd also keep locally - the
@@ -4902,7 +4934,13 @@
 ;; and on a Redo (5, the points already in hand).
 (defun fit:ask-settings (def total / step ptype treat tol pct oos bowed v
                                     n)
-  (setq ptype (nth 0 def)
+  ;; the pool type is read into the keyword's own spelling (nil makes
+  ;; step 1 require an answer), and the share is held to what step 4
+  ;; would take typed: on a first run it is the fit:*miss-pct* knob,
+  ;; and Enter took an override of 15 as 1500% (shown <1500>), one of
+  ;; -0.1 as <-9>, one of 0 as <0> -- none of them an answer initget 6
+  ;; lets through
+  (setq ptype (fit:kw-canon (nth 0 def) fit:*types*)
         treat (nth 1 def)
         tol   (nth 2 def)
         pct   (nth 3 def)
@@ -4910,6 +4948,7 @@
         bowed (nth 5 def)
         n     (itoa total)
         step  1)
+  (if (not (and (numberp pct) (> pct 0) (<= pct 1.0))) (setq pct 0.15))
   (while (<= step 6)
     (cond
       ((= step 1)
@@ -4931,14 +4970,20 @@
                          " - the pool corners.  The SIZE is not asked:"))
           (princ "\n  the radius or cut face is measured from the points.")
           (setq v (cal:asktreat "the pool corners"
-                                (if fit:*treat* fit:*treat* "Radius") T)))
+                                (cond ((fit:kw-canon fit:*treat*
+                                         '("Square" "Radius" "Cut" "NotGiven")))
+                                      ("Radius"))
+                                T)))
          ((= ptype "Grecian")
           (princ (strcat "\n\n  Step 2 of " n
                          " - the cut corners.  Nominal grecians are sharp,"))
           (princ "\n  but an as-built may ease them - Radius measures that easing")
           (princ "\n  from the points (too small to believe stays sharp).")
           (setq v (cal:asktreat "the cut corners"
-                                (if fit:*gtreat* fit:*gtreat* "Radius") T)))
+                                (cond ((fit:kw-canon fit:*gtreat*
+                                         '("Square" "Radius" "Cut" "NotGiven")))
+                                      ("Radius"))
+                                T)))
          ((= ptype "OAsis")
           ;; an oasis has no corners at all, so step 2 asks the one
           ;; thing the points cannot be READ without: which of OASIS's
@@ -4952,7 +4997,9 @@
           (princ "\n  given are measured, not asked.")
           (setq v (cal:askkw "Oasis shape" fit:*oas-fams*
                              "Center/TopRight/CLoud/Kidney/NXTcloud"
-                             (if fit:*oasfam* fit:*oasfam* "Center") T)))
+                             (cond ((fit:kw-canon fit:*oasfam* fit:*oas-fams*))
+                                   ("Center"))
+                             T)))
          (T (setq v "Square")))
        (if (eq v 'CAL-BACK)
          (progn (princ "\nStepping back one step.")

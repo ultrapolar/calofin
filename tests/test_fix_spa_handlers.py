@@ -7,7 +7,7 @@ handlers may drive a command -- the UNDO close, OASIS's CMDACTIVE
 drain.  Under that mode AutoCAD resets the evaluator BEFORE *error*
 runs: the handler function is the one in force at the failure, but
 every binding the command made is gone, and a local of the command
-reads its GLOBAL value (nil) there.  The stock VM runs every handler
+reads its GLOBAL value (nil) there.  The stock VM ran every handler
 with every frame live, which is why these three passed their own
 cancel tests while, in AutoCAD:
 
@@ -17,10 +17,10 @@ cancel tests while, in AutoCAD:
     real POOL layer, where it looks like work) and its undo group open
     -- both were locals.
 
-pushed_unwind() below models the unwind for the length of a with-block
-(the same model as the audit's vmpatch.py prototype), so each test
-drives the command to a point where the handler has real work and
-checks the work got done.
+tests/lispvm.py models the unwind itself now (tests/test_lispvm_errmode.py
+pins it; this file used to install the audit's vmpatch.py model), so
+each test drives the command to a point where the handler has real work
+and checks the work got done.
 
 Run: python3 tests/test_fix_spa_handlers.py
 """
@@ -31,7 +31,6 @@ import sys
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_DIR = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, TESTS_DIR)
-import lispvm  # noqa: E402
 from lispvm import VM, LispError, Sym, NIL  # noqa: E402
 import test_oasis  # noqa: E402  (its newvm/script/made, and entmakex)
 
@@ -53,85 +52,10 @@ def esc(vm):
     raise LispError('Function cancelled', vm)
 
 
-class HandlerDeath(LispError):
-    """The handler itself threw: what the drafter sees is a raw error
-    line and no report."""
-
-
-class pushed_unwind(object):
-    """AutoCAD's pushed-mode unwind, for the length of a with-block.
-
-    While the error mode is pushed, the handler is looked up with the
-    stack live (it is the one in force at the failure) and then CALLED
-    with the stack emptied, so it sees globals only.  In default mode
-    nothing changes: the stack stays live, as AutoCAD keeps it."""
-
-    def __enter__(self):
-        self.saved = VM.call_defun
-
-        def call_defun(self_, name, fn, args):
-            _, params, locals_, body = fn
-            if len(args) != len(params):
-                raise LispError(f"{name}: expected {len(params)} args, "
-                                f"got {len(args)}", self_)
-            frame = dict(zip(params, args))
-            for l in locals_:
-                frame[l] = NIL
-            self_.stack.append(frame)
-            self_.calls.append(name)
-            try:
-                r = NIL
-                for form in body:
-                    r = self_.eval(form)
-                return r
-            except LispError as e:
-                if (self_.handle_errors and not self_._catch_depth
-                        and not self_._in_handler
-                        and not getattr(e, 'handled', False)):
-                    h = self_.get(Sym('*error*'))    # BEFORE the unwind
-                    if (isinstance(h, tuple) and h[0] == 'defun') or (
-                            isinstance(h, list) and h and h[0] == 'lambda'):
-                        e.handled = True
-                        msg = str(e).split('\n')[0]
-                        self_.handled_errors.append(msg)
-                        self_._in_handler = True
-                        unwind = self_.error_mode_depth > 0
-                        live = self_.stack
-                        if unwind:
-                            self_.stack = []
-                        try:
-                            if isinstance(h, tuple):
-                                self_.call_defun(Sym('*error*'), h, [msg])
-                            else:
-                                self_.call_lambda(h, [msg])
-                        except LispError as inner:
-                            if isinstance(inner, lispvm.HandlerAbort):
-                                raise
-                            raise HandlerDeath(
-                                "*error* handler died: %s"
-                                % str(inner).splitlines()[0], self_)
-                        finally:
-                            if unwind:
-                                self_.stack = live
-                            self_._in_handler = False
-                raise
-            finally:
-                self_.stack.pop()
-                self_.calls.pop()
-
-        VM.call_defun = call_defun
-        return self
-
-    def __exit__(self, *exc):
-        VM.call_defun = self.saved
-        return False
-
-
 def drive(vm, cmd, script):
-    """Run CMD under the unwind; the first line of any error, or None."""
+    """Run CMD; the first line of any error, or None."""
     try:
-        with pushed_unwind():
-            vm.run(cmd, list(script))
+        vm.run(cmd, list(script))
     except LispError as e:
         return str(e).splitlines()[0]
     return None
@@ -142,8 +66,9 @@ def undos(vm):
 
 
 def test_the_model_unwinds():
-    """The model itself: a pushed handler reads the command's local as
-    nil, a default-mode one still sees it."""
+    """The VM's model: a pushed handler reads the command's local as
+    nil, a default-mode one still sees it (tests/test_lispvm_errmode.py
+    pins the rest)."""
     src = '''
       (defun c:T1 ( / *error* flag)
         (defun *error* (msg) (setq t1:*saw* flag) (princ))
@@ -157,11 +82,10 @@ def test_the_model_unwinds():
         vm = VM()
         vm.handle_errors = True
         vm.loads(src % push)
-        with pushed_unwind():
-            try:
-                vm.run('c:T1', [esc])
-            except LispError:
-                pass        # the pushed case leaves the mode pushed
+        try:
+            vm.run('c:T1', [esc])
+        except LispError:
+            pass        # the pushed case leaves the mode pushed
         got = vm.globals.get(Sym('t1:*saw*'))
         check("model -- " + label,
               (got not in (None, NIL)) == bool(want), repr(got))

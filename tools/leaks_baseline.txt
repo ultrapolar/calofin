@@ -1,0 +1,20 @@
+# What tools/check_leaks.py reports that a person has READ and found
+# genuinely fine -- never a defect waiting for a fix; that stays red.
+# One line per accepted finding:  file|defun|RULE|resource|reason
+#   file      the tool file's name, as in lisp/ and shared/parts/; a
+#             releases/ twin's dated _MMDDYY_REVnn is dropped, so the
+#             same line matches all three tiers
+#   defun     the command or scope the finding is on; * means every
+#             reader, and only on a STALE or SIBLING line -- the global
+#             itself is kept between runs on purpose.  An EXIT, HANDLER
+#             or BYPASS line names its one site (a * there is malformed)
+#   resource  undo, errmode, lzd, a sysvar's name, a global's name, or
+#             the callee of a BYPASS
+# A line that no longer matches anything is reported as stale, and a
+# malformed one is reported; either fails the run.
+LAZPANEL.lsp|*|STALE|lzp:*aliasoff*|the refusals of the LAST lzp:aliases-apply (at load, and on LAZNAME's OK), rebuilt whole by that apply and read by the panel, LAZSET and LAZNAME to say which stored names are not in force: it describes the session, not a run, and is meant to outlive every command that reads it
+LAZPANEL.lsp|*|STALE|lzp:*iconerr*|c:LAZICON prints it only on its failure branch, where lzp:write-bmps returned nil -- and that path runs this run's own lzp:bmp-write, which resets it to "" before anything reads it (lzp:bmp-write's first setq).  The read always follows this run's reset; the model cannot tie write-bmps' nil to that write having run
+LAZPANEL.lsp|*|STALE|lzp:*iconroute*|c:LAZICON prints it on its success branch.  When this run wrote the icons, lzp:bmp-write reset it first; when both files were already on disk -- the report then says "on disk at", not "written to" -- nothing was written, and the line reports the route of the session's last write, or "?": the session diagnostic LAZICON exists to give
+LAZPANEL.lsp|*|STALE|lzp:*icontype*|which byte-array spelling the last icon write used.  lzp:bmp-stream resets it whenever this run's ADODB.Stream starts, and the certutil route sets it; c:LAZICON's success branch reads it as the session's last write, like lzp:*iconroute*.  Only a run whose stream will not start reads an earlier write's value, and on one machine the stream starts in every run of a session or in none -- so what that run reads is the load-time nil
+LAZPANEL.lsp|*|STALE|lzp:*msxmlwhy*|c:LAZICON prints it only on its failure branch.  lzp:bytes-msxml resets it whenever this run's ADODB.Stream starts; only a run whose stream will not start reads an earlier write's value, and on one machine the stream starts in every run of a session or in none -- so that run reads the load-time nil, never a dead run's refusals.  (That nil then prints "MSXML: carried it" for an MSXML that never ran: a LAZICON wording nit, not a leak)
+LAZPANEL.lsp|*|SIBLING|lzp:*pos*|where the panel was last standing, NOT reset on purpose (c:LAZPANEL says so): the panel reopens after every tool it launches and comes back where the drafter left it.  lzf:*pos* and lzt:*pos* belong to form dialogs that reopen from the profile instead

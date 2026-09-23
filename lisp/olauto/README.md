@@ -88,6 +88,15 @@ is wrong:
   the move written back through the same mistake. (A `LINE` keeps world
   points whatever its extrusion says, so it is not caught by this.)
 
+One more stops the run outright, because nothing can be done about it
+from inside the command:
+
+* **A pick on a locked layer.** OLAUTO moves one perimeter and puts
+  both on its own layers, and a locked layer refuses both. Run past it,
+  the fit, the dimensions and the report all described an overlay the
+  drawing did not show, with the perimeter still where it was. The
+  locked layers are named; unlock them and run OLAUTO again.
+
 ### What it doubts
 
 OLAUTO has no idea what a pool looks like and will happily fit any two

@@ -1,6 +1,6 @@
 ---
 name: calofin-checks
-description: Decoding a failing check or test in the calofin repo - make check, make test, make parity, or any of check_lisp / check_scope / check_standards / check_lazdiag / check_handlers / check_osnap / check_color / check_perf / check_back / check_vb / check_dcl / check_registry, and the generator staleness checks (mirror_shared, release_lisp, build_shared_bundle, gen_ui_data, gen_ui_charts, gen_knobs, gen_ribbon_icons, gen_agents_md / a stale AGENTS.md). Use when a check is red, a test fails, or a tier has drifted, to find the cause and the fix without reading the checker's source.
+description: Decoding a failing check or test in the calofin repo - make check, make test, make parity, or any of check_lisp / check_scope / check_standards / check_lazdiag / check_handlers / check_leaks / check_writes / check_offered / check_input / check_values / check_tier_parity / check_osnap / check_color / check_perf / check_back / check_vb / check_dcl / check_registry, and the generator staleness checks (mirror_shared, release_lisp, build_shared_bundle, gen_ui_data, gen_ui_charts, gen_knobs, gen_ribbon_icons, gen_agents_md / a stale AGENTS.md). Use when a check is red, a test fails, or a tier has drifted, to find the cause and the fix without reading the checker's source.
 ---
 
 # Decoding a calofin check failure
@@ -143,6 +143,68 @@ work there. Reads all three tiers.
 | H6 | a pushing command pops (through its finish) and then `(exit)`s — the handler runs again with nothing to pop | end with `(princ)`, or guard the second pass |
 
 ---
+
+## `check_leaks.py` — what a run borrows comes back
+
+Every way out of a run -- each early exit, the handler, a hand-off to another command -- gives back what the run holds. Reads all three tiers.
+
+| Rule | Cause | Fix |
+| --- | --- | --- |
+| EXIT / HANDLER / BYPASS / STALE / SIBLING / ERRNO / HANDOFF | one way out of a run skips a release, and the drafter meets it in the NEXT command. EXIT: an early exit leaves the undo group, the error mode, the LAZDIAG run or a sysvar held; the finding names the exit ('still held on the way out at ...'), and a release under `(if rows ...)` does not count for the no-rows path. HANDLER: `*error*` does not put back what was held at a prompt, or dies at `command-s` under the push first. BYPASS: a c: command, or a helper with its own `*error*`, is called while holding them, so an Esc in there runs only ITS handler. STALE: a flag or snapshot a dead run can leave set is read by the next run before it writes it. SIBLING: the same, but nothing in the tier ever clears it while other tools clear the same thing. ERRNO: read with no reset. HANDOFF: `(command "X")` of an AutoLISP command | close or restore ONCE in the common tail after the `cond`, not per branch, under the acquire's own flag; put it back from the handler; restore before the hand-off, or call the scan's handler-less core; reset the global at the top of the run, beside its siblings, and in the handler; `(setvar "ERRNO" 0)` before the pick; call `(c:X)`, or queue it with `vla-SendCommand`. A site that is genuinely fine goes in `tools/leaks_baseline.txt` as `file|defun|RULE|resource|reason`. `*` as the defun is allowed only on a STALE/SIBLING line, for a global kept between runs on purpose. A line nothing matches, or a malformed one, fails the run |
+
+## `check_writes.py` — a write nobody looks at
+
+An entmod, entdel or edit command on the drafter's own objects answers nil on a locked layer and changes nothing -- quietly. Reads all three tiers.
+
+| Rule | Cause | Fix |
+| --- | --- | --- |
+| W1 / W2 / stale baseline line | W1: a layer maker (an entmake of a LAYER record, or `vla-Add` on the Layers collection) never clears bit 4 when the layer is already there, so what the tool draws on it can never be erased. W2: an entmod / entdel / caught `vla-` write, or an edit command, on an object this run did not make, answer thrown away, then COUNTED (`(1+ n)`, `cons`, `ssadd`, a returned `T`) or CLAIMED ("erased", "moved", "marked") in the next statements -- or, for a write inside a loop, in the statements after the loop. A locked layer refuses the write without a word, so the report is false. `stale baseline line ... what it rests on is gone`: the `needs=` code a `write_baseline.txt` line names has left its defun, so the reason the site was accepted no longer holds | W1: clear bit 4 of group 70 when the layer exists (the `pool:rulerlayer` idiom), or `vla-put-Lock ... :vlax-false` after the `vla-Add`. W2: count on the answer, `(if (entdel e) (setq n (1+ n)) (setq stuck (1+ stuck)))`, and say what stayed; or unlock the selection's layers for the run BEFORE the write (not behind a question the drafter can refuse) and relock them; or stop when a lock reader says locked. `--list` shows why every other write passed (TABLE / FRESH / SCREENED / GATED / OBSERVED). A site that is genuinely fine goes in `tools/write_baseline.txt` as `file|defun|what|needs=TOKEN[@DEFUN]|reason`, where the token is the code that makes it fine. A real defect is fixed, never baselined. For a stale line: put the gate back, or delete the line and fix the site |
+
+## `check_offered.py` — an answer the prompt never offered
+
+Reads **all three tiers**, `releases/` included, like `check_osnap`. What a prompt hands back WITHOUT a keystroke is the code's own choice, and nothing in AutoCAD checks it: Enter's default, a remembered answer, a LAZTUNE knob, a form's stored answer.
+
+| Cause | Fix |
+| --- | --- |
+| **E**: a knob, a literal or a registry-read global reaches a keyword prompt's Enter answer unchecked (FITABHD's `<radius>`) | canonicalise it where it is USED: `(cond ((x:kwcanon knob '("Square" "Radius"))) ("Radius"))`, the `pool:treat-canon` / `ptr:dircanon` shape. A member test that only picks a branch is no guard |
+| **N**: a knob reaches Enter at a number prompt that refuses zero or negatives, either through its initget bits or through the code's own `(if (or (not v) (< v 1)) (setq v knob))`, with no LOWER bound on the way | vet the knob BEFORE the prompt shows it: `(if (not (and (numberp d) (> d 0))) (setq d <shipped>))` at the top of the helper. An upper-only clamp does not count. A clamp on the Enter branch alone does not count either: it shows `<1500>` and takes 1.0 |
+| **T1**: a bit-128 typed word is compared with one the prompt never offers, or offers only under a condition | gate the compare on whatever offers the word, or have every caller test the sentinel |
+| **T2**: a bit-128 answer is used as a point or a number without a `(type v)` test | test `(type v)` first |
+| **S**: a form's stored answer stands in for the prompt, taken raw | vet it the way the prompt would |
+| **I**: the initget is outside the loop that re-asks | move the initget inside the loop |
+
+A site that is right on purpose goes in `tools/offered_baseline.txt` as `file|defun|RULE word|reason`. A real defect never does. `--all` also lists the advisories (what the trace could not follow, never fatal) and the baselined sites.
+
+## `check_input.py` — a miss, and a space
+
+A click on empty paper at an `entsel` answers nil exactly as Enter does. Only ERRNO 7 tells them apart, and a read means THIS pick only when ERRNO was zeroed right before it. At every input but `(getstring T ...)` the spacebar is Enter. Reads all three tiers.
+
+| Rule | Cause | Fix |
+| --- | --- | --- |
+| PICK | an `entsel`'s nil DECIDES something (ends a loop, takes the default, skips the offer or the item), so a click just beside the thing is taken as Enter with nothing said. A nil that only speaks passes only if the SAME question comes round again: a `while` that does not move its own test on, or a recursive call. A `foreach`, `repeat` or `mapcar` asks about the next item | put `(vl-catch-all-apply 'setvar (list "ERRNO" 0))` right before the pick, and a clause `((and (null sel) (= 7 (getvar "ERRNO"))) (princ "...nothing there..."))` ahead of the `((null sel) ...)` that stays Enter's (`ptr:ask-perim` is the pattern). "Enter should mean what it says" is not a baseline reason, because the zero-and-7 keeps Enter as it was. A line in `tools/input_baseline.txt` is only for a miss that costs no more than the retype and says so |
+| STICKY | ERRNO is read after a pick but does not answer for it: it was not zeroed before the pick in that same pass (an earlier miss's 7 turns a real Enter into "Nothing there"), or it was zeroed again between the pick and the read (the 7 is wiped) | zero it inside the loop, right before the pick, and nowhere between the pick and the read. A helper with no loop of its own may leave the zero to every caller, right before the call. Never baselined |
+| SPACE | a prompt, hint or caption shows `44 1/2` or `4'-4 1/2"`, or a prompt shows `1524 MM`, where the spacebar is Enter, so it arrives as two answers | dash it (`44-1/2`, `4'-4-1/2"`) or close the unit up (`1524mm`). A `(getstring T ...)` prompt is exempt, unless the same file reads text at an `(initget 128)` prompt |
+
+## `check_values.py` — a value AutoCAD does not promise
+
+| Rule | What the red means | Fix |
+| --- | --- | --- |
+| rtos-ftin | rtos text in feet and inches reaches the DRAWING: an entity's group 1 or 3, a TextString, a TEXT/MTEXT/LEADER command, or the text after "_T" in a DIM command. The finding names how it gets there. The mode is 3 or 4, a knob that nothing on the way sends elsewhere, or omitted (LUNITS). rtos follows DIMZIN, so at 0, 2 or 8 a whole foot is written `15'`, which SPACHECK, COVERCHECK and LINFINCHECK reject. Prompts and princ are never flagged. | Spell it with the tool's own `<prefix>:ftin`: a copy of `cal:ftin` taking rtos's arguments, plus one mirror_shared swap line. A knob or LUNITS mode goes behind `(if (member m '(3 4)) (x:ftin v m p) (rtos v m p))`. Never bind DIMZIN. A label the command removes on every path out is baselined, with the removal named. |
+| rtos-shape | CDATE through rtos, or rtos text cut with `substr` or `vl-string-search`, or `read` back. DIMZIN 8 and 4 move the digits. | Decode CDATE arithmetically (`cal:datestr`). Slice numbers, not text. |
+| rtos-bound | A max, min, between or or-less limit printed with round-to-nearest inside the loop that asks again against it. rtos, a `:ftin` call and the file's own formatters all count. A max that rounds up is refused when typed back. | `(rtos (x:floor-shown cap))` for a max, `x:ceil-shown` for a min. Do not widen the test. |
+| vl-sort-dedupe | The comment trusts `vl-sort` to drop duplicate REALS, but it drops only EQ items (integers, symbols). | Skip `r` when `(equal r prev 1e-9)` after the sort. |
+| getobject-nil | A `vlax-get-object` or `vlax-create-object` result is tested with `vl-catch-all-error-p` alone. Nothing running, or nothing registered, answers nil. | Add `(null v)` beside the test, or a `((null v) ...)` clause before the one that uses v. |
+| typed-angle | angtos is typed into `(command ...)` in a file that never borrows ANGBASE, ANGDIR and AUNITS. | Borrow and zero all three for the run, and restore them on both paths. |
+
+A site that is genuinely right goes in `tools/values_baseline.txt`, one line per site with its reason. Identical sites pair with lines in order. `--update-baseline` writes new sites as UNREVIEWED, and neither that nor an empty reason passes. The check reads lisp/ plus the three hand-edited shared/parts files.
+
+## `check_tier_parity.py` — both builds read the same things
+
+A helper `mirror_shared.py` swaps for a `cal:` one must read the same knobs, profile keys and sysvars as the library's, or a setting works in one build and not the other.
+
+| Rule | Cause | Fix |
+| --- | --- | --- |
+| finding | the two builds read different things where `mirror_shared.py` swaps a helper for a `cal:` one, or a hand-kept twin has drifted. The tag says which. **P1** `standalone-only`/`grouped-only` + `global:` (a LAZTUNE knob such as `lin:*back-words*`, or a sibling's knob), `env:` (a profile key such as `CalofinInk-*`), `sysvar:` (a typed expand list, as with SPACHECK's CLAYER, or a DIM* in a snapshot table), `implicit:` (rtos/angtos reading DIMZIN, or LUNITS/LUPREC when the mode or precision is left out), `sym:` (a Back sentinel), `effect:`/`fn:` (a LAZDIAG hook). **P2**: the twin names a knob fewer times than lisp/. **P3**: a twin `(cal:X ...)` with the wrong argument count, `'(lambda ...)` bodies included. **P4**: a dropped table or a swapped-away slot (`tool:*sysold*`) still named in the twin, or a knob the mirror drops or renames. **P5**: a hand twin (LISPLAB) whose code, not its prose, differs from lisp/, usually a LAZDIAG hook `check_lazdiag --fix` put only in lisp/. **P0**: the mirror refused the twin | fix the Lisp or the mirror entry: keep the helper local (drop the swap), give both bodies the same read, pass the knob through a collapse/expand, or add the `symbols` rename, then `retier.sh <TOOL>`. For P5, copy the lisp/ lines into the hand twin. `--list TOOL` prints both footprints. Only a genuinely harmless P1/P2 goes in `tools/tier_parity_baseline.txt`, under the key the check prints (the TOOL's own src\|helper\|atom\|reason). P0 and P3-P5 never do |
 
 ## `check_osnap.py` — the drafter's object snaps
 

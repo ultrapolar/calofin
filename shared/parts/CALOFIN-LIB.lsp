@@ -25,7 +25,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v2.6")
+(setq cal:*version* "v2.7")
 
 
 ;;  WHAT IS LOADED, AND AT WHICH VERSION.  Every tool reports its own
@@ -732,6 +732,57 @@
           (cal:zeropad2 (rem dd 100)) " "
           (cal:zeropad2 (fix (+ (* tt 100) 1e-6))) ":"
           (cal:zeropad2 (rem (fix (+ (* tt 10000) 1e-4)) 100))))
+
+;; V as feet and inches -- 15'-0", 0'-6 1/2", 15'-0.50" -- whatever the
+;; drawing's DIMZIN and UNITMODE say.  rtos mode 3/4 reads both: at
+;; DIMZIN 0, 2 or 8 (0 is acad.dwt's) a whole foot came out 15' and a
+;; sub-foot length 6", and that is the notation SPACHECK, COVERCHECK and
+;; LINFINCHECK reject as "feet with no inches" -- so text the tools
+;; wrote into a drawing failed the tools' own review in some drawings
+;; and passed in others.  Takes rtos's own arguments (MODE 3 is decimal
+;; inches, 4 fractional; PREC as rtos reads it), so a fix is a rename:
+;; (rtos v 4 4) -> (tool:ftin v 4 4).  For text that goes INTO the
+;; drawing; a line printed to the command line may follow the drafter's
+;; own DIMZIN.  Rounds half up; a negative that rounds to nothing is
+;; 0'-0", not -0'-0".
+(defun cal:ftin (v mode prec / neg den tot ft n in num g)
+  (setq neg  (minusp v)
+        prec (max 0 (min (if (= mode 3) 6 8) prec))
+        den  (if (= mode 3) (expt 10 prec) (expt 2 prec))
+        tot  (fix (+ (* (abs v) den) 0.5))
+        ft   (/ tot (* 12 den))
+        n    (- tot (* ft 12 den))
+        in   (/ n den)
+        num  (- n (* in den)))
+  (strcat (if (and neg (> tot 0)) "-" "")
+          (itoa ft) "'-" (itoa in)
+          (cond ((= mode 3)
+                 (if (> prec 0) (strcat "." (substr (itoa (+ den num)) 2)) ""))
+                ((= num 0) "")
+                (T (setq g (gcd num den))
+                   (strcat " " (itoa (/ num g)) "/" (itoa (/ den g)))))
+          "\""))
+
+;; The step a plain (rtos v) shows a length to -- LUPREC places, or
+;; 1/2^LUPREC in architectural and fractional units.
+(defun cal:shown-step ( / p)
+  (setq p (max 0 (min 8 (getvar "LUPREC"))))
+  (if (member (getvar "LUNITS") '(4 5))
+    (/ 1.0 (expt 2 p))
+    (/ 1.0 (expt 10 p))))
+
+;; A LIMIT as it may be shown: a maximum floored and a minimum ceiled to
+;; the shown step.  (rtos v) rounds, so a 47.8" cap read back as
+;; 3'-11 13/16" -- 47.8125, over the cap -- and the drafter who typed
+;; exactly what the refusal said was refused again.  The acceptance
+;; test stays on the true limit; only what is SAID moves inward.
+(defun cal:floor-shown (v / s)
+  (setq s (cal:shown-step))
+  (* s (fix (+ (/ v s) 1e-9))))
+(defun cal:ceil-shown (v / s n)
+  (setq s (cal:shown-step)
+        n (fix (+ (/ v s) 1e-9)))
+  (* s (if (> (/ v s) (+ n 1e-9)) (1+ n) n)))
 
 ;;; -------------------- the chart forms ---------------------------------
 ;;;  LAZFORM, LAZSPA and LAZSTEP draw their charts into a DCL IMAGE

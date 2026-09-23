@@ -102,9 +102,9 @@ offers, before anyone has answered:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `ptr:*band*` | `6.0` | the band; later runs offer the last answer instead |
+| `ptr:*band*` | `6.0` | the band; later runs offer the last answer instead.  Zero or less is offered as `6.0` |
 | `ptr:*dir*` | `"Clockwise"` | the direction, on the same footing: `Clockwise` or `Counterclockwise` in any case, or `CW` / `CCW`; anything else is offered as `Clockwise` |
-| `ptr:*first*` | `1` | the number the count is offered at, every run (not carried between them) |
+| `ptr:*first*` | `1` | the number the count is offered at, every run (not carried between them); a whole number, 1 or more -- anything else is offered as `1` |
 | `ptr:*sysvars*` | `'("CMDECHO")` | saved on the way in, restored however the run ends |
 
 *What the report looks like:*

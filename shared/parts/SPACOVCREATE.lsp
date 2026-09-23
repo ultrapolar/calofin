@@ -83,7 +83,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacovcreate-version* "v1.2")
+(setq *spacovcreate-version* "v1.3")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value SPACOVCREATE reads that somebody might want
@@ -1351,8 +1351,17 @@
                 (setq qstep 2))))))
       ;; 2 -- how far the cover laps
       ((= qstep 2)
+       ;; the knob is the Enter answer, which skips initget's refusal
+       ;; of zero and negatives: a 0 drew a cover the size of the spa
+       ;; and a negative one INSIDE it, when the cover is always the
+       ;; larger of the two.  Held to what a typed lap must be, or the
+       ;; shipped 6
        (setq d (scv:askdist "Cover offset past the spa"
-                            scv:*offset-dflt* t))
+                            (if (and (numberp scv:*offset-dflt*)
+                                     (> scv:*offset-dflt* 0.0))
+                                scv:*offset-dflt*
+                                6.0)
+                            t))
        (if (eq d 'SCV-BACK)
            (progn (scv:say "Stepping back one question.")
                   (setq ss nil qstep 1))

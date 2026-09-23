@@ -908,8 +908,10 @@ def test_a_multi_sheet_taper_is_audited_against_the_sheet_spa_used():
     """A taper row can carry more than one foam sheet, and SPA does not
     take the first: spa:hbest solves and scores EVERY sheet in the row,
     keeps the winner and says which one it took ("FOAM SHEET USED:
-    49.50 x 102").  spachk:audit-hinges read (car opts) and measured
-    the drawing against a sheet SPA had explicitly rejected.
+    49.5 x 102" -- SPA runs under its own DIMZIN 8, so its (rtos fw 2 2)
+    drops the trailing zero; only the DIMZIN-blind VM ever said 49.50).
+    spachk:audit-hinges read (car opts) and measured the drawing against
+    a sheet SPA had explicitly rejected.
 
     A 98 x 60 cover on STANDARD 3-2 is the case: 48" would need three
     pieces and that row allows only two, so SPA lays it out to the
@@ -927,7 +929,7 @@ def test_a_multi_sheet_taper_is_audited_against_the_sheet_spa_used():
                     'Yes', '90', 'Yes', 'No', 'No', None, taper])
         add_block(vm, 'STANDARD', taper)
         said = "".join(str(x) for x in vm.printed)
-        assert 'FOAM SHEET USED: 49.50 x 102' in said, \
+        assert 'FOAM SHEET USED: 49.5 x 102 ' in said, \
             "SPA did not take the second sheet on %s: %s" % (
                 taper, [l for l in said.split(chr(10)) if 'FOAM' in l])
         txt = report_of(vm)

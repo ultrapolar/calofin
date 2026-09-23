@@ -50,7 +50,7 @@ does.
 | --- | --- |
 | `DIMCHECK` | The full interactive review. Fixes what you approve, flags what you don't. |
 | `DIMSCAN` | The same audits, **read-only** — reports everything, changes nothing. Good as a pre-flight. |
-| `DIMCHECKRESCUE` | Restores every colour DIMCHECK stashed and clears its report/markers — the way out after a crash, or to remove the marks once you're done with them. |
+| `DIMCHECKRESCUE` | Restores every colour DIMCHECK stashed and clears its report/markers — the way out after a crash, or to remove the marks once you're done with them. An item on a locked layer is counted apart and keeps its stash, so running it again once the layer is unlocked still knows the original colour. |
 | `DIMCHECKVER` | Prints which build is loaded. |
 | `TUTORIALDIMCHECK` | Teaches the tool — see below. |
 
@@ -179,7 +179,10 @@ up front — **List**, **Demo**, or **Both**:
   3. an arc whose ends attach to nothing.
 
   It then offers to run `DIMSCAN` for a real report, and to erase the
-  practice drawing afterwards.
+  practice drawing afterwards. The practice drawing goes on its own
+  layer, `DIMCHECK-TUTORIAL` (made, or unlocked, for the demo), never on
+  `0` or the current layer; an object a locked layer still keeps is
+  counted and reported rather than said to be erased.
 * **Both** — the list, then the demo.
 
 The whole tutorial runs inside one UNDO group and never touches

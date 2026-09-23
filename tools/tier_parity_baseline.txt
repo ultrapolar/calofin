@@ -1,0 +1,17 @@
+# Differences between a local helper and the cal: one the mirror swaps it
+# for, that a person has READ and decided are harmless (rules P1 and P2 of
+# tools/check_tier_parity.py).  One line per atom:
+#   tool's source file|local helper or knob|side and atom|why it is fine
+# The first field is the TOOL's own file -- its mirror_shared.py entry's
+# src -- not the file the helper lives in: POOL, POOLDEMO and TUTORIALPOOL
+# all drive pool:syssave through their own typed expands, and accepting a
+# difference for one must not accept it for the other two.  The check
+# prints the key of every new P1/P2 finding ready to paste.
+# An unlisted difference fails the check; a listed one the tree no longer
+# produces is reported as stale, and a line with no reason is an error,
+# so this file cannot rot.  P3 (a cal: call of the wrong arity), P4 (a
+# dropped or swapped-away slot the twin still names, or a knob the mirror
+# drops) and P5 (a hand-kept twin whose code has drifted) take no
+# baseline: none is ever harmless.  A real drift is FIXED, never listed.
+lisp/olauto/OLAUTO.lsp|ola:dimstyrestore|standalone-only effect:command-s|the same dimension-style restore by another route: OLAUTO never pushes *push-error-using-command*, so (vl-catch-all-apply 'command-s ...) is legal in its handler; cal:dimstyrestore uses the ActiveX put because the tools that DO push cannot use command-s there
+lisp/olauto/OLAUTO.lsp|ola:dimstyrestore|grouped-only effect:vla-put-activedimstyle|the other half of the line above: both restore the style saved in *odstyle*, both only when tblsearch finds it, both under vl-catch-all-apply

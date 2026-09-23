@@ -721,7 +721,7 @@ a floor under the result.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `oasis:*hopoff*` | `18.0` | The offset the hopper question opens on when a session has not yet had one accepted. After that the session offers its own last answer, because a job's pools share a hopper — that memory is `oasis:*hopoff-last*`, which is state rather than a setting, so a run never edits the configuration it was given |
+| `oasis:*hopoff*` | `18.0` | The offset the hopper question opens on when a session has not yet had one accepted. After that the session offers its own last answer, because a job's pools share a hopper — that memory is `oasis:*hopoff-last*`, which is state rather than a setting, so a run never edits the configuration it was given. A value of 0 or less is not an offset in from the wall, and the question opens on 18 instead |
 | `oasis:*hopchord*` | `24` | How many chords a **guided** slope line is drawn with — more is smoother and heavier |
 | `oasis:*hopscan*` | `720` | How finely the deepest point of the offset ring is looked for. Only the deep end's *location* comes off this scan; every point drawn is solved exactly |
 

@@ -66,7 +66,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.9")
+(setq *abpcheck-version* "v1.10")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value ABPCHECK reads that someone might want to
@@ -171,7 +171,9 @@
 ;; Findings are indented under their heading by this string.
 (setq abp:*row-indent*   "  ")
 
-;; Distances in the report go through (rtos d mode prec): mode 4 is
+;; Distances in the report are spelled in MODE at PREC: modes 3 and 4
+;; through abp:ftin, whatever the drawing's DIMZIN (rtos would write a
+;; whole foot 1' at DIMZIN 0), any other mode through rtos.  Mode 4 is
 ;; architectural (feet-inches), so 1.875 reads 0'-1 7/8"; prec is how
 ;; many ways the inch is split, as a power of two (4 = sixteenths).
 ;; This is the shape the report was asked for -- see the header.
@@ -566,7 +568,15 @@
           "closest line is " (abp:dstr (car q)) " away"))
 
 ;; Distance as the report writes it, for prose (the limit, mostly).
-(defun abp:dstr (d) (rtos d abp:*dist-mode* abp:*dist-prec*))
+;; Modes 3 and 4 are feet and inches, and rtos spells those after
+;; DIMZIN: at 0 (acad.dwt's) the shipped mode 4 wrote 15' and 1 7/8"
+;; into the report MTEXT -- the notation the review tools reject -- so
+;; those two are spelled by arithmetic (cal:ftin's), the same in every
+;; drawing.
+(defun abp:dstr (d)
+  (if (member abp:*dist-mode* '(3 4))
+    (cal:ftin d abp:*dist-mode* abp:*dist-prec*)
+    (rtos d abp:*dist-mode* abp:*dist-prec*)))
 
 ;; The findings, worst first: everything over the limit under one
 ;; heading, then the near misses under another, capped so a 200-point
@@ -760,8 +770,14 @@
 
 ;; How far off is too far.  A limit is always needed, so there is no NA
 ;; here: Enter takes the remembered answer and nothing else opts out.
-;; initget 6 rejects zero and negatives, as a REQ measurement does.
+;; initget 6 rejects zero and negatives, as a REQ measurement does --
+;; but only what is TYPED: Enter hands DFLT back unchecked, and on the
+;; first run of a session that is the abp:*limit* knob, so a LAZTUNE
+;; override of 0 or -1 flagged every point in the survey as too far.
+;; A default that a typed answer would be refused for is offered as
+;; the shipped inch instead.
 (defun abp:asklimit (msg dflt / v)
+  (if (not (and (numberp dflt) (> dflt 0))) (setq dflt 1.0))
   (initget 6)
   (setq v (getdist (strcat "\n" msg " <" (abp:dstr dflt) ">: ")))
   (if lzd:ask (lzd:ask msg v) v)

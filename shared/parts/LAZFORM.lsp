@@ -98,7 +98,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.21")
+(setq *lazform-version* "v2.22")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -1965,10 +1965,14 @@
   ;; view carries no tile for either: it READS both when it builds the
   ;; form (below), so a LAZFORM run earlier in the session used to hand
   ;; POOL an in-square Wedge here with nothing on screen saying so and
-  ;; no way to change it.
+  ;; no way to change it.  The cover flag likewise: this view is never
+  ;; a cover sheet, but a LAZFORMCOVER whose POOL failed never reached
+  ;; the line that lowers it, and the form built here then dropped the
+  ;; bottom type and every depth as "behind the cover gate".
   (setq lzf:*vals* nil lzf:*cvals* nil lzf:*pvals* nil lzf:*chart* c
         lzf:*insq* nil                  ; out of square, as a run starts
-        lzf:*btype* 0)                  ; Normal, first in the list
+        lzf:*btype* 0                   ; Normal, first in the list
+        lzf:*cover* nil)                ; a text view, not a cover sheet
   (cond
     ((not (setq f (lzf:write-dcl)))
      (princ "\nLAZTXT error: could not write the dialog file."))

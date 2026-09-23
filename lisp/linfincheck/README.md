@@ -88,7 +88,7 @@ with what the code actually does.
 | `LINFINCHECK` | The full interactive review. Fixes what you approve, flags what you don't. |
 | `LINFINSCAN` | The same audits, **read-only** — reports everything, changes nothing. Good as a pre-flight. |
 | `LITELINFINSCAN` | The scan minus the `DIMCHECK`-style pass (dimensions, arcs, overlapping lines) — for a drawing `DIMCHECK` already went over, when only the liner-finish rules are wanted. It keeps the dimension-layer verdict (which tells you to run `CDIM`) and the feet-and-inches check. |
-| `LINFINCHECKRESCUE` | Restores every colour LINFINCHECK stashed and clears its report/markers — the way out after a crash, or to remove the marks once you're done with them. |
+| `LINFINCHECKRESCUE` | Restores every colour LINFINCHECK stashed and clears its report/markers — the way out after a crash, or to remove the marks once you're done with them. An item on a locked layer is counted apart and keeps its stash, so running it again once the layer is unlocked still knows the original colour. |
 | `LINFINCHECKVER` | Prints which build is loaded. |
 | `TUTORIALLINFINCHECK` | Teaches the tool — see below. |
 
@@ -260,7 +260,10 @@ up front — **List**, **Demo**, or **Both**:
   4. an arc whose ends attach to nothing.
 
   It then offers to run `LINFINSCAN` for a real report, and to erase
-  the practice drawing afterwards.
+  the practice drawing afterwards. The practice drawing goes on its own
+  layer, `LINFINCHECK-TUTORIAL` (made, or unlocked, for the demo), never
+  on `0` or the current layer; an object a locked layer still keeps is
+  counted and reported rather than said to be erased.
 * **Both** — the list, then the demo.
 
 The whole tutorial runs inside one UNDO group and never touches

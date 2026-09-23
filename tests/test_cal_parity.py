@@ -60,6 +60,16 @@ def check(label, ok, detail=""):
 #: Several sets each where an edge case is worth pinning -- a negative
 #: angle, a wrapped one, a zero-length vector, an empty string.
 INPUTS = {
+    # feet and inches whatever DIMZIN says: a whole foot, a sub-foot
+    # length, decimal inches, a negative, one that rounds to nothing,
+    # a carry into the next foot, the 47.8 cap, precision 0 and 8
+    "cal:ftin": ["180.0 4 4", "6.5 4 4", "180.5 3 2", "-12.5 4 4",
+                 "-0.01 4 4", "0.01 4 4", "95.9999 4 4", "47.8 4 4",
+                 "1.0 4 0", "15.0 3 0", "0.3333 4 8", "147.5 4 12"],
+    # a shown limit, at the VM's LUNITS/LUPREC: a cap that rounds up,
+    # one already on the step, and a minimum just past one
+    "cal:floor-shown": ["47.8", "48.0", "0.0", "-2.5", "3.00009"],
+    "cal:ceil-shown": ["3.01", "48.0", "0.0", "-2.5", "3.00001"],
     "cal:2d": ["'(1.5 2.5 3.5)", "'(0.0 0.0 0.0)", "'(-4.0 7.25)"],
     "cal:andjoin": ['\'("a" "b" "c") "and"', '\'("only") "and"',
                     '\'("a" "b") "or"', "nil \"and\""],
@@ -256,6 +266,7 @@ SKIP = {
     "cal:osup": "session state",
     "cal:osdown": "session state",
     "cal:datestr": "reads CDATE, not a pure function of its arguments",
+    "cal:shown-step": "takes no arguments and reads LUNITS/LUPREC; its\n              answer is compared through floor-shown and ceil-shown",
     "cal:ensure-layer": "writes the layer table; needs a drawing",
     "cal:layer-usable-p": "reads the layer table; needs a drawing",
     "cal:bbox-ent": "needs an entity",

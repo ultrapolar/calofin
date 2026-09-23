@@ -4,14 +4,14 @@ the drafter would have been let down.
 
 1. A handler that runs under *push-error-using-command* runs with the
    AutoLISP stack already unwound: every local of the command reads nil
-   and every helper defined inside it is undefined.  The stock VM keeps
+   and every helper defined inside it is undefined.  The stock VM kept
    the frames live, so XFTCONV's handler (which called its own local
    xft:sysback) and HONEFILLET/SMARTFILLET's (which closed the undo
    group through a local flag) passed here and died in AutoCAD.  The
-   model below -- lifted from the guard-handler-death audit's vmpatch --
-   swaps the stack out for the handler call, refuses a bare (command)
-   in a handler that did not push, and refuses a pop with nothing
-   pushed.  It is installed for this file only.
+   VM models the error modes itself now (tests/test_lispvm_errmode.py):
+   the stack is reset for a pushed handler, a bare (command) is refused
+   in a handler that did not push, and a pop with nothing pushed fails
+   the run.
 2. The U hint XFTCONV printed on every way into its handler, including
    an Esc at the highlight before anything was touched.
 3. SCALE, entdel and a sweep of the wrong space: XFTCONV scaling a
@@ -39,7 +39,6 @@ sys.dont_write_bytecode = True
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, '..', 'tools'))
-import lispvm  # noqa: E402
 from lispvm import VM, LispError, Ent, Dot, Sym, NIL, T, BUILTINS  # noqa: E402
 
 ROOT = os.environ.get('CALOFIN_LISP_ROOT', 'lisp')
@@ -73,106 +72,11 @@ def check(label, cond, detail=''):
 # ---------------------------------------------------------------------
 #  the pushed-mode model
 # ---------------------------------------------------------------------
-
-# 'unwind' off is the stock VM: a check that has to see what a handler
-# PRINTS once it survives turns it off for that one run
-MODEL = {'unwind': True}
-
-
-class HandlerDeath(LispError):
-    """The handler itself threw: what the drafter sees is a raw error
-    line and nothing after it -- no restore, no close, no report."""
-
-
-def call_defun(self, name, fn, args):
-    _, params, locals_, body = fn
-    if len(args) != len(params):
-        raise LispError(f"{name}: expected {len(params)} args, "
-                        f"got {len(args)}", self)
-    frame = dict(zip(params, args))
-    for loc in locals_:
-        frame[loc] = NIL
-    self.stack.append(frame)
-    self.calls.append(name)
-    try:
-        r = NIL
-        for form in body:
-            r = self.eval(form)
-        return r
-    except LispError as e:
-        if (self.handle_errors and not self._catch_depth
-                and not self._in_handler
-                and not getattr(e, 'handled', False)):
-            h = self.get(Sym('*error*'))      # the one in force at the throw
-            if (isinstance(h, tuple) and h[0] == 'defun') or (
-                    isinstance(h, list) and h and h[0] == 'lambda'):
-                e.handled = True
-                msg = str(e).split('\n')[0]
-                self.handled_errors.append(msg)
-                self._in_handler = True
-                unwind = MODEL['unwind'] and self.error_mode_depth > 0
-                saved = self.stack
-                if unwind:
-                    self.stack = []
-                try:
-                    if isinstance(h, tuple):
-                        self.call_defun(Sym('*error*'), h, [msg])
-                    else:
-                        self.call_lambda(h, [msg])
-                except LispError as inner:
-                    if isinstance(inner, lispvm.HandlerAbort):
-                        raise
-                    raise HandlerDeath(
-                        "*error* handler died%s: %s" % (
-                            " (stack unwound by the pushed mode)"
-                            if unwind else "",
-                            str(inner).splitlines()[0]), self)
-                finally:
-                    if unwind:
-                        self.stack = saved
-                    self._in_handler = False
-        raise
-    finally:
-        self.stack.pop()
-        self.calls.pop()
-
-
-VM.call_defun = call_defun
-
-_command = BUILTINS[Sym('command')]
-
-
-def command(vm, a):
-    if vm._in_handler and vm.error_mode_depth == 0:
-        raise LispError("Cannot invoke (command) from *error* without prior "
-                        "call to (*push-error-using-command*)", vm)
-    return _command(vm, a)
-
-
-BUILTINS[Sym('command')] = command
-_command_s = BUILTINS[Sym('command-s')]
-
-
-def command_s(vm, a):
-    # refused under a push (lispvm's own HandlerAbort); otherwise the
-    # unrefused command logger, not the default-mode refusal above
-    if vm._in_handler and vm.error_mode_depth > 0:
-        return _command_s(vm, a)
-    return _command(vm, a)
-
-
-BUILTINS[Sym('command-s')] = command_s
-_check = VM._check_balanced
-
-
-def check_balanced(self, name):
-    _check(self, name)
-    if self.error_mode_underflow:
-        raise LispError(f"{name} popped the error mode with nothing pushed "
-                        f"({self.error_mode_underflow} time(s))", self)
-
-
-VM._check_balanced = check_balanced
+# tests/lispvm.py runs every handler in the error mode its command put
+# in force (tests/test_lispvm_errmode.py pins it): under a push the
+# stack is reset, a bare (command) is refused in the default mode, a
+# pop with nothing pushed fails the run, and a handler that dies raises
+# lispvm.HandlerDeath.  This file used to install that model itself.
 
 REPORTER = '''
   (setq tfix:*reported* nil)
@@ -341,18 +245,14 @@ check("...and there IS a group for the U hint to point at",
 # ---------------------------------------------------------------------
 print("XFTCONV/XFTRECONV: the U hint only over a group (finding 3)")
 # ---------------------------------------------------------------------
-# with the unwind model off, so a handler that survives is read to its
-# end: this is the line the drafter meets once finding 1 is fixed
-MODEL['unwind'] = False
-try:
-    for cmd in ('c:XFTCONV', 'c:XFTRECONV'):
-        vm = xftvm()
-        attempt(vm, cmd, [None, esc])
-        check(f"{cmd[2:]}: an Esc before anything changed says nothing of U",
-              'use U' not in said(vm) and 'part-way' not in said(vm),
-              said(vm)[-300:])
-finally:
-    MODEL['unwind'] = True
+# the handler survives the pushed mode now (finding 1), so it is read
+# to its end: this is the line the drafter meets
+for cmd in ('c:XFTCONV', 'c:XFTRECONV'):
+    vm = xftvm()
+    attempt(vm, cmd, [None, esc])
+    check(f"{cmd[2:]}: an Esc before anything changed says nothing of U",
+          'use U' not in said(vm) and 'part-way' not in said(vm),
+          said(vm)[-300:])
 
 vm = xftvm()
 vm.sysvars['UNDOCTL'] = 4                      # recording off
@@ -367,37 +267,21 @@ check("undo off, a throw mid-swap: no U hint, and the part-way run said",
 # ---------------------------------------------------------------------
 print("XFTCONV: every locked layer in the highlight stops it (finding 5)")
 # ---------------------------------------------------------------------
-# entdel refuses a locked layer in AutoCAD; the VM does not, so it is
-# modelled here the way test_covercheck models a locked entmod
+# entdel refuses a locked layer in AutoCAD, and the VM's does too now
+# (test_lispvm_values.py) -- this block used to model it by hand
 _entdel = BUILTINS[Sym('entdel')]
-
-
-def locked_entdel(vm, a):
-    e = a[0]
-    lay = vm.layer_of(e) if isinstance(e, Ent) else NIL
-    if lay and lay is not NIL:
-        rec = vm.loads(f'(tblsearch "LAYER" "{lay}")')
-        if rec and (grp(rec, 70) or 0) & 4:
-            return NIL
-    return _entdel(vm, a)
-
-
-BUILTINS[Sym('entdel')] = locked_entdel
-try:
-    vm = xftvm([layer('TITLE', 4)])
-    ents = (made(vm, marker(0.0, 0.5)) + made(vm, text(0.2, 1.0, "P4"))
-            + made(vm, text(40.0, 40.0, "SITE NOTES", lay='TITLE')))
-    ok, why = attempt(vm, 'c:XFTCONV', [None, ents])
-    check("a locked TITLE in the highlight is named, the run refused",
-          ok and 'Unlock TITLE' in said(vm), why or said(vm)[-300:])
-    check("...before anything was scaled, swapped or erased",
-          not [c for c in vm.commands if c and c[0] == '_.SCALE']
-          and not inserts(vm) and not vm.deleted,
-          repr((vm.commands, inserts(vm), vm.deleted)))
-    check("...and no count of text 'erased' that is still there",
-          'leftover text object(s) erased' not in said(vm), said(vm)[-300:])
-finally:
-    BUILTINS[Sym('entdel')] = _entdel
+vm = xftvm([layer('TITLE', 4)])
+ents = (made(vm, marker(0.0, 0.5)) + made(vm, text(0.2, 1.0, "P4"))
+        + made(vm, text(40.0, 40.0, "SITE NOTES", lay='TITLE')))
+ok, why = attempt(vm, 'c:XFTCONV', [None, ents])
+check("a locked TITLE in the highlight is named, the run refused",
+      ok and 'Unlock TITLE' in said(vm), why or said(vm)[-300:])
+check("...before anything was scaled, swapped or erased",
+      not [c for c in vm.commands if c and c[0] == '_.SCALE']
+      and not inserts(vm) and not vm.deleted,
+      repr((vm.commands, inserts(vm), vm.deleted)))
+check("...and no count of text 'erased' that is still there",
+      'leftover text object(s) erased' not in said(vm), said(vm)[-300:])
 
 # ---------------------------------------------------------------------
 print("XFTCONV: a refused erase is neither counted nor recorded (finding 6)")

@@ -292,10 +292,11 @@ install_ssget_xdata()
 # refuses for an entity on a layer whose table record carries bit 4.
 # The record itself stays writable (that is how a layer is unlocked),
 # and entmake is not touched -- AutoCAD creates on a locked layer.
+# That is tests/lispvm.py's own model now (test_lispvm_values.py pins
+# it); this file used to patch it in.  What stays here is the THROW.
 # ------------------------------------------------------------------
 
 _BASE_ENTMOD = BUILTINS[Sym('entmod')]
-_BASE_ENTDEL = BUILTINS[Sym('entdel')]
 #: set True to make every entity write THROW, the way a future bug in
 #: a colour restore would: the handlers must still re-lock
 STATE = {'throw': False}
@@ -311,7 +312,7 @@ def layer_locked(vm, name):
     return False
 
 
-def _entmod_locked(vm, a):
+def _entmod_throwing(vm, a):
     alist = a[0] or []
     ename = next((g.b for g in alist
                   if isinstance(g, Dot) and g.a == -1), None)
@@ -319,21 +320,10 @@ def _entmod_locked(vm, a):
         return _BASE_ENTMOD(vm, a)
     if STATE['throw']:
         raise LispError('entmod: simulated failure inside the handler', vm)
-    lay = next((g.b for g in alist if isinstance(g, Dot) and g.a == 8), None)
-    if lay is not None and layer_locked(vm, lay):
-        return NIL
     return _BASE_ENTMOD(vm, a)
 
 
-def _entdel_locked(vm, a):
-    e = a[0]
-    if isinstance(e, lispvm.Ent) and layer_locked(vm, grp(vm, e, 8) or '0'):
-        return NIL
-    return _BASE_ENTDEL(vm, a)
-
-
-BUILTINS[Sym('entmod')] = _entmod_locked
-BUILTINS[Sym('entdel')] = _entdel_locked
+BUILTINS[Sym('entmod')] = _entmod_throwing
 # set-layer-lock clears the bit with (logand old (~ 4))
 BUILTINS.setdefault(Sym('~'), lambda vm, a: ~int(a[0]))
 

@@ -540,8 +540,11 @@ asked = [p for p, _v in vm.prompts if 'Dimension the steps' in p]
 check("Back at the wall width re-asks whether to dimension",
       len(asked) == 3, "%d asked" % len(asked))
 check("...B and U both do it", out.count("Stepping back one question") == 2)
+# HEMISTEP sets LUNITS 4 for its run so feet-inch answers type in, and
+# says the width with a bare (rtos wid) -- so AutoCAD spells 60 in that
+# session as 5' (acad.dwt's DIMZIN 0 drops the zero inches), never "60".
 check("...and the width that finally stands is the one drawn",
-      "Width at the wall: 60" in out)
+      "Width at the wall: 5'." in out)
 
 
 # ------------------------------ 9. NORMIESTEP's corner-treatment sizes
@@ -838,12 +841,16 @@ asked = [p for p, _v in vm.prompts]
 check("...and lower-case s is the same answer",
       len([p for p in asked if 'step tread' in p]) >= 3)
 
-# the offer names the number, so S is not a promise you have to trust
+# the offer names the number, so S is not a promise you have to trust.
+# CORNERSTP runs under LUNITS 4 (so 1'4 types in) and offers the number
+# with a bare (rtos n): 24 and 30 read 2' and 2'-6" in that session, at
+# acad.dwt's DIMZIN 0 -- the old VM's LUNITS-blind "24" was never on a
+# drafter's screen.
 check("the tread prompt names the tread Same would repeat",
-      any('step tread' in p and 'Same = 24' in p for p in asked),
+      any('step tread' in p and "Same = 2'>" in p for p in asked),
       [p.strip() for p in asked if 'step tread' in p][:2])
 check("the width prompt names the width Same would repeat",
-      any('step width' in p and 'Same = 30' in p for p in asked),
+      any('step width' in p and 'Same = 2\'-6">' in p for p in asked),
       [p.strip() for p in asked if 'step width' in p][:2])
 
 # ...and it is not offered before there is one to repeat

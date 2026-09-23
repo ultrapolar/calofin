@@ -1,0 +1,13 @@
+# Sites tools/check_values.py flags that are FINE, and why.
+# One line per site: file|defun|rule|excerpt|why.
+#
+# Only a site that is genuinely right goes here, with the reason it is.
+# A defect is fixed, not baselined -- a DIMZIN-proof :ftin, a floored
+# max, an explicit dedupe.  --update-baseline keeps every reason, drops
+# stale lines and writes a new site as UNREVIEWED, which the check does
+# not accept: replace it with the reason, or fix the site.
+# Regenerate with: python3 tools/check_values.py --update-baseline
+lisp/oasis/OASIS.lsp|oasis:preview|rtos-ftin|(rtos (nth slot ans))|a preview label: the radius the drafter just typed, on the guide layer beside its dashed circle while the questions run.  oasis:pv-clear takes every preview entity away before the next preview, at the end of the run (c:OASIS) and from *error* (oasis:*prev*), so no sheet carries it -- it is read like a prompt, in the drafter's own units, which is the point
+lisp/oasis/OASIS.lsp|oasis:preview|rtos-ftin|(rtos (nth 2 a))|the same preview label for a bulge not asked yet (its current radius); swept with the rest of the preview on every path out
+lisp/lisplab/LISPLAB.lsp|lab:sort-demo-1|vl-sort-dedupe|(vl-sort (mapcar 'fix nums) '<)|the lesson's demonstration OF the trap: the radii are made whole numbers on purpose so vl-sort drops the EQ duplicate 3 in front of the reader, and the next line counts what came out -- nothing downstream relies on the sorted list keeping its length
+shared/parts/LISPLAB.lsp|lab:sort-demo-1|vl-sort-dedupe|(vl-sort (mapcar 'fix nums) '<)|the hand-kept twin of the same lesson line: the dropped integer duplicate is the thing being shown

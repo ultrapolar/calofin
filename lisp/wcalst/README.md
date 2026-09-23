@@ -149,7 +149,7 @@ feet-inches:
 ```
 TOP LINE:      1286.01  (107'-2")   <- straightened side, as drawn
 BOTTOM BEFORE: 1271.04  (105'-11")  <- opposite side along the original curve
-BOTTOM AFTER:  1294.74  (107'-10")  <- opposite side as drawn, flattened
+BOTTOM AFTER:  1294.74  (107'-10 3/4")  <- opposite side as drawn, flattened
 DELTA:         23.70  (1.86% long)
 AFTER CUTS:    -4.24  (0.33%)  [target <1%]
 ```
@@ -233,7 +233,7 @@ every knob present, with the default it really has -- and
 
 | Knob | Default | What changing it does |
 | --- | --- | --- |
-| `wc:*maxfeat*` | `20` | the darts+inserts cap the prompt offers, and what an out-of-range answer falls back to |
+| `wc:*maxfeat*` | `20` | the darts+inserts cap the prompt offers, and what an out-of-range answer falls back to - a whole number, 1 or more (anything else is offered as 20) |
 | `wc:*dart-cap*` | `4.0` | widest mouth ONE dart may open: lower it and a big bend splits across more darts side by side, raise it for fewer, wider Vs |
 | `wc:*dart-space*` | `2.0` | bottom line left between two darts cut side by side for one bend, and between any two mouths: less packs them tighter, more spreads a wide correction along the band |
 | `wc:*wmin-f*` | `0.04` | smallest correction worth a cut, as a share of the band width - the floor that stops the refining pass cutting hair-width darts |

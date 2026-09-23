@@ -111,18 +111,10 @@ def text(vm, lay, s='x'):
 
 # ---------------------------------------------------------------- models
 
-_ENTDEL = BUILTINS[Sym('entdel')]
+# AutoCAD's entdel on a LOCKED layer -- nil, and nothing erased -- is
+# tests/lispvm.py's own now (test_lispvm_values.py); an entdel_locked
+# model used to be patched in here for it.
 _TRANS = BUILTINS[Sym('trans')]
-
-
-def entdel_locked(vm, a):
-    """AutoCAD's entdel on a LOCKED layer: nil, and nothing erased."""
-    e = a[0]
-    if isinstance(e, Ent) and e not in vm.deleted:
-        lay = vm.layer_of(e)
-        if lay and layer_flags(vm, lay) & 4:
-            return NIL
-    return _ENTDEL(vm, a)
 
 
 def entdel_refused(vm, a):
@@ -197,13 +189,16 @@ PURGES = [
 
 for prefix, purge, tag in PURGES:
     vm = loaded(prefix)
-    layer(vm, 'L', 4)                         # the drafter locked it
+    layer(vm, 'L', 0)
     mine = text(vm, 'L', 'POINTS OFF THE LINE (3)')
     vm.globals[Sym('e')] = mine
     vm.loads(tag)
     theirs = text(vm, 'L', "the drafter's own note")
-    with patched(entdel=entdel_locked):
-        n = vm.loads(purge)
+    # the drafter locked it AFTER the tool tagged its marker: tagged on
+    # a locked layer, the tag's own entmod would be refused
+    vm.loads('(setq t:rec (entget (tblobjname "LAYER" "L")))'
+             '(entmod (subst (cons 70 4) (assoc 70 t:rec) t:rec))')
+    n = vm.loads(purge)
     check("%s: a locked layer's own marker is erased and counted" % prefix,
           n == 1 and not live(vm, mine), (n, live(vm, mine)))
     check("%s: ...the drafter's own object on it is left alone" % prefix,

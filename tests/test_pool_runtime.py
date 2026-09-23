@@ -144,11 +144,28 @@ vm = run(["Insquare", "Rectangle"] + BASE +
          "R1b")
 
 
+def _offered(text):
+    """An offer read back the way AutoCAD would read it.  POOL runs under
+    LUNITS 4 (POOL.LSP sets it so 1'4 types in) and offers a default
+    with a bare (rtos dflt), so the offer is feet and inches -- 10' for
+    120 at acad.dwt's DIMZIN 0 -- never the plain 120 the LUNITS-blind
+    VM used to print.  (distof s 4) is how a routine reads that back."""
+    from lispvm import BUILTINS, Sym
+    return BUILTINS[Sym('distof')](vm, [text, 4])
+
+
+def _offer_of(prompt):
+    """The number a prompt's <default> offers, or None if it has none."""
+    if " <" not in prompt:
+        return None
+    return _offered(prompt.split(" <")[1].split(">")[0])
+
+
 def _sugg(letter):
     """The <number> a prompt offered, or None if it asked cold."""
     for p, a in vm.prompts:
         if p.lstrip().startswith(letter + " -") and " <" in p:
-            return float(p.split(" <")[1].split(">")[0])
+            return _offer_of(p)
     return None
 
 
@@ -188,7 +205,7 @@ vm = run(["Insquare", "Rectangle"] + BASE +
           "Square", "No"],        # square corners, no bottom
          "R1d")
 _end = [p for p, a in vm.prompts if "End length (left & right)" in p]
-assert _end and " <216" in _end[0], _end
+assert _end and _offer_of(_end[0]) == 216.0, _end     # <18'>
 # the offer does NOT loosen the question: a width is still required,
 # so NA is not on the table the way it is on a suggested NA letter
 assert "NA" not in _end[0], _end[0]
@@ -208,8 +225,8 @@ vm = run(["Outofsquare", "Rectangle"] + BASE +
          "R1e")
 _le = [p for p, a in vm.prompts if "End length LEFT" in p]
 _ri = [p for p, a in vm.prompts if "End length RIGHT" in p]
-assert _le and " <215.5" in _le[0], _le
-assert _ri and " <215.5" in _ri[0], _ri
+assert _le and _offer_of(_le[0]) == 215.5, _le      # <17'-11 1/2">
+assert _ri and _offer_of(_ri[0]) == 215.5, _ri
 assert reportrow(vm, "LEFT END (A-D)")[1] == "240.00"
 assert reportrow(vm, "RIGHT END (B-C)")[1] == "215.50"
 print("   both ends offered half the mean side; a typed answer still wins")
@@ -1919,7 +1936,7 @@ _sz = [p for p, a in vm.prompts if "Radius for" in p or "Cut face length for" in
 # A offered no default (first), B offered 20 back (same treatment),
 # C offered none (Radius -> Cut must not carry 20" across)
 assert "<" not in _sz[0], _sz[0]
-assert "<20" in _sz[1], _sz[1]
+assert _offer_of(_sz[1]) == 20.0, _sz[1]            # <1'-8">
 assert "Cut face length for Corner C" in _sz[2] and "<" not in _sz[2], _sz[2]
 print("   size default only survives when the treatment is unchanged")
 
@@ -2099,7 +2116,8 @@ vm = run(["Insquare", "Rectangle"] + BASE +
          "R36b")
 _msg = [s for s in vm.printed if "Too large" in s]
 assert len(_msg) == 1, _msg
-assert "120" in _msg[0], _msg[0]
+# a princ under POOL's LUNITS 4 and the drafter's DIMZIN 0: 120 is 10'
+assert "max 10'." in _msg[0], _msg[0]
 # and the maximum it prints is one the prompt would accept
 vm = run(["Insquare", "Rectangle"] + BASE +
          [480.0, 240.0, "Radius", 200.0, 120.0, "No"], "R36c")

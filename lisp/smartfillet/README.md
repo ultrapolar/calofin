@@ -118,7 +118,10 @@ at a different size:
   an error. The empty layer is left behind; a `PURGE` clears it.
 * **Enter means different things by design.** At the line prompts it
   takes the offered `Cancel` / `Done` — nothing has been drawn yet, so
-  there is nothing to lose. At the pick it re-asks instead: those arcs
+  there is nothing to lose. A click that lands just beside a line is
+  not Enter, though: it says *nothing there* and asks again, so a near
+  miss in the "other corners" loop no longer ends the session and drops
+  the line already picked. At the pick it re-asks instead: those arcs
   are thin, and the near miss that would throw a whole fan away is
   exactly the click that prompt invites. `Cancel` is in the bracket, so
   a mouse-only way out is always there.

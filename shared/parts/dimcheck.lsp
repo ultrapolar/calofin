@@ -118,7 +118,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.26")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.27")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -333,9 +333,26 @@
 ;;;  drawing is xdata under the "DIMCHECK" APPID.
 ;;; ======================================================================
 
-;; A distance as the prompts and the report print it.
+;; A distance as the prompts and the report print it.  Modes 3 and 4
+;; are feet and inches, and rtos spells those after DIMZIN: at 0 (the
+;; acad.dwt setting), 2 or 8 a whole foot came out 15' -- the notation
+;; COVERCHECK, LINFINCHECK and SPACHECK reject as feet with no inches --
+;; in a report written into the drawing.  So a *dchk-dist-mode* tuned
+;; to either is spelled by arithmetic, the same in every drawing.
 (defun dchk:dist (d)
-  (rtos d *dchk-dist-mode* *dchk-dist-prec*))
+  (if (member *dchk-dist-mode* '(3 4))
+    (cal:ftin d *dchk-dist-mode* *dchk-dist-prec*)
+    (rtos d *dchk-dist-mode* *dchk-dist-prec*)))
+
+;; A length in the drawing's own units (LUNITS/LUPREC) -- how the report
+;; quotes a dimension's measurement and an overlap.  A plain (rtos v)
+;; follows DIMZIN in a feet-inch drawing exactly as dchk:dist's modes 3
+;; and 4 did, so LUNITS 3 and 4 are spelled by arithmetic (cal:ftin's);
+;; every other unit keeps rtos, which is what the drafter reads.
+(defun dchk:dist-units (v)
+  (if (member (getvar "LUNITS") '(3 4))
+    (cal:ftin v (getvar "LUNITS") (getvar "LUPREC"))
+    (rtos v)))
 
 ;; The word for an ACI colour, so a message naming a colour follows the
 ;; knob instead of saying "red" whatever the knob holds.
@@ -382,20 +399,27 @@
   (if (and ed (assoc -3 ed))
     (entmod (subst (list -3 (list "DIMCHECK")) (assoc -3 ed) ed))))
 
-(defun dchk:clear-old (/ ss2 i e xd n)
+(defun dchk:clear-old (/ ss2 i e xd n stuck)
   ;; erase the report and marker lines left by an earlier DIMCHECK
-  ;; run, so a rerun replaces them instead of stacking on top
-  (setq ss2 (ssget "_X" '((-3 ("DIMCHECK")))) n 0 i 0)
+  ;; run, so a rerun replaces them instead of stacking on top.  DIMSCAN
+  ;; unlocks only the report layer, so a marker line on a locked
+  ;; construction layer refuses the erase: it is counted as left, not
+  ;; as removed
+  (setq ss2 (ssget "_X" '((-3 ("DIMCHECK")))) n 0 stuck 0 i 0)
   (if ss2
     (repeat (sslength ss2)
       (setq e  (ssname ss2 i)
             i  (1+ i)
             xd (dchk:xd e))
       (if (member (cdr (assoc 1000 xd)) '("REPORT" "XLINE"))
-        (progn (entdel e) (setq n (1+ n))))))
+        (if (entdel e) (setq n (1+ n)) (setq stuck (1+ stuck))))))
   (if (> n 0)
     (princ (strcat "\n(Removed " (itoa n)
-                   " report/marker item(s) from an earlier DIMCHECK run.)"))))
+                   " report/marker item(s) from an earlier DIMCHECK run.)")))
+  (if (> stuck 0)
+    (princ (strcat "\n(" (itoa stuck)
+                   " report/marker item(s) from an earlier DIMCHECK run are"
+                   " on a locked layer - NOT removed.)"))))
 
 (defun dchk:layer-locked-p (name / ld)
   (setq ld (tblsearch "LAYER" name))
@@ -418,7 +442,7 @@
       (setq found T)))
   found)
 
-(defun c:DIMCHECKRESCUE ( / *error* undo-open ss i e xd n)
+(defun c:DIMCHECKRESCUE ( / *error* undo-open ss i e xd n stuck)
   ;; entdel/entmod over the whole drawing was N undos deep and
   ;; had no handler at all -- now one group, closed on both exits,
   ;; and a cancel that says nothing
@@ -436,8 +460,12 @@
     (progn (command "_.UNDO" "_Begin") (setq undo-open T)))
   ;; the way out after a crash or interrupted run: puts back every
   ;; colour DIMCHECK stashed (flag colours included) and removes its
-  ;; report and marker lines
-  (setq ss (ssget "_X" '((-3 ("DIMCHECK")))) n 0 i 0)
+  ;; report and marker lines.  Only a write that TOOK is counted: on a
+  ;; locked layer entdel and entmod answer nil and change nothing, and
+  ;; counting the attempts said "restored" over a dimension still red.
+  ;; A colour that would not go back keeps its stash, so a rerun once
+  ;; the layer is unlocked still knows the original
+  (setq ss (ssget "_X" '((-3 ("DIMCHECK")))) n 0 stuck 0 i 0)
   (if ss
     (repeat (sslength ss)
       (setq e  (ssname ss i)
@@ -445,15 +473,20 @@
             xd (dchk:xd e))
       (cond
         ((member (cdr (assoc 1000 xd)) '("REPORT" "XLINE"))
-         (entdel e)
-         (setq n (1+ n)))
+         (if (entdel e) (setq n (1+ n)) (setq stuck (1+ stuck))))
         ((assoc 1071 xd)
-         (dchk:set-color e (cdr (assoc 1071 xd)))
-         (dchk:unstash e)
-         (setq n (1+ n))))))
-  (if (> n 0)
-    (princ (strcat "\nDIMCHECKRESCUE: restored or removed " (itoa n) " item(s)."))
-    (princ "\nDIMCHECKRESCUE: nothing to restore - no DIMCHECK markers in the drawing."))
+         (if (dchk:set-color e (cdr (assoc 1071 xd)))
+           (progn (dchk:unstash e) (setq n (1+ n)))
+           (setq stuck (1+ stuck)))))))
+  (cond
+    ((> n 0)
+     (princ (strcat "\nDIMCHECKRESCUE: restored or removed " (itoa n) " item(s).")))
+    ((= stuck 0)
+     (princ "\nDIMCHECKRESCUE: nothing to restore - no DIMCHECK markers in the drawing.")))
+  (if (> stuck 0)
+    (princ (strcat "\nDIMCHECKRESCUE: " (itoa stuck)
+                   " item(s) on locked layer(s) NOT restored - unlock and"
+                   " run DIMCHECKRESCUE again.")))
   (if undo-open (progn (command "_.UNDO" "_End") (setq undo-open nil)))
   (if lzd:end (lzd:end "DIMCHECKRESCUE"))
   (princ))
@@ -999,7 +1032,7 @@
     ((= dtype 1)                              ; aligned: point-to-point
      (setq p13 (cdr (assoc 13 ed))
            p14 (cdr (assoc 14 ed)))
-     (if (and p13 p14) (rtos (distance p13 p14))))
+     (if (and p13 p14) (dchk:dist-units (distance p13 p14))))
     ((= dtype 0)                              ; rotated/linear: project the
      (setq p13 (cdr (assoc 13 ed))            ; points onto the dim direction
            p14 (cdr (assoc 14 ed))
@@ -1008,12 +1041,12 @@
        (progn
          (if (null ang) (setq ang 0.0))
          (setq v (mapcar '- p14 p13))
-         (rtos (abs (+ (* (car v) (cos ang))
+         (dchk:dist-units (abs (+ (* (car v) (cos ang))
                        (* (cadr v) (sin ang))))))))
     ((member dtype '(2 5))                    ; angular: show the angle
      (if (and meas (>= meas 0.0)) (angtos meas)))
     (t                                        ; radius/diameter/ordinate
-     (if (and meas (>= meas 0.0)) (rtos meas)))))
+     (if (and meas (>= meas 0.0)) (dchk:dist-units meas)))))
 
 (defun dchk:dim-def-pts (ent / ed dtype p13 p14)
   ;; the two definition points of a linear/aligned dimension (the ones
@@ -1409,7 +1442,7 @@
             kinds     (if (and (dchk:whole-line-p la) (dchk:whole-line-p lb))
                         "lines"
                         "segments")
-            label     (strcat h1 "+" h2 " (overlap " (rtos (caddr info)) ")"))
+            label     (strcat h1 "+" h2 " (overlap " (dchk:dist-units (caddr info)) ")"))
       (dchk:zoom-2ents ea eb)
       (redraw ea 3)
       (redraw eb 3)
@@ -2132,7 +2165,7 @@
                                  "+"
                                  (cdr (assoc 5 (entget (dchk:seg-ent (cadr pr)))))
                                  ": OVERLAP of "
-                                 (rtos (caddr (dchk:overlap-info (car pr) (cadr pr))))
+                                 (dchk:dist-units (caddr (dchk:overlap-info (car pr) (cadr pr))))
                                  " - flagged")
                          lines)))
 
@@ -2271,23 +2304,29 @@
                  '(100 . "AcDbLine") (cons 10 p1) (cons 11 p2)))
   (entlast))
 
-(defun dchk:tut-dim (p1 p2 dimpt rot / old res)
+(defun dchk:tut-dim (p1 p2 dimpt rot lay / old oldlay res)
   ;; a linear dimension, made with the command so it is valid in any
   ;; release; osnap is muted so the picks land exactly where told,
   ;; and the command is caught so a failure cannot skip the restore -
-  ;; the tutorial's handler has no way to put OSMODE back
-  (setq old (getvar "OSMODE"))
+  ;; the tutorial's handler has no way to put OSMODE back.  The
+  ;; command draws on the current layer, so LAY is made current for
+  ;; it: on a current layer the drafter had locked the practice
+  ;; dimension could never be erased again
+  (setq old    (getvar "OSMODE")
+        oldlay (getvar "CLAYER"))
   (setvar "OSMODE" 0)
+  (setvar "CLAYER" lay)
   (setq res (vl-catch-all-apply
               '(lambda ()
                  (if (zerop rot)
                    (command "_.DIMLINEAR" p1 p2 "_H" dimpt)
                    (command "_.DIMLINEAR" p1 p2 "_V" dimpt)))
               nil))
+  (setvar "CLAYER" oldlay)
   (setvar "OSMODE" old)
   (entlast))
 
-(defun dchk:tut-demo (/ org ox oy made e ss2 i rmark nx)
+(defun dchk:tut-demo (/ org ox oy made e ss2 i rmark nx lay stuck)
   (princ "\n\n--- DEMO: a practice drawing with faults planted in it ---")
   (setq org (getpoint "\n  Pick an empty spot for the practice drawing: "))
   (if lzd:ask (lzd:ask "\n  Pick an empty spot for the practice drawing: " org) org)
@@ -2297,13 +2336,19 @@
       (setq org (trans org 1 0)
             ox  (car org)
             oy  (cadr org)
-            made nil)
+            made nil
+            ;; the practice drawing's own layer, made or unlocked here:
+            ;; on layer 0 it was drawn wherever the drafter had locked
+            ;; 0, and the erase at the end was refused object by object
+            ;; under "Practice drawing erased."
+            lay "DIMCHECK-TUTORIAL")
+      (cal:ensure-layer lay 7)
 
       ;; --- fault 1: two lines overlapping ------------------------
       (setq made (cons (dchk:tut-line (list ox oy 0.0)
-                                      (list (+ ox 100.0) oy 0.0) "0") made))
+                                      (list (+ ox 100.0) oy 0.0) lay) made))
       (setq made (cons (dchk:tut-line (list (+ ox 60.0) oy 0.0)
-                                      (list (+ ox 180.0) oy 0.0) "0") made))
+                                      (list (+ ox 180.0) oy 0.0) lay) made))
       (command "_.ZOOM" "_Object" (car made) "")
       (command "_.ZOOM" "_0.4x")
       (dchk:tut-pause
@@ -2314,10 +2359,10 @@
 
       ;; --- fault 2: a dim whose point misses the line -------------
       (setq made (cons (dchk:tut-line (list ox (+ oy 80.0) 0.0)
-                                      (list (+ ox 120.0) (+ oy 80.0) 0.0) "0") made))
+                                      (list (+ ox 120.0) (+ oy 80.0) 0.0) lay) made))
       (setq e (dchk:tut-dim (list ox (+ oy 80.0) 0.0)
                             (list (+ ox 120.0) (+ oy 88.0) 0.0)   ; 8 units OFF the line
-                            (list (+ ox 60.0) (+ oy 110.0) 0.0) 0))
+                            (list (+ ox 60.0) (+ oy 110.0) 0.0) 0 lay))
       (if e (setq made (cons e made)))
       (command "_.ZOOM" "_Window"
                (trans (list (- ox 20.0) (+ oy 50.0) 0.0) 0 1)
@@ -2332,7 +2377,7 @@
                 "  question and the whole dimension turns RED to fix later."))
 
       ;; --- fault 3: an arc floating free --------------------------
-      (entmake (list '(0 . "ARC") '(100 . "AcDbEntity") '(8 . "0")
+      (entmake (list '(0 . "ARC") '(100 . "AcDbEntity") (cons 8 lay)
                      '(100 . "AcDbCircle")
                      (cons 10 (list (+ ox 220.0) (+ oy 40.0) 0.0))
                      (cons 40 30.0) '(100 . "AcDbArc")
@@ -2379,9 +2424,13 @@
           (dchk:scan)))
       (if (cal:ask-yn "\n  Erase the practice drawing now?" "Yes")
         (progn
-          (setq i 0)
+          ;; an erase that is refused (a locked layer) is counted, so
+          ;; the line at the end never says "erased" over objects that
+          ;; are still on screen
+          (setq i 0 stuck 0)
           (repeat (sslength ss2)
-            (if (entget (ssname ss2 i)) (entdel (ssname ss2 i)))
+            (if (entget (ssname ss2 i))
+              (if (not (entdel (ssname ss2 i))) (setq stuck (1+ stuck))))
             (setq i (1+ i)))
           ;; ...and the report the scan wrote for it, and nothing
           ;; older: the report layer is where EVERY scan in the drawing
@@ -2396,13 +2445,17 @@
                 (setq nx (entnext e))
                 (if (= (strcase (cdr (assoc 8 (entget e))))
                        (strcase *dchk-report-layer*))
-                  (entdel e))
+                  (if (not (entdel e)) (setq stuck (1+ stuck))))
                 (setq e nx))))
-          (princ "\n  Practice drawing erased."))
+          (if (= stuck 0)
+            (princ "\n  Practice drawing erased.")
+            (princ (strcat "\n  " (itoa stuck)
+                           " object(s) of the practice run on a locked layer NOT erased"
+                           " - unlock the layer and erase them by hand."))))
         (princ "\n  Left in place - one U removes the whole tutorial."))
       (princ))))
 
-(defun c:TUTORIALDIMCHECK ( / *error* oldecho os0 undo-open ans l ins h
+(defun c:TUTORIALDIMCHECK ( / *error* oldecho os0 cl0 undo-open ans l ins h
                              sstep)
   (defun *error* (msg)
     ;; object snaps first, before anything below it can throw.
@@ -2410,6 +2463,9 @@
     ;; from a local of its own, which this handler cannot see -- so
     ;; the tutorial holds the drafter's value itself
     (if os0 (setvar "OSMODE" os0))
+    ;; ...and the current layer, which it makes the practice layer for
+    ;; the same DIMLINEAR
+    (if cl0 (setvar "CLAYER" cl0))
     (if undo-open (progn (setvar "CMDECHO" 0) (vl-catch-all-apply 'command-s (list "_.UNDO" "_End"))))
     (if oldecho (setvar "CMDECHO" oldecho))
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
@@ -2429,7 +2485,7 @@
   (if lzd:ask (lzd:ask "\n  Read the Checks, Demo them on a practice drawing, or Both? [Checks/Demo/Both] <Both>: " ans) ans)
   (if (null ans) (setq ans "Both"))
   (if (= ans "LIST") (setq ans "Checks"))
-  (setq oldecho (getvar "CMDECHO") os0 (getvar "OSMODE"))
+  (setq oldecho (getvar "CMDECHO") os0 (getvar "OSMODE") cl0 (getvar "CLAYER"))
   (setvar "CMDECHO" 0)
   ;; only when undo is recording - _Begin in a drawing with UNDO
   ;; off (bit 1 of UNDOCTL clear) errors out of the command

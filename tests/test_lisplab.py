@@ -193,9 +193,16 @@ for fn in SORTS:
     got = plain(call(vm, fn, list(lst), Sym('<')))
     check(f'{fn} keeps both 3s ({len(lst)} in, {len(got)} out)',
           len(got) == len(lst) and got.count(3.0) == 2)
-dropped = plain(BUILTINS[Sym('vl-sort')](vm, [list(lst), Sym('<')]))
-check('vl-sort really does drop one -- the trap the lesson claims',
-      len(dropped) == len(lst) - 1 and dropped.count(3.0) == 1)
+# the trap is an EQ one: two equal INTEGERS are the same object and
+# vl-sort drops one, two equal reals are not and it keeps both -- which
+# is why the demo sorts the radii as whole numbers
+ints = [int(x) for x in lst]
+dropped = plain(BUILTINS[Sym('vl-sort')](vm, [list(ints), Sym('<')]))
+check('vl-sort really does drop one integer -- the trap the lesson claims',
+      len(dropped) == len(ints) - 1 and dropped.count(3) == 1)
+kept = plain(BUILTINS[Sym('vl-sort')](vm, [list(lst), Sym('<')]))
+check('...and keeps both equal reals, as the lesson now says',
+      len(kept) == len(lst) and kept.count(3.0) == 2)
 keep = plain(BUILTINS[Sym('vl-sort-i')](vm, [list(lst), Sym('<')]))
 check('vl-sort-i keeps all seven, as indexes',
       keep == [1, 3, 5, 0, 6, 2, 4])

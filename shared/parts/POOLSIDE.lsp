@@ -64,7 +64,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.13")
+(setq *poolside-version* "v1.14")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -942,8 +942,9 @@
                    (rtos wh) ") -- re-enter."))
     (setq dp (psd:ask "D - deep end depth" psd:*deepdepth-ladder*)))
   (while (or (< c2 wh) (> c2 dp))
-    (princ (strcat "\nC2 must be between C (" (rtos wh) ") and D ("
-                   (rtos dp) ") -- re-enter."))
+    (princ (strcat "\nC2 must be between C ("
+                   (rtos (cal:ceil-shown wh)) ") and D ("
+                   (rtos (cal:floor-shown dp)) ") -- re-enter."))
     (setq c2 (psd:ask "C2 - depth where the shallow floor meets the break"
                       psd:*breakdepth-ladder*)))
   (psd:pvkill)

@@ -3,8 +3,9 @@
 """PERPPTS, CPERPPTS, their tutorials and PERPMARK, run the way AutoCAD
 runs them where the stock VM is kinder than AutoCAD is.
 
-Four things the stock VM cannot see, each modelled here, inside the
-test, rather than in tests/lispvm.py:
+Four things the stock VM could not see.  The first is modelled in
+tests/lispvm.py now; the other three are modelled here, inside the
+test:
 
 * THE ERROR MODE.  Under *push-error-using-command* AutoCAD resets the
   evaluator before *error* runs: the handler it calls is the one in
@@ -12,12 +13,12 @@ test, rather than in tests/lispvm.py:
   its locals read nil and its local helpers are undefined.  In the
   default mode the stack is live, command-s is fine and a bare
   (command) from inside *error* is refused.  A pop with nothing pushed
-  is AutoCAD's "(*pop-error-mode*) underflow".  The stock VM keeps
-  every frame live in both modes, so PERPPTS's handler -- nothing but a
+  is AutoCAD's "(*pop-error-mode*) underflow".  The VM kept every
+  frame live in both modes, so PERPPTS's handler -- nothing but a
   call to its LOCAL perp:finish, behind a push -- passed every test and
   died at its first form in AutoCAD: OSMODE left at 0, the drafter on
   PERPPTS-TEMP, the guides in the drawing, no report, and the mode left
-  pushed for the session.
+  pushed for the session.  (tests/test_lispvm_errmode.py pins it.)
 * PLINEWID.  The stock VM does not seed it, and its PLINE ignores it.
   PLINE starts every polyline at it, so a width left behind by an
   earlier PLINE made every measured course a heavy band.
@@ -43,7 +44,6 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
-import lispvm  # noqa: E402
 from lispvm import VM, Ent, Dot, Sym, NIL, LispError, BUILTINS  # noqa: E402
 import test_perp_points as tpp  # noqa: E402
 import test_perpmark as tpm  # noqa: E402
@@ -84,22 +84,21 @@ def tier_path(path):
     return os.path.join(REPO, root, 'parts', name)
 
 
-# ---- AutoCAD's two error modes, modelled ------------------------------
-
-class HandlerDeath(LispError):
-    """The *error* handler itself threw: every form after the one that
-    threw was skipped -- the restores, the undo close, the report."""
-
+# ---- AutoCAD's two error modes ----------------------------------------
+# tests/lispvm.py models them itself now (tests/test_lispvm_errmode.py):
+# a pushed handler runs with the stack reset, a bare (command) is refused
+# in a default-mode one, a pop with nothing pushed fails the run, and a
+# handler that dies raises lispvm.HandlerDeath and is named in
+# vm.handler_deaths.  What is left here is the undo count the test's own
+# (command) stand-in does not keep.
 
 @contextlib.contextmanager
 def autocad_error_modes(vm):
-    """Run VM under the two error modes as AutoCAD has them.  Installed
-    AFTER the test's own (command) stand-in, which it wraps."""
-    orig_call_defun = VM.call_defun
+    """Run VM with the undo groups counted through the test's (command)
+    stand-in, and a group left open failing the run.  Installed AFTER
+    the stand-in, which it wraps."""
     orig_check = VM._check_balanced
     inner = BUILTINS[Sym('command')]
-    orig_command_s = BUILTINS[Sym('command-s')]
-    vm.handler_deaths = []
     vm.undo_open = 0
 
     def counted(vm_, a):
@@ -115,95 +114,18 @@ def autocad_error_modes(vm):
                 vm_.undo_open -= 1
         return inner(vm_, a)
 
-    def command(vm_, a):
-        if vm_._in_handler and vm_.error_mode_depth == 0:
-            raise LispError("Cannot invoke (command) from *error* without "
-                            "prior call to (*push-error-using-command*)", vm_)
-        return counted(vm_, a)
-
-    def command_s(vm_, a):
-        if vm_._in_handler and vm_.error_mode_depth > 0:
-            raise lispvm.HandlerAbort("INTERNAL error in FAIL: command-s "
-                                      "inside *error* while the mode is "
-                                      "pushed", vm_)
-        return counted(vm_, a)
-
-    def call_defun(self, name, fn, args):
-        _, params, locals_, body = fn
-        if len(args) != len(params):
-            raise LispError(f"{name}: expected {len(params)} args, "
-                            f"got {len(args)}", self)
-        frame = dict(zip(params, args))
-        for loc in locals_:
-            frame[loc] = NIL
-        self.stack.append(frame)
-        self.calls.append(name)
-        try:
-            r = NIL
-            for form in body:
-                r = self.eval(form)
-            return r
-        except LispError as e:
-            if (self.handle_errors and not self._catch_depth
-                    and not self._in_handler
-                    and not getattr(e, 'handled', False)):
-                # the handler in force AT the failure, resolved before
-                # anything unwinds...
-                h = self.get(Sym('*error*'))
-                if (isinstance(h, tuple) and h[0] == 'defun') or (
-                        isinstance(h, list) and h and h[0] == 'lambda'):
-                    e.handled = True
-                    msg = str(e).split('\n')[0]
-                    self.handled_errors.append(msg)
-                    self._in_handler = True
-                    # ...then run with the stack gone, when pushed
-                    unwind = self.error_mode_depth > 0
-                    saved = self.stack
-                    if unwind:
-                        self.stack = []
-                    try:
-                        if isinstance(h, tuple):
-                            orig_call_defun(self, Sym('*error*'), h, [msg])
-                        else:
-                            self.call_lambda(h, [msg])
-                    except LispError as inner_e:
-                        first = str(inner_e).splitlines()[0]
-                        self.handler_deaths.append(first)
-                        death = HandlerDeath(
-                            "*error* handler died%s: %s"
-                            % (" (stack unwound by the pushed mode)"
-                               if unwind else "", first), self)
-                        death.handled = True
-                        raise death
-                    finally:
-                        if unwind:
-                            self.stack = saved
-                        self._in_handler = False
-            raise
-        finally:
-            self.stack.pop()
-            self.calls.pop()
-
     def check_balanced(self, name):
         orig_check(self, name)
-        if self.error_mode_underflow:
-            raise LispError(f"{name} popped the error mode with nothing "
-                            f"pushed ({self.error_mode_underflow} time(s))",
-                            self)
         if self.undo_open:
             raise LispError(f"{name} returned with {self.undo_open} undo "
                             f"group(s) still open", self)
 
-    BUILTINS[Sym('command')] = command
-    BUILTINS[Sym('command-s')] = command_s
-    VM.call_defun = call_defun
+    BUILTINS[Sym('command')] = counted
     VM._check_balanced = check_balanced
     try:
         yield vm
     finally:
         BUILTINS[Sym('command')] = inner
-        BUILTINS[Sym('command-s')] = orig_command_s
-        VM.call_defun = orig_call_defun
         VM._check_balanced = orig_check
 
 

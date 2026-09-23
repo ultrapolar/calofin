@@ -127,7 +127,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092226 REV41")
+(setq pool:*version* "092326 REV42")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -3916,7 +3916,7 @@
 ;; (getdist keeps only the value, never the text typed, so the
 ;; drawing's own units are the crew's declared preference.)
 (defun pool:fmtlen (v)
-  (if pool:*ftin* (rtos v 4 4) (rtos v 2 2)))
+  (if pool:*ftin* (cal:ftin v 4 4) (rtos v 2 2)))
 
 ;; DELTA is always plain signed inches -- a delta is a small number
 ;; and reads best that way whichever units the lengths are in.
@@ -3953,26 +3953,50 @@
 ;; 2/16) to the smallest terms a crew reads it in (1/8).
 (defun pool:igcd (a b) (if (= b 0) a (pool:igcd b (rem a b))))
 
+;; pool:*given-den* as both spellings of a Given mark read it: a whole
+;; number, 1 or more, or the shipped 8.  The knob is read where it is
+;; used because LAZTUNE writes it after load: a 0 read every fraction up
+;; to the next whole inch (20 1/2" came out 21"), and a non-number
+;; stopped the report part-drawn.
+(defun pool:givenden ( / d)
+  (setq d pool:*given-den*)
+  (if (and (numberp d) (>= d 1) (equal d (fix d) 1.0e-9))
+      (fix d)
+      8))
+
 ;; V (inches) as bare inches with a fraction, no feet broken out --
 ;; pool:*smalldim*'s "small dimensions read in inches" applied to a
 ;; Given mark's text instead of a dimension style.
-(defun pool:inchtxt (v / whole num g)
-  (setq whole (fix (+ v 1.0e-6))
-        num   (fix (+ (* (- v whole) pool:*given-den*) 0.5)))
-  (if (>= num pool:*given-den*) (setq whole (1+ whole) num 0))
+(defun pool:inchtxt (v / whole num g den)
+  (setq den   (pool:givenden)
+        whole (fix (+ v 1.0e-6))
+        num   (fix (+ (* (- v whole) den) 0.5)))
+  (if (>= num den) (setq whole (1+ whole) num 0))
   (if (= num 0)
       (itoa whole)
       (progn
-        (setq g (pool:igcd num pool:*given-den*))
+        (setq g (pool:igcd num den))
         (strcat (itoa whole) " " (itoa (/ num g)) "/"
-                (itoa (/ pool:*given-den* g))))))
+                (itoa (/ den g))))))
 
 ;; The formal "as given" reading of V: plain inches under
 ;; pool:*smalldim*, feet-inches (nearest 1/*given-den*) at or past it.
 (defun pool:fmtgiven (v)
   (if (< v pool:*smalldim*)
       (strcat (pool:inchtxt v) "\"")
-      (rtos v 4 3)))
+      (pool:givenft v)))
+
+;; A Given mark's feet-inches -- one spelling for the mark as drawn and
+;; the mark flipped back, so the two cannot drift -- read to the same
+;; 1/*given-den* as its plain-inch spelling.  It was fixed at the eighth
+;; whatever the knob said, so with 16 a mark read 20 1/16" and flipped to
+;; 1'-8 1/8": the same number, two values.  Architectural text only reads
+;; a power of two (1/1 to 1/256), so any other den keeps the shipped 1/8.
+(defun pool:givenft (v / den p d)
+  (setq den (pool:givenden) p 0 d 1)
+  (while (and (< d den) (< p 8))
+    (setq p (1+ p) d (* d 2)))
+  (cal:ftin v 4 (if (= d den) p 3)))
 
 ;; Ask once, after a failed run, whether to mark every row the fit
 ;; could not honor with the crew's original number.  FAILP is the
@@ -4022,7 +4046,7 @@
                   (cons 1 (strcat
                             (if (wcmatch cur "*'*")
                                 (strcat (pool:inchtxt v) "\"")
-                                (rtos v 4 3))
+                                (pool:givenft v))
                             " Given"))
                   (assoc 1 ed) ed)))))
 
@@ -4825,7 +4849,8 @@
                     (> (setq sb (* sz (pool:cornerk ty wed)))
                        (+ maxsb pool:*capfuzz*)))
           (princ (strcat "\nToo large for this corner's walls -- max "
-                         (rtos (/ maxsb (pool:cornerk ty wed)))
+                         (rtos (cal:floor-shown
+                                 (/ maxsb (pool:cornerk ty wed))))
                          ".  Re-enter."))
           ;; the same question again, so the same ruler: a rung over the
           ;; cap is still shown, since what will not fit here is what
@@ -5291,8 +5316,11 @@
 (defun pool:askc2 (msg ents wh dp ladder / c2)
   (setq c2 (pool:askh msg ents ladder))
   (while (or (< c2 wh) (> c2 dp))
-    (princ (strcat "\nC2 must be between C (" (rtos wh) ") and D ("
-                   (rtos dp) ") -- re-enter."))
+    ;; both ends said as the prompt takes them back: a D of 72.22 shown
+    ;; rounded read 6'-0 1/4", and typing that was refused as too deep
+    (princ (strcat "\nC2 must be between C ("
+                   (rtos (cal:ceil-shown wh)) ") and D ("
+                   (rtos (cal:floor-shown dp)) ") -- re-enter."))
     (setq c2 (pool:askh msg ents ladder)))
   c2)
 

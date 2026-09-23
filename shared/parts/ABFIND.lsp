@@ -395,7 +395,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.20")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.21")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -770,7 +770,7 @@
 ;; and so does one that misses by less than abf:*touch* - half of what
 ;; the readings are printed to.  Without that band the arithmetic finds
 ;; a gap the drawing cannot print, and the command answers a pair of
-;; readings that DO meet with "the two arcs fall 0" short of each
+;; readings that DO meet with "the two arcs fall 0'-0" short of each
 ;; other" and a table of readings to replace them with.
 (defun abf:reach (pa pb ra rb / d)
   (setq d (cal:dist pa pb))
@@ -1032,8 +1032,12 @@
 
 ;;; ---------------------- readings and misreadings ----------------------
 
-;; A distance the way the sheet writes it.
-(defun abf:fmt (d) (rtos d 4 abf:*prec*))
+;; A distance the way the sheet writes it, spelled by arithmetic
+;; (cal:ftin's), not rtos: rtos spells feet and inches after DIMZIN,
+;; and at 0 (acad.dwt's) the note ABFIND leaves on a created point read
+;; "A 15' held" for 15'-0" and "7 1/2"" for 0'-7 1/2" -- the notation
+;; the review tools reject.
+(defun abf:fmt (d) (cal:ftin d 4 abf:*prec*))
 
 ;; D's architectural reading as (feet whole-inches).  Rounded to the
 ;; nearest 1/16 first, so a distance a hair under a whole inch reads as

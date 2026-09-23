@@ -320,8 +320,12 @@ check("every pad is on the PADS layer",
       {vm.layer_of(e) for e in pad_ents(vm, n0)} == {"PADS"})
 check("every pad is square to the X/Y axes",
       all(abs(dxf(vm, e, 50) or 0.0) < 1e-9 for e in pad_ents(vm, n0)))
+# UPADOVER's lengths are command-line text spelled by (rtos n 4 0) under
+# the drafter's DIMZIN, and acad.dwt's DIMZIN 0 drops zero inches: AutoCAD
+# prints 20', never the 20'-0" the old DIMZIN-blind VM did.  (Text that
+# stays in the drawing is another matter -- tools/check_values.py.)
 check("it reported the count, the layer and the run",
-      said(vm, '8 36" pad(s) on layer "PADS", covering 20\'-0"'))
+      said(vm, '8 36" pad(s) on layer "PADS", covering 20\' of perimeter'))
 check("and which two points it ran between",
       said(vm, "from Pt.1 to Pt.2"))
 
@@ -422,9 +426,9 @@ check("and the second end is never asked for at all",
 check("it covered the line exactly as the two-point run would",
       cs == [(x, 0.0) for x in (0, 36, 72, 108, 144, 180, 216, 252)], f"{cs}")
 check("it said it padded the whole of it, end to end",
-      said(vm, "covering the whole 20'-0\" of it, end to end"))
+      said(vm, "covering the whole 20' of it, end to end"))
 check("an open run says how long it is, and that Whole is there",
-      said(vm, "an open run, 20'-0\" long.  Whole at the next question"))
+      said(vm, "an open run, 20' long.  Whole at the next question"))
 
 print("UPADOVER -- Whole on a polyline follows its arcs too")
 vm = fresh()
@@ -452,7 +456,7 @@ check("a whole loop: no two pads lie over each other", not overlaps(cs),
 check("the way round is not a question when the answer is both ways",
       not asked(vm, "Click a spot the run passes through"))
 check("it said it came back round to where it started",
-      said(vm, "the whole 60'-0\" of it, back round to where it started"))
+      said(vm, "the whole 60' of it, back round to where it started"))
 #: A loop is the one run that cannot come out whole: it closes on its
 #: own first pad, and the stretch left over takes no pad without lying
 #: over that one.  So the tool says how much -- and what it says is
@@ -478,7 +482,7 @@ run(vm, [per, [0.0, 0.0, 0.0], [240.0, 0.0, 0.0]], "shorter")
 check("it never put the way-round question",
       not asked(vm, "Click a spot the run passes through"))
 check("it said which way it went and what the other way would have been",
-      said(vm, "the shorter way round, 20'-0\" against 40'-0\""))
+      said(vm, "the shorter way round, 20' against 40' the other way"))
 check("and it padded the short side",
       all(c[1] == 0.0 for c in centres(vm, n0)), f"{centres(vm, n0)}")
 

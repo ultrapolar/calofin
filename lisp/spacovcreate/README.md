@@ -240,7 +240,7 @@ file loads.
 
 | Knob | Default | What moves when you change it |
 | --- | --- | --- |
-| `scv:*offset-dflt*` | `6.0` | the lap Enter takes at question 2 |
+| `scv:*offset-dflt*` | `6.0` | the lap Enter takes at question 2. More than 0, or Enter takes 6.0 instead -- a 0 or a negative would draw the cover on or inside the spa |
 | `scv:*filter*` | curves only | what the selection is allowed to hand the command |
 | `scv:*taper-dflt*` | `"4-2"` | the taper assumed when nobody gives one |
 | `scv:*grade-dflt*` | `"STANDARD"` | the grade assumed with it |

@@ -180,7 +180,7 @@ label-pairing distance).
 | `*ABL-EXACT-EPS*` | `0.001` | Two points closer than this are one shot |
 | `*ABL-FIT-EPS*` | `0.01` | How close an arc must pass to an interior point to count as passing *through* it |
 | `*ABL-ON-EPS*` | `0.25` | A point within this of the result is reported as ON it |
-| `*ABL-MISS-PCT*` | `0.15` | Share of the points (rounded up) allowed off the run -- the default step 2 offers |
+| `*ABL-MISS-PCT*` | `0.15` | Share of the points (rounded up) allowed off the run -- the default step 2 offers; a fraction from 0 to 1, and anything else is offered as 0.15 |
 | `*ABL-CORNER-ANG*` | `(/ pi 4.0)` | A point turning more than this is a corner on its own, exempt from the tangency rule |
 | `*ABL-NICE-RADII*` | `'(12.0 6.0 1.0)` | Preferred arc-radius tiers: a radius near one of these is snapped to it |
 | `*ABL-TANG-TOL*` | `(/ pi 22.5)` | Wiggle room from perfect tangency at a joint |

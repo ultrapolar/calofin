@@ -37,7 +37,7 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq *lisplab-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *lisplab-version* "v1.7")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -53,7 +53,7 @@
 
 ;; The sample the demo draws.  Radii are multiples of the size unit the
 ;; demo asks for, and 3 appears TWICE on purpose: the duplicate is what
-;; makes vl-sort's habit of dropping equal items visible in the demo
+;; makes vl-sort's habit of dropping equal INTEGERS visible in the demo
 ;; rather than in your production code.  The second field is the layer:
 ;; 0 = lab:*laya*, 1 = lab:*layb*.
 (setq lab:*sample* '((6 0) (3 1) (9 0) (3 0) (12 1) (5 1) (8 0)))
@@ -316,9 +316,12 @@
       "   drawing.  Write your own to learn, or when you need something"
       "   vl-sort will not do."
       ""
-      "   TRAP, and it is a big one: vl-sort DROPS DUPLICATES.  Seven"
-      "   items went in above and six came out, because the two 3s"
-      "   compared equal in both directions.  Two ways round it:"
+      "   TRAP, and it is a big one: vl-sort DROPS DUPLICATE INTEGERS"
+      "   (and symbols).  Seven items went in above and six came out:"
+      "   the two 3s are the same integer, so one went.  Reals are kept"
+      "   -- (vl-sort '(3.0 3.0) '<) gives both back -- which is exactly"
+      "   why it bites: the same code keeps a list of lengths and loses"
+      "   a list of counts or indexes.  Two ways round it:"
       "     (vl-sort-i lst '<)   the INDEXES in sorted order, nothing"
       "                          lost - then nth them back out"
       "     sort RECORDS, not bare numbers: two circles with the same"
@@ -700,9 +703,14 @@
     "---------------------------------------------------------------------"
     (strcat "  start:  " (lab:fmt nums))
     ""
-    "(0) vl-sort - the built-in, and the duplicate trap:"
-    (strcat "      (vl-sort lst '<)  ->  " (lab:fmt (vl-sort nums '<)))))
-  (setq sorted (vl-sort nums '<))
+    "(0) vl-sort - the built-in, and the duplicate trap.  On the radii"
+    "    as WHOLE numbers, which is where it bites (it keeps equal reals):"
+    (strcat "      (vl-sort lst '<)  ->  "
+            (lab:fmt (vl-sort (mapcar 'fix nums) '<)))))
+  ;; integers on purpose: vl-sort drops an EQ duplicate, and two equal
+  ;; reals are not EQ, so on the floats the demo draws with it would
+  ;; keep both 3s and the trap the lesson is about would not show
+  (setq sorted (vl-sort (mapcar 'fix nums) '<))
   (lab:say (list
     (strcat "    " (itoa (length nums)) " in, " (itoa (length sorted))
             " out"
@@ -866,7 +874,9 @@
     (if (and msg (not (wcmatch (strcase msg)
                                "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLISPLAB error: " msg)))
+    (if lzd:report (lzd:report "LISPLAB" *lisplab-version* msg))
     (princ))
+  (if lzd:begin (lzd:begin "LISPLAB" *lisplab-version*))
 
   ;; no OSMODE: LISPLAB changes none, so listing it would only let the
   ;; lesson put its opening snapshot back over a snap the reader
@@ -913,9 +923,11 @@
           (setq base (getpoint (strcat "\nPick a clear spot for the demo"
                                        " (about 1000 x 500 needed)"
                                        " <0,0>: ")))
+          (if lzd:ask (lzd:ask (getvar "LASTPROMPT") base) base)
           (if (null base) (setq base '(0.0 0.0 0.0)))
           (initget 6)
           (setq u (getdist base "\nDemo size unit <5.0>: "))
+          (if lzd:ask (lzd:ask "\nDemo size unit <5.0>: " u) u)
           (if (null u) (setq u 5.0))
           (setq recs (lab:db-demo base u)
                 drew T)
@@ -957,6 +969,7 @@
   (if undo-open (command "_.UNDO" "_End"))
   (setq undo-open nil)
   (cal:sysrestore)
+  (if lzd:end (lzd:end "LISPLAB"))
   (princ))
 
 (defun c:LISPLABVER ()

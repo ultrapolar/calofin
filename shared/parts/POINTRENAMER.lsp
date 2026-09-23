@@ -61,7 +61,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *pointrenamer-version* "v1.6")
+(setq *pointrenamer-version* "v1.7")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob the tool has, all of them here.
@@ -137,7 +137,8 @@
 ;; the last answer instead (ptr:*band-now*, below).  Zero is refused at
 ;; the prompt (initget 6) -- to mean "only what is exactly on it",
 ;; answer a hair such as 1/16" rather than 0.  Inches, like every
-;; distance here: 6.0 is six inches.
+;; distance here: 6.0 is six inches.  A value here of zero or less is
+;; offered as 6.0.
 (setq ptr:*band* 6.0)
 
 ;; Which way round the FIRST run of a session offers: "Clockwise" or
@@ -152,7 +153,9 @@
 ;; The number the count starts at, offered at every run.  Unlike the
 ;; band and the direction this one is NOT carried between runs: a
 ;; renumber almost always starts at 1, and continuing someone else's
-;; count is the exception you type.  Zero and negatives are refused.
+;; count is the exception you type.  A whole number, 1 or more: zero
+;; and negatives are refused when typed, and a value here that is not
+;; one is offered as 1.
 (setq ptr:*first* 1)
 
 ;; The sysvars saved on the way in and put back on the way out, however
@@ -268,9 +271,15 @@
 
 ;; The band, as a distance.  A band is always needed, so there is no NA
 ;; here: Enter takes the remembered answer.  initget 6 rejects zero and
-;; negatives, as a REQ measurement does.  Returns the number or
-;; CAL-BACK.
+;; negatives, as a REQ measurement does -- but only what is TYPED, and
+;; on the first run of a session DFLT is the ptr:*band* knob: a LAZTUNE
+;; override of -6 was offered as <-0'-6"> and put every point beyond
+;; the band, and one of 0 moved a point sitting on the edge out of it,
+;; and the survey was renumbered either way.  So a default a typed
+;; answer would be refused for is offered as the shipped 6" instead.
+;; Returns the number or CAL-BACK.
 (defun ptr:asklimit (msg dflt back / v)
+  (if (not (and (numberp dflt) (> dflt 0))) (setq dflt 6.0))
   (if back (initget 6 "Back Undo") (initget 6))
   (setq v (getdist (strcat "\n" msg (if back " [Back]" "")
                            " <" (ptr:dstr dflt) ">: ")))
@@ -280,8 +289,12 @@
         (t v)))
 
 ;; The first number to hand out.  A whole number, one or more; Enter
-;; takes the default.  Returns the number or CAL-BACK.
+;; takes the default -- which is the ptr:*first* knob, and initget 6
+;; holds only what is typed: a knob of 0 numbered the survey from 0,
+;; one of -3 from -3.  A default below 1 (or not a whole number) is
+;; offered as 1.  Returns the number or CAL-BACK.
 (defun ptr:asknum (msg dflt back / v)
+  (if (not (and (= (type dflt) 'INT) (> dflt 0))) (setq dflt 1))
   (if back (initget 6 "Back Undo") (initget 6))
   (setq v (getint (strcat "\n" msg (if back " [Back]" "")
                           " <" (itoa dflt) ">: ")))

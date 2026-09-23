@@ -98,7 +98,7 @@
 ;;  this block, and nowhere else in the file.  Edit one and APPLOAD the
 ;;  file again; to try a value for one session, type the setq at the
 ;;  command line, because every knob is read when the command runs.
-(setq *ablobf-version*   "v1.5")     ; announced on load; release_lisp.py
+(setq *ablobf-version*   "v1.6")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *ABL-POOL-LAYER*   "POOL")     ; layer the kept run ends up on -
@@ -165,9 +165,11 @@
 (setq *ABL-ON-EPS*       0.25)       ; a point within this of the result
                                     ; counts as ON it; only points off
                                     ; by more eat into the allowance
-(setq *ABL-MISS-PCT*     0.15)       ; share of the points (rounded UP)
-                                    ; that may sit off the result by up
-                                    ; to the tolerance
+(setq *ABL-MISS-PCT*     0.15)       ; share of the points, as a FRACTION
+                                    ; from 0 to 1 (0.15 is 15%; anything
+                                    ; else is offered as 0.15), rounded
+                                    ; UP, that may sit off the result by
+                                    ; up to the tolerance
 (setq *ABL-CORNER-ANG*   (/ pi 4.0)) ; a point that turns more than this
                                     ; (45 deg) is a sharp corner: it
                                     ; may start or end a span but never
@@ -370,9 +372,19 @@
     (if (> d mx) (setq mx d)))
   mx)
 
+;; *ABL-MISS-PCT* as it may be used: a fraction from 0 to 1, or the
+;; shipped 0.15.  The step's initget and its clamp over 100 hold
+;; only what is TYPED; Enter and every other reader take the knob
+;; as it stands, so a LAZTUNE override of 15 (meant as 15%) was
+;; offered as <1500> and let every point off the line, and one of
+;; -0.1 as <-9>.
+(defun abl:miss-knob ( / v)
+  (setq v *ABL-MISS-PCT*)
+  (if (and (numberp v) (>= v 0) (<= v 1.0)) v 0.15))
+
 ;; The miss percentage in force for the current run.
 (defun abl:misspct ()
-  (if abl-miss-pct abl-miss-pct *ABL-MISS-PCT*))
+  (if abl-miss-pct abl-miss-pct (abl:miss-knob)))
 
 ;; The "on the shape" threshold in force for the current run; scales
 ;; with the tolerance (a quarter of it, never below *ABL-ON-EPS*).
@@ -1454,10 +1466,14 @@
                                         (itoa (+ (length bad)
                                                  (length omit)))
                                         ")")))))
+      ;; the off-by figure is spelled by arithmetic (cal:ftin's), not
+      ;; rtos: rtos follows DIMZIN, and at 0 (acad.dwt's) it wrote
+      ;; 1 7/8" for 0'-1 7/8" and 1' for 1'-0" -- the spelling the
+      ;; review tools reject, in text left on the drawing
       (foreach pair (append keyed okeyed)
         (setq y    (- y (* th 1.6))
               line (strcat "Pt." (abl:pt-name (cdr pair))
-                           "   off by " (rtos (car pair) 4 4)
+                           "   off by " (cal:ftin (car pair) 4 4)
                            (if (abl:memb (cdr pair) omit)
                              *ABL-OMIT-TAIL*
                              "")))
@@ -1997,6 +2013,11 @@
 ;; Share of the points allowed off the line, returned as a fraction;
 ;; DEF is the fraction Enter keeps.
 (defun abl:ask-pct (def back / pct)
+  ;; DEF is the knob on a first asking: held to the range a typed
+  ;; answer is held to BEFORE it is shown, so the prompt never
+  ;; offers <1500> or <-9> and Enter never takes it
+  (if (not (and (numberp def) (>= def 0) (<= def 1.0)))
+    (setq def (abl:miss-knob)))
   (if back (initget 4 "Back Undo") (initget 4))
   (setq pct (getint (strcat "\n  Percent of points allowed off <"
                             (itoa (fix (+ 0.5 (* 100.0 def))))
@@ -2317,7 +2338,7 @@
        (princ "\n\n  Step 2 of 7 - what percent of the points may sit OFF the line")
        (princ "\n  (off, but still within the distance above)?")
        (princ (strcat "\n  Press Enter for the standard "
-                      (itoa (fix (+ 0.5 (* 100.0 *ABL-MISS-PCT*))))
+                      (itoa (fix (+ 0.5 (* 100.0 (abl:miss-knob)))))
                       " percent."))
        (setq v (abl:ask-pct *ABL-MISS-PCT* T))
        (if (eq v 'CAL-BACK)

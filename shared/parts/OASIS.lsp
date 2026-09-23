@@ -229,7 +229,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v9.4")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v9.5")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -2189,20 +2189,27 @@
 ;; A side bulge's radius, re-asked until it fits inside the Y bound.
 ;; A bulge is tangent to the bottom edge, so its top sits at twice its
 ;; radius: any more than half the Y bound and it breaks out of the top.
+;;
+;; The refusal names the TIGHTER of the two bounds, not the first one
+;; tested.  Picked by the Y test, a 40 in a 50 x 60.1 envelope said
+;; 2'-6" or less -- and 30 typed back was refused again on the X bound,
+;; 2'-1" this time, so the drafter was told a limit that was never one.
+;; The tighter bound always fails when the looser one does, so the
+;; message it picks names a real breakout too.
 (defun oasis:ask-bulge (msg side w h / v)
   (setq v (oasis:askdist 'REQ msg nil T oasis:*radius-ladder*))
   (while (and (not (eq v 'OASIS-BACK))
               (or (> (* 2.0 v) (+ h oasis:*fuzz*))
                   (> (* 2.0 v) (+ w oasis:*fuzz*))))
-    (if (> (* 2.0 v) (+ h oasis:*fuzz*))
+    (if (<= h w)
         (princ (strcat "\nA " (rtos v) " " side " bulge stands "
                        (rtos (* 2.0 v)) " tall and breaks out through the"
                        " top of a " (rtos h) " envelope.  "
-                       (rtos (/ h 2.0)) " or less."))
+                       (rtos (cal:floor-shown (/ h 2.0))) " or less."))
         (princ (strcat "\nA " (rtos v) " " side " bulge is "
                        (rtos (* 2.0 v)) " across and breaks out through the"
                        " far side of a " (rtos w) " envelope.  "
-                       (rtos (/ w 2.0)) " or less.")))
+                       (rtos (cal:floor-shown (/ w 2.0))) " or less.")))
     (setq v (oasis:askdist 'REQ msg nil T oasis:*radius-ladder*)))
   v)
 
@@ -2223,7 +2230,8 @@
         ;; bounds, so it is twice its radius both ways
         (princ (strcat "\nA " (rtos v) " corner bulge is " (rtos (* 2.0 v))
                        " both ways and breaks out of a " (rtos w) " x "
-                       (rtos h) " envelope.  " (rtos (/ (min w h) 2.0))
+                       (rtos h) " envelope.  "
+                       (rtos (cal:floor-shown (/ (min w h) 2.0)))
                        " or less."))
         (princ (strcat "\nA " (rtos v) " top bulge and the left bulge lie one"
                        " inside the other, so no tangent radius can join them"
@@ -3283,21 +3291,30 @@
 ;; rules one out is never the number on its own -- it is the number
 ;; against this pool -- so the check is the build itself.  Returns
 ;; (offset bottom), or OASIS-BACK.
-(defun oasis:askhopoff (arcs sh sd / off bot try)
-  (setq bot nil)
+(defun oasis:askhopoff (arcs sh sd / off bot try dflt)
+  ;; The Enter answer is held to what initget 6 holds a typed one to --
+  ;; more than 0 -- because the build below does not refuse it: a knob
+  ;; of 0 put the hopper on the wall and a negative one outside the
+  ;; pool, drawn without a word.  A bad knob falls back to the shipped 18.
+  (setq bot  nil
+        dflt (cond ((and (numberp oasis:*hopoff-last*)
+                         (> oasis:*hopoff-last* 0.0))
+                    oasis:*hopoff-last*)
+                   ((and (numberp oasis:*hopoff*) (> oasis:*hopoff* 0.0))
+                    oasis:*hopoff*)
+                   (18.0)))
   (while (null bot)
     (initget 6 "Back Undo")
     (setq off (getdist
                 (strcat "\nHopper offset in from the wall [Back] <"
-                        (rtos (cond (oasis:*hopoff-last*) (oasis:*hopoff*)))
+                        (rtos dflt)
                         ">: ")))
     (if lzd:ask (lzd:ask "oasis:askhopoff" off) off)
     (cond
       ((and (= (type off) 'STR) (member off '("Back" "Undo")))
        (setq bot 'OASIS-BACK))
       (t
-       (if (null off)
-           (setq off (cond (oasis:*hopoff-last*) (oasis:*hopoff*))))
+       (if (null off) (setq off dflt))
        (setq try (oasis:bottom arcs (car sh) (cadr sh) (car sd) (cadr sd)
                                off))
        (if (= (type try) 'STR)

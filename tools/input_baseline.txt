@@ -1,0 +1,23 @@
+# Every pick whose nil is a decision without reading ERRNO, and every
+# spaced example check_input.py reads as teaching a keystroke, that
+# somebody has READ and decided is right as it stands -- and why.
+# One line per site:  file|the defun|what it asks or says|why
+#
+# The file is matched by its stem, so one line covers the lisp/ tool,
+# its shared/parts twin and its dated releases/ copy.  The middle field
+# is what check_input prints after "asks:" / "says:", computed parts of
+# a prompt in braces.  A line nothing matches any more is reported
+# stale: delete it.
+#
+# A NEW line here is a decision.  For a pick: zero ERRNO before it and
+# ask again on 7 (POINTRENAMER's ptr:ask-perim is the pattern), or say
+# here why a miss may decide it -- and "Enter should mean what it says"
+# is not a reason: zeroing ERRNO and asking again on 7 keeps Enter
+# exactly as it was.  A line here is for a miss that costs the drafter
+# no more than the retype, said out loud.  STICKY takes no line: an
+# ERRNO read that does not answer for its pick is a bug on every path.
+# For a spaced example: dash it (44-1/2, 4'-4-1/2") or say here why no
+# drafter types it.
+lisp/dim_continue/dim_continue.lsp|c:dimcontend|Select the dimension to continue:|a miss is taken as the Enter that ends the command, and it says so: "No dimension selected -- nothing to do".  Nothing is drawn for the pass being asked, chains continued on earlier passes stay, and nothing has to be rebuilt to go on: the cost is retyping the command and picking the next seed, the same question this prompt asks
+lisp/linfincheck/linfincheck.lsp|lfc:tut-checklist|steps are drawn. 40'', 3'-4'', 3' 4 1/2'' and 40.5 all parse,|tutorial prose about the Tech Title block's WALL HEIGHT attribute, which LINFINCHECK reads out of the drawing -- the spellings a drafter may have TYPED INTO THE BLOCK, not a keystroke at any prompt
+lisp/linfincheck/linfincheck.lsp|lfc:tut-checklist|(58'-8'' x 45'-3 5/8'') or any scaled-UP multiple. Smaller ->|tutorial prose giving the title block border's nominal size in the drawing, not an answer to any prompt

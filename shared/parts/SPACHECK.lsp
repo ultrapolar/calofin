@@ -121,7 +121,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.21")
+(setq *spacheck-version* "v1.22")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -357,6 +357,18 @@
   (foreach s lst
     (setq out (if out (strcat out sep s) s)))
   (if out out ""))
+
+;; A length as the report quotes it, in the drawing's own units
+;; (LUNITS/LUPREC).  A plain (rtos v) follows DIMZIN in a feet-inch
+;; drawing: at 0 (acad.dwt's), 2 or 8 a whole foot came out 5' and the
+;; report MTEXT said a dimension "reads 5' but spans ..." -- the very
+;; feet-with-no-inches spelling rule 6 flags, in SPACHECK's own report.
+;; So LUNITS 3 and 4 are spelled by arithmetic; every other unit keeps
+;; rtos, which is what the drafter reads on the sheet.
+(defun spachk:dist (v)
+  (if (member (getvar "LUNITS") '(3 4))
+    (cal:ftin v (getvar "LUNITS") (getvar "LUPREC"))
+    (rtos v)))
 
 ;; "MM/DD/YYYY HH:MM" off the computer clock, for the report's stamp --
 ;; the sheet's own MM/DD/YYYY, the form the Tech Title date is held to.
@@ -717,24 +729,24 @@
           (cond
             ;; out of proportion is wrong whatever its size
             ((> (abs (- sw sh)) (* spachk:*border-tol* (max sw sh)))
-             (cons (strcat (rtos bw) " x " (rtos bh)
+             (cons (strcat (spachk:dist bw) " x " (spachk:dist bh)
                      " - STRETCHED out of proportion (" (rtos sw 2 3)
                      "x wide but " (rtos sh 2 3) "x tall); a spa title"
-                     " block is " (rtos tw) " x " (rtos th)) nil))
+                     " block is " (spachk:dist tw) " x " (spachk:dist th)) nil))
             ;; the size the user asked for by name
             ((and (> sc (- 1.0 spachk:*border-tol*))
                   (< sc (+ 1.0 spachk:*border-tol*)))
-             (cons (strcat (rtos bw) " x " (rtos bh) " - "
+             (cons (strcat (spachk:dist bw) " x " (spachk:dist bh) " - "
                      (rtos spachk:*title-frac* 2 2)
                      "x the liner block, OK") t))
             (t
-             (cons (strcat (rtos bw) " x " (rtos bh) " is "
+             (cons (strcat (spachk:dist bw) " x " (spachk:dist bh) " is "
                      (rtos (* sc spachk:*title-frac*) 2 3)
                      "x the liner block "
-                     (rtos spachk:*liner-w*) " x " (rtos spachk:*liner-h*)
+                     (spachk:dist spachk:*liner-w*) " x " (spachk:dist spachk:*liner-h*)
                      " - a spa title block must be exactly "
                      (rtos spachk:*title-frac* 2 2) "x it ("
-                     (rtos tw) " x " (rtos th) ")") nil))))))))
+                     (spachk:dist tw) " x " (spachk:dist th) ")") nil))))))))
 
 ;; Everything on the border layer, from the selection when it holds the
 ;; border and from the space the drafter is in when it does not.  A
@@ -888,11 +900,11 @@
     (if (spachk:inside-p watbb covbb spachk:*tiny*)
       (setq rows (list (spachk:row
                          (strcat "Cover vs water's edge: cover "
-                                 (rtos (spachk:bw covbb)) " x "
-                                 (rtos (spachk:bh covbb))
+                                 (spachk:dist (spachk:bw covbb)) " x "
+                                 (spachk:dist (spachk:bh covbb))
                                  " contains water's edge "
-                                 (rtos (spachk:bw watbb)) " x "
-                                 (rtos (spachk:bh watbb)) ", OK")
+                                 (spachk:dist (spachk:bw watbb)) " x "
+                                 (spachk:dist (spachk:bh watbb)) ", OK")
                          nil)))
       (setq rows (list (spachk:row
                          (strcat "Cover vs water's edge: the water's"
@@ -942,8 +954,8 @@
             (if (> (abs (- d m)) spachk:*meas-tol*)
               (setq rows (cons (spachk:row
                                   (strcat "Dim " (spachk:dxf 5 e)
-                                          ": reads " (rtos m)
-                                          " but spans " (rtos d)
+                                          ": reads " (spachk:dist m)
+                                          " but spans " (spachk:dist d)
                                           " - the dimension DISAGREES"
                                           " with its own points")
                                   1)
@@ -1027,10 +1039,10 @@
              (setq rows (append rows
                          (list (spachk:row
                                  (strcat "Overall " (spachk:dxf 5 e)
-                                         ": reads " (rtos m)
+                                         ": reads " (spachk:dist m)
                                          " but the cover measures "
-                                         (rtos (spachk:bw covbb)) " x "
-                                         (rtos (spachk:bh covbb)))
+                                         (spachk:dist (spachk:bw covbb)) " x "
+                                         (spachk:dist (spachk:bh covbb)))
                                  1)))
                    ents (cons e ents))))))))
   ;; --- the water's edge overalls, when there is a water's edge
@@ -1067,14 +1079,14 @@
         (if (and m want (> (abs (- m want)) spachk:*meas-tol*))
           (setq rows (append rows
                       (list (spachk:row
-                              (strcat "Overlap: reads " (rtos m)
+                              (strcat "Overlap: reads " (spachk:dist m)
                                       " but the cover laps the water's"
-                                      " edge by " (rtos want))
+                                      " edge by " (spachk:dist want))
                               1)))
                 ents (cons (car lapn) ents))
           (setq rows (append rows
                       (list (spachk:row
-                              (strcat "Overlap: " (rtos m) ", OK")
+                              (strcat "Overlap: " (spachk:dist m) ", OK")
                               nil))))))))
   (spachk:res rows (reverse ents)))
 
@@ -1096,9 +1108,9 @@
                (setq rows (append rows
                            (list (spachk:row
                                    (strcat "Overall " (spachk:dxf 5 e)
-                                           ": stands " (rtos dy)
+                                           ": stands " (spachk:dist dy)
                                            " above the cover, SPA puts it "
-                                           (rtos spachk:*topoff*))
+                                           (spachk:dist spachk:*topoff*))
                                    1))))))
             ;; left of the cover: the up dim
             ((> dx 0.0)
@@ -1106,9 +1118,9 @@
                (setq rows (append rows
                            (list (spachk:row
                                    (strcat "Overall " (spachk:dxf 5 e)
-                                           ": stands " (rtos dx)
+                                           ": stands " (spachk:dist dx)
                                            " left of the cover, SPA puts it "
-                                           (rtos spachk:*dimoff*))
+                                           (spachk:dist spachk:*dimoff*))
                                    1)))))))))))
   (spachk:res rows nil))
 
@@ -1240,15 +1252,15 @@
         (setq rows (append rows
                     (list (spachk:row
                             (strcat "Foam length: longest hinge "
-                                    (rtos maxrun) " exceeds the "
-                                    (rtos fl) " sheet")
+                                    (spachk:dist maxrun) " exceeds the "
+                                    (spachk:dist fl) " sheet")
                             1))))
         (setq rows (append rows
                     (list (spachk:row
                             (strcat "Foam length: longest hinge "
-                                    (rtos maxrun)
+                                    (spachk:dist maxrun)
                                     (if fl
-                                        (strcat " within " (rtos fl) ", OK")
+                                        (strcat " within " (spachk:dist fl) ", OK")
                                         (strcat " - Thermo-Light length"
                                                 " N/A, verify")))
                             (if fl nil 2))))))
@@ -1260,14 +1272,14 @@
             (setq rows (append rows
                         (list (spachk:row
                                 (strcat "Foam width: widest piece "
-                                        (rtos maxpiece) " exceeds the "
-                                        (rtos fw) " sheet")
+                                        (spachk:dist maxpiece) " exceeds the "
+                                        (spachk:dist fw) " sheet")
                                 1))))
             (setq rows (append rows
                         (list (spachk:row
                                 (strcat "Foam width: widest piece "
-                                        (rtos maxpiece) " within "
-                                        (rtos fw) ", OK")
+                                        (spachk:dist maxpiece) " within "
+                                        (spachk:dist fw) ", OK")
                                 nil))))))
         (setq rows (append rows
                     (list (spachk:row
@@ -2408,7 +2420,7 @@
   ((lambda (v) (if lzd:ask (lzd:ask "\n  (Enter to go on) " v) v))
     (getstring "\n  (Enter to go on) ")))
 
-(defun spachk:demo (/ base x y e cov wat lay)
+(defun spachk:demo (/ base x y e cov wat lay rmark nx stuck)
   (setq spachk:*demo-ents* nil)
   (foreach lay (list (list spachk:*lay-cover* 3)
                      (list spachk:*lay-water* 5)
@@ -2526,19 +2538,42 @@
           (if oldecho (setvar "CMDECHO" oldecho))
           (princ (strcat "\n(SPACHECKSCAN asks what to scan - press Enter"
                          " to take the whole drawing.)"))
+          ;; the last entity before the scan: what the scan writes on
+          ;; the report layer follows it, and nothing else does
+          (setq rmark (entlast))
           (c:SPACHECKSCAN)))
       (if (= "Yes" (cal:askkw "Erase the practice drawing"
                                  "Yes No" "Yes/No" "Yes" nil))
         (progn
-          (foreach e spachk:*demo-ents* (if (entget e) (entdel e)))
-          (setq e (ssget "_X" (list (cons 8 spachk:*report-layer*))))
-          (if e
+          ;; an erase that is refused (a locked layer) is counted, so
+          ;; the line at the end never says "erased" over objects that
+          ;; are still on screen.  The details block's ATTRIBs and SEQEND
+          ;; are not asked: entdel takes only a main entity, and they
+          ;; go with the INSERT they belong to
+          (setq stuck 0)
+          (foreach e spachk:*demo-ents*
+            (if (and (entget e)
+                     (not (member (spachk:etype e) '("ATTRIB" "SEQEND"))))
+              (if (not (entdel e)) (setq stuck (1+ stuck)))))
+          ;; ...and the report the practice scan wrote, and nothing
+          ;; older: the report layer is where EVERY scan in the drawing
+          ;; writes, and sweeping it whole took the drafter's own
+          ;; reports down with the practice one.  What this run added
+          ;; is what follows RMARK; with no scan run there is none
+          (if rmark
             (progn
-              (setq x 0)
-              (repeat (sslength e)
-                (entdel (ssname e x))
-                (setq x (1+ x)))))
-          (princ "\nPractice drawing erased.")))
+              (setq e (entnext rmark))
+              (while e
+                (setq nx (entnext e))
+                (if (= (strcase (cdr (assoc 8 (entget e))))
+                       (strcase spachk:*report-layer*))
+                  (if (not (entdel e)) (setq stuck (1+ stuck))))
+                (setq e nx))))
+          (if (= stuck 0)
+            (princ "\nPractice drawing erased.")
+            (princ (strcat "\n" (itoa stuck)
+                           " object(s) of the practice run on a locked layer NOT erased"
+                           " - unlock the layer and erase them by hand.")))))
       (setq spachk:*demo-ents* nil)))
   (princ))
 

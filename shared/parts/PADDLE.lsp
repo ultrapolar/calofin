@@ -81,7 +81,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.17")
+(setq *paddle-version* "v1.18")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -1388,7 +1388,7 @@
   (entlast))
 
 (defun c:TUTORIALPADDLE (/ *error* mark-open doc space base lay ents pl vts
-                           feats blk delta pad ncorner narc)
+                           feats blk delta pad ncorner narc left)
   ;; the demo draws a layer, a perimeter, labels and pads with pauses
   ;; between -- an Esc at a pause used to leave all of it behind, N
   ;; undos deep, with no handler.  One mark round the whole tour,
@@ -1453,7 +1453,13 @@
             (getkword "\nDraw a live demonstration in this drawing? [Yes/No] <Yes>: ")) "No")
       (progn
         (setq lay *paddle-demo-layer*)
-        (vla-put-Color (vla-Add (vla-get-Layers doc) lay) *paddle-demo-color*)
+        ;; vla-Add hands back a layer that is already there untouched,
+        ;; lock and all, so a PADDLE-DEMO left locked took the whole demo
+        ;; and then refused every erase at the end without a word.  The
+        ;; helper thaws, unlocks and switches it on; the colour is still
+        ;; put back every run, as it always was
+        (paddle--ensure-layer lay *paddle-demo-color*)
+        (vla-put-Color (vla-Item (vla-get-Layers doc) lay) *paddle-demo-color*)
         (setq base (getpoint "\nPick a clear spot for the demo <0,0>: "))
         (if lzd:ask (lzd:ask "\nPick a clear spot for the demo <0,0>: " base) base)
         (if (not base) (setq base '(0.0 0.0 0.0)))
@@ -1505,7 +1511,14 @@
         (initget "Yes No")
         (if (= ((lambda (v) (if lzd:ask (lzd:ask "\nErase the demonstration? [Yes/No] <No>: " v) v))
                  (getkword "\nErase the demonstration? [Yes/No] <No>: ")) "Yes")
-            (foreach e ents (entdel e)))))
+            (progn
+              ;; the layer can still be locked from the palette while a
+              ;; pause waits, and entdel then refuses: say what stayed
+              (setq left 0)
+              (foreach e ents (if (not (entdel e)) (setq left (1+ left))))
+              (if (> left 0)
+                (princ (strcat "\n" (itoa left) " demo object(s) on a locked"
+                               " layer - NOT erased.")))))))
   (princ "\nEnd of tutorial. Type PADDLE to run it on a real drawing.")
   (vla-EndUndoMark doc)
   (setq mark-open nil)

@@ -56,7 +56,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.12"     ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.13"     ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -925,8 +925,13 @@
 
 ;; ---- demo mode -------------------------------------------------------------
 
-(defun autobead-demo-layer (name / def)
-  ;; Temporary POOL-matching layer for the sample geometry.
+(defun autobead-demo-layer (name / ed fl col)
+  ;; Temporary POOL-matching layer for the sample geometry.  One left
+  ;; behind LOCKED (a drafter who locked it, or LAYISO's lock-and-fade)
+  ;; was drawn on as it stood: entmake builds on a locked layer and
+  ;; entdel refuses there, so the demo went up and the cleanup could
+  ;; not take it down.  It is the demo's own scratch, so an existing
+  ;; one is thawed, unlocked and switched on for it, and said once.
   (if (not (tblsearch "LAYER" name))
     (entmake (list '(0 . "LAYER")
                    '(100 . "AcDbSymbolTableRecord")
@@ -934,7 +939,19 @@
                    (cons 2 name)
                    (cons 70 0)
                    (cons 62 4)               ; cyan
-                   (cons 6 "Continuous")))))
+                   (cons 6 "Continuous")))
+    (progn
+      (setq ed  (entget (tblobjname "LAYER" name))
+            fl  (cond ((cdr (assoc 70 ed))) (0))
+            col (cond ((cdr (assoc 62 ed))) (4)))
+      (if (or (/= 0 (logand 5 fl)) (< col 0))  ; frozen (1), locked (4), off
+        (progn
+          (setq ed (subst (cons 70 (- fl (logand 5 fl))) (assoc 70 ed) ed)
+                ed (subst (cons 62 (abs col)) (assoc 62 ed) ed))
+          (if (entmod ed)
+            (princ (strcat "\nLayer " name " was off, frozen or locked -"
+                           " restored so the demo can be seen and"
+                           " erased again."))))))))
 
 (defun autobead-demo-line (a b lay / e)
   ;; Draw one demo segment and return its ename.

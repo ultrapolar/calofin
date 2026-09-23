@@ -468,19 +468,21 @@
                                     ; prompt (2 inches): further than
                                     ; that and the line is no longer a
                                     ; trace of the points
-(setq *PF-MISS-PCT*     0.20)       ; share of the points (rounded UP to
-                                    ; a whole point) that may sit off the
-                                    ; result by up to the tolerance
-                                    ; (an inch by default) - this slack
-                                    ; is what buys longer spans and
-                                    ; fewer curves.  Step 2 offers it;
-                                    ; the answer is per run, on purpose.
-                                    ; A fifth of an AB survey off by an
-                                    ; inch is what the built shell
-                                    ; actually does: at 15% the fitter
-                                    ; ran out of allowance early in the
-                                    ; loop and paid for the rest of it
-                                    ; in short arcs
+(setq *PF-MISS-PCT*     0.20)       ; share of the points, as a FRACTION
+                                    ; from 0 to 1 (0.20 is 20%; anything
+                                    ; else is offered as 0.20), rounded
+                                    ; UP to a whole point, that may sit
+                                    ; off the result by up to the
+                                    ; tolerance (an inch by default) -
+                                    ; this slack is what buys longer
+                                    ; spans and fewer curves.  Step 2
+                                    ; offers it; the answer is per run,
+                                    ; on purpose.  A fifth of an AB
+                                    ; survey off by an inch is what the
+                                    ; built shell actually does: at 15%
+                                    ; the fitter ran out of allowance
+                                    ; early in the loop and paid for the
+                                    ; rest of it in short arcs
 (setq *PF-ARC-DIV*      3.0)        ; the RECOMMENDED curve cap: one
                                     ; curve per this many survey points,
                                     ; rounded to the NEAREST whole curve
@@ -771,7 +773,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "092226 REV25") ; announced on load.  The
+(setq pf:*version*      "092326 REV26") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -1131,10 +1133,20 @@
     (if (> d mx) (setq mx d)))
   mx)
 
+;; *PF-MISS-PCT* as it may be used: a fraction from 0 to 1, or the
+;; shipped 0.20.  The step's initget and its clamp over 100 hold
+;; only what is TYPED; Enter and every other reader take the knob
+;; as it stands, so a LAZTUNE override of 15 (meant as 15%) was
+;; offered as <1500> and let every point off the line, and one of
+;; -0.1 as <-9>.
+(defun pf:miss-knob ( / v)
+  (setq v *PF-MISS-PCT*)
+  (if (and (numberp v) (>= v 0) (<= v 1.0)) v 0.20))
+
 ;; The miss percentage in force for the current run: the command binds
 ;; pf-miss-pct from the user's answer; Enter keeps the standard value.
 (defun pf:misspct ()
-  (if pf-miss-pct pf-miss-pct *PF-MISS-PCT*))
+  (if pf-miss-pct pf-miss-pct (pf:miss-knob)))
 
 ;; A curve cap of N points over D of them, rounded to the NEAREST
 ;; whole curve and never below 1.  A cap of nothing is not a cap, and
@@ -2578,7 +2590,7 @@
 ;; so they are easy to zoom to and judge: a mis-shot, a duplicate, or
 ;; a real feature the tolerance is too tight for.  Also writes the list
 ;; of them to the side of the shape, worst first, as
-;; "Pt.17   off by 1-7/8"" - so the misses can be worked through
+;; "Pt.17   off by 0'-1 7/8"" - so the misses can be worked through
 ;; without hunting for red circles.
 ;;
 ;; Ring every bad point and list it beside the pool with how far off it
@@ -2625,10 +2637,14 @@
                                         (itoa (+ (length bad)
                                                  (length omit)))
                                         ")")))))
+      ;; the off-by figure is spelled by arithmetic (cal:ftin's), not
+      ;; rtos: rtos follows DIMZIN, and at 0 (acad.dwt's) it wrote
+      ;; 1 7/8" for 0'-1 7/8" and 1' for 1'-0" -- the spelling the
+      ;; review tools reject, in text left on the drawing
       (foreach pair (append keyed okeyed)
         (setq y    (- y (* th 1.6))
               line (strcat "Pt." (pf:pt-name (cdr pair))
-                           "   off by " (rtos (car pair) 4 4)
+                           "   off by " (cal:ftin (car pair) 4 4)
                            (if (pf:memb (cdr pair) omit)
                              *PF-OMIT-TAIL*
                              "")))
@@ -4370,6 +4386,11 @@
 ;; Share of the points allowed off the line, returned as a fraction;
 ;; DEF is the fraction Enter keeps.
 (defun pf:ask-pct (def back / pct)
+  ;; DEF is the knob on a first asking: held to the range a typed
+  ;; answer is held to BEFORE it is shown, so the prompt never
+  ;; offers <1500> or <-9> and Enter never takes it
+  (if (not (and (numberp def) (>= def 0) (<= def 1.0)))
+    (setq def (pf:miss-knob)))
   (if back (initget 4 "Back Undo") (initget 4))
   (setq pct (getint (strcat "\n  Percent of points allowed off <"
                             (itoa (fix (+ 0.5 (* 100.0 def))))
@@ -4868,7 +4889,7 @@
                       "what percent of the points may sit OFF the line"))
        (princ "\n  (off, but still within the distance above)?")
        (princ (strcat "\n  Press Enter for the recommended "
-                      (itoa (fix (+ 0.5 (* 100.0 *PF-MISS-PCT*))))
+                      (itoa (fix (+ 0.5 (* 100.0 (pf:miss-knob)))))
                       " percent - a fifth of an AB survey an inch off"
                       "\n  is what a built shell measures like."))
        (setq v (pf:ask-pct *PF-MISS-PCT* T))
@@ -5722,7 +5743,7 @@
   (princ "\nTHE SEVEN QUESTIONS")
   (princ "\n  1. Max distance a point may sit from the line (2 inch ceiling).")
   (princ (strcat "\n  2. Percent of points allowed off the line (Enter = "
-                 (itoa (fix (+ 0.5 (* 100.0 *PF-MISS-PCT*))))
+                 (itoa (fix (+ 0.5 (* 100.0 (pf:miss-knob)))))
                  ", rounded"))
   (princ "\n     UP to whole points - the slack that buys longer arcs).")
   (princ (strcat "\n  3. Curve cap (Enter = Auto: one curve per "

@@ -72,6 +72,8 @@ TOOLS = {
     'SPA': {
         'src': 'lisp/spa/SPA.LSP',
         'swap': {
+            'spa:shown-step': 'cal:shown-step',
+            'spa:floor-shown': 'cal:floor-shown',
             # the ink table: one body, and the library's is it
             'spa:ink': 'cal:ink',
             'spa:inkoverride': 'cal:inkoverride',
@@ -608,6 +610,7 @@ TOOLS = {
     'ABLOBF': {
         'src': 'lisp/ablobf/ABLOBF.lsp',
         'swap': {
+            'abl:ftin': 'cal:ftin',
             'abl:2d': 'cal:2d', 'abl:dist': 'cal:dist',
             'abl:sub': 'cal:v-', 'abl:add': 'cal:v+', 'abl:scl': 'cal:v*',
             'abl:dot': 'cal:dot', 'abl:mid': 'cal:mid',
@@ -699,6 +702,7 @@ TOOLS = {
     'ABPCHECK': {
         'src': 'lisp/abpcheck/ABPCHECK.lsp',
         'swap': {
+            'abp:ftin': 'cal:ftin',
             'abp:2d': 'cal:2d', 'abp:dist': 'cal:dist',
             'abp:v-': 'cal:v-', 'abp:v+': 'cal:v+', 'abp:v*': 'cal:v*',
             'abp:dot': 'cal:dot', 'abp:mid': 'cal:mid',
@@ -752,6 +756,7 @@ TOOLS = {
     'SPACHECK': {
         'src': 'lisp/spacheck/SPACHECK.lsp',
         'swap': {
+            'spachk:ftin': 'cal:ftin',
             'spachk:trim': 'cal:trim',
             'spachk:mtext': 'cal:mtext',
             'spachk:bbox': 'cal:bbox-ent',
@@ -783,6 +788,10 @@ TOOLS = {
     'POOL': {
         'src': 'lisp/pool/POOL.LSP',
         'swap': {
+            'pool:ftin': 'cal:ftin',
+            'pool:shown-step': 'cal:shown-step',
+            'pool:floor-shown': 'cal:floor-shown',
+            'pool:ceil-shown': 'cal:ceil-shown',
             # the ink table: one body, and the library's is it
             'pool:ink': 'cal:ink',
             'pool:inkoverride': 'cal:inkoverride',
@@ -858,6 +867,9 @@ TOOLS = {
     'POOLSIDE': {
         'src': 'lisp/poolside/POOLSIDE.lsp',
         'swap': {
+            'psd:shown-step': 'cal:shown-step',
+            'psd:floor-shown': 'cal:floor-shown',
+            'psd:ceil-shown': 'cal:ceil-shown',
             # the ink table: one body, and the library's is it
             'psd:ink': 'cal:ink',
             'psd:inkoverride': 'cal:inkoverride',
@@ -1247,6 +1259,7 @@ TOOLS = {
     'covercheck': {
         'src': 'lisp/covercheck/covercheck.lsp',
         'swap': {
+            'cchk:ftin': 'cal:ftin',
             # the ink table: one body, and the library's is it
             'cchk:ink': 'cal:ink',
             'cchk:inkoverride': 'cal:inkoverride',
@@ -1300,6 +1313,7 @@ TOOLS = {
     'dimcheck': {
         'src': 'lisp/dimcheck/dimcheck.lsp',
         'swap': {
+            'dchk:ftin': 'cal:ftin',
             # the ink table: one body, and the library's is it
             'dchk:ink': 'cal:ink',
             'dchk:inkoverride': 'cal:inkoverride',
@@ -1338,6 +1352,7 @@ TOOLS = {
     'linfincheck': {
         'src': 'lisp/linfincheck/linfincheck.lsp',
         'swap': {
+            'lfc:ftin': 'cal:ftin',
             # the ink table: one body, and the library's is it
             'lfc:ink': 'cal:ink',
             'lfc:inkoverride': 'cal:inkoverride',
@@ -1384,6 +1399,7 @@ TOOLS = {
     'abhd': {
         'src': 'lisp/abhd/abhd.lsp',
         'swap': {
+            'pf:ftin': 'cal:ftin',
             'pf:2d': 'cal:2d', 'pf:dist': 'cal:dist', 'pf:sub': 'cal:v-',
             'pf:add': 'cal:v+', 'pf:scl': 'cal:v*', 'pf:dot': 'cal:dot',
             'pf:mid': 'cal:mid', 'pf:perp': 'cal:perp', 'pf:tan': 'cal:tan',
@@ -1448,6 +1464,7 @@ TOOLS = {
     'CABHD': {
         'src': 'lisp/cabhd/CABHD.lsp',
         'swap': {
+            'cab:ftin': 'cal:ftin',
             'cab:2d': 'cal:2d', 'cab:dist': 'cal:dist', 'cab:sub': 'cal:v-',
             'cab:add': 'cal:v+', 'cab:scl': 'cal:v*', 'cab:dot': 'cal:dot',
             'cab:mid': 'cal:mid', 'cab:perp': 'cal:perp',
@@ -1480,6 +1497,7 @@ TOOLS = {
     'lhd': {
         'src': 'lisp/lhd/lhd.lsp',
         'swap': {
+            'lh:ftin': 'cal:ftin',
             'lh:2d': 'cal:2d', 'lh:dist': 'cal:dist', 'lh:sub': 'cal:v-',
             'lh:add': 'cal:v+', 'lh:scl': 'cal:v*', 'lh:dot': 'cal:dot',
             'lh:mid': 'cal:mid', 'lh:perp': 'cal:perp', 'lh:tan': 'cal:tan',
@@ -1521,6 +1539,8 @@ TOOLS = {
     'OASIS': {
         'src': 'lisp/oasis/OASIS.lsp',
         'swap': {
+            'oasis:shown-step': 'cal:shown-step',
+            'oasis:floor-shown': 'cal:floor-shown',
             # the ink table: one body, and the library's is it
             'oasis:ink': 'cal:ink',
             'oasis:inkoverride': 'cal:inkoverride',
@@ -1591,6 +1611,7 @@ TOOLS = {
     'ABFIND': {
         'src': 'lisp/abfind/ABFIND.lsp',
         'swap': {
+            'abf:ftin': 'cal:ftin',
             # the ink table: one body, and the library's is it
             'abf:ink': 'cal:ink',
             'abf:inkoverride': 'cal:inkoverride',
@@ -2000,6 +2021,7 @@ TOOLS = {
     'wcalst': {
         'src': 'lisp/wcalst/wcalst.lsp',
         'swap': {
+            'wc:ftin': 'cal:ftin',
             'wc:d2': 'cal:d2', 'wc:ensure-layer': 'cal:ensure-layer',
             'wc:text': 'cal:text',
         },

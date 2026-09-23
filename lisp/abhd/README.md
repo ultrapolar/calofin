@@ -308,7 +308,7 @@ starts.)
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `*PF-TOL-MAX*` | `2.0` | Hard ceiling on the max-distance prompt (2″) |
-| `*PF-MISS-PCT*` | `0.20` | Recommended share of points allowed off (rounded up) |
+| `*PF-MISS-PCT*` | `0.20` | Recommended share of points allowed off (rounded up) -- a fraction from 0 to 1; anything else is offered as 0.20 |
 | `*PF-ARC-DIV*` | `3.0` | The recommended curve cap: one curve per this many points, rounded to nearest, never below 1 |
 | `*PF-ON-EPS*` / `*PF-ON-FRAC*` | `0.25` / `0.25` | Within this — or this fraction of the distance typed, whichever is larger — counts as ON the line |
 | `*PF-TIGHT-TOL*` | `0.01` | What the "tight" candidate fits to |
@@ -690,10 +690,10 @@ your `ab_pt` blocks:
 
 ```
 POINTS OFF THE LINE (4)
-Pt.8    off by 1-7/8"
-Pt.7    off by 1-5/16"
-Pt.51   off by 1-1/16"
-Pt.23   off by 4-1/2"   (left out)
+Pt.8    off by 0'-1 7/8"
+Pt.7    off by 0'-1 5/16"
+Pt.51   off by 0'-1 1/16"
+Pt.23   off by 0'-4 1/2"   (left out)
 - Pt.8, Pt.7, Pt.51 and Pt.23 are bad.
 ```
 

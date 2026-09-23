@@ -104,10 +104,10 @@ report and markers instead of stacking a second copy.
 | `COVERCHECK` | The full interactive review; fixes what you approve, flags the rest |
 | `COVERSCAN` | The same audits, read-only -- reports everything, changes nothing |
 | `LITECOVERSCAN` | COVERSCAN minus the dimension/arc/overlap audit -- just the cover rules, for a drawing DIMCHECK already went over |
-| `COVERCHECKRESCUE` | Restores every colour COVERCHECK stashed and clears its report and markers -- the way out after a crash |
+| `COVERCHECKRESCUE` | Restores every colour COVERCHECK stashed and clears its report and markers -- the way out after a crash. An item on a locked layer is counted apart and keeps its stash for a rerun once the layer is unlocked |
 | `COVERCHECKVER` | Print which build is loaded (`COVERCHECKVERSION`, the pre-standard name, is kept as an alias) |
 | `TUTORIALCOVERCHECK` | Builds a practice cover sheet with planted faults and walks the review on it |
-| `TUTORIALCOVERCHECKCLEAN` | Erases everything the tutorial built, report and markers included |
+| `TUTORIALCOVERCHECKCLEAN` | Erases everything the tutorial built, report and markers included. A lock on the pool layer (or any layer the demo drew on) is lifted for the erase and put back after it |
 
 `COVERSCAN`'s Enter (no highlight) scans the whole of the space you
 are working in -- model space from the Model tab or a layout

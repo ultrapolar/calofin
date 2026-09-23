@@ -6,11 +6,11 @@
   * the undo group every one of them opens is closed again when the run
     is cut short, under AutoCAD's PUSHED error mode -- which resets the
     evaluator before *error* runs, so a local of the command reads nil
-    in the handler.  The VM keeps every frame live, so that reset is
-    modelled here (pushed_mode_unwind) the way the audit modelled it.
-  * a ruler drawn onto a LOCKED scratch layer is still taken down: the
-    VM has no layer lock, so entdel is made to refuse on one here, as
-    AutoCAD's does.
+    in the handler.  tests/lispvm.py models that reset itself
+    (tests/test_lispvm_errmode.py pins it); this file used to.
+  * a ruler drawn onto a LOCKED scratch layer is still taken down:
+    entdel refuses on one, as AutoCAD's does -- tests/lispvm.py models
+    that itself (tests/test_lispvm_values.py pins it); this file used to.
   * a run cut short at the Given-dimension pick leaves nothing for the
     next POOL, TUTORIALPOOL or POOLDEMO to pick up.
   * a click on empty space at that pick is said and asked again rather
@@ -20,15 +20,13 @@ Run: python3 tests/test_fix_pool.py
      CALOFIN_LISP_ROOT=shared python3 tests/test_fix_pool.py
 """
 
-import contextlib
 import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
-import lispvm  # noqa: E402
-from lispvm import VM, LispError, Sym, Dot, NIL, BUILTINS, Ent  # noqa: E402
+from lispvm import VM, LispError, Sym, Dot, NIL  # noqa: E402
 
 POOL = os.path.join(REPO, 'lisp', 'pool', 'POOL.LSP')
 TUT = os.path.join(REPO, 'lisp', 'pool', 'TUTORIALPOOL.LSP')
@@ -59,103 +57,6 @@ def attempt(label, fn):
     except LispError as e:
         check(label, False, str(e).splitlines()[0])
         return None
-
-
-# --------------------------------------------------------------------
-# the pushed error mode, modelled
-# --------------------------------------------------------------------
-@contextlib.contextmanager
-def pushed_mode_unwind():
-    """After (*push-error-using-command*) AutoCAD resets the AutoLISP
-    evaluator before it calls *error*: the handler in force at the
-    failure runs, but every binding the failing command made is gone,
-    so its locals read their GLOBAL value.  The stock VM runs the
-    handler with every frame live.  Here the stack is swapped out for
-    the handler call and put back after, while a mode is pushed."""
-    orig = VM.call_defun
-
-    def call_defun(self, name, fn, args):
-        _, params, locals_, body = fn
-        if len(args) != len(params):
-            raise LispError("%s: expected %d args, got %d"
-                            % (name, len(params), len(args)), self)
-        frame = dict(zip(params, args))
-        for loc in locals_:
-            frame[loc] = NIL
-        self.stack.append(frame)
-        self.calls.append(name)
-        try:
-            r = NIL
-            for form in body:
-                r = self.eval(form)
-            return r
-        except LispError as e:
-            if (self.handle_errors and not self._catch_depth
-                    and not self._in_handler
-                    and not getattr(e, 'handled', False)):
-                h = self.get(Sym('*error*'))      # the one in force, BEFORE
-                if (isinstance(h, tuple) and h[0] == 'defun') or (
-                        isinstance(h, list) and h and h[0] == 'lambda'):
-                    e.handled = True
-                    msg = str(e).split('\n')[0]
-                    self.handled_errors.append(msg)
-                    self._in_handler = True
-                    unwind = self.error_mode_depth > 0
-                    saved = self.stack
-                    if unwind:
-                        self.stack = []
-                    try:
-                        if isinstance(h, tuple):
-                            self.call_defun(Sym('*error*'), h, [msg])
-                        else:
-                            self.call_lambda(h, [msg])
-                    except LispError as inner:
-                        if isinstance(inner, lispvm.HandlerAbort):
-                            raise
-                        raise LispError("*error* handler died: %s"
-                                        % str(inner).splitlines()[0], self)
-                    finally:
-                        if unwind:
-                            self.stack = saved
-                        self._in_handler = False
-            raise
-        finally:
-            self.stack.pop()
-            self.calls.pop()
-
-    VM.call_defun = call_defun
-    try:
-        yield
-    finally:
-        VM.call_defun = orig
-
-
-# --------------------------------------------------------------------
-# a locked layer, modelled
-# --------------------------------------------------------------------
-@contextlib.contextmanager
-def entdel_refuses_on_locked_layers():
-    """entmake draws onto a locked layer; entdel refuses there and
-    answers nil.  The VM has no lock, so entdel is taught one."""
-    orig = BUILTINS[Sym('entdel')]
-    tbl = BUILTINS[Sym('tblsearch')]
-
-    def entdel(vm, a):
-        e = a[0]
-        lay = vm.layer_of(e) if isinstance(e, Ent) else None
-        if lay:
-            rec = tbl(vm, ['LAYER', lay]) or []
-            fl = next((g.b for g in rec
-                       if isinstance(g, Dot) and g.a == 70), 0)
-            if int(fl) & 4:
-                return NIL
-        return orig(vm, a)
-
-    BUILTINS[Sym('entdel')] = entdel
-    try:
-        yield
-    finally:
-        BUILTINS[Sym('entdel')] = orig
 
 
 def layer(vm, name, flags=0):
@@ -199,10 +100,9 @@ for label, script in [
         ("Esc at the first question", [esc]),
         ("Esc at the first wall length (guide up)",
          ["Outofsquare", "Rectangle"] + BASE + [esc])]:
-    with pushed_mode_unwind():
-        vm = pool_vm()
-        vm.handle_errors = True
-        attempt(label, lambda: vm.run('c:POOL', script))
+    vm = pool_vm()
+    vm.handle_errors = True
+    attempt(label, lambda: vm.run('c:POOL', script))
     check(label + ": the handler ran",
           vm.handled_errors == ['Function cancelled'], repr(vm.handled_errors))
     check(label + ": no undo group left open", vm.undo_groups == 0,
@@ -225,15 +125,14 @@ attempt("stale flag", lambda: vm.run('c:POOL', [esc]))
 check("stale flag: nothing sent to UNDO", undo_subs(vm) == [],
       repr(undo_subs(vm)))
 check("stale flag: the handler did not die",
-      not any('handler died' in s for s in vm.handled_errors))
+      not vm.handler_deaths, repr(vm.handler_deaths))
 
 # ====================================================================
 print("== F4. POOLSIDE cut short under the pushed mode closes its group ==")
-with pushed_mode_unwind():
-    vm = VM()
-    vm.load(SIDE)
-    vm.handle_errors = True
-    attempt("POOLSIDE Esc", lambda: vm.run('c:POOLSIDE', ["Normal", esc]))
+vm = VM()
+vm.load(SIDE)
+vm.handle_errors = True
+attempt("POOLSIDE Esc", lambda: vm.run('c:POOLSIDE', ["Normal", esc]))
 check("POOLSIDE: the handler ran", vm.handled_errors == ['Function cancelled'],
       repr(vm.handled_errors))
 check("POOLSIDE: no undo group left open", vm.undo_groups == 0,
@@ -243,13 +142,12 @@ check("POOLSIDE: _Begin and _End, once each",
 check("POOLSIDE: the error mode popped", vm.error_mode_depth == 0)
 
 print("== F4b. ...and Esc at a depth, with the ruler standing ==")
-with pushed_mode_unwind():
-    vm = VM()
-    vm.load(SIDE)
-    vm.handle_errors = True
-    attempt("POOLSIDE Esc at C",
-            lambda: vm.run('c:POOLSIDE', ["Normal"] + BASE +
-                           [480.0, 60.0, 90.0, 240.0, 90.0, esc]))
+vm = VM()
+vm.load(SIDE)
+vm.handle_errors = True
+attempt("POOLSIDE Esc at C",
+        lambda: vm.run('c:POOLSIDE', ["Normal"] + BASE +
+                       [480.0, 60.0, 90.0, 240.0, 90.0, esc]))
 check("POOLSIDE at C: no undo group left open", vm.undo_groups == 0,
       "sent %r" % undo_subs(vm))
 check("POOLSIDE at C: the ruler came down",
@@ -257,10 +155,9 @@ check("POOLSIDE at C: the ruler came down",
 
 # ====================================================================
 print("== F5. TUTORIALPOOL and POOLDEMO under the pushed mode ==")
-with pushed_mode_unwind():
-    vm = pool_vm(TUT)
-    vm.handle_errors = True
-    attempt("TUTORIALPOOL Esc", lambda: vm.run('c:TUTORIALPOOL', ['', esc]))
+vm = pool_vm(TUT)
+vm.handle_errors = True
+attempt("TUTORIALPOOL Esc", lambda: vm.run('c:TUTORIALPOOL', ['', esc]))
 check("TUTORIALPOOL: the handler ran",
       vm.handled_errors == ['Function cancelled'], repr(vm.handled_errors))
 check("TUTORIALPOOL: no undo group left open", vm.undo_groups == 0,
@@ -268,14 +165,13 @@ check("TUTORIALPOOL: no undo group left open", vm.undo_groups == 0,
 check("TUTORIALPOOL: _Begin and _End, once each",
       undo_subs(vm) == ['_Begin', '_End'], repr(undo_subs(vm)))
 
-with pushed_mode_unwind():
-    vm = pool_vm(DEMO)
-    # the VM's (atoms-family 0) is empty, so the POOL-loaded gate is
-    # answered the way test_tutorialpool answers it; then one cell fails
-    vm.loads("(defun atoms-family (n) (list 'pool:hopcalc))")
-    vm.loads("(defun pooldemo:c3 (org) (pooldemo:no-such-helper org))")
-    vm.handle_errors = True
-    attempt("POOLDEMO failure", lambda: vm.run('c:POOLDEMO', []))
+vm = pool_vm(DEMO)
+# the VM's (atoms-family 0) is empty, so the POOL-loaded gate is
+# answered the way test_tutorialpool answers it; then one cell fails
+vm.loads("(defun atoms-family (n) (list 'pool:hopcalc))")
+vm.loads("(defun pooldemo:c3 (org) (pooldemo:no-such-helper org))")
+vm.handle_errors = True
+attempt("POOLDEMO failure", lambda: vm.run('c:POOLDEMO', []))
 check("POOLDEMO: the handler ran", len(vm.handled_errors) == 1,
       repr(vm.handled_errors))
 check("POOLDEMO: no undo group left open", vm.undo_groups == 0,
@@ -285,12 +181,11 @@ check("POOLDEMO: _Begin and _End, once each",
 
 # ====================================================================
 print("== F6. a ruler drawn on a LOCKED scratch layer is still taken down ==")
-with entdel_refuses_on_locked_layers():
-    vm = pool_vm()
-    layer(vm, 'POOL-RULER', 4)
-    attempt("POOL locked ruler",
-            lambda: vm.run('c:POOL', ["Insquare", "Rectangle"] + BASE +
-                           [480.0, 240.0, "Radius", 24.0, "No"]))
+vm = pool_vm()
+layer(vm, 'POOL-RULER', 4)
+attempt("POOL locked ruler",
+        lambda: vm.run('c:POOL', ["Insquare", "Rectangle"] + BASE +
+                       [480.0, 240.0, "Radius", 24.0, "No"]))
 check("POOL: the ruler was drawn at all",
       any(vm.layer_of(e) == 'POOL-RULER' for e in vm.entities))
 check("POOL: nothing is left on POOL-RULER", not live_on(vm, 'POOL-RULER'),
@@ -299,14 +194,13 @@ check("POOL: the layer is unlocked", not (layer_flags(vm, 'POOL-RULER') or 0) & 
 check("POOL: and the drafter was told",
       any('POOL-RULER was locked' in s for s in vm.printed))
 
-with entdel_refuses_on_locked_layers():
-    vm = VM()
-    vm.load(SIDE)
-    layer(vm, 'POOLSIDE-RULER', 4)
-    attempt("POOLSIDE locked ruler",
-            lambda: vm.run('c:POOLSIDE', ["Normal"] + BASE +
-                           [480.0, 60.0, 90.0, 240.0, 90.0, 42.0, 96.0,
-                            "No"]))
+vm = VM()
+vm.load(SIDE)
+layer(vm, 'POOLSIDE-RULER', 4)
+attempt("POOLSIDE locked ruler",
+        lambda: vm.run('c:POOLSIDE', ["Normal"] + BASE +
+                       [480.0, 60.0, 90.0, 240.0, 90.0, 42.0, 96.0,
+                        "No"]))
 check("POOLSIDE: the ruler was drawn at all",
       any(vm.layer_of(e) == 'POOLSIDE-RULER' for e in vm.entities))
 check("POOLSIDE: nothing is left on POOLSIDE-RULER",

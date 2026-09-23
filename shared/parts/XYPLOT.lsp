@@ -58,7 +58,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.10")
+(setq *xyplot-version* "v1.11")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -1046,6 +1046,15 @@
                 (xyp:to-abhd ss)
                 (princ "\n  Left as points - run ABHD (or CABHD) when ready."))
               (princ)))))))
+  ;; the two "nothing plotted" exits above never reached the close by
+  ;; the ABHD question, so the group stayed open and everything the
+  ;; drafter drew next joined it -- one U then took their work back
+  ;; with the empty run.  Closed here, once, for every way out; on the
+  ;; plotting path it is already shut and this does nothing
+  (if undo-open
+    (progn
+      (command "_.UNDO" "_End")
+      (setq undo-open nil)))
   (if lzd:end (lzd:end "XYPLOT"))
   (princ))
 

@@ -1,0 +1,17 @@
+# Every answer a prompt takes or hands back that it does not offer, ON
+# PURPOSE -- tools/check_offered.py.  One line per site:
+#
+#   file|the defun|RULE word|why it is harmless where it lands
+#
+# The file is the defun's lisp/ home: one line holds the site in every
+# tier (the grouped twin and the dated release carry the same defun).
+# A NEW line here is a decision, not a way to make the check pass.  A
+# real defect -- a knob handed back on Enter that no branch below the
+# prompt takes, a stored answer nothing vets -- is FIXED, never listed:
+# canonicalise the answer (see pool:treat-canon, ptr:dircanon), hold a
+# number knob to the bound the prompt enforces BEFORE the prompt shows
+# it (so <...> shows what Enter takes), or vet the stored answer the
+# way the prompt would.  A line the check no longer finds is reported
+# stale -- on the default run, which reads every tier.
+lisp/abfind/ABFIND.lsp|abf:run|T1 P|a pre-v3 keyword typed at the marker click: it prints "Just click it - this prompt takes the click itself" and re-asks; nothing is taken, and no tag in the table is spelt P
+lisp/abfind/ABFIND.lsp|abf:run|T1 PICK|the long spelling of the same pre-v3 keyword: it prints the same guidance and re-asks; nothing is taken

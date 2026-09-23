@@ -132,7 +132,10 @@ at a different size:
   has one to purge per tool and neither can erase the other's work.
 * **Enter means different things by design.** At the line prompts it
   takes the offered `Cancel` / `Done` — nothing has been drawn yet, so
-  there is nothing to lose. At the three picks it re-asks instead: those
+  there is nothing to lose. A click that lands just beside a line is
+  not Enter, though: it says *nothing there* and asks again, so a near
+  miss in the "other corners" loop no longer ends the session and drops
+  the line already picked. At the three picks it re-asks instead: those
   arcs are thin and half an inch apart, and the near miss that would
   throw a whole fan away is exactly the click those prompts invite.
   `Cancel` is in the bracket, so a mouse-only way out is always there.

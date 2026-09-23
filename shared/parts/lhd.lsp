@@ -70,7 +70,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v2.6")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v2.7")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -125,9 +125,11 @@
 (setq *LH-ON-EPS*       0.25)       ; a point within this of the result
                                     ; counts as ON it; only points off
                                     ; by more eat into the allowance
-(setq *LH-MISS-PCT*     0.15)       ; share of the points (rounded UP)
-                                    ; that may sit off the result by up
-                                    ; to the tolerance
+(setq *LH-MISS-PCT*     0.15)       ; share of the points, as a FRACTION
+                                    ; from 0 to 1 (0.15 is 15%; anything
+                                    ; else is offered as 0.15), rounded
+                                    ; UP, that may sit off the result by
+                                    ; up to the tolerance
 (setq *LH-CORNER-ANG*   (/ pi 4.0)) ; a point that turns more than this
                                     ; (45 deg) is a sharp corner: it
                                     ; may start or end a span but never
@@ -535,9 +537,19 @@
     (if (> d mx) (setq mx d)))
   mx)
 
+;; *LH-MISS-PCT* as it may be used: a fraction from 0 to 1, or the
+;; shipped 0.15.  The step's initget and its clamp over 100 hold
+;; only what is TYPED; Enter and every other reader take the knob
+;; as it stands, so a LAZTUNE override of 15 (meant as 15%) was
+;; offered as <1500> and let every point off the line, and one of
+;; -0.1 as <-9>.
+(defun lh:miss-knob ( / v)
+  (setq v *LH-MISS-PCT*)
+  (if (and (numberp v) (>= v 0) (<= v 1.0)) v 0.15))
+
 ;; The miss percentage in force for the current run.
 (defun lh:misspct ()
-  (if lh-miss-pct lh-miss-pct *LH-MISS-PCT*))
+  (if lh-miss-pct lh-miss-pct (lh:miss-knob)))
 
 ;; The "on the shape" threshold in force for the current run; scales
 ;; with the tolerance (a quarter of it, never below *LH-ON-EPS*).
@@ -1889,10 +1901,14 @@
                         (cons 40 th)
                         (cons 1 (strcat "POINTS OFF THE LINE ("
                                         (itoa (length bad)) ")")))))
+      ;; the off-by figure is spelled by arithmetic (cal:ftin's), not
+      ;; rtos: rtos follows DIMZIN, and at 0 (acad.dwt's) it wrote
+      ;; 1 7/8" for 0'-1 7/8" and 1' for 1'-0" -- the spelling the
+      ;; review tools reject, in text left on the drawing
       (foreach pair keyed
         (setq y    (- y (* th 1.6))
               line (strcat "Pt." (lh:pt-name (cdr pair))
-                           "   off by " (rtos (car pair) 4 4)))
+                           "   off by " (cal:ftin (car pair) 4 4)))
         (lh:tag-mine
           (entmakex (list '(0 . "TEXT") '(100 . "AcDbEntity")
                           (cons 8 *LH-MISS-LAYER*) '(100 . "AcDbText")
@@ -2283,6 +2299,11 @@
 ;; Share of the points allowed off the line, returned as a fraction;
 ;; DEF is the fraction Enter keeps.
 (defun lh:ask-pct (def back / pct)
+  ;; DEF is the knob on a first asking: held to the range a typed
+  ;; answer is held to BEFORE it is shown, so the prompt never
+  ;; offers <1500> or <-9> and Enter never takes it
+  (if (not (and (numberp def) (>= def 0) (<= def 1.0)))
+    (setq def (lh:miss-knob)))
   (if back (initget 4 "Back Undo") (initget 4))
   (setq pct (getint (strcat "\n  Percent of points allowed off <"
                             (itoa (fix (+ 0.5 (* 100.0 def))))
@@ -2616,7 +2637,7 @@
        (princ "\n\n  Step 2 of 6 - what percent of the points may sit OFF the line")
        (princ "\n  (off, but still within the distance above)?")
        (princ (strcat "\n  Press Enter for the standard "
-                      (itoa (fix (+ 0.5 (* 100.0 *LH-MISS-PCT*))))
+                      (itoa (fix (+ 0.5 (* 100.0 (lh:miss-knob)))))
                       " percent."))
        (setq v (lh:ask-pct *LH-MISS-PCT* T))
        (if (eq v 'CAL-BACK)

@@ -480,28 +480,15 @@ print("== C28. a line on a locked layer is not reported as erased ==")
 # entdel answers nil on a locked layer and the line stays.  v1.5 counted
 # every entdel as a success and told the drafter '2 dimensioned lines
 # erased' over two lines still live under their new dimensions.  The VM
-# has no layer lock, so entdel is made to refuse on a "locked" layer here
-from lispvm import BUILTINS, NIL  # noqa: E402
-
-_entdel = BUILTINS[Sym('entdel')]
-
-
-def _locked_entdel(v, a):
-    if any(isinstance(g, Dot) and g.a == 8 and g.b == 'LOCKED'
-           for g in (v.entdata.get(a[0]) or [])):
-        return NIL
-    return _entdel(v, a)
-
-
-BUILTINS[Sym('entdel')] = _locked_entdel
-try:
-    vm = newvm()
-    ls = [line(vm, (0, 0, 0), (10, 0, 0), layer='LOCKED'),
-          line(vm, (0, 5, 0), (10, 5, 0), layer='LOCKED'),
-          line(vm, (0, 9, 0), (10, 9, 0), layer='POOL')]
-    run(vm, [None, ls], "C28")
-finally:
-    BUILTINS[Sym('entdel')] = _entdel
+# refuses entdel on a locked layer itself now (test_lispvm_values.py), so
+# the layer is simply locked, as a drafter's would be
+vm = newvm()
+vm.loads('(entmake (list (cons 0 "LAYER") (cons 2 "LOCKED") (cons 70 4)'
+         ' (cons 62 7) (cons 6 "Continuous")))')
+ls = [line(vm, (0, 0, 0), (10, 0, 0), layer='LOCKED'),
+      line(vm, (0, 5, 0), (10, 5, 0), layer='LOCKED'),
+      line(vm, (0, 9, 0), (10, 9, 0), layer='POOL')]
+run(vm, [None, ls], "C28")
 assert len(dims(vm)) == 3
 assert ls[0] not in vm.deleted and ls[1] not in vm.deleted
 assert ls[2] in vm.deleted
