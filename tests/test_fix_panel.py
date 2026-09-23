@@ -29,11 +29,12 @@ result:
   been cleared with "", placed its last-resort text at an untranslated
   UCS pick, and wrote no record of the coordinate frame at all.
 
-The VM has no UCS (trans is the identity), no command table and no
-acad.pgp, so each is modelled here with a defun that shadows the
-builtin for this VM only -- a UCS whose origin sits at World
-(1000,500), a getcname that knows a handful of AutoCAD commands, an
-acad.pgp in the VM's own file store.
+The VM has no command table and no acad.pgp, so each is modelled here
+with a defun that shadows the builtin for this VM only -- a getcname
+that knows a handful of AutoCAD commands, an acad.pgp in the VM's own
+file store.  A UCS whose origin sits at World (1000,500) is the VM's
+own vm.set_ucs (tests/test_lispvm_ucs.py); its trans was the identity
+and a (defun trans ...) used to shadow it here.
 
 Run: python3 tests/test_fix_panel.py
 """
@@ -106,13 +107,7 @@ def reg(vm):
 def ucs(vm):
     """A UCS with its origin at World (1000,500): (trans p 1 0) adds
     the offset and (trans p 0 1) takes it away."""
-    vm.loads('''(defun trans (p from to / z)
-                  (setq z (if (caddr p) (caddr p) 0.0))
-                  (cond ((and (= from 1) (= to 0))
-                         (list (+ (car p) 1000.0) (+ (cadr p) 500.0) z))
-                        ((and (= from 0) (= to 1))
-                         (list (- (car p) 1000.0) (- (cadr p) 500.0) z))
-                        (t p)))''')
+    vm.set_ucs((1000.0, 500.0, 0.0))
 
 
 # ------------------------------------------------------------------ [1]
