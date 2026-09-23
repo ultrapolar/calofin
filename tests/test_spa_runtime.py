@@ -1109,6 +1109,70 @@ def test_a_corner_spillway_follows_the_quarter_turn():
     assert 'SPILLWAY BOTTOMLEFT' in txt, txt
 
 
+
+# ------------------------------------------ corner callouts, POOL's way
+
+MIXED = ['No', 'Radius', 12.0, 'Diagonal', 10.0, '90', 'NotGiven']
+
+
+def test_mixed_corners_are_called_out_like_a_pool_rectangle():
+    """POOL's rectangle rule: the two overalls, as true LINEAR dims, and
+    every corner called out on its own -- and nothing else.  SPA used to
+    add an inboard FLAT dim on every side a cut had shortened, which
+    POOL never draws and which crowded the corner callouts."""
+    vm = run([None, 'Coversize', 'Rectangle', None, 84.0, 60.0]
+             + MIXED + ['No', 'No'], 'callouts/mixed')
+    lin = dimcalls(vm, '_.DIMLINEAR')
+    assert len(lin) == 2, lin                      # the overalls, no flats
+    assert sorted(c[3] for c in lin) == ['_H', '_V'], lin
+    assert all(override(c) == '<>\\XCover Size' for c in lin), lin
+    # the cut face is the only aligned dim, and it carries no Typ.
+    al = dimcalls(vm, '_.DIMALIGNED')
+    assert len(al) == 1 and override(al[0]) is None, al
+    assert len(radcalls(vm)) == 1 and override(radcalls(vm)[0]) is None
+    assert sorted(override(c) for c in markcalls(vm)) == ['90%%d', '?']
+
+
+def test_the_second_outline_gets_its_own_callouts_inward():
+    """Mixed corners and a water's edge: the water's edge used to get no
+    corner callouts at all (only an all-same one earned its Typ.).  It
+    is called out corner by corner now, and -- being the INNER outline
+    -- its callouts read inward, so they cannot land on the cover's."""
+    vm = run([None, 'Coversize', 'Rectangle', None, 84.0, 60.0]
+             + MIXED + ['No', 'Yes', 'Offset', 3.0], 'callouts/mixed-two')
+    rads = radcalls(vm)
+    assert len(rads) == 2, rads                    # A on each outline
+    cover, water = rads
+    # the cover's reads out past the arc, the water's edge's back in
+    # towards the spa's centre (42, 30) -- and short of the arc's own
+    # centre, or DIMRADIUS would measure the far side of the circle
+    cen = (42.0, 30.0)
+    dist = lambda p: ((p[0] - cen[0]) ** 2 + (p[1] - cen[1]) ** 2) ** 0.5
+    ctip, cloc = cover[1][1], cover[-1]
+    wtip, wloc = water[1][1], water[-1]
+    assert dist(cloc) > dist(ctip), cover
+    assert dist(wloc) < dist(wtip), water
+    assert ((wloc[0] - wtip[0]) ** 2 + (wloc[1] - wtip[1]) ** 2) ** 0.5 \
+        < 9.0, water                               # the 9" water radius
+    assert sorted(override(c) for c in markcalls(vm)) == \
+        ['90%%d', '90%%d', '?', '?'], [override(c) for c in markcalls(vm)]
+    assert len([c for c in vm.commands if c and c[0] == '_.LEADER']) == 2
+    assert len(dimcalls(vm, '_.DIMALIGNED')) == 2  # a cut face on each
+    assert not stray_arcs(vm)
+
+
+def test_all_same_second_outline_keeps_one_typ_each():
+    """Four matching corners: one Typ. per outline, the cover's at the
+    bottom-right and the water's edge's at the top-left."""
+    vm = run([None, 'Coversize', 'Rectangle', None, 84.0, 60.0,
+              'Yes', 'Diagonal', 10.0, 'No', 'Yes', 'Offset', 3.0],
+             'callouts/same-two')
+    al = dimcalls(vm, '_.DIMALIGNED')
+    assert [override(c) for c in al] == ['<> Typ.', '<> Typ.'], al
+    assert al[0][1][0] > 42.0 and al[0][1][1] < 30.0, al[0]   # B
+    assert al[1][1][0] < 42.0 and al[1][1][1] > 30.0, al[1]   # D
+
+
 if __name__ == '__main__':
     fails = 0
     for name, fn in sorted(globals().items()):
