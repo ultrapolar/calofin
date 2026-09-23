@@ -857,31 +857,18 @@ def rotated_ucs():
         c, s_ = round(math.cos(a)), round(math.sin(a))
         return x * c - y * s_, x * s_ + y * c
 
-    def trans(vm, a):
-        p, frm, to = a[0], a[1], a[2]
-        disp = len(a) > 3 and a[3] is not NIL
-        x, y = p[0], p[1]
-        z = p[2] if len(p) > 2 else 0.0
-        if frm == 0 and to == 1:             # World -> UCS
-            if not disp:
-                x, y = x - ox, y - oy
-            x, y = rot(x, y, -th)
-        elif frm == 1 and to == 0:           # UCS -> World
-            x, y = rot(x, y, th)
-            if not disp:
-                x, y = x + ox, y + oy
-        return [float(x), float(y), float(z)]
-
     sel = [((450.0, 275.0), (550.0, 325.0)),
            ("pt", 450.0, 275.0), ("pt", 550.0, 325.0)]
     stock = {"5M_Tech.dwg": {"box": ((-50.0, -25.0), (50.0, 25.0)),
                              "pts": [(-50.0, -25.0), (50.0, 25.0)]}}
     vm, fake = build(stock=stock, selection=sel, files=["5M_Tech.dwg"])
-    # put back, not deleted: the VM has a trans of its own, and a later
-    # run in this file that reaches MOVE needs it
-    saved_trans = lispvm.BUILTINS.get(Sym("trans"))
+    # the UCS is the VM's own (tests/test_lispvm_ucs.py), given by its
+    # axes so a quarter turn is exact: X along world Y, Y along world -X.
+    # A trans that knew it used to be swapped in here.
+    vm.set_ucs((ox, oy, 0.0), xdir=(0.0, 1.0, 0.0), ydir=(-1.0, 0.0, 0.0))
+    # put back, not deleted: a later run in this file that reaches
+    # ROTATE needs the VM's own
     saved_rotate = lispvm.BUILTINS.get(Sym("vla-rotate"))
-    lispvm.BUILTINS[Sym("trans")] = trans
     frame = {}                               # ref -> (ox, oy, angle)
 
     def rbox(b, bx, by, a):
@@ -934,8 +921,8 @@ def rotated_ucs():
 
     def move(ents, frm, to):
         # MOVE reads its two points in the UCS
-        w0 = trans(vm, [frm, 1, 0])
-        w1 = trans(vm, [to, 1, 0])
+        w0 = vm.ucs_to_wcs(frm)
+        w1 = vm.ucs_to_wcs(to)
         for e in ents:
             b = fake.bbox[e]
             dx, dy = w1[0] - w0[0], w1[1] - w0[1]
@@ -946,7 +933,7 @@ def rotated_ucs():
     try:
         run(vm, ["5M"])
     finally:
-        for name, fn in (("trans", saved_trans), ("vla-rotate", saved_rotate)):
+        for name, fn in (("vla-rotate", saved_rotate),):
             if fn is None:
                 lispvm.BUILTINS.pop(Sym(name), None)
             else:

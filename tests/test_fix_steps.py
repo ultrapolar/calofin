@@ -64,7 +64,6 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-import lispvm  # noqa: E402
 from lispvm import VM, Dot, LispError, Sym, NIL, T, BUILTINS  # noqa: E402
 import test_steps_settings as SS  # noqa: E402  (scripts only)
 
@@ -501,21 +500,8 @@ print("== 6. TUTORIALAUTOBEAD's demo ==")
 UCS = (1000.0, 500.0, 0.0)
 
 
-def fake_trans(vm, a):
-    """A UCS moved to WCS (1000,500): 1 -> 0 adds the origin, 0 -> 1
-    takes it off; a displacement (4th arg) and any other pair are the
-    identity."""
-    p = [float(v) for v in lispvm.pt(a[0])]
-    frm = a[1] if len(a) > 1 else 0
-    to = a[2] if len(a) > 2 else 0
-    disp = len(a) > 3 and a[3] is not NIL
-    if disp or frm == to:
-        return p
-    if frm == 1 and to == 0:
-        return [p[0] + UCS[0], p[1] + UCS[1], p[2] + UCS[2]]
-    if frm == 0 and to == 1:
-        return [p[0] - UCS[0], p[1] - UCS[1], p[2] - UCS[2]]
-    return p
+# the UCS is the VM's own (vm.set_ucs; tests/test_lispvm_ucs.py): a
+# fake_trans that added and took off UCS used to be swapped in here
 
 
 def demo_vm():
@@ -533,10 +519,11 @@ def demo_vm():
 
 # 6a. under a moved UCS the demo is where the drafter clicked
 vm = demo_vm()
+vm.set_ucs(UCS)
 vm.loads("(setq t:*args* nil)")
 vm.loads("(defun autobead-build (ss dir side some hold)"
          " (setq t:*args* (list dir some)) 0)")
-with patched(trans=fake_trans, command=fake_command):
+with patched(command=fake_command):
     try:
         vm.run('c:TUTORIALAUTOBEAD',
                ["Demo", (10.0, 10.0, 0.0), None, None, (150.0, 80.0, 0.0),
@@ -560,7 +547,7 @@ else:
 check("the zoom window (UCS) frames the pool", inside, zoom)
 args = glob(vm, 't:*args*')
 if args:
-    dw = fake_trans(vm, [args[0], 1, 0])
+    dw = vm.ucs_to_wcs(args[0])
     tp = args[1][0]
     in_dir = min(xs) < dw[0] < max(xs) and min(ys) < dw[1] < max(ys)
     in_tread = min(xs) < float(tp[0]) < max(xs) \

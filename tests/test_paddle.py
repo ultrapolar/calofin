@@ -405,15 +405,15 @@ check("Enter closed the gap", len(fillets(vm)) == 1 and not arrows(vm))
 
 
 print("PADDLE -- a wall run past its neighbour is trimmed, not the perimeter")
-#: the last leg is a 30" stub that crosses the first wall 10" along and
-#: sticks 20" out past it.  FILLET keeps the side it was picked on, so
-#: a pick in the middle of that stub would keep the overshoot and trim
-#: the stub off the perimeter instead; the pick goes nine tenths of the
-#: way IN from the loose end for exactly that reason.
+#: the last leg is a 30" stub that crosses the first wall at its end
+#: and sticks 20" out past it.  The two ends already CROSS, so there is
+#: no gap to ask about: the perimeter is there, at the crossing, and
+#: PADDLE trims the overshoot back to it without the fillet question.
 vm = gappy(fresh(DEMO_LAYER),
            [((0, 0), (300, 0)), ((300, 0), (300, 200)), ((300, 200), (0, 200)),
             ((0, 200), (0, 10)), ((0, 10), (0, -20))])
-vm.run("c:PADDLE", [None, None, "Yes"])
+vm.run("c:PADDLE", [None, None])
+out = "".join(vm.printed)
 stub = [e for e in vm.entities if dxf(vm, e, 0) == "LINE"
         and dxf(vm, e, 10)[:2] == [0.0, 10.0]]
 check("the overshoot came off at the crossing",
@@ -422,9 +422,74 @@ check("the overshoot came off at the crossing",
 check("the wall it was still attached to did not move",
       [0.0, 10.0] in [dxf(vm, e, 11)[:2] for e in vm.entities
                       if dxf(vm, e, 0) == "LINE"])
+check("it never asked, and never ran FILLET",
+      not fillets(vm)
+      and not any("zero fillet" in p for p, _ in vm.prompts))
+check("it said what it trimmed",
+      "the two ends already cross" in out
+      and "1 overshoot(s) trimmed back" in out, out)
 check("and the perimeter it left is the one that was padded",
+      "auto-detected the largest closed loop" in out and not arrows(vm))
+
+
+print("PADDLE -- two walls that both run past each other are both trimmed")
+#: the first wall starts 8" left of the corner, the last leg ends 5"
+#: below it: both overshoot, and they cross at (0,0).
+vm = gappy(fresh(DEMO_LAYER),
+           [((-8, 0), (300, 0)), ((300, 0), (300, 200)), ((300, 200), (0, 200)),
+            ((0, 200), (0, -5))])
+vm.run("c:PADDLE", [None, None])
+ends = sorted(tuple(round(c, 6) for c in dxf(vm, e, k)[:2])
+              for e in vm.entities if dxf(vm, e, 0) == "LINE"
+              and e not in vm.deleted for k in (10, 11))
+check("both stubs came back to the corner",
+      ends.count((0.0, 0.0)) == 2 and (-8.0, 0.0) not in ends
+      and (0.0, -5.0) not in ends, f"{ends}")
+check("and the closed perimeter was padded, no arrow left",
       "auto-detected the largest closed loop" in "".join(vm.printed)
       and not arrows(vm))
+
+
+print("PADDLE -- a line run past a curved wall is trimmed at the curve")
+#: the case off a real drawing: a straight wall runs on past the arc it
+#: meets, and the arc runs on past the wall.  Both stubs come back to
+#: where the two cross -- the line's end onto the arc, the arc's end
+#: angle onto the line.  Arc: centre (150,-100), R 180, from about
+#: 145 degrees to 20 -- it passes through the line y = 0 at x ~ 0.9.
+R = 180.0
+X0 = 150.0 - math.sqrt(R * R - 100.0 * 100.0)   # where the arc meets y=0
+vm = fresh(DEMO_LAYER)
+vm.loads('(entmake (list (cons 0 "ARC") (cons 8 "DEMO") (list 10 150.0 -100.0 0.0)'
+         ' (cons 40 %.6f) (cons 50 %.6f) (cons 51 %.6f)))'
+         % (R, math.radians(20.0), math.radians(147.0)))
+gappy(vm, [((X0 - 6.0, 0.0), (300, 0)), ((300, 0), (300, 200)),
+           ((300, 200), (0, 200)), ((0, 200), (0, 60))])
+#: close the other side of the ring with a line from the arc's far end
+arc = vm.entities[0]
+far = (150.0 + R * math.cos(math.radians(20.0)),
+       -100.0 + R * math.sin(math.radians(20.0)))
+vm.loads('(entmake (list (cons 0 "LINE") (cons 8 "DEMO") (list 10 %.6f %.6f 0.0)'
+         ' (list 11 0.0 60.0 0.0)))' % far)
+vm.run("c:PADDLE", [None, None])
+out = "".join(vm.printed)
+line = [e for e in vm.entities if dxf(vm, e, 0) == "LINE"
+        and abs(dxf(vm, e, 11)[0] - 300.0) < 1e-6
+        and abs(dxf(vm, e, 11)[1]) < 1e-6]
+check("the line's stub came back onto the arc",
+      len(line) == 1 and abs(dxf(vm, line[0], 10)[0] - X0) < 1e-6
+      and abs(dxf(vm, line[0], 10)[1]) < 1e-6,
+      f"{[dxf(vm, e, 10) for e in line]}")
+ea = dxf(vm, arc, 51)
+check("the arc's stub came back onto the line",
+      abs(-100.0 + R * math.sin(ea)) < 1e-6 and ea < math.radians(147.0),
+      f"{math.degrees(ea)}")
+check("without the fillet question",
+      not fillets(vm)
+      and not any("zero fillet" in p for p, _ in vm.prompts))
+check("and what closed was padded, with no arrow left",
+      "1 overshoot(s) trimmed back" in out
+      and "auto-detected the largest closed loop" in out and not arrows(vm),
+      out)
 
 
 print("PADDLE -- two gaps exactly as wide as each other are both found")
@@ -447,14 +512,17 @@ check("and both were arrowed", len(arrows(vm)) == 2, f"{len(arrows(vm))}")
 print("PADDLE -- a fillet AutoCAD refuses is reported, not assumed")
 #: a C whose two open ends are parallel and 6 apart: they never cross,
 #: so FILLET cannot join them however far they run on.  The other gap
-#: in the same run is an ordinary one, and closes.
+#: in the same run is the first wall running 6" on past the last leg's
+#: foot -- two ends that already cross, trimmed without a question.
 vm = gappy(fresh(DEMO_LAYER),
            [((0, 0), (300, 0)), ((300, 0), (300, 200)), ((300, 200), (0, 200)),
             ((0, 200), (0, 120)), ((6, 100), (6, 0))])
-vm.run("c:PADDLE", [None, None, "Yes", "Yes"])
+vm.run("c:PADDLE", [None, None, "Yes"])
 out = "".join(vm.printed)
 check("it found both gaps", "one closed perimeter with 2 gap(s)" in out)
-check("it tried both", len(fillets(vm)) == 2, f"{len(fillets(vm))}")
+check("it trimmed the crossing one and asked FILLET for the other",
+      len(fillets(vm)) == 1 and "1 overshoot(s) trimmed back" in out,
+      f"{len(fillets(vm))}")
 check("it said which one FILLET would not close",
       "FILLET would not close 1 gap(s)" in out)
 check("the refused gap keeps its arrow, the closed one does not",

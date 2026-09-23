@@ -22,8 +22,9 @@ test:
 * PLINEWID.  The stock VM does not seed it, and its PLINE ignores it.
   PLINE starts every polyline at it, so a width left behind by an
   earlier PLINE made every measured course a heavy band.
-* THE UCS.  The stock VM's trans is the identity.  A click comes back
-  in the current UCS and a survey point is read out of entget in WCS.
+* THE UCS.  A click comes back in the current UCS and a survey point
+  is read out of entget in WCS.  The stock VM's trans was the identity
+  and a UCS was modelled here; vm.set_ucs is the VM's own now.
 * THE SPACEBAR.  At a click-or-type prompt it is Enter, so the docs a
   drafter reads must spell a fraction dashed.
 
@@ -44,7 +45,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
-from lispvm import VM, Ent, Dot, Sym, NIL, LispError, BUILTINS  # noqa: E402
+from lispvm import VM, Ent, Dot, Sym, LispError, BUILTINS  # noqa: E402
 import test_perp_points as tpp  # noqa: E402
 import test_perpmark as tpm  # noqa: E402
 
@@ -412,22 +413,10 @@ def test_the_tutorials_draw_what_the_commands_draw():
 
 # ---- 6: a survey-point click is carried into WCS ----------------------
 
-UCS_ORIGIN = (100.0, 0.0)
-
-
-def ucs_trans(vm, a):
-    """(trans p from to) for a UCS whose origin sits at UCS_ORIGIN in
-    WCS, axes parallel: 1 -> 0 adds the origin, 0 -> 1 takes it off."""
-    p, frm, to = a[0], a[1], a[2]
-    disp = len(a) > 3 and a[3] not in (NIL, None)
-    if not isinstance(p, list) or frm == to or disp:
-        return p
-    ox, oy = UCS_ORIGIN
-    if (frm, to) == (1, 0):
-        return [p[0] + ox, p[1] + oy] + list(p[2:])
-    if (frm, to) == (0, 1):
-        return [p[0] - ox, p[1] - oy] + list(p[2:])
-    return p
+#: the UCS origin, in WCS, axes parallel: the VM's own trans honours it
+#: (vm.set_ucs; tests/test_lispvm_ucs.py) -- a ucs_trans that added and
+#: took off the origin used to be swapped in here for it
+UCS_ORIGIN = (100.0, 0.0, 0.0)
 
 
 def perpmark_vm():
@@ -454,12 +443,8 @@ def test_perpmark_takes_the_point_under_a_ucs_click():
     vm = perpmark_vm()
     pt1 = tpm.ab_pt(vm, 140, 0, 1)     # UCS (40, 0)
     tpm.ab_pt(vm, 40, 0, 2)            # UCS (-60, 0)
-    old = BUILTINS[Sym('trans')]
-    BUILTINS[Sym('trans')] = ucs_trans
-    try:
-        vm.run('c:FIXPERPASK', [[40.0, 1.0, 0.0]])
-    finally:
-        BUILTINS[Sym('trans')] = old
+    vm.set_ucs(UCS_ORIGIN)
+    vm.run('c:FIXPERPASK', [[40.0, 1.0, 0.0]])
     got = vm.globals.get(Sym('*fixperp-got*'))
     assert got and got[2] is pt1, \
         "the click on Pt.1 took %r" % (got[1] if got else got,)

@@ -5,9 +5,10 @@ does -- the parts the VM's flat, unlocked world would otherwise hide.
 
 ABHD, FITABHD, LHD, CABHD, ABLOBF, ABPCHECK, LOBF and ABCURCHECK each
 carry their own copy of a handful of helpers, and each copy had the
-same blind spot.  The VM keeps every layer unlocked, every UCS World
-and every entity in the world plane, so the three are MODELLED here,
-in the test, the way AutoCAD behaves:
+same blind spot.  The VM used to keep every layer unlocked, every UCS
+World and every entity in the world plane; it models all three the way
+AutoCAD behaves now (tests/test_lispvm_values.py, test_lispvm_ucs.py),
+and they were modelled here, in the test, first:
 
   * a LOCKED LAYER: entdel answers nil and erases nothing.  The purges
     that clear a tool's own markers counted the attempt, said "cleared"
@@ -41,7 +42,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lispvm import VM, Dot, Ent, Sym, BUILTINS, NIL, LispError  # noqa: E402
+from lispvm import VM, Dot, Sym, BUILTINS, NIL, LispError  # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 LISP = os.path.join(REPO, 'lisp')
@@ -114,41 +115,15 @@ def text(vm, lay, s='x'):
 # AutoCAD's entdel on a LOCKED layer -- nil, and nothing erased -- is
 # tests/lispvm.py's own now (test_lispvm_values.py); an entdel_locked
 # model used to be patched in here for it.
-_TRANS = BUILTINS[Sym('trans')]
+# The UCS and an entity's own plane are tests/lispvm.py's now too
+# (test_lispvm_ucs.py): vm.set_ucs moves the UCS, and trans takes a
+# point through an ename's 210 by the arbitrary axis algorithm.  A
+# trans_model used to be patched in here for both.
 
 
 def entdel_refused(vm, a):
     """An entdel that refuses whatever it is handed."""
     return NIL
-
-
-def normal_of(vm, e):
-    n = grp(vm.entdata.get(e, []), 210)
-    return [float(c) for c in n] if n else None
-
-
-def trans_model(ucs_origin=(0.0, 0.0, 0.0)):
-    """trans as AutoCAD answers it, for the two frames modelled here: a
-    UCS that is World moved to UCS_ORIGIN (codes 1 and 0), and an
-    entity's own plane when its extrusion is (0 0 -1) -- the arbitrary
-    axis algorithm gives that plane X = -world X, Y = world Y, Z =
-    -world Z.  Anything else is the VM's identity."""
-    ox, oy, oz = ucs_origin
-
-    def _t(vm, a):
-        p = [float(c) for c in a[0]] + [0.0] * (3 - len(a[0]))
-        frm, to = a[1], a[2]
-        if isinstance(frm, Ent) and to == 0:
-            n = normal_of(vm, frm)
-            if n and abs(n[0]) < 1e-9 and abs(n[1]) < 1e-9 and n[2] < 0:
-                return [-p[0], p[1], -p[2]]
-            return p
-        if frm == 1 and to == 0:
-            return [p[0] + ox, p[1] + oy, p[2] + oz]
-        if frm == 0 and to == 1:
-            return [p[0] - ox, p[1] - oy, p[2] - oz]
-        return _TRANS(vm, a)
-    return _t
 
 
 class patched:
@@ -275,8 +250,7 @@ for prefix in READERS:
              ' (list 10 100.0 20.0 0.0) \'(40 . 30.0)'
              ' \'(50 . 0.0) (cons 51 (/ pi 2.0)) %s))' % DOWN)
     arc = vm.entities[-1]
-    with patched(trans=trans_model()):
-        got = segs(vm, prefix, arc)
+    got = segs(vm, prefix, arc)
     a = math.pi / 4.0
     want_mid = (-(100.0 + 30.0 * math.cos(a)), 20.0 + 30.0 * math.sin(a))
     check("%s: a downward ARC starts and ends where it is drawn" % prefix,
@@ -290,8 +264,7 @@ for prefix in READERS:
     vm.loads('(entmake (list \'(0 . "CIRCLE") \'(8 . "POOL")'
              ' (list 10 50.0 20.0 0.0) \'(40 . 10.0) %s))' % DOWN)
     circ = vm.entities[-1]
-    with patched(trans=trans_model()):
-        got = segs(vm, prefix, circ)
+    got = segs(vm, prefix, circ)
     pts = [s[0] for s in got] + [s[1] for s in got] + [arc_mid(s) for s in got]
     check("%s: a downward CIRCLE is round the world centre" % prefix,
           len(got) == 2
@@ -305,8 +278,7 @@ for prefix in READERS:
              ' \'(10 100.0 50.0) \'(42 . 0.0) \'(10 0.0 50.0) \'(42 . 0.0)'
              ' %s))' % DOWN)
     lw = vm.entities[-1]
-    with patched(trans=trans_model()):
-        got = segs(vm, prefix, lw)
+    got = segs(vm, prefix, lw)
     # the first span runs (0,0) -> (-100,0) in the world, and its bulge,
     # +0.5 in the downward plane, sags to +y there -- the same side it
     # is drawn on
@@ -329,8 +301,7 @@ for prefix in READERS:
         vm.loads('(entmake (list \'(0 . "VERTEX") \'(8 . "POOL")'
                  ' (list 10 %r %r 0.0) (cons 42 %r) \'(70 . 0)))' % (x, y, b))
     vm.loads('(entmake (list \'(0 . "SEQEND") \'(8 . "POOL")))')
-    with patched(trans=trans_model()):
-        got = segs(vm, prefix, heavy)
+    got = segs(vm, prefix, heavy)
     check("%s: a downward heavy POLYLINE is read in world numbers" % prefix,
           len(got) == 2 and near(got[0][1], (-60.0, 0.0))
           and near(got[1][1], (-60.0, 30.0)) and abs(got[0][2] + 0.25) < 1e-9,
@@ -341,8 +312,7 @@ for prefix in READERS:
              ' (list 10 100.0 20.0 0.0) \'(40 . 30.0)'
              ' \'(50 . 0.0) (cons 51 (/ pi 2.0))))')
     flat = vm.entities[-1]
-    with patched(trans=trans_model()):
-        got = segs(vm, prefix, flat)
+    got = segs(vm, prefix, flat)
     check("%s: a flat ARC reads exactly as before" % prefix,
           len(got) == 1 and near(got[0][0], (130.0, 20.0))
           and near(got[0][1], (100.0, 50.0)) and got[0][2] > 0.0, got)
@@ -400,8 +370,8 @@ vm.loads("""(setq P (list (cons 'variant "RoundedBottom")
                           (cons 'mirror nil)))""")
 before = len(vm.entities)
 vm.script = [(384.0, 108.0, 0.0), None, None, None, None]
-with patched(trans=trans_model((1000.0, 0.0, 0.0))):
-    vm.loads('(fit:bottom R)')
+vm.set_ucs((1000.0, 0.0, 0.0))
+vm.loads('(fit:bottom R)')
 xs = []
 for e in vm.entities[before:]:
     d = vm.entdata.get(e, [])
@@ -419,17 +389,17 @@ check("FITABHD: the bottom is drawn at the end that was clicked",
 # ABCURCHECK: a declared break, added by clicking it, and one dropped
 # by clicking it -- the UCS origin moved up to (0, 50)
 vm = loaded('acc')
-with patched(trans=trans_model((0.0, 50.0, 0.0))):
-    vm.script = ['Add', (10.0, -2.0, 0.0), None, None]
-    got = vm.loads('(acc:declare-loop nil)')
-    check("ABCURCHECK: a declaration is kept in world numbers",
-          got and near(got[0], (10.0, 48.0)), got)
-    # a declaration read back off the drawing is in world numbers, and
-    # a click on it under the moved UCS drops it
-    vm.script = ['Remove', (10.0, -2.0, 0.0), None, None]
-    got = vm.loads("(acc:declare-loop (list '(10.0 48.0)))")
-    check("ABCURCHECK: ...and a click on a declaration drops it",
-          not got and 'Nothing declared to drop' not in said(vm), got)
+vm.set_ucs((0.0, 50.0, 0.0))
+vm.script = ['Add', (10.0, -2.0, 0.0), None, None]
+got = vm.loads('(acc:declare-loop nil)')
+check("ABCURCHECK: a declaration is kept in world numbers",
+      got and near(got[0], (10.0, 48.0)), got)
+# a declaration read back off the drawing is in world numbers, and
+# a click on it under the moved UCS drops it
+vm.script = ['Remove', (10.0, -2.0, 0.0), None, None]
+got = vm.loads("(acc:declare-loop (list '(10.0 48.0)))")
+check("ABCURCHECK: ...and a click on a declaration drops it",
+      not got and 'Nothing declared to drop' not in said(vm), got)
 
 # the wall a Remove takes: two walls in world numbers, y 0 and y 50,
 # the UCS origin moved up to (0, 50), and a click just under the UPPER
@@ -443,9 +413,9 @@ for prefix, var, fn in WALLS:
     vm.loads('(setq %s (list (list \'(0.0 0.0) \'(100.0 0.0))'
              ' (list \'(0.0 50.0) \'(100.0 50.0))))' % var)
     vm.script = ['Remove', (50.0, -2.0, 0.0), None]
-    with patched(trans=trans_model((0.0, 50.0, 0.0))):
-        vm.loads("(%s (list '(0.0 0.0) '(100.0 0.0) '(0.0 50.0)"
-                 " '(100.0 50.0)))" % fn)
+    vm.set_ucs((0.0, 50.0, 0.0))
+    vm.loads("(%s (list '(0.0 0.0) '(100.0 0.0) '(0.0 50.0)"
+             " '(100.0 50.0)))" % fn)
     left = vm.loads(var)
     check("%s: Remove takes the wall that was clicked" % fn,
           left and len(left) == 1 and near(left[0][0], (0.0, 0.0)), left)
@@ -525,13 +495,12 @@ def seen(vm):
 
 
 def drive(vm, cmd, script):
-    """Run CMD under the trans model as far as SCRIPT reaches; running
-    out of answers after the read is the expected way to stop."""
-    with patched(trans=trans_model()):
-        try:
-            vm.run(cmd, script)
-        except LispError:
-            pass
+    """Run CMD as far as SCRIPT reaches; running out of answers after
+    the read is the expected way to stop."""
+    try:
+        vm.run(cmd, script)
+    except LispError:
+        pass
 
 
 # the helper itself, in all seven copies: a block from below, a flat
@@ -548,11 +517,10 @@ for prefix in ('pf', 'cab', 'lh', 'abp', 'abl', 'lobf', 'fit'):
              ' \'(1 . "12.5") (list 10 60.0 30.5 0.0) %s))' % DOWN)
     tx = vm.entities[-1]
     got = {}
-    with patched(trans=trans_model()):
-        for k, e in (('down', down), ('flat', flat), ('pt', pt), ('tx', tx)):
-            vm.globals[Sym('e')] = e
-            got[k] = [float(c) for c in vm.loads('(%s:ins-w (entget E))'
-                                                  % prefix)]
+    for k, e in (('down', down), ('flat', flat), ('pt', pt), ('tx', tx)):
+        vm.globals[Sym('e')] = e
+        got[k] = [float(c) for c in vm.loads('(%s:ins-w (entget E))'
+                                              % prefix)]
     check("%s:ins-w takes a block from below to world, Z and all" % prefix,
           got['down'] == [-100.0, 20.0, 5.0], got['down'])
     check("%s:ins-w leaves a flat block, a POINT, as stored" % prefix,
@@ -565,8 +533,7 @@ for prefix in ('pf', 'cab', 'lh', 'abp', 'abl', 'lobf', 'fit'):
 for prefix in ('pf', 'cab', 'lh', 'abl'):
     vm = loaded(prefix)
     survey(vm)
-    with patched(trans=trans_model()):
-        got = vm.loads('(%s:collect-points)' % prefix)
+    got = vm.loads('(%s:collect-points)' % prefix)
     check("%s:collect-points offers each block where it is drawn" % prefix,
           xy([c[0] for c in got]) == WORLD, got)
 
@@ -575,16 +542,14 @@ for prefix, call in (('abp', '(car (abp:harvest SS))'),
                      ('lobf', '(lobf:harvest SS)')):
     vm = loaded(prefix)
     vm.globals[Sym('ss')] = ['<ss>'] + survey(vm)
-    with patched(trans=trans_model()):
-        got = vm.loads(call)
+    got = vm.loads(call)
     check("%s's harvest reads each block where it is drawn" % prefix,
           xy(got) == WORLD, got)
 
 vm = loaded('fit')
 vm.globals[Sym('ss')] = ['<ss>'] + survey(vm)
 vm.loads('(setq fit-pts nil fit-ptnames nil fit-npt 0 fit-nmoved 0)')
-with patched(trans=trans_model()):
-    vm.loads('(fit:gather SS)')
+vm.loads('(fit:gather SS)')
 got = vm.loads('fit-pts')
 check("fit:gather reads each block where it is drawn", xy(got) == WORLD, got)
 
@@ -695,11 +660,11 @@ print("\nTUTORIALABHD's demo under a moved UCS")
 vm = loaded('pf')
 vm.script = [(0.0, 0.0, 0.0)]
 before = len(vm.entities)
-with patched(trans=trans_model((1000.0, 0.0, 0.0))):
-    try:
-        vm.loads('(pf:tut-demo)')        # stops at its first pause
-    except LispError:
-        pass
+vm.set_ucs((1000.0, 0.0, 0.0))
+try:
+    vm.loads('(pf:tut-demo)')        # stops at its first pause
+except LispError:
+    pass
 xs = [float(grp(vm.entdata.get(e, []), 10)[0]) for e in vm.entities[before:]
       if grp(vm.entdata.get(e, []), 0) == 'POINT' and live(vm, e)]
 check("the practice survey is drawn round the spot that was picked",

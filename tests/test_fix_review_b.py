@@ -1,15 +1,16 @@
 """Regression tests for the review-b findings: CHECK, SPACHECK, CLEARDIM
 and LINTXTCHK, each driven through the REAL .lsp in the VM.
 
-The VM has no locked layers, no UCS and one paper space it never
-switches to, so each test models what it needs itself:
+The VM had no locked layers, no UCS and one paper space it never
+switches to, so each test modelled what it needed itself:
 
   * a LOCKED layer is a layer record with bit 4 of group 70 set, and
     entmod is swapped for one that refuses (answers nil, changes
     nothing) for an entity on such a layer -- what AutoCAD does;
-  * a SHIFTED UCS is a trans that adds (or takes off) an origin
-    offset, and a command wrapper that reads every point it is handed
-    as a UCS point -- which is what (command ...) does;
+  * a SHIFTED UCS is vm.set_ucs: the VM's trans adds (or takes off) the
+    origin, and its (command ...) reads every point it is handed as a
+    UCS point -- a trans and a command wrapper used to be swapped in
+    here for it;
   * a LAYOUT VIEWPORT is CTAB naming a layout while CVPORT is above 1,
     and paper-space ink is an entity carrying (410 . "Layout1").
 
@@ -679,50 +680,10 @@ def test_a_frame_open_wider_than_the_slack_is_measured_whole():
 # [9] TUTORIALSPACHECK's practice drawing under a moved UCS
 # ------------------------------------------------------------------
 
-class ShiftedUCS:
-    """A UCS whose origin sits at WCS (ox, oy): trans adds or takes off
-    the offset (not for a displacement), and (command ...) reads every
-    point it is handed as a UCS point, as AutoCAD's does.  getpoint's
-    scripted answers are UCS points already."""
-
-    def __init__(self, ox, oy):
-        self.o = (ox, oy)
-
-    def __enter__(self):
-        self.trans = BUILTINS[Sym('trans')]
-        self.command = BUILTINS[Sym('command')]
-        ox, oy = self.o
-
-        def is_pt(v):
-            return (isinstance(v, list) and len(v) in (2, 3)
-                    and all(isinstance(c, (int, float)) for c in v))
-
-        def trans(vm, a):
-            p = list(a[0])
-            disp = len(a) > 3 and a[3] is not NIL
-            if disp:
-                return p
-            frm, to = a[1], a[2]
-            k = (1 if (frm == 1 and to == 0) else
-                 -1 if (frm == 0 and to == 1) else 0)
-            out = [p[0] + k * ox, p[1] + k * oy] + p[2:]
-            return out
-
-        real_cmd = self.command
-
-        def command(vm, a):
-            a = [[v[0] + ox, v[1] + oy] + list(v[2:]) if is_pt(v) else v
-                 for v in a]
-            return real_cmd(vm, a)
-
-        BUILTINS[Sym('trans')] = trans
-        BUILTINS[Sym('command')] = command
-        return self
-
-    def __exit__(self, *exc):
-        BUILTINS[Sym('trans')] = self.trans
-        BUILTINS[Sym('command')] = self.command
-        return False
+# A SHIFTED UCS is the VM's own now (tests/test_lispvm_ucs.py): trans
+# adds or takes off the origin, and a command reads every point it is
+# handed as a UCS point.  A ShiftedUCS that swapped both builtins used
+# to stand here.
 
 
 def test_the_practice_drawing_holds_together_under_a_moved_ucs():
@@ -732,10 +693,10 @@ def test_the_practice_drawing_holds_together_under_a_moved_ucs():
     faults nobody planted."""
     vm = VM()
     vm.load(PATHS['spacheck'])
-    with ShiftedUCS(1000.0, 500.0):
-        vm.run('c:TUTORIALSPACHECK',
-               ['Demo', [10.0, 20.0, 0.0], '', '', '',
-                'Yes', None, None, 'No'])
+    vm.set_ucs((1000.0, 500.0, 0.0))
+    vm.run('c:TUTORIALSPACHECK',
+           ['Demo', [10.0, 20.0, 0.0], '', '', '',
+            'Yes', None, None, 'No'])
     txt = report_text(vm)
     bad = rows(txt, 1)
     check("[9] the scan names the three planted faults and nothing else",
@@ -749,13 +710,16 @@ def test_the_practice_drawing_holds_together_under_a_moved_ucs():
           and abs(first[2] - 520.0) < 1e-9, repr(first))
     # the first explanation zooms to the cover: its window, read as the
     # UCS points ZOOM takes, has to land around the cover's WORLD box
-    zooms = [c for c in vm.commands
+    # (vm.commands keeps a command's points as they were handed over --
+    # UCS -- so the window is taken to World to be laid over the cover)
+    zooms = [[vm.ucs_to_wcs(c[2]), vm.ucs_to_wcs(c[3])]
+             for c in vm.commands
              if c and c[0] == '_.ZOOM' and len(c) > 3 and c[1] == '_Window']
     x0, y0 = (first[1], first[2]) if first else (None, None)
     check("[9] the walk's zoom window frames the cover itself",
           bool(zooms) and x0 is not None
-          and zooms[0][2][0] <= x0 <= zooms[0][3][0]
-          and zooms[0][2][1] <= y0 <= zooms[0][3][1], repr(zooms[:1]))
+          and zooms[0][0][0] <= x0 <= zooms[0][1][0]
+          and zooms[0][0][1] <= y0 <= zooms[0][1][1], repr(zooms[:1]))
 
 
 # ------------------------------------------------------------------
@@ -825,8 +789,8 @@ def test_lintxtchk_lands_on_the_click_under_a_moved_ucs():
     point, entmake takes WCS, and the checklist landed 1000 off."""
     vm = VM()
     vm.load(PATHS['lintxtchk'])
-    with ShiftedUCS(1000.0, 500.0):
-        vm.run('c:LINTXTCHK', [[10.0, 20.0, 0.0]])
+    vm.set_ucs((1000.0, 500.0, 0.0))
+    vm.run('c:LINTXTCHK', [[10.0, 20.0, 0.0]])
     texts = [e for e in live(vm) if ent_dict(vm, e).get(0) == 'TEXT']
     first = grp(vm, texts[0], 10) if texts else None
     check("[5] the first line sits at the click, in world numbers",
