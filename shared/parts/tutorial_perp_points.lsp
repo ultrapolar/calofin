@@ -28,7 +28,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.10")
+(setq *tutperp-version* "v0.11")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -245,7 +245,7 @@
                   "  * the offset polyline takes the layer, colour, linetype,"
                   "    lineweight and linetype scale of the source line"
                   "  * dimensions are drawn at the very end, all at once, on"
-                  "    the DIMENSIONS layer (created if missing)"
+                  "    the DIMENSION layer (created if missing)"
                   "  * you pick STANDARD INCHES or SIDE STANDARD; if the"
                   "    drawing lacks that style the current style is used"
                   "    and a note is printed"
@@ -391,7 +391,7 @@
                   "STAGE 6 - the dimensions."
                   "One aligned dimension per point, from the line to its"
                   "offset point.  In the real command these are drawn at the"
-                  "very end, all at once, on the DIMENSIONS layer, in the"
+                  "very end, all at once, on the DIMENSION layer, in the"
                   "style you pick: STANDARD INCHES or SIDE STANDARD."))
       (tutp:pause)
 
@@ -426,11 +426,11 @@
                   "like; a single U undoes the whole run."))
       (tutp:pause)
 
-      ;; keep or erase the demo
-      (initget "Keep Erase")
-      (setq ans (getkword "\nKeep the demo drawing? [Keep/Erase] <Keep>: "))
-      (if lzd:ask (lzd:ask "\nKeep the demo drawing? [Keep/Erase] <Keep>: " ans) ans)
-      (if (equal ans "Erase")
+      ;; erase the demo only on an explicit Yes -- Enter keeps it
+      (initget "Yes No")
+      (setq ans (getkword "\nErase the demo drawing? [Yes/No] <No>: "))
+      (if lzd:ask (lzd:ask "\nErase the demo drawing? [Yes/No] <No>: " ans) ans)
+      (if (equal ans "Yes")
         (progn
           (foreach e ents (if (and e (entget e)) (entdel e)))
           (setq ents nil)))))

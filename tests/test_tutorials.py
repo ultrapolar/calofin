@@ -25,8 +25,9 @@ What is asserted:
     arc.  A tour that silently drew nothing would still "pass" a test
     that only checked it did not throw, so the count and the findings
     are both asserted;
-  * the erase question at the end: Enter takes the practice drawing
-    away, No leaves it standing;
+  * the erase question at the end, "Erase the practice drawing?
+    [Yes/No] <No>": Yes takes the practice drawing away, No and Enter
+    both leave it standing (Enter never erases a demo -- STANDARDS 3);
   * and every exit restores CMDECHO and every other sysvar and closes
     the undo group -- run() enforces the group, this file the rest.
 
@@ -145,7 +146,8 @@ for label, path, cmd, layer, scan, faults in [
           f"{label} tutorial" in out and not live)
 
     print(f"TUTORIAL{label} -- the Demo plants faults and the scan finds them")
-    vm, live, out, before = tour(path, cmd, DEMO + [None] * faults)
+    vm, live, out, before = tour(path, cmd,
+                                 DEMO + [None] * (faults - 1) + ["Yes"])
     check(f"{label}: it drew a practice drawing",
           "practice objects drawn" in out)
     check(f"{label}: it ran the read-only scanner",
@@ -154,7 +156,7 @@ for label, path, cmd, layer, scan, faults in [
           "with a stray point" in out)
     check(f"{label}: the scan reported the unattached arc",
           re.search(r"Arcs: \d+ scanned", out) is not None)
-    check(f"{label}: Enter at the last question erased the practice drawing",
+    check(f"{label}: Yes at the last question erased the practice drawing",
           not live and "Practice drawing erased" in out, f"{len(live)} left")
     check(f"{label}: every sysvar is back", vm.sysvars == before)
 
@@ -169,7 +171,7 @@ for label, path, cmd, layer, scan, faults in [
              % layer)
     prior = vm.entities[-1]
     try:
-        vm.run(cmd, DEMO + [None] * faults)
+        vm.run(cmd, DEMO + [None] * (faults - 1) + ["Yes"])
     except LispError as e:
         raise AssertionError(f"[{cmd}] {e}") from None
     out = "".join(vm.printed)
@@ -180,14 +182,17 @@ for label, path, cmd, layer, scan, faults in [
     check(f"{label}: the report that was already there is kept",
           prior not in vm.deleted)
 
-    print(f"TUTORIAL{label} -- No at the last question keeps the drawing")
-    vm, live, out, before = tour(path, cmd,
-                                 DEMO + [None] * (faults - 1) + ["No"])
-    check(f"{label}: the practice objects are still there", len(live) > 1,
-          f"{len(live)}")
-    check(f"{label}: nothing was erased",
-          "Practice drawing erased" not in out)
-    check(f"{label}: every sysvar is back", vm.sysvars == before)
+    # "Erase the practice drawing? [Yes/No] <No>": Enter never erases
+    for last, said_as in (("No", "No"), (None, "Enter")):
+        print(f"TUTORIAL{label} -- {said_as} at the last question keeps"
+              " the drawing")
+        vm, live, out, before = tour(path, cmd,
+                                     DEMO + [None] * (faults - 1) + [last])
+        check(f"{label}: the practice objects are still there",
+              len(live) > 1, f"{len(live)}")
+        check(f"{label}: nothing was erased",
+              "Practice drawing erased" not in out)
+        check(f"{label}: every sysvar is back", vm.sysvars == before)
 
     print(f"TUTORIAL{label} -- Enter takes the documented default (Both)")
     vm, live, out, before = tour(path, cmd,

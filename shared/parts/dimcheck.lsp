@@ -118,7 +118,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.28")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.29")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -2453,7 +2453,10 @@
           ;; still closes the undo group and puts CMDECHO back
           (setq rmark (entlast))
           (dchk:scan)))
-      (if (cal:ask-yn "\n  Erase the practice drawing now?" "Yes")
+      ;; Enter keeps the practice drawing; only an explicit Yes erases it
+      (initget "Yes No")
+      (if (= "Yes" ((lambda (v) (if lzd:ask (lzd:ask "\n  Erase the practice drawing? [Yes/No] <No>: " v) v))
+                     (getkword "\n  Erase the practice drawing? [Yes/No] <No>: ")))
         (progn
           ;; an erase that is refused (a locked layer) is counted, so
           ;; the line at the end never says "erased" over objects that

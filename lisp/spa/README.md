@@ -64,7 +64,7 @@ flow in `SPA.LSP` changes, walk `TUTORIALSPA.LSP` through with it.
 
 | Shape | What it asks for |
 | --- | --- |
-| **Rectangle** | overall width (A‑B), then the length (A‑D) — **the width is offered back**, so Enter makes it square — then the corners, once for all four or one at a time |
+| **Rectangle** | overall length across (A‑B), then the width up (A‑D) — **the length is offered back**, so Enter makes it square — then the corners, once for all four or one at a time |
 | **Octagon** | overalls **B** across and **A** up, then the cut **face S2**, then **T / S / S1 / V** (any of them may be `NA`) |
 | **Round** | **one measurement** — the diameter. Type `O` at it for an out-of-round spa and the two axes are asked instead |
 
@@ -81,13 +81,13 @@ A --------- B        |               |
                        A --------- B
 ```
 
-## Thermo-Light
+## THERMOLIGHT
 
-Thermo-Light is a special case on two counts, so the **Spa Cover Details
+THERMOLIGHT is a special case on two counts, so the **Spa Cover Details
 block is read first**, before anything else is asked:
 
 * **Water's edge = cover size.** They are the same thing on a
-  Thermo-Light cover, so the water's-edge question is not asked at all —
+  THERMOLIGHT cover, so the water's-edge question is not asked at all —
   the drawing is made as `Cover Size` — and the offer to add the other
   outline is skipped, since there is no other outline.
 * **Every hinge is velcro.** There is no dashed fold hinge; all hinges
@@ -99,14 +99,14 @@ here, where your own drawing is still on the screen to click — by the
 hinge pass it is the grey guide spa that is up, not your drawing.
 Skipping it is therefore an answer, not a postponement: the taper is
 typed at the hinge pass instead, the grade falls back to `Standard`, and
-a Thermo-Light cover has to be told through the block or the form for
+a THERMOLIGHT cover has to be told through the block or the form for
 the two rules above to apply. Only Enter skips: a click that hits
 nothing says `Nothing there` and asks again, so a pick that just misses
 the block cannot spend the one offer.
 
 ## Water's edge vs cover size
 
-Except on Thermo-Light, the first question is which one is being drawn, and it decides both the
+Except on THERMOLIGHT, the first question is which one is being drawn, and it decides both the
 layer and the dimension text:
 
 | Answer | Perimeter | Overall dimension reads |
@@ -236,7 +236,7 @@ Two places worth knowing:
   (water's edge or cover size), the spa shape, and the insertion base
   point — are one chain like the rest. The shape is the one that shapes
   every question after it, so `Back` at the base point re-asks it and
-  `Back` at the shape re-asks the mode. Thermo-Light settles the mode
+  `Back` at the shape re-asks the mode. THERMOLIGHT settles the mode
   without asking, so on the way back that step is stepped over rather
   than stopped on.
 * The spa is laid out from the base point along the **current UCS**:
@@ -247,10 +247,10 @@ Two places worth knowing:
   down), is refused before the first question -- the radius corners
   would come out mirrored and the labels backwards. `TUTORIALSPA`
   refuses it too.
-* The **spillaway loop** commits as it goes, so Back at the top of it
-  *removes the spillaway just committed* — and with it the no-go zone
+* The **spillway loop** commits as it goes, so Back at the top of it
+  *removes the spillway just committed* — and with it the no-go zone
   and the report row it would have made — before re-asking
-  (`Stepping back one spillaway.` / `Already at the first spillaway.`).
+  (`Stepping back one spillway.` / `Already at the first spillway.`).
 * The **taper** prompt is a `getstring`, which cannot take keywords, so
   there Back is typed like a value — `B`, `BACK`, `U` or `UNDO`, any
   case — and the prompt says so.
@@ -296,7 +296,7 @@ The key roster:
 | `mode` | `Watersedge` / `Coversize` |
 | `shape` | `Rectangle` / `OCtagon` / `ROund` — exact spelling |
 | `base` | insertion base point, as a plain list: `(base 0.0 0.0)` |
-| `w`, `l` | rectangle overall width / length |
+| `w`, `l` | rectangle overall length across (`w`) / width up (`l`) -- the keys keep their old letters |
 | `samecorners` | `Yes` / `No` — are all four corners the same? A form that names no corner but `cornera` is still asked this at the keyboard; one that fills in any of `cornerb`/`cornerc`/`cornerd` has said `No` by doing so, and is not asked unless it sent this key too — an explicit answer always wins |
 | `cornera-ty` … `cornerd-ty` | corner treatment: `Radius` / `Diagonal` / `90` (`Square` accepted as the synonym for `90`, exactly as at the prompt). With `samecorners` = `Yes`, **corner A's pair answers the one round** and B, C and D take it |
 | `cornera-sz` … `cornerd-sz` | the radius or cut face length for a sized treatment; `90` needs none |
@@ -308,18 +308,18 @@ The key roster:
 | `w2`, `l2` | the second outline by dims, rectangle |
 | `b2`, `a2`, `f2` | the second outline by dims, octagon (`f2` the cut face); the round one takes `b2`, `a2` |
 | `autohinge` | `Yes` / `No` — auto-hinge the cover |
-| `grade`, `taper` | the Spa Cover Details values, normalised exactly as the block's tags are — a form grade of Thermo-Light engages the Thermo-Light rules just like the block, and a form answer wins over a block picked in the drawing |
+| `grade`, `taper` | the Spa Cover Details values, normalised exactly as the block's tags are — a form grade of THERMOLIGHT engages the THERMOLIGHT rules just like the block, and a form answer wins over a block picked in the drawing |
 
 Two prompts stay interactive by design: the **Spa Cover Details block
 pick** (an `entsel` — the block is in the drawing, there is nothing for
-a form to type) and the **spillaway loop**. `tests/test_spa_form.py`
+a form to type) and the **spillway loop**. `tests/test_spa_form.py`
 proves the equivalence — the same spa from the prompts and from a form
 — at both tiers.
 
 ## Orientation
 
 **The long overall always runs west to east**, whichever order the two
-were typed in. If the length comes in bigger than the width the cover is
+were typed in. If the width (up) comes in bigger than the length (across) the cover is
 drawn a quarter turn over, and the corner treatments and their letters
 travel round with it — the corner the user called `B` lands bottom-left
 and is still labelled `B`, so the drawing reads back against the report
@@ -466,7 +466,7 @@ is gone by the time you see it.
 Any measurement may be typed **in millimetres by putting the unit on the
 number** — `600mm`, `1524MM`, `76.2mm` — and it is converted to inches
 (÷ 25.4). This works at every distance prompt: the guided measurements,
-the corner sizes, the lap, the spillaway lengths.
+the corner sizes, the lap, the spillway lengths.
 
 **No space before the unit.** The spacebar is Enter at a distance
 prompt, so `300 mm` hands in 300 *inches* and leaves the `mm` to
@@ -531,10 +531,10 @@ octagon and the round spa the field‑sheet ties (`B`, `A`, `T`, `S`, `S1`,
 `V`, `S2`) are drawn and lit the same way.
 
 **The guide stays up until the real spa replaces it.** The hinge
-questions — the auto-hinge offer, the spillaways, the taper — are asked
+questions — the auto-hinge offer, the spillways, the taper — are asked
 *before* anything is drawn, because their answers can still turn the
 cover; the guide is the only spa on the screen while they are answered,
-and the spillaway questions name its corners and its walls. It comes
+and the spillway questions name its corners and its walls. It comes
 down at the moment the real outline goes up, and the view moves with it:
 the guide is drawn at a nominal 240 × 200 whatever the spa measures, so
 the window it was shown in is the wrong one for the real thing.
@@ -569,13 +569,13 @@ whichever outline they belong to.
 Hinges run north-south, splitting the cover into side-by-side pieces
 along its west-east length.
 
-**1. Spillaways** — places a hinge cannot go, asked in a loop that always
+**1. Spillways** — places a hinge cannot go, asked in a loop that always
 defaults to `No`:
 
 * `Corner` — pick the corner, give the length from the (hypotenuse)
   corner to keep clear; it blocks that far along both walls of the angle.
-* `Wall` — give the spillaway's overall length; it is assumed centred on
-  its wall. A left/right wall spillaway cannot meet a north-south hinge,
+* `Wall` — give the spillway's overall length; it is assumed centred on
+  its wall. A left/right wall spillway cannot meet a north-south hinge,
   so it is recorded but blocks nothing.
 
 Both are answered against the spa **as measured**; the turn, if one is
@@ -597,13 +597,13 @@ asked for a second time. The `GRADE` and `TAPER` tags are read
 4-2 each come as 48" × 144"/96" *and* 49½" × 102" — and **one can work
 where the other will not**: the wider sheet needs fewer hinges, the
 longer one lets a hinge run further. Every sheet is solved and scored on
-what it satisfies (dodges the spillaways / fits the foam length /
+what it satisfies (dodges the spillways / fits the foam length /
 acceptable piece count) before fewest pieces is even considered. When
 neither fits the length, the longer sheet wins so the overrun is as small
 as it can be. Which sheet was taken is noted under the report.
 
 **3. Placement** — the fewest pieces that fit the foam width, spaced
-evenly, then nudged off any spillaway zone. A nudge keeps every piece
+evenly, then nudged off any spillway zone. A nudge keeps every piece
 inside the foam width; when no nudge works the piece count is bumped, and
 failing everything the even layout is kept and the report flags the hinge
 in the zone. One hinge prefers dead centre.
@@ -616,7 +616,7 @@ hinge-length chart and each item recommended in the report:
 | Economy | upon request only | upon request only | upon request only |
 | Standard & Deluxe | over 120" | over 108" | over 120" |
 | Ultra | over 108" | never | over 96" |
-| Thermo-Light | always | never | never |
+| THERMOLIGHT | always | never | never |
 
 These are **advisories**, printed in cyan under the report table rather
 than red — they are recommendations, not failures.
@@ -641,8 +641,8 @@ centre:
 | 7 | Hinge, Velcro, Hinge, Velcro, Velcro, Hinge |
 
 The leftmost hinge is always a fold, no two folds are ever adjacent, and
-Thermo-Light stays all-velcro. Labels go on the `TEXT` layer, vertical,
-beside their hinge. The report gains rows for each spillaway, the piece
+THERMOLIGHT stays all-velcro. Labels go on the `TEXT` layer, vertical,
+beside their hinge. The report gains rows for each spillway, the piece
 count (with grade/taper), the worst piece width vs foam width, the worst
 hinge length vs foam length, and each hinge's offset from the left edge.
 
@@ -747,7 +747,7 @@ holds this table and the block together, so neither can drift from the other.
 | `spa:*pv-zoom*` | `0.35` | margin round the real spa when the view leaves the guide for it (of its long side) |
 | `spa:*foamdflt*` | `(list (cons 48.0 96.0))` | assumed when nothing matches |
 | `spa:*foamdpc*` | `(list 2 3 4 5)` | and the counts it will accept |
-| `spa:*thermotaper*` | `"1-3/8"` | the one taper a Thermo-Light comes in |
+| `spa:*thermotaper*` | `"1-3/8"` | the one taper a THERMOLIGHT comes in |
 | `spa:*hinge-min*` | `2` | a cover is never fewer pieces than this |
 | `spa:*hinge-try*` | `3` | how many extra piece counts to try |
 | `spa:*hinge-edge*` | `0.01` | keep a hinge this far off the cover's edge |
@@ -765,9 +765,9 @@ holds this table and the block together, so neither can drift from the other.
 | `spa:*cutface-ladder*` | `'(3.0 18.0 3.0)` | The same for the DIAGONAL's cut face |
 | `spa:*second-default*` | `"Yes"` | What Enter means at the offer of the SECOND outline -- `Yes` goes on to draw the other one (the cover size after a water's edge, or the reverse), `No` leaves the outline already drawn standing alone. A shop that draws one outline and stops sets `No` and stops typing it |
 | `spa:*method-default*` | `"Offset"` | What Enter means at "Take it from" -- `Offset` builds that second outline by lapping the one already drawn, `Dims` asks for its own measurements instead |
-| `spa:*spill-default*` | `"No"` | What Enter means at "Is there a spillaway" -- `No` ends the round of spillaways, `Yes` opens another one. A shop whose spas nearly always carry one sets `Yes` and types No to finish instead |
-| `spa:*spillloc-default*` | `"Wall"` | What Enter means at a spillaway's location -- `Wall` centres it on a wall and asks which wall, `Corner` asks which corner and how far along to keep clear of the hinges |
-| `spa:*autohinge-default*` | `"Yes"` | What Enter means at "Auto-hinge the cover" -- `Yes` goes on to the spillaways and lays the fold hinges out itself, `No` draws the outlines and their dimensions and leaves the cover unhinged |
+| `spa:*spill-default*` | `"No"` | What Enter means at "Is there a spillway" -- `No` ends the round of spillways, `Yes` opens another one. A shop whose spas nearly always carry one sets `Yes` and types No to finish instead |
+| `spa:*spillloc-default*` | `"Wall"` | What Enter means at a spillway's location -- `Wall` centres it on a wall and asks which wall, `Corner` asks which corner and how far along to keep clear of the hinges |
+| `spa:*autohinge-default*` | `"Yes"` | What Enter means at "Auto-hinge the cover" -- `Yes` goes on to the spillways and lays the fold hinges out itself, `No` draws the outlines and their dimensions and leaves the cover unhinged |
 | `spa:*treat-default*` | `""` | What the FIRST corner's treatment question offers on Enter, before there is a previous answer to reuse: `""` asks cold, or one of the four words -- `Square`, `Radius`, `Cut`, `NotGiven` -- in any case. Every corner after the first offers the answer before it, as it always has |
 | `spa:*samecorners-default*` | `"Yes"` | What Enter means at "Are all four corners the same?" -- `Yes` buys ONE round of treatment questions for all four, `No` walks A, B, C and D with A's answer autofilling the rest |
 

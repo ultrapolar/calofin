@@ -78,7 +78,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.20")
+(setq *paddle-version* "v1.21")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -1717,8 +1717,8 @@
                        " pad(s) along the curve, on layer \"" *paddle-layer* "\"."))
         (paddle--pause)
         (initget "Yes No")
-        (if (= ((lambda (v) (if lzd:ask (lzd:ask "\nErase the demonstration? [Yes/No] <No>: " v) v))
-                 (getkword "\nErase the demonstration? [Yes/No] <No>: ")) "Yes")
+        (if (= ((lambda (v) (if lzd:ask (lzd:ask "\nErase the demo drawing? [Yes/No] <No>: " v) v))
+                 (getkword "\nErase the demo drawing? [Yes/No] <No>: ")) "Yes")
             (progn
               ;; the layer can still be locked from the palette while a
               ;; pause waits, and entdel then refuses: say what stayed

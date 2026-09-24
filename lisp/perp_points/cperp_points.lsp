@@ -61,7 +61,7 @@
 ;;;      new point count and repeat from step 6 with the new polyline as
 ;;;      the path.
 ;;;   9. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
-;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
+;;;      Every dimension is then drawn at once, on the DIMENSION layer.
 ;;;
 ;;; Steps 1 to 4 are one chain: Back at the click re-opens the
 ;;; selection, Back at the width question re-opens the click, and Back
@@ -181,7 +181,7 @@
 ;;; Properties
 ;;;   * The offset polylines take the layer, colour, linetype, lineweight
 ;;;     and linetype scale of the curve they were offset from.
-;;;   * The dimensions go on the DIMENSIONS layer (created if missing)
+;;;   * The dimensions go on the DIMENSION layer (created if missing)
 ;;;     and use the dimension style picked in step 9 when the drawing
 ;;;     has it; otherwise the current style is used and a note is
 ;;;     printed.
@@ -246,7 +246,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.24")
+(setq *cperp-version* "v0.25")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -305,6 +305,10 @@
 ;; either way and both keywords are still offered.  Anything that is
 ;; neither keyword is ignored and "STandard" stands.
 (setq cperp:*dimstyle-default* "STandard")
+
+;; The layer every dimension goes on (made if missing, ACI 4) -- the
+;; shop-wide DIMENSION layer the other drawing tools use.
+(setq cperp:*dimlayer* "DIMENSION")    ; layer the dimensions are drawn on
 
 ;;; -------------------- the length ruler --------------------------------
 ;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
@@ -1504,7 +1508,7 @@
   ;; there.  Made once, ahead of the chain below, which can come back
   ;; through the click step more than once.
   (cperp:layer "PERPPTS-TEMP" 1)
-  (cperp:layer "DIMENSIONS"   4)
+  (cperp:layer cperp:*dimlayer* 4)
   ;; the length ruler, not up yet: it stands beside the length prompts
   ;; on the guide layer, and cperp:finish takes it down with the guides
   (setq rl (cperp:ruler-new "PERPPTS-TEMP" (cperp:ruler-style)))
@@ -2031,7 +2035,7 @@
                    "\" is not in this drawing - using the current style \""
                    cdim "\" instead.")))
 
-  (setvar "CLAYER" "DIMENSIONS")
+  (setvar "CLAYER" cperp:*dimlayer*)
   (foreach pr (reverse dimPairs)
     (command "._DIMALIGNED" (car pr) (cadr pr) (cadr pr)))
 
@@ -2040,7 +2044,7 @@
   (princ (strcat "\nDone: " (itoa iter) " round(s), "
                  (itoa total) " points, "
                  (itoa iter) " polyline(s) on layer \"" srcLayer "\" and "
-                 (itoa total) " dimensions on layer \"DIMENSIONS\"."))
+                 (itoa total) " dimensions on layer \"" cperp:*dimlayer* "\"."))
   (if lzd:end (lzd:end "CPERPPTS"))
   (princ))
 

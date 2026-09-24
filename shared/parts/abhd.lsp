@@ -773,7 +773,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "092326 REV27") ; announced on load.  The
+(setq pf:*version*      "092326 REV28") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -5982,14 +5982,15 @@
       (princ "\n\n  That is the whole flow.  TUTORIALABHD Checks lists every")
       (princ "\n  rule; ABHD runs it on your survey; ADAB does just the")
       (princ "\n  bottom over any perimeter.")
+      ;; Enter keeps the demo; only an explicit Yes sweeps it
       (initget "Yes No")
-      (if (= "Yes" ((lambda (v) (if lzd:ask (lzd:ask "\n  Keep the demo drawing to poke at? [Yes/No] <No>: " v) v))
+      (if (= "Yes" ((lambda (v) (if lzd:ask (lzd:ask "\n  Erase the demo drawing? [Yes/No] <No>: " v) v))
                      (getkword
-                       "\n  Keep the demo drawing to poke at? [Yes/No] <No>: ")))
+                       "\n  Erase the demo drawing? [Yes/No] <No>: ")))
+        (princ "\n  Swept - the drawing is as it was.")
         (progn
           (setq pf-temp nil)
-          (princ "\n  Kept - erase it whenever; every piece is stamped ABHD."))
-        (princ "\n  Swept - the drawing is as it was.")))))
+          (princ "\n  Kept - erase it whenever; every piece is stamped ABHD."))))))
 
 (defun c:TUTORIALABHD ( / mode pf-temp pf-phase *error* pf-old-err)
   (setq pf-temp   nil

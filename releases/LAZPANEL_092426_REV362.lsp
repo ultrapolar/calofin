@@ -138,7 +138,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.61")
+(setq *lazpanel-version* "v3.62")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -668,7 +668,7 @@
     ("SMARTFILLET" "Fillet a corner after previewing every radius that fits.\nWhat it asks, in order:\n 1. Select the first line of the corner\n 2. Select the second line of the corner\n 3. Select the first line of the next corner\n 4. Select the second line of that corner")
     ("SOCONV" "Puts an SO site-survey export onto the shop's layers in one pass.\nWhat it asks, in order:\n 1. Select objects")
     ("SORECONV" "Undoes a SOCONV run - every object back on the export's own layers.\nWhat it asks, in order:\n 1. Select objects")
-    ("SPA" "Spa / hot-tub template layout.\nWhat it asks, in order:\n 1. Select the Spa Cover Details block\n 2. Is this drawing at the water's edge or the cover size\n 3. Spa shape\n 4. Insertion base point\n 5. Auto-hinge the cover\n 6. Is there a spillaway\n 7. Spillaway location (a wall one is centred on it)\n 8. Which corner\n 9. On which wall\n 10. Take it from\n 11. How far does the cover lap the water's edge\n 12. Taper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8)\n 13. Overall diameter\n 14. Are all four corners the same?\n 15. Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL")
+    ("SPA" "Spa / hot-tub template layout.\nWhat it asks, in order:\n 1. Select the Spa Cover Details block\n 2. Is this drawing at the water's edge or the cover size\n 3. Spa shape\n 4. Insertion base point\n 5. Auto-hinge the cover\n 6. Is there a spillway\n 7. Spillway location (a wall one is centred on it)\n 8. Which corner\n 9. On which wall\n 10. Take it from\n 11. How far does the cover lap the water's edge\n 12. Taper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8)\n 13. Overall diameter\n 14. Are all four corners the same?\n 15. Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL")
     ("SPACHECK" "Audits a spa sheet against what SPA draws.\nWhat it asks, in order:\n 1. Select objects")
     ("SPACHECKSCAN" "Highlight the spa drawing together with its \"Spa Cover Details\" block; runs SPACHECK's full set of audits -- built from what SPA itself draws, so a SPA-produced drawing passes and a hand-edited one shows exactly where it drifted -- but read-only, as one scan instead of a guided walk.")
     ("SPACOVCREATE" "Offsets a selected spa outline into its cover and hinges it to the taper.\nWhat it asks, in order:\n 1. Select objects\n 2. Cover offset past the spa\n 3. Select the block that gives the taper\n 4. Taper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8)")
@@ -5693,7 +5693,8 @@
      ("cperp:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
      ("cperp:*split-default*" "\"Yes\"" "Which answer the \"Split the ... evenly, half at each end?\" question takes on Enter when a width change has...")
      ("cperp:*boundary-default*" "\"Limit\"" "Which answer the boundary's \"stop at the boundary, or run out to meet it?\" question takes on Enter: \"Limit\"...")
-     ("cperp:*dimstyle-default*" "\"STandard\"" "Which of the two dimension styles the closing question takes on Enter -- \"STandard\" (STANDARD INCHES) or \"S..."))
+     ("cperp:*dimstyle-default*" "\"STandard\"" "Which of the two dimension styles the closing question takes on Enter -- \"STandard\" (STANDARD INCHES) or \"S...")
+     ("cperp:*dimlayer*" "\"DIMENSION\"" "layer the dimensions are drawn on The layer every dimension goes on (made if missing, ACI 4) -- the shop-wi..."))
     ("PERPPTS" "lisp/perp_points/perp_points.lsp"
      ("perp:*ruler-color*" "3" "ACI colour of the rows you can PICK, carried on the entities themselves -------------------- tunables -----...")
      ("perp:*ruler-current-color*" "7" "ACI colour of the ringed CURRENT row -- the last length -- so it reads apart from the options; 7 is AutoCAD...")
@@ -5706,7 +5707,8 @@
      ("perp:*split-default*" "\"Yes\"" "Which answer the \"Split the ... evenly, half at each end?\" question takes on Enter when a width change has...")
      ("perp:*bound-default*" "\"Limit\"" "Which answer the boundary's \"stop at the boundary, or run out to meet it?\" question takes on Enter: \"Limit\"...")
      ("perp:*join-default*" "\"Straight\"" "What the FIRST round's \"how should the points be joined?\" question offers on Enter, before there is a round...")
-     ("perp:*dimstyle-default*" "\"STandard\"" "Which of the two dimension styles the closing question takes on Enter -- \"STandard\" (STANDARD INCHES) or \"S..."))
+     ("perp:*dimstyle-default*" "\"STandard\"" "Which of the two dimension styles the closing question takes on Enter -- \"STandard\" (STANDARD INCHES) or \"S...")
+     ("perp:*dimlayer*" "\"DIMENSION\"" "layer the dimensions are drawn on The layer every dimension goes on (made if missing, ACI 4) -- the shop-wi..."))
     ("PERPMARK" "lisp/perpmark/PERPMARK.lsp"
      ("pm:*marklayer*" "\"PERPMARK\"" "Layer the circles and the perpendicular lines are drawn on. Change it to put the run's working marks somewh...")
      ("pm:*markcolor*" "1" "ACI colour that layer is CREATED with, on a drawing that lacks it. A number, not 'auto: these marks are the...")
@@ -5972,8 +5974,8 @@
      ("spa:*pv-col*" "'auto" "guide outline: 'auto picks the grey for the background (8 is nearly the stock dark one), a number is used e...")
      ("spa:*pvx-col*" "7" "measuring tie (white) grey for the background (8 is nearly the stock dark one), a number is used exactly as...")
      ("spa:*hi-col*" "1" "the element being asked for (red) grey for the background (8 is nearly the stock dark one), a number is use...")
-     ("spa:*pv-w*" "240.0" "nominal guide width The RECTANGLE guide's nominal box. The octagon and round guides keep their own ring in...")
-     ("spa:*pv-l*" "200.0" "nominal guide length The RECTANGLE guide's nominal box. The octagon and round guides keep their own ring in...")
+     ("spa:*pv-w*" "240.0" "nominal guide length (across) The RECTANGLE guide's nominal box. The octagon and round guides keep their ow...")
+     ("spa:*pv-l*" "200.0" "nominal guide width (up) The RECTANGLE guide's nominal box. The octagon and round guides keep their own rin...")
      ("spa:*pv-th*" "12.0" "guide corner-letter height The RECTANGLE guide's nominal box. The octagon and round guides keep their own r...")
      ("spa:*pv-tie*" "10.0" "guide tie-letter height The RECTANGLE guide's nominal box. The octagon and round guides keep their own ring...")
      ("spa:*pv-lbl*" "22.0" "how far a rectangle corner letter sits out The RECTANGLE guide's nominal box. The octagon and round guides...")
@@ -5983,7 +5985,7 @@
      ("spa:*foamtab*" "(list (list \"ECONOMY\" \"3-2\" (list (cons 48.0 96.0)) (list 2)) (list \"STANDARD\" \"3-2\" (list (cons 48.0 144.0) (cons 49.5 102.0)) (list 2)) (list \"STANDARD\" \"4-2\" (list (cons 48.0 96.0) (cons 49.5 102.0)) (list 2 3 4)) (list \"STANDARD\" \"4-3\" (list (cons 48.0 144.0)) (list 2 3 4)) (list \"STANDARD\" \"5-3\" (list (cons 48.0 96.0)) (list 2 3 4 5)) (list \"STANDARD\" \"5-4\" (list (cons 48.0 96.0)) (list 2 3 4 5)) (list \"STANDARD\" \"3-3\" (list (cons 48.0 144.0)) (list 2 3 4 5)) (list \"ULTRA\" \"3-2\" (list (cons 48.0 144.0)) (list 2)) (list \"ULTRA\" \"4-3\" (list (cons 48.0 96.0)) (list 2 3 4)) (list \"ULTRA\" \"3-3\" (list (cons 48.0 144.0)) (list 2 3 4 5)) (list \"THERMOLIGHT\" \"1-3/8\" (list (cons 53.0 nil)) (list 2 3 4 5)))" "---- the foam sheet THE SHOP DATA THIS ROUTINE IS BUILT ON. Grade and taper -- read off the Spa Cover Detai...")
      ("spa:*foamdflt*" "(list (cons 48.0 96.0))" "assumed when nothing matches")
      ("spa:*foamdpc*" "(list 2 3 4 5)" "and the counts it will accept")
-     ("spa:*thermotaper*" "\"1-3/8\"" "the one taper a Thermo-Light comes in")
+     ("spa:*thermotaper*" "\"1-3/8\"" "the one taper a THERMOLIGHT comes in")
      ("spa:*hardtab*" "(list ; grade velcro double C hold down (list \"ECONOMY\" '(REQUEST) '(REQUEST) '(REQUEST)) (list \"STANDARD\" '(OVER 120.0) '(OVER 108.0) '(OVER 120.0)) (list \"ULTRA\" '(OVER 108.0) '(NEVER) '(OVER 96.0)) (list \"THERMOLIGHT\" '(ALWAYS) '(NEVER) '(NEVER)))" "---- hardware called for by the LONGEST hinge, per grade Each rule is (OVER <inches>) | (ALWAYS) | (NEVER)...")
      ("spa:*hardnames*" "(list \"VELCRO HINGES\" \"DOUBLE C CHANNEL\" \"HOLD DOWN KIT\")" "What the three columns are called in the report, in the order the table above holds them -- rename one and...")
      ("spa:*hinge-min*" "2" "a cover is never fewer pieces than this ---- the hinge placement solver The fewest pieces that fit the foam...")
@@ -6003,9 +6005,9 @@
      ("spa:*cutface-ladder*" "'(3.0 18.0 3.0)" "The two LADDERS those prompts stand on, as (LOW HIGH STEP) in inches. A spa is a small shape and its corner...")
      ("spa:*second-default*" "\"Yes\"" "What Enter means at the offer of the SECOND outline -- \"Yes\" goes on to draw the other one (the cover size...")
      ("spa:*method-default*" "\"Offset\"" "What Enter means at \"Take it from\" -- \"Offset\" builds that second outline by lapping the one already drawn,...")
-     ("spa:*spill-default*" "\"No\"" "What Enter means at \"Is there a spillaway\" -- \"No\" ends the round of spillaways, \"Yes\" opens another one. A...")
-     ("spa:*spillloc-default*" "\"Wall\"" "What Enter means at a spillaway's location -- \"Wall\" centres it on a wall and asks which wall, \"Corner\" ask...")
-     ("spa:*autohinge-default*" "\"Yes\"" "What Enter means at \"Auto-hinge the cover\" -- \"Yes\" goes on to the spillaways and lays the fold hinges out...")
+     ("spa:*spill-default*" "\"No\"" "What Enter means at \"Is there a spillway\" -- \"No\" ends the round of spillways, \"Yes\" opens another one. A s...")
+     ("spa:*spillloc-default*" "\"Wall\"" "What Enter means at a spillway's location -- \"Wall\" centres it on a wall and asks which wall, \"Corner\" asks...")
+     ("spa:*autohinge-default*" "\"Yes\"" "What Enter means at \"Auto-hinge the cover\" -- \"Yes\" goes on to the spillways and lays the fold hinges out i...")
      ("spa:*treat-default*" "\"\"" "What the FIRST corner's treatment question offers on Enter, before there is a previous answer to reuse: \"\"...")
      ("spa:*samecorners-default*" "\"Yes\"" "What Enter means at \"Are all four corners the same?\" -- \"Yes\" buys ONE round of treatment questions for all..."))
     ("SPACHECK" "lisp/spacheck/SPACHECK.lsp"
@@ -6112,7 +6114,7 @@
      ("scv:*foamtab*" "(list (list \"ECONOMY\" \"3-2\" (list (cons 48.0 96.0)) (list 2)) (list \"STANDARD\" \"3-2\" (list (cons 48.0 144.0) (cons 49.5 102.0)) (list 2)) (list \"STANDARD\" \"4-2\" (list (cons 48.0 96.0) (cons 49.5 102.0)) (list 2 3 4)) (list \"STANDARD\" \"4-3\" (list (cons 48.0 144.0)) (list 2 3 4)) (list \"STANDARD\" \"5-3\" (list (cons 48.0 96.0)) (list 2 3 4 5)) (list \"STANDARD\" \"5-4\" (list (cons 48.0 96.0)) (list 2 3 4 5)) (list \"STANDARD\" \"3-3\" (list (cons 48.0 144.0)) (list 2 3 4 5)) (list \"ULTRA\" \"3-2\" (list (cons 48.0 144.0)) (list 2)) (list \"ULTRA\" \"4-3\" (list (cons 48.0 96.0)) (list 2 3 4)) (list \"ULTRA\" \"3-3\" (list (cons 48.0 144.0)) (list 2 3 4 5)) (list \"THERMOLIGHT\" \"1-3/8\" (list (cons 53.0 nil)) (list 2 3 4 5)))" "-- the shop data the hinges are built on ----------------------------- THE FOAM SHEET. Grade and taper pick...")
      ("scv:*foamdflt*" "(list (cons 48.0 96.0))" "when nothing matches at all")
      ("scv:*foamdpc*" "(list 2 3 4 5)" "and the counts it will accept")
-     ("scv:*thermotaper*" "\"1-3/8\"" "the one taper a Thermo-Light comes in")
+     ("scv:*thermotaper*" "\"1-3/8\"" "the one taper a THERMOLIGHT comes in")
      ("scv:*hardtab*" "(list ; grade velcro double C hold down (list \"ECONOMY\" '(REQUEST) '(REQUEST) '(REQUEST)) (list \"STANDARD\" '(OVER 120.0) '(OVER 108.0) '(OVER 120.0)) (list \"ULTRA\" '(OVER 108.0) '(NEVER) '(OVER 96.0)) (list \"THERMOLIGHT\" '(ALWAYS) '(NEVER) '(NEVER)))" "HARDWARE called for by the LONGEST hinge, per grade. Each rule is (OVER <inches>) | (ALWAYS) | (NEVER) | (R...")
      ("scv:*hardnames*" "(list \"VELCRO HINGES\" \"DOUBLE C CHANNEL\" \"HOLD DOWN KIT\")" "What the three columns are called in the report, in the order the table above holds them -- rename one and...")
      ("scv:*hinge-min*" "2" "a cover is never fewer pieces than this The placement solver. The fewest pieces that fit the foam width are...")
@@ -6291,7 +6293,7 @@
     ("dim-style" ("*g2mconv-dim-style*" "*vsconv-dim-style*"))
     ("dim-xdata" ("*g2mconv-dim-xdata*" "*vsconv-dim-xdata*"))
     ("dimfix-cmd" ("*cchk-dimfix-cmd*" "*lfc-dimfix-cmd*" "spachk:*dimfix-cmd*"))
-    ("dimlayer" ("cbk:*dimlayer*" "hn:*dimlayer*" "oasis:*dimlayer*" "pm:*dimlayer*" "sf:*dimlayer*"))
+    ("dimlayer" ("cbk:*dimlayer*" "hn:*dimlayer*" "oasis:*dimlayer*" "cperp:*dimlayer*" "perp:*dimlayer*" "pm:*dimlayer*" "sf:*dimlayer*"))
     ("dimoff" ("spa:*dimoff*" "spachk:*dimoff*"))
     ("dimoff" ("hn:*dimoff*" "sf:*dimoff*"))
     ("dimrepeat" ("hn:*dimrepeat*" "sf:*dimrepeat*"))

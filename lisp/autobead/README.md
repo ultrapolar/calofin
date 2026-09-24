@@ -103,8 +103,8 @@ At the top of `AUTOBEAD.lsp` (the `AUTOBEAD SETTINGS` block):
 * Chains the offset engine rejects are counted in the report instead
   of failing silently -- clicking farther from the pool line usually
   fixes it.
-* The tutorial demo's cleanup (`Erase the demo pool and its bead?
-  [Yes/No] <Yes>`) erases only what the demo drew -- everything after
+* The tutorial demo's cleanup (`Erase the demo drawing? [Yes/No]
+  <No>` -- Enter keeps the demo, only Yes erases it) erases only what the demo drew -- everything after
   the mark it takes before its first line -- so beads already in the
   drawing stay. Anything it could not erase (a locked layer) is
   counted and said. Esc at any of the demo's questions takes the demo

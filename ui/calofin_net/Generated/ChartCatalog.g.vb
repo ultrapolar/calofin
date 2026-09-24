@@ -814,8 +814,8 @@ Public NotInheritable Class ChartCatalog
                 New Stroke(New Double() {150, 250, 850, 250, 850, 820, 150, 820, 150, 250})
             },
             New ChartDim() {
-                New ChartDim("W", "w", 150, 920, 850, 920, True, "W - overall WIDTH across (A-B)"),
-                New ChartDim("L", "l", 75, 250, 75, 820, False, "L - overall LENGTH up (A-D)")
+                New ChartDim("L", "w", 150, 920, 850, 920, True, "L - overall LENGTH across (A-B)"),
+                New ChartDim("W", "l", 75, 250, 75, 820, False, "W - overall WIDTH up (A-D)")
             },
             New ListKey() {},
             New Mark() {
@@ -2196,8 +2196,8 @@ Public NotInheritable Class ChartCatalog
             New SpaCornerRow("cornerd", "Corner D (top left)")
             },
             New ListKey() {
-            New ListKey("w2", "Other outline ACROSS"),
-            New ListKey("l2", "Other outline UP")
+            New ListKey("w2", "L2 - Other outline length ACROSS"),
+            New ListKey("l2", "W2 - Other outline width UP")
             },
             New String() {"l", "l2"}),
         New SpaSheet("OCtagon", "B and A alone draw a true square octagon -- NA the cut letters.",

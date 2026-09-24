@@ -15,7 +15,7 @@ The receiving end is lisp/spa/SPA.LSP's answer store -- spa:*form*,
 spa:fhas / spa:ftake (consume-once), spa:run-with-answers, and the
 hooks in its ask helpers -- the same store POOL carries.  Two prompts
 stay interactive by design and appear in every script below: the Spa
-Cover Details block pick (an entsel in the drawing) and the spillaway
+Cover Details block pick (an entsel in the drawing) and the spillway
 loop.
 """
 
@@ -89,7 +89,7 @@ print("== 1. full form == command line ==")
 
 PROMPTS = [None,                       # skip the Spa Cover Details block
            "Watersedge", "Rectangle", (0, 0),
-           84.0, 72.0,                 # overall width / length
+           84.0, 72.0,                 # overall length across / width up
            "No",                       # corners not all the same...
            "90", "90", "90", "90",     # ... so A..D, one at a time
            "No",                       # no cover size
@@ -365,14 +365,14 @@ print("   both outlines from one form; only the block pick remained")
 #     set, so neither the second Spa Cover Details offer nor the taper
 #     getstring appears.  They are consumed BEFORE the Thermo-Light
 #     branch, so a form grade behaves exactly like one read off the
-#     block.  The spillaway loop stays interactive.
+#     block.  The spillway loop stays interactive.
 # --------------------------------------------------------------------
 print("== 11. grade/taper from the form: no taper prompt ==")
 
 GT_PROMPTS = [None, "Watersedge", "Rectangle", (0, 0), 84.0, 72.0,
               "No", "90", "90", "90", "90",
               "Yes",                    # auto-hinge -- asked before the draw
-              "No",                     # no spillaway
+              "No",                     # no spillway
               "No",                     # no second outline
               "4-2"]                    # the taper, typed after -- the
                                         # block was offered once, up front
@@ -384,7 +384,7 @@ GT_FORM = """'((mode . "Watersedge") (shape . "Rectangle") (base 0.0 0.0)
                (grade . "Standard") (taper . "4-2"))"""
 
 g1 = by_prompts(GT_PROMPTS)
-g2 = by_form(GT_FORM, [None, "No"])    # the block pick, one spillaway No
+g2 = by_form(GT_FORM, [None, "No"])    # the block pick, one spillway No
 same(g1, g2, "grade+taper")
 assert not any('Taper' in p for p, _ in g2.prompts), \
     "the taper was asked despite the form supplying it"
@@ -431,16 +431,16 @@ print("== 13. Back over a consumed distance prompts at the keyboard ==")
 BACKFORM = """'((mode . "Watersedge") (shape . "Rectangle") (base 0.0 0.0)
                 (w . 84.0))"""
 j = by_form(BACKFORM, [None,      # skip the Spa Cover Details block
-                       "Back",    # at the length: back onto the width
-                       84.0,      # the width again - AT THE KEYBOARD
-                       72.0,      # the length
+                       "Back",    # at the width: back onto the length
+                       84.0,      # the length again - AT THE KEYBOARD
+                       72.0,      # the width
                        "No", "90", "90", "90", "90", "No", "No"])
 same(a, j, "back over a consumed answer")
-wasked = [p for p, _ in j.prompts if 'WIDTH' in p]
+wasked = [p for p, _ in j.prompts if 'LENGTH across' in p]
 assert len(wasked) == 1, \
-    "the width should be asked exactly once (the post-Back re-ask), " \
+    "the length should be asked exactly once (the post-Back re-ask), " \
     "got %d" % len(wasked)
-print("   width form-answered, backed onto, and re-asked at the keyboard")
+print("   length form-answered, backed onto, and re-asked at the keyboard")
 
 
 # --------------------------------------------------------------------

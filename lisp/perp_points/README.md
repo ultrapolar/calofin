@@ -62,7 +62,7 @@ each.
    offsets accumulate in one consistent direction.
 10. `Dimension style - STANDARD INCHES or SIDE STANDARD?
     [STandard/SIde] <STandard>` -- every dimension is then drawn at
-    once, on the `DIMENSIONS` layer.
+    once, on the `DIMENSION` layer.
 
 **`CPERPPTS`** ("C" for curved) is the same pipeline for curved
 geometry -- LWPOLYLINE (bulges included), POLYLINE, LINE, ARC, ELLIPSE
@@ -94,7 +94,7 @@ and SPLINE, open only. Differences from PERPPTS:
 | --- | --- | --- |
 | `PERPPTS` | `perp_points.lsp` | Offset points off a straight line |
 | `CPERPPTS` | `cperp_points.lsp` | Offset points off a curve, by tangent normals |
-| `TUTORIALPERPPTS` | `tutorial_perp_points.lsp` | `[Checks/Demo/Both] <Both>`: the rules up front, a narrated worked example, or both; ends with `Keep the demo drawing? [Keep/Erase] <Keep>` |
+| `TUTORIALPERPPTS` | `tutorial_perp_points.lsp` | `[Checks/Demo/Both] <Both>`: the rules up front, a narrated worked example, or both; ends with `Erase the demo drawing? [Yes/No] <No>` -- Enter keeps the demo, only Yes erases it |
 | `TUTORIALCPERPPTS` | `tutorial_cperp_points.lsp` | The same, for CPERPPTS |
 
 ### The overall width, and how a change is shared out
@@ -216,7 +216,7 @@ the other, and only PERPPTS asks how the points are joined:
 
 ## Assumptions
 
-* Dimensions go on the `DIMENSIONS` layer (created if missing) in the
+* Dimensions go on the `DIMENSION` layer (created if missing) in the
   style picked at the end -- `STANDARD INCHES` or `SIDE STANDARD`;
   when the drawing lacks the style the current one is used and a note
   is printed.

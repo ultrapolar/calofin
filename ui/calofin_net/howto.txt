@@ -722,8 +722,8 @@ What it asks, in order:
  3. Spa shape
  4. Insertion base point
  5. Auto-hinge the cover
- 6. Is there a spillaway
- 7. Spillaway location (a wall one is centred on it)
+ 6. Is there a spillway
+ 7. Spillway location (a wall one is centred on it)
  8. Which corner
  9. On which wall
  10. Take it from

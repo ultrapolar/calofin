@@ -66,8 +66,9 @@ Type `TUTORIALABHD` (or `TUTORIALADAB`) and choose:
   (Enter advances): the survey, the automatic ordering, the three
   coloured candidates, keeping one, and the full bottom — breaks,
   auto-found back point, K/L/M dims, one guided and one straight
-  slope. At the end it sweeps everything away (or keeps it to poke
-  at, if you ask — every piece is stamped as ABHD's own).
+  slope. At the end it asks `Erase the demo drawing? [Yes/No] <No>`:
+  Enter keeps it to poke at (every piece is stamped as ABHD's own),
+  Yes sweeps everything away.
 
 ## Setup expected in the drawing
 

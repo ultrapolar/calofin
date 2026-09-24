@@ -47,7 +47,7 @@ than silently swallowing what you type.
 
 | Chart | SPA shape | Letters on the picture | Keys |
 | --- | --- | --- | --- |
-| `Rectangle` | `Rectangle` | W across, L up (corners marked A B C D) | `w` `l` |
+| `Rectangle` | `Rectangle` | L across, W up (corners marked A B C D) | `w` `l` |
 | `OCtagon` | `OCtagon` | B S T across, A S1 V up (S2 in the list) | `b` `a` `s2` `tt` `ss` `s1` `vv` |
 | `ROund` | `ROund` | B across, A up | `b` `a` |
 
@@ -59,8 +59,10 @@ without saying so.
 
 **Rectangle.** SPA's header names its corners *A bottom-left, B
 bottom-right, C top-right, D top-left*, and its two overalls are named
-for them -- `W` runs A-B across the bottom and `L` runs A-D up the left
-end. So `W` is drawn *under* the shape, on the side it is actually
+for them -- `L`, the overall length, runs A-B across the bottom and `W`,
+the overall width, runs A-D up the left end (POOL's naming: the across
+overall is the length). The store keys stay `w` (across) and `l` (up).
+So `L` is drawn *under* the shape, on the side it is actually
 taped, and the four corner letters are marked on the picture, because
 the Corners rows below are named after them.
 
@@ -146,12 +148,12 @@ about than one that does not.
 | `grade` = `THERMOLIGHT` | `mode`, `second`, `method`, `gap`, the second overalls, `taper` | see below |
 | nothing yet | nothing | `(ask)` settles nothing, so every box stays live |
 
-**Thermo-Light is the big one.** Its water's edge and its cover size are
+**THERMOLIGHT is the big one.** Its water's edge and its cover size are
 the *same thing*, so `c:SPA` sets the mode itself (`Coversize`),
 `spa:askother` declines to offer the second outline at all, and
 `spa:askdetails` forces the taper to `1-3/8`. Mode, the whole cover
 block and the taper are therefore dead. **Auto-hinge survives it**: a
-Thermo-Light cover is still hinged, only in velcro throughout.
+THERMOLIGHT cover is still hinged, only in velcro throughout.
 
 ## Install & run
 
@@ -212,9 +214,9 @@ chart went on showing what was typed -- the chart draws the **string**
 given.
 
 ```
-W is not a measurement - type a number, or NA, or clear it.
-W cannot be NA - SPA needs a number there.
-W and W2 cannot be NA - SPA needs a number in each of them.
+L is not a measurement - type a number, or NA, or clear it.
+L cannot be NA - SPA needs a number there.
+L and L2 cannot be NA - SPA needs a number in each of them.
 ```
 
 **`Insert` is greyed for both**, and released the moment either is
@@ -222,7 +224,7 @@ fixed. With neither there, the line is the hand-off:
 
 ```
 Nothing filled yet - SPA will ask for all 5 boxes, plus the base point.
-2 of 5 boxes filled - SPA will ask for W2, L2 and the cover lap, plus the base point.
+2 of 5 boxes filled - SPA will ask for L2, W2 and the cover lap, plus the base point.
 All 5 boxes filled - SPA will ask only for the base point and the block.
 ```
 
@@ -274,7 +276,7 @@ string it sits in, and these files write their own `.dcl`.
 - **Two prompts stay at the command line, by design**, and the form says
   so on its own face: the **Spa Cover Details block pick** (an `entsel`
   in the drawing -- the block is *in* the drawing, there is nothing for
-  a form to type) and the **spillaway loop**. The insertion base point
+  a form to type) and the **spillway loop**. The insertion base point
   is picked in the drawing too, with the user's own snaps live, so
   `base` is never sent.
 - DCL dialogs are modal and not resizable. The form closes when you
@@ -350,8 +352,8 @@ nothing is flipped at draw time, and the *bottom* of a spa is the
 ```lisp
 ("Rectangle" "Rectangle" "Rectangle"
  ((150 250 850 250 850 820 150 820 150 250))     ; outline polylines / arcs
- (("W" "w" 150 920 850 920 "h" "W - overall WIDTH across (A-B)")
-  ("L" "l"  75 250  75 820 "v" "L - overall LENGTH up (A-D)"))
+ (("L" "w" 150 920 850 920 "h" "L - overall LENGTH across (A-B)")
+  ("W" "l"  75 250  75 820 "v" "W - overall WIDTH up (A-D)"))
  nil                                             ; column-only fields
  (("D" 105 210) ("C" 895 210)                    ; letters on the picture
   ("A" 105 860) ("B" 895 860)))

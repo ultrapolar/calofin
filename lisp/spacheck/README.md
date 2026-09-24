@@ -17,7 +17,7 @@ on-drawing MTEXT report — with the spa rules in place of the liner ones.
 
 1. **The Spa Cover Details block.** One must be in the selection, with a
    readable `TAPER` tag. `GRADE` may be absent — Standard is assumed,
-   exactly as SPA assumes it. A Thermo-Light block claiming any taper
+   exactly as SPA assumes it. A THERMOLIGHT block claiming any taper
    but `1-3/8` is called out.
 2. **The cover outline.** Exactly one, on `COVER`, and a single **closed
    bounded entity** — one LWPOLYLINE, or a CIRCLE/ELLIPSE for a round
@@ -123,7 +123,7 @@ Asks up front — **Checks**, **Demo**, or **Both**:
 
   It then offers to run `SPACHECKSCAN` for a real report — which names
   those three and nothing else — and to erase the practice drawing
-  afterwards. The erase takes that run's report with it and no other:
+  afterwards (`Erase the practice drawing? [Yes/No] <No>` -- Enter keeps it). The erase takes that run's report with it and no other:
   an earlier report on `SPACHECK-REPORT` stays.
 * **Both** — the checklist, then the demo.
 

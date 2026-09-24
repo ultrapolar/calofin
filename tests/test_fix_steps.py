@@ -565,7 +565,7 @@ with patched(command=fake_command):
     try:
         vm.run('c:TUTORIALAUTOBEAD',
                ["Demo", (10.0, 10.0, 0.0), None, None, (150.0, 80.0, 0.0),
-                None, None])
+                None, "Yes"])
         err = None
     except LispError as e:
         err = str(e).splitlines()[0]
@@ -591,17 +591,17 @@ vm = demo_vm()
 _stock_entdel = BUILTINS[Sym('entdel')]
 
 
-def lock_then_enter(vm):
+def lock_then_yes(vm):
     vm.loads('(setq t:rec (entget (tblobjname "LAYER" "POOL-TUTORIAL")))'
              '(entmod (subst (cons 70 (logior 4 (cdr (assoc 70 t:rec))))'
              ' (assoc 70 t:rec) t:rec))')
-    return None
+    return "Yes"      # Enter keeps the demo now; Yes is what erases
 
 
 with patched(command=fake_command):
     vm.run('c:TUTORIALAUTOBEAD',
            ["Demo", (10.0, 10.0, 0.0), None, None, (150.0, 80.0, 0.0),
-            None, lock_then_enter])
+            None, lock_then_yes])
 check("objects a locked layer kept are counted and said",
       "except 5 object(s) on a locked layer - NOT erased" in said(vm),
       said(vm)[-200:])
@@ -664,7 +664,7 @@ with patched(command=fake_command, entlast=main_entlast, entdel=sub_entdel):
     try:
         vm.run('c:TUTORIALAUTOBEAD',
                ["Demo", (10.0, 10.0, 0.0), None, None, (150.0, 80.0, 0.0),
-                None, None])
+                None, "Yes"])
         err = None
     except LispError as e:
         err = str(e).splitlines()[0]

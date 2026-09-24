@@ -1015,7 +1015,7 @@ def same(a, b, label):
 # The scripts below are SPA's real prompt order, the same one
 # tests/test_spa_form.py drives: the Spa Cover Details block pick, the
 # mode, the shape, the base point, the measurements, the corners, the
-# auto-hinge gate (asked before anything is drawn, so a spillaway can
+# auto-hinge gate (asked before anything is drawn, so a spillway can
 # still turn the spa) and the offer of the second outline.  The form
 # answers everything except the block pick and the base point.
 CASES = [
@@ -1155,8 +1155,8 @@ sv.loads('(setq t:*a* (lzs:tagof lzs:*chart* "w"))'
          '(setq t:*b* (lzs:tagof lzs:*chart* "w2"))'
          '(setq t:*c* (lzs:tagof lzs:*chart* "gap"))'
          '(setq t:*d* (lzs:tagof lzs:*chart* "cornera-sz"))')
-assert str(sv.globals['t:*a*']) == 'W', sv.globals['t:*a*']
-assert str(sv.globals['t:*b*']) == 'W2', sv.globals['t:*b*']
+assert str(sv.globals['t:*a*']) == 'L', sv.globals['t:*a*']
+assert str(sv.globals['t:*b*']) == 'L2', sv.globals['t:*b*']
 assert str(sv.globals['t:*c*']) == 'the cover lap', sv.globals['t:*c*']
 assert str(sv.globals['t:*d*']) == 'Corner A', sv.globals['t:*d*']
 
@@ -1177,7 +1177,7 @@ assert 'cannot be NA' not in state(sv), \
     "NA on a key that HAS an NA is being complained about: %r" % state(sv)
 sv.loads('(lzs:put "w" "NA")')
 na = state(sv)
-assert na == 'W cannot be NA - SPA needs a number there.', na
+assert na == 'L cannot be NA - SPA needs a number there.', na
 sv.loads('(lzs:put "w2" "NA")')
 assert 'cannot be NA - SPA needs a number in each of them.' in state(sv), state(sv)
 # and it really would have been dropped
@@ -1187,7 +1187,7 @@ assert str(sv.globals['t:*ka*']).upper() == 'SKIP', \
 
 # rubbish outranks it: it is the coarser failure
 sv.loads('(lzs:put "w" "wat")')
-assert state(sv).startswith('W is not a measurement'), state(sv)
+assert state(sv).startswith('L is not a measurement'), state(sv)
 
 # a full sheet names what stays in the drawing
 sv.loads('(setq lzs:*vals* nil)')
