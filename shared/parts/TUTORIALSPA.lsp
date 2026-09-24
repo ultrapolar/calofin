@@ -27,7 +27,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "092326 REV17")
+(setq tut:*version* "092326 REV18")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -88,7 +88,7 @@
     "    taper is typed at the hinge pass instead.  GRADE and TAPER are"
     "    read off the tags, and the 'Grade:' / 'Taper:' prefixes are"
     "    stripped."
-    "2.  Water's edge or cover size.  NOT asked on Thermo-Light -- the"
+    "2.  Water's edge or cover size.  NOT asked on THERMOLIGHT -- the"
     "    two are the same thing there, so it draws the cover size."
     "3.  Shape: Rectangle, Octagon or Round."
     "4.  Insertion base point (Enter = 0,0).  Your own object snaps stay"
@@ -98,7 +98,7 @@
     "    re-asks the previous question, right across the input phase."
     "    A ROUND spa takes ONE measurement -- the diameter; type O at"
     "    it only if the spa measured out of round.  A RECTANGLE offers"
-    "    the width back as the length, so Enter makes it square."
+    "    the length back as the width, so Enter makes it square."
     "    Any measurement may be typed in MILLIMETRES with the unit on"
     "    the number -- 600mm, 1524mm -- and is converted to inches."
     "    No space before the mm: the spacebar is Enter at a distance"
@@ -111,14 +111,14 @@
     "    typed in full: 90, ROUNDED, DIAG, NG)."
     "    Asked one at a time, corner A's answer autofills B, C and D"
     "    -- Enter accepts."
-    "7.  Auto-hinge?  Then the spillaways, in a loop defaulting to No."
-    "    ASKED BEFORE ANYTHING IS DRAWN: a spillaway no hinge can dodge"
+    "7.  Auto-hinge?  Then the spillways, in a loop defaulting to No."
+    "    ASKED BEFORE ANYTHING IS DRAWN: a spillway no hinge can dodge"
     "    is dodged by turning the spa, and nothing already on the screen"
     "    can be turned.  The grey guide spa stays up across these, and"
     "    comes down only as the real outline goes up in its place."
     "8.  Draw the other outline as well?  By Offset (give the lap) or by"
     "    Dims (give it as measured; the two are drawn concentric)."
-    "    Skipped on Thermo-Light.  Then the taper, typed, if the block"
+    "    Skipped on THERMOLIGHT.  Then the taper, typed, if the block"
     "    did not give it -- asked NOW, not with step 7, because it turns"
     "    nothing: by here the cover is on the screen, or the offer to"
     "    add one has been declined.  The hinges are drawn at the end all"
@@ -153,12 +153,12 @@
     "    one can work where the other will not.  Every sheet is solved"
     "    and scored before fewest pieces is even considered."
     "*   HOW MANY HINGES AND WHERE.  The fewest pieces that fit the foam"
-    "    width, evenly spaced, nudged off the spillaway zones."
+    "    width, evenly spaced, nudged off the spillway zones."
     "*   FOLD OR VELCRO, per the Hinge Arrangement Chart: the pieces"
     "    fold up in PAIRS from both ends -- a sewn fold hinge inside"
     "    each pair, velcro between bundles -- so 5 pieces read Hinge /"
     "    Velcro / Velcro / Hinge, and an odd count leaves one flat"
-    "    piece at or beside the centre.  Thermo-Light: all velcro."))
+    "    piece at or beside the centre.  THERMOLIGHT: all velcro."))
 
 (setq tut:*checks*
   (list
@@ -178,11 +178,11 @@
     "  - a hinge longer than the foam length is still drawn, and the"
     "    report says by how much"
     "  - a piece count the taper does not allow is still drawn, flagged"
-    "  - a hinge that ends up inside a spillaway zone is flagged"
-    "  - spillaway zones that could not all be dodged are flagged"
-    "  - a left/right wall spillaway cannot meet a north-south hinge, so"
+    "  - a hinge that ends up inside a spillway zone is flagged"
+    "  - spillway zones that could not all be dodged are flagged"
+    "  - a left/right wall spillway cannot meet a north-south hinge, so"
     "    it is recorded but blocks nothing"
-    "  - Thermo-Light has no published hinge length: a verify note"
+    "  - THERMOLIGHT has no published hinge length: a verify note"
     "  - a grade/taper not on the foam sheet falls back to 48 x 96"
     ""
     "HARDWARE (advisory, in cyan -- recommendations, not failures)"
@@ -191,7 +191,7 @@
     "      Economy            all three upon request only"
     "      Standard & Deluxe  over 120 / over 108 / over 120"
     "      Ultra              over 108 / never    / over 96"
-    "      Thermo-Light       always   / never    / never"
+    "      THERMOLIGHT        always   / never    / never"
     ""
     "INPUT"
     "  - a block that is not named Spa Cover Details is read anyway,"
@@ -400,7 +400,7 @@
                   "(5 pieces would read Hinge/Velcro/Velcro/Hinge.)"
                   ""
                   "Each hinge runs the full 110\", well inside the 144\""
-                  "foam length.  Had a spillaway been declared, the even"
+                  "foam length.  Had a spillway been declared, the even"
                   "stations would have been nudged off it.")
             '(lambda ()
                (setvar "CLAYER" "DIMENSION")

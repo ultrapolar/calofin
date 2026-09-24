@@ -35,7 +35,7 @@
 ;;;            LISPLABVER   print the loaded version
 ;;; ======================================================================
 
-(setq *lisplab-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *lisplab-version* "v1.9")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -1035,8 +1035,8 @@
   ;; ---- out -----------------------------------------------------------
   (if drew
     (progn
-      (if (= "Erase" (lab:askkw "Keep the demo drawing?" "Keep Erase"
-                                "Keep/Erase" "Keep" nil))
+      (if (= "Yes" (lab:askkw "Erase the demo drawing?" "Yes No"
+                              "Yes/No" "No" nil))
         (progn
           (setq n (lab:erase-demo))
           (lab:say (list (strcat "LISPLAB: erased " (itoa n)

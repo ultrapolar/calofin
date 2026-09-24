@@ -85,6 +85,12 @@ VERSION_GLOBALS = {"*perp-version*", "*cperp-version*",
                    "*tutperp-version*", "*tutcperp-version*",
                    "*calofin-quiet*"}
 
+# Tunables the command body reads directly: set once in the file's
+# tunables block (LAZTUNE retunes them per drafter) and only READ here.
+# The dimension layer is the one the owner made a knob -- "DIMENSION",
+# the name every other tool uses -- in place of the old "DIMENSIONS".
+KNOB_GLOBALS = {"perp:*dimlayer*", "cperp:*dimlayer*"}
+
 
 def strip_comments(src):
     """Drop ;-comments without being fooled by semicolons inside strings.
@@ -171,6 +177,7 @@ def check_no_global_leaks(path, cmd, prefix):
         name for name in used - called
         if name not in declared and name not in BUILTINS
         and name not in KEYWORDS and name not in VERSION_GLOBALS
+        and name not in KNOB_GLOBALS
         and name != cmd
     )
     assert not leaked, "undeclared (global) variables: %s" % leaked
@@ -219,7 +226,8 @@ def check_dimension_style_handling(path, cmd, prefix):
 
 
 def check_output_placement_and_properties(path, cmd, prefix):
-    """Polylines inherit the source object's look; dims go on DIMENSIONS."""
+    """Polylines inherit the source object's look; dims go on the
+    <prefix>:*dimlayer* knob, which ships as DIMENSION."""
     code = load(path)
     # every property copied from the source is applied before PLINE runs
     pline = code.index('(command "._PLINE")')
@@ -229,13 +237,19 @@ def check_output_placement_and_properties(path, cmd, prefix):
                      ("CELTSCALE", "srcLts")):
         assert re.search(r'\(setvar\s+"%s"\s+%s\)' % (var, src), setup), \
             "polyline must inherit %s from the source object" % var
-    # the dimension loop runs on the DIMENSIONS layer
+    # the dimension loop runs on the knob's layer, which ships DIMENSION
+    knob = "%s:*dimlayer*" % prefix
+    assert re.search(r'\(setq\s+%s\s+"DIMENSION"\)' % re.escape(knob),
+                     code), "%s must ship as \"DIMENSION\"" % knob
     dim = code.index('._DIMALIGNED')
-    assert re.search(r'\(setvar\s+"CLAYER"\s+"DIMENSIONS"\)', code[:dim]), \
-        "dimensions must be created on the DIMENSIONS layer"
-    assert ('(%s:layer "DIMENSIONS"' % prefix) in code, \
-        "the DIMENSIONS layer must be created if missing"
-    print("  polylines inherit source properties, dims on DIMENSIONS layer")
+    assert re.search(r'\(setvar\s+"CLAYER"\s+%s\)' % re.escape(knob),
+                     code[:dim]), \
+        "dimensions must be created on the %s layer" % knob
+    assert ('(%s:layer %s' % (prefix, knob)) in code, \
+        "the dimension layer must be created if missing"
+    assert '"DIMENSIONS"' not in code, \
+        "no DIMENSIONS layer literal may remain"
+    print("  polylines inherit source properties, dims on DIMENSION layer")
 
 
 def check_error_handler_cleans_up(path, cmd, prefix):

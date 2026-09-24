@@ -260,7 +260,8 @@ up front — **List**, **Demo**, or **Both**:
   4. an arc whose ends attach to nothing.
 
   It then offers to run `LINFINSCAN` for a real report, and to erase
-  the practice drawing afterwards. The practice drawing goes on its own
+  the practice drawing afterwards (`Erase the practice drawing? [Yes/No]
+  <No>` -- Enter keeps it). The practice drawing goes on its own
   layer, `LINFINCHECK-TUTORIAL` (made, or unlocked, for the demo), never
   on `0` or the current layer; an object a locked layer still keeps is
   counted and reported rather than said to be erased.

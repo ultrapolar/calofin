@@ -174,12 +174,12 @@ One question, one vocabulary, repo-wide:
 | Defpoint fix               | `Move Keep Pick`            | `<Move>`; explain the choices in the question text, not the bracket |
 | Declared-feature edit loop | `Add Remove Keep`           | `<Keep>`                              |
 | Tutorial selector          | `Checks Demo Both`          | `<Both>`                              |
-| Demo cleanup               | `Keep Erase`                | `<Keep>`                              |
+| Demo cleanup               | `Yes No`                    | `<No>` -- asked as `Erase the demo drawing? [Yes/No] <No>` (the tool's own noun where it is not a demo drawing: `practice drawing`); Enter never erases |
 | Repeat the last value      | `Same`                      | offered only where a previous value exists AND `Enter` is already taken; the prompt names the number |
 | Multi-fit pick             | `1 2 3 All None Redo`       | `<2>`                                 |
 | Direction                  | `Clockwise COunterclockwise` | Previous answer (session-remembered, `<Clockwise>` to start); `CW` and `CCW` accepted as hidden synonyms |
 
-Tool-specific vocabularies (POOL's shape list, SPA's spillaway walls)
+Tool-specific vocabularies (POOL's shape list, SPA's spillway walls)
 are fine -- they just obey section 1, and reuse this table's word
 whenever the concept already has one.
 
@@ -1294,7 +1294,7 @@ fixed `[Yes/No/Back/Skip]` for the grouped build.
 * ~~`ROUnd` vs `ROund`~~ **DONE** -- `ROUnd` everywhere (POOL needs
   `RO` for `ROman`); SPA's shape list and the palette's field map
   moved together.
-* `spa:askkw "BottomLeft BottomRight TopRight TopLeft"` (the spillaway
+* `spa:askkw "BottomLeft BottomRight TopRight TopLeft"` (the spillway
   corner pick) -- no usable hotkeys (all collide until 7 letters in).
   Reviewed 2026-08-27 and DEFERRED on purpose: it works clicked or
   typed in full, and no replacement scheme was picked.
@@ -1458,7 +1458,7 @@ explicitly kept open, and the 2026-09-10 Back pass closed the
 prompt-navigation entry below.  What remains, each a deliberate
 deferral:
 
-* SPA's spillaway corner-pick keywords (8.3) -- no hotkey scheme
+* SPA's spillway corner-pick keywords (8.3) -- no hotkey scheme
   chosen yet.
 * The uppercase `.LSP` renames and the `prefix-` style migrations
   (8.4) -- churn without behaviour.
@@ -1505,14 +1505,17 @@ deferral:
   a stricter "derives from the keyword list" rule, deliberately not
   added here because three of its four current findings are the very
   hidden-alias sites that migration removes.
-* Demo-cleanup confirms are asked as `Yes/No` with `<Yes>` in
-  SPACHECK, dimcheck, linfincheck and AUTOBEAD where section 2's
-  vocabulary gives `Keep Erase` with `<Keep>` (LISPLAB and both perp
-  tutorials already use it).  Reviewed 2026-09-01 and DEFERRED: the
-  divergence is the WORDING, not the safety -- what these erase is the
-  practice drawing the tutorial itself drew and tracked, never the
-  user's work -- so a "destructive confirms default No" rule would
-  enforce the wrong axis.  Worth a vocabulary pass of its own.
+* ~~Demo-cleanup confirms in three spellings~~ **DONE 2026-09-24**:
+  nine tools asked it as `Keep/Erase <Keep>` (LISPLAB, both perp
+  tutorials), `Yes/No <Yes>` where Enter erased (AUTOBEAD, SPACHECK,
+  dimcheck, linfincheck), `Yes/No <No>` asking whether to KEEP (ABHD,
+  where Enter erased too) and `Yes/No <No>` asking to erase (PADDLE).
+  The owner's rule, now section 3's: **Enter never erases the demo.**
+  One question in every tool, `Erase the demo drawing? [Yes/No] <No>`
+  (`practice drawing` in the three check tutorials), Yes the only
+  answer that erases; what an erase takes is unchanged per tool.
+  `tests/test_demo_cleanup.py` drives all nine to the question and
+  holds both answers.
 * The VB palette's button catalog still lacks the newer tools --
   additions are unverifiable without a machine that can build the
   DLL, so `ui/calofin_ui/calofin.lsp`'s roster (test-pinned) carries

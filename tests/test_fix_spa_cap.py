@@ -91,13 +91,15 @@ RECT_FORM = """'((mode . "Watersedge") (shape . "Rectangle") (base 0.0 0.0)
 
 
 def test_an_oversize_form_width_is_asked_at_the_keyboard():
-    """spa:fok on a REQ question: W = 1524 off the sheet."""
+    """spa:fok on a REQ question: W = 1524 off the sheet.  The store's
+    w is the ACROSS overall (worded LENGTH, as POOL words it) and l the
+    UP one, so the prompts are found by their direction."""
     typed = drive(None, RECT_TYPED, 'typed')
     vm = drive(RECT_FORM % ('1524.0', '72.0'), [None, 84.0, "No", "No"],
                'form w=1524')
     same(typed, vm, 'form w=1524')
-    assert len(asked(vm, 'WIDTH')) == 1, [p for p, _ in vm.prompts]
-    assert not asked(vm, 'LENGTH'), "the length was given and asked"
+    assert len(asked(vm, 'across (A-B)')) == 1, [p for p, _ in vm.prompts]
+    assert not asked(vm, 'up (A-D)'), "the length was given and asked"
     assert REFUSED in said(vm), said(vm)
 
 
@@ -108,7 +110,7 @@ def test_an_oversize_form_length_is_asked_at_the_keyboard():
     vm = drive(RECT_FORM % ('84.0', '1524.0'), [None, None, "No", "No"],
                'form l=1524')
     same(typed, vm, 'form l=1524')
-    assert len(asked(vm, 'LENGTH')) == 1, [p for p, _ in vm.prompts]
+    assert len(asked(vm, 'up (A-D)')) == 1, [p for p, _ in vm.prompts]
     assert REFUSED in said(vm), said(vm)
 
 
@@ -116,7 +118,7 @@ def test_a_form_value_under_the_cap_is_still_taken_unasked():
     """The bound is 30 ft, not a spa's usual size: 360 itself stands."""
     vm = drive(RECT_FORM % ('360.0', '72.0'), [None, "No", "No"],
                'form w=360')
-    assert not asked(vm, 'WIDTH'), [p for p, _ in vm.prompts]
+    assert not asked(vm, 'across (A-B)'), [p for p, _ in vm.prompts]
     assert REFUSED not in said(vm), said(vm)
 
 

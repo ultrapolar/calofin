@@ -56,7 +56,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.13"     ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.14"     ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -1106,11 +1106,11 @@
                   "      The report above is printed on every real run."
                   ""))))
 
-      ;; cleanup
+      ;; cleanup -- Enter keeps the demo; only an explicit Yes erases it
       (initget "Yes No")
-      (if (/= "No" ((lambda (v) (if lzd:ask (lzd:ask "\nErase the demo pool and its bead? [Yes/No] <Yes>: " v) v))
+      (if (= "Yes" ((lambda (v) (if lzd:ask (lzd:ask "\nErase the demo drawing? [Yes/No] <No>: " v) v))
                      (getkword
-                       "\nErase the demo pool and its bead? [Yes/No] <Yes>: ")))
+                       "\nErase the demo drawing? [Yes/No] <No>: ")))
         (progn
           (setq left (autobead-demo-sweep))
           (if (> left 0)

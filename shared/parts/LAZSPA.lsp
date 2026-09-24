@@ -83,7 +83,7 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.8")
+(setq *lazspa-version* "v1.9")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -194,13 +194,16 @@
   ;; ---------------- Rectangle ----------------
   ;;  SPA's own header: "Corners: A bottom-left, B bottom-right, C
   ;;  top-right, D top-left", and its two overalls are named for them --
-  ;;  W runs A-B across the bottom and L runs A-D up the left end.  So W
-  ;;  is drawn UNDER the shape, on the side it is actually taped, rather
-  ;;  than borrowed from the top edge because there was room up there.
+  ;;  L, the LENGTH, runs A-B across the bottom and W, the WIDTH, runs
+  ;;  A-D up the left end: POOL's naming, the across overall the length.
+  ;;  The letters are the words shown; the store keys stay w (across)
+  ;;  and l (up).  So L is drawn UNDER the shape, on the side it is
+  ;;  actually taped, rather than borrowed from the top edge because
+  ;;  there was room up there.
   ("Rectangle" "Rectangle" "Rectangle"
    ((150 250 850 250 850 820 150 820 150 250))
-   (("W" "w" 150 920 850 920 "h" "W - overall WIDTH across (A-B)")
-    ("L" "l"  75 250  75 820 "v" "L - overall LENGTH up (A-D)"))
+   (("L" "w" 150 920 850 920 "h" "L - overall LENGTH across (A-B)")
+    ("W" "l"  75 250  75 820 "v" "W - overall WIDTH up (A-D)"))
    nil
    (("D" 105 210) ("C" 895 210) ("A" 105 860) ("B" 895 860)))
 
@@ -341,8 +344,8 @@
 
 (setq lzs:*second*
   '(("Rectangle"
-     ("w2" "Other outline ACROSS")
-     ("l2" "Other outline UP"))
+     ("w2" "L2 - Other outline length ACROSS")
+     ("l2" "W2 - Other outline width UP"))
     ("OCtagon"
      ("b2" "Other outline ACROSS")
      ("a2" "Other outline UP")
@@ -752,7 +755,7 @@
 ;;;  than one that does not, and SPA drops them unread on the way out
 ;;;  either way.
 ;;;
-;;;    grade THERMOLIGHT  a Thermo-Light cover's water's edge and cover
+;;;    grade THERMOLIGHT  a THERMOLIGHT cover's water's edge and cover
 ;;;                       size are the SAME thing, so c:SPA sets the
 ;;;                       mode itself (Coversize), spa:askother declines
 ;;;                       to offer the second outline at all, and
@@ -765,7 +768,7 @@
 ;;;    method Offset      the lap is asked, the by-dims overalls are not.
 ;;;    method Dims        the by-dims overalls are asked, the lap is not.
 ;;;
-;;;  Auto-hinge survives all of it: Thermo-Light covers are hinged like
+;;;  Auto-hinge survives all of it: THERMOLIGHT covers are hinged like
 ;;;  any other, only in velcro throughout.
 
 (defun lzs:dead (c / g s m)
@@ -1152,7 +1155,7 @@
   ;; than discovered at the command line
   (setq out (cons (strcat "  : text { width = 62; label = \""
                           "The Spa Cover Details block pick and the "
-                          "spillaway questions stay at the command line.\"; }")
+                          "spillway questions stay at the command line.\"; }")
                   out))
   ;; The state line.  No label here: it is written before the dialog is
   ;; shown and rewritten on every change, so a label in the file would

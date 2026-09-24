@@ -37,7 +37,7 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq *lisplab-version* "v1.8")   ; announced on load; release_lisp.py
+(setq *lisplab-version* "v1.9")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -956,8 +956,8 @@
   ;; ---- out -----------------------------------------------------------
   (if drew
     (progn
-      (if (= "Erase" (cal:askkw "Keep the demo drawing?" "Keep Erase"
-                                "Keep/Erase" "Keep" nil))
+      (if (= "Yes" (cal:askkw "Erase the demo drawing?" "Yes No"
+                              "Yes/No" "No" nil))
         (progn
           (setq n (lab:erase-demo))
           (lab:say (list (strcat "LISPLAB: erased " (itoa n)

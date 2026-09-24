@@ -71,7 +71,7 @@
 ;;;      new point count and repeat from step 6 with the new polyline as
 ;;;      the path.
 ;;;  10. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
-;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
+;;;      Every dimension is then drawn at once, on the DIMENSION layer.
 ;;;
 ;;; The offset side is fixed once from the direction click in step 2 and
 ;;; reused for every round, so all offsets stay on the same side of the
@@ -197,7 +197,7 @@
 ;;; Properties
 ;;;   * The offset polylines take the layer, colour, linetype, lineweight
 ;;;     and linetype scale of the object they were offset from.
-;;;   * The dimensions go on the DIMENSIONS layer (created if missing)
+;;;   * The dimensions go on the DIMENSION layer (created if missing)
 ;;;     and use the dimension style picked in step 9 when the drawing
 ;;;     has it; otherwise the current style is used and a note is
 ;;;     printed.
@@ -256,7 +256,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.24")
+(setq *perp-version* "v0.25")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -323,6 +323,10 @@
 ;; either way and both keywords are still offered.  Anything that is
 ;; neither keyword is ignored and "STandard" stands.
 (setq perp:*dimstyle-default* "STandard")
+
+;; The layer every dimension goes on (made if missing, ACI 4) -- the
+;; shop-wide DIMENSION layer the other drawing tools use.
+(setq perp:*dimlayer* "DIMENSION")    ; layer the dimensions are drawn on
 
 ;;; -------------------- the length ruler --------------------------------
 ;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
@@ -1175,10 +1179,10 @@
   ;; Guides live on their own layer so a locked current layer cannot stop
   ;; them being erased; the START arrow and the boundary probe both draw
   ;; on it.  Offset polylines go on the source object's own layer;
-  ;; dimensions go on DIMENSIONS.  Made once, ahead of the chain below,
+  ;; dimensions go on perp:*dimlayer*.  Made once, ahead of the chain below,
   ;; which can come back through the click step more than once.
   (cal:ensure-layer "PERPPTS-TEMP" 1)     ; guides, erased before the command ends
-  (cal:ensure-layer "DIMENSIONS"   4)
+  (cal:ensure-layer perp:*dimlayer* 4)
   ;; the length ruler, not up yet: it stands beside the length prompts
   ;; on the guide layer, and perp:finish takes it down with the guides
   (setq rl (cal:ruler-new "PERPPTS-TEMP" (perp:ruler-style)))
@@ -1759,7 +1763,7 @@
                    "\" is not in this drawing - using the current style \""
                    cdim "\" instead.")))
 
-  (setvar "CLAYER" "DIMENSIONS")
+  (setvar "CLAYER" perp:*dimlayer*)
   (foreach pr (reverse dimPairs)
     (command "._DIMALIGNED" (car pr) (cadr pr) (cadr pr)))
 
@@ -1768,7 +1772,7 @@
   (princ (strcat "\nDone: " (itoa iter) " round(s), "
                  (itoa total) " points, "
                  (itoa iter) " polyline(s) on layer \"" srcLayer "\" and "
-                 (itoa total) " dimensions on layer \"DIMENSIONS\"."))
+                 (itoa total) " dimensions on layer \"" perp:*dimlayer* "\"."))
   (if lzd:end (lzd:end "PERPPTS"))
   (princ))
 

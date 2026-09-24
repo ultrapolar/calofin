@@ -66,7 +66,7 @@
 ;;;  moving anybody's drawing.  A cover wider than it is tall gets
 ;;;  upright hinges; a tall one gets flat hinges.
 ;;;
-;;;  WHAT IT DOES NOT DO.  It does not ask about spillaways: a spillway
+;;;  WHAT IT DOES NOT DO.  It does not ask about spillways: a spillway
 ;;;  is a no-go zone that SPA dodges by turning the spa, and turning is
 ;;;  not on the table here.  And it never moves, changes or erases the
 ;;;  spa outline it was handed.  Anything out of spec -- a hinge over
@@ -80,7 +80,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacovcreate-version* "v1.3")
+(setq *spacovcreate-version* "v1.4")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value SPACOVCREATE reads that somebody might want
@@ -231,7 +231,7 @@
 
 (setq scv:*foamdflt* (list (cons 48.0 96.0)))  ; when nothing matches at all
 (setq scv:*foamdpc*  (list 2 3 4 5))           ; and the counts it will accept
-(setq scv:*thermotaper* "1-3/8")  ; the one taper a Thermo-Light comes in
+(setq scv:*thermotaper* "1-3/8")  ; the one taper a THERMOLIGHT comes in
 
 ;;;  HARDWARE called for by the LONGEST hinge, per grade.  Each rule is
 ;;;  (OVER <inches>) | (ALWAYS) | (NEVER) | (REQUEST), and the three
@@ -941,7 +941,7 @@
 ;;
 ;; The pieces fold up in PAIRS from both ends -- a fold hinge inside
 ;; each pair, velcro between bundles -- an odd count leaving one flat
-;; piece at or beside the centre.  allvel (Thermo-Light) forces every
+;; piece at or beside the centre.  allvel (THERMOLIGHT) forces every
 ;; hinge to velcro.  Returns a list of "H" / "V", west to east.
 (defun scv:hingetypes (n allvel / hc m zone p out)
   (setq hc (1- n)
@@ -1254,7 +1254,7 @@
         opts   (car fo)
         allowed (cadr fo))
   (if allvel
-      (scv:advise "THERMO-LIGHT: EVERY HINGE IS VELCRO - NO FOLD HINGE"))
+      (scv:advise "THERMOLIGHT: EVERY HINGE IS VELCRO - NO FOLD HINGE"))
   (if (not (caddr fo))
       (scv:note (strcat "GRADE/TAPER " grade " " taper
                         " NOT ON THE FOAM SHEET - 48/96 ASSUMED")))
@@ -1448,8 +1448,8 @@
   ;; -------- draw it -------------------------------------------------
   (if (= qstep 4)
       (progn
-        ;; A Thermo-Light comes in ONE taper, so the grade settles it:
-        ;; a block with no readable TAPER tag on a Thermo-Light is not a
+        ;; A THERMOLIGHT comes in ONE taper, so the grade settles it:
+        ;; a block with no readable TAPER tag on a THERMOLIGHT is not a
         ;; taper nobody gave, it is one the grade already answered -- and
         ;; flagging that as an assumption would send a drafter hunting
         ;; for a number that was never missing.  It is still SAID, in
@@ -1458,7 +1458,7 @@
             (progn
               (if (/= taper scv:*thermotaper*)
                   (scv:advise (strcat "TAPER TAKEN FROM THE GRADE - A"
-                                      " THERMO-LIGHT IS "
+                                      " THERMOLIGHT IS "
                                       scv:*thermotaper*)))
               (setq taper scv:*thermotaper* assumed nil)))
         (if assumed

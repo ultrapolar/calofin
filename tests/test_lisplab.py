@@ -316,10 +316,10 @@ class Tour(VM):
         raise LispError(f'unscripted {kind}: {prompt!r}', self)
 
 
-def drive(lesson, mode, point=None, size=None, ending='Keep'):
+def drive(lesson, mode, point=None, size=None, ending='No'):
     vm = Tour({'Which lesson': lesson,
                'Checks prints': mode,
-               'Keep the demo drawing': ending},
+               'Erase the demo drawing': ending},
               point=point, size=size)
     vm.load(LSP)
     try:
@@ -407,7 +407,7 @@ vm = drive('Both', 'Checks')
 check('Checks alone draws nothing and asks for no point',
       not vm.entities and not asked_for(vm, 'getpoint'))
 check('Checks alone never offers to erase a drawing',
-      not [pr for pr in asked_for(vm, 'getkword') if 'Keep' in pr])
+      not [pr for pr in asked_for(vm, 'getkword') if 'Erase the demo' in pr])
 
 vm = drive('Both', 'Demo', point=[0.0, 0.0, 0.0], size=5.0)
 check('Demo alone still draws all three rows', drawn(vm) == 21)
@@ -416,8 +416,8 @@ check('Demo alone asks the point and size once each',
       and len(asked_for(vm, 'getdist')) == 1)
 
 # =====================================================================
-print('LISPLAB -- Erase takes the demo back out again')
-vm = drive('Both', 'Both', point=[0.0, 0.0, 0.0], size=5.0, ending='Erase')
+print('LISPLAB -- Yes takes the demo back out again')
+vm = drive('Both', 'Both', point=[0.0, 0.0, 0.0], size=5.0, ending='Yes')
 check('nothing of the demo is left in the drawing',
       not [e for e in vm.entities
            if e not in vm.deleted
@@ -440,7 +440,7 @@ check('every sysvar is back where it started', vm.sysvars == BEFORE)
 # =====================================================================
 print('LISPLAB -- a frozen demo layer is thawed, not drawn onto blind')
 vm = Tour({'Which lesson': 'Database', 'Checks prints': 'Demo',
-           'Keep the demo drawing': 'Keep'}, point=[0.0, 0.0, 0.0],
+           'Erase the demo drawing': 'No'}, point=[0.0, 0.0, 0.0],
           size=5.0)
 vm.load(LSP)
 vm.tables['LAYER'].add('LISPLAB-A')

@@ -921,7 +921,7 @@ def practice_drawings_on_their_own_layer():
             [('Pick an empty spot', [0.0, 0.0, 0.0]),
              ('press Enter to continue', ''),
              ('Write a read-only', 'No'),
-             ('Erase the practice drawing now?', 'Yes')])
+             ('Erase the practice drawing?', 'Yes')])
         made = [e for e in vm.entities[mark:]]
         left = [e for e in made if e not in vm.deleted]
         out = printed(vm)
@@ -949,7 +949,7 @@ def practice_drawings_on_their_own_layer():
             [('Pick an empty spot', [0.0, 0.0, 0.0]),
              ('press Enter to continue', ''),
              ('Write a read-only', 'No'),
-             ('Erase the practice drawing now?', lock_then_yes)])
+             ('Erase the practice drawing?', lock_then_yes)])
         left = [e for e in vm.entities[mark:] if e not in vm.deleted]
         out = printed(vm)
         check(f"TUTORIAL{tool}: a refused erase is not 'Practice drawing "

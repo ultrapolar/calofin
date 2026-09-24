@@ -27,7 +27,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.11")
+(setq *tutcperp-version* "v0.12")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -306,7 +306,7 @@
                   "  * the polyline takes the layer, colour, linetype,"
                   "    lineweight and linetype scale of the source curve"
                   "  * dimensions are drawn at the end, all at once, on the"
-                  "    DIMENSIONS layer, in STANDARD INCHES or SIDE"
+                  "    DIMENSION layer, in STANDARD INCHES or SIDE"
                   "    STANDARD (current style if the drawing lacks it)"
                   ""
                   "Safety net"
@@ -413,7 +413,7 @@
                   "    plain lightweight polyline with arc segments, never a"
                   "    spline - passing exactly through every point;"
                   "  * one aligned dimension per point (in the real command"
-                  "    these land on the DIMENSIONS layer at the end, in the"
+                  "    these land on the DIMENSION layer at the end, in the"
                   "    style you pick)."))
       (setq crv (tutc:round crv lens))
       (tutc:pause)
@@ -435,11 +435,11 @@
                   "one U undoes the whole run."))
       (tutc:pause)
 
-      ;; keep or erase the demo
-      (initget "Keep Erase")
-      (setq ans (getkword "\nKeep the demo drawing? [Keep/Erase] <Keep>: "))
-      (if lzd:ask (lzd:ask "\nKeep the demo drawing? [Keep/Erase] <Keep>: " ans) ans)
-      (if (equal ans "Erase")
+      ;; erase the demo only on an explicit Yes -- Enter keeps it
+      (initget "Yes No")
+      (setq ans (getkword "\nErase the demo drawing? [Yes/No] <No>: "))
+      (if lzd:ask (lzd:ask "\nErase the demo drawing? [Yes/No] <No>: " ans) ans)
+      (if (equal ans "Yes")
         (progn
           (foreach e ents (if (and e (entget e)) (entdel e)))
           (setq ents nil)))))

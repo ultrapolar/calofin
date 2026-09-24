@@ -154,7 +154,7 @@ The pieces fold up in pairs from both ends: a fold hinge inside each
 pair, velcro between bundles, an odd count leaving one flat piece at or
 beside the centre. Fold hinges are dashed (`DASHED2`, scaled so the dash
 plots 5" whatever the drawing's `LTSCALE`) and labelled `Hinge`; velcro
-hinges are ByLayer and labelled `Velcro Hinge`. A Thermo-Light is velcro
+hinges are ByLayer and labelled `Velcro Hinge`. A THERMOLIGHT is velcro
 throughout.
 
 Hardware called for by the **longest** hinge -- velcro hinges, double C
@@ -270,7 +270,7 @@ copy cannot quietly drift.
 
 ## Notes & limitations
 
-* **No spillaways.** A spillway is a no-go zone that `SPA` dodges by
+* **No spillways.** A spillway is a no-go zone that `SPA` dodges by
   turning the spa, and turning is not on the table here -- the geometry
   is already drawn. Measure the spa and run `SPA` when a spillway has to
   be dodged.

@@ -16071,7 +16071,7 @@
 ;;;  outline always takes the outside pair.  One more dimension at the
 ;;;  bottom gives the OVERLAP: how far the cover laps the water's edge.
 ;;;
-;;;  THERMO-LIGHT
+;;;  THERMOLIGHT
 ;;;  ------------
 ;;;  Two rules make it a special case, so the Spa Cover Details block is
 ;;;  read BEFORE anything else is asked:
@@ -16083,7 +16083,7 @@
 ;;;  AUTO-HINGE
 ;;;  ----------
 ;;;  The command offers to auto-hinge the cover.  The offer, and the
-;;;  spillaways behind it, are ASKED AS SOON AS THE SPA IS MEASURED --
+;;;  spillways behind it, are ASKED AS SOON AS THE SPA IS MEASURED --
 ;;;  before a line is drawn -- because their answers can still turn the
 ;;;  spa (see THE QUARTER TURN below), and nothing already on the screen
 ;;;  can be turned.
@@ -16096,7 +16096,7 @@
 ;;;  way.  The hinges themselves are drawn at the end, on whichever
 ;;;  outline they belong to.
 ;;;
-;;;  Spillaways (corner or centred-on-a-wall) are the no-go zones, and
+;;;  Spillways (corner or centred-on-a-wall) are the no-go zones, and
 ;;;  they are answered against the spa AS MEASURED; the "Spa Cover
 ;;;  Details" block supplies the grade and taper, which set the foam
 ;;;  width (max hinge spacing), foam length (max hinge run) and the
@@ -16118,11 +16118,11 @@
 ;;;  measured; the corners, their treatments and their letters all
 ;;;  travel with the shape.
 ;;;
-;;;  Hinges run north-south, so a spillaway on the top or the bottom
+;;;  Hinges run north-south, so a spillway on the top or the bottom
 ;;;  wall stands in the way of every one of them -- while the same
-;;;  spillaway on a LEFT or RIGHT wall cannot touch any.  A quarter turn
+;;;  spillway on a LEFT or RIGHT wall cannot touch any.  A quarter turn
 ;;;  moves it there, so when the spa laid out the way the long-overall
-;;;  rule wants cannot get a hinge clear of a spillaway and the other
+;;;  rule wants cannot get a hinge clear of a spillway and the other
 ;;;  way round can, the spillway wins and the spa is turned.  Both ways
 ;;;  round are scored on the same three things the layout is scored on
 ;;;  -- dodging every zone, fitting the foam length, an acceptable piece
@@ -16253,7 +16253,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092326 REV35")
+(setq spa:*version* "092326 REV36")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -16484,8 +16484,8 @@
 ;;  than reading these: their field-sheet ties (B, T, S, A, S1, V, S2)
 ;;  are laid out at coordinates measured around that ring, so a size
 ;;  changed here alone would leave the ties floating off it.
-(setq spa:*pv-w*  240.0)        ; nominal guide width
-(setq spa:*pv-l*  200.0)        ; nominal guide length
+(setq spa:*pv-w*  240.0)        ; nominal guide length (across)
+(setq spa:*pv-l*  200.0)        ; nominal guide width (up)
 (setq spa:*pv-th*  12.0)        ; guide corner-letter height
 (setq spa:*pv-tie* 10.0)        ; guide tie-letter height
 (setq spa:*pv-lbl* 22.0)        ; how far a rectangle corner letter sits out
@@ -16529,7 +16529,7 @@
 
 (setq spa:*foamdflt*  (list (cons 48.0 96.0)))   ; assumed when nothing matches
 (setq spa:*foamdpc*   (list 2 3 4 5))  ; and the counts it will accept
-(setq spa:*thermotaper* "1-3/8")  ; the one taper a Thermo-Light comes in
+(setq spa:*thermotaper* "1-3/8")  ; the one taper a THERMOLIGHT comes in
 
 ;; ---- hardware called for by the LONGEST hinge, per grade
 ;;;
@@ -16551,7 +16551,7 @@
 ;; ---- the hinge placement solver
 ;;;
 ;;;  The fewest pieces that fit the foam width are used, spaced evenly,
-;;;  then nudged off any spillaway zone.  When no nudge works the piece
+;;;  then nudged off any spillway zone.  When no nudge works the piece
 ;;;  count is bumped and the search runs again, up to spa:*hinge-try*
 ;;;  counts past the minimum; failing everything the even layout is kept
 ;;;  and the report says which hinge is in a zone.
@@ -16638,22 +16638,22 @@
 ;; rather than lapped sets "Dims" and answers one question less.
 (setq spa:*method-default* "Offset")
 
-;; What Enter means at "Is there a spillaway" -- "No" ends the round of
-;; spillaways, "Yes" opens another one.  A shop whose spas nearly
+;; What Enter means at "Is there a spillway" -- "No" ends the round of
+;; spillways, "Yes" opens another one.  A shop whose spas nearly
 ;; always carry one sets "Yes" and types No to finish instead, which is
 ;; the same round with the tapping the other way about.
 (setq spa:*spill-default* "No")
 
-;; What Enter means at a spillaway's location -- "Wall" centres it on a
+;; What Enter means at a spillway's location -- "Wall" centres it on a
 ;; wall and asks which wall, "Corner" asks which corner and how far
 ;; along to keep clear of the hinges.  The two answers ask different
 ;; follow-ups, so this decides which of them Enter walks into.
 (setq spa:*spillloc-default* "Wall")
 
 ;; What Enter means at "Auto-hinge the cover" -- "Yes" goes on to the
-;; spillaways and lays the fold hinges out itself, "No" draws the
+;; spillways and lays the fold hinges out itself, "No" draws the
 ;; outlines and their dimensions and leaves the cover unhinged.  A shop
-;; that hinges by hand sets "No" and is never asked the spillaways.
+;; that hinges by hand sets "No" and is never asked the spillways.
 (setq spa:*autohinge-default* "Yes")
 
 ;; What the FIRST corner's treatment question offers on Enter, before
@@ -16692,8 +16692,8 @@
 (setq spa:*turned*   nil)            ; the cover was turned 90 to lie long-ways
 (setq spa:*spillturn* nil)           ; ...and it was the spillway that turned it
 (setq spa:*hingeon*   nil)           ; the cover is being auto-hinged
-(setq spa:*spills*    nil)           ; spillaways, as measured (see spa:askspill)
-(setq spa:*hingerows* nil)           ; hinge/spillaway rows for the report
+(setq spa:*spills*    nil)           ; spillways, as measured (see spa:askspill)
+(setq spa:*hingerows* nil)           ; hinge/spillway rows for the report
 (setq spa:*advice*    nil)           ; hardware recommendations
 (setq spa:*grade*     nil)           ; from the Spa Cover Details block
 (setq spa:*taper*     nil)
@@ -17516,7 +17516,7 @@
                       ": ")))
     (if lzd:ask (lzd:ask msg v) v)
     ;; a keyword counts only where this prompt OFFERS it: bit 128 lets
-    ;; any typed word through, and a Back typed at the first width (no
+    ;; any typed word through, and a Back typed at the first overall (no
     ;; Back there) reached the caller as CAL-BACK and died in rc:sides,
     ;; an NA on a REQ as nil in the arithmetic.  Unoffered, each falls
     ;; to "Not a measurement" and is asked again
@@ -18040,7 +18040,7 @@
 (defun spa:askother ( / v)
   (if (spa:thermop)
       (progn
-        (princ "\nThermo-Light: the water's edge and the cover are the same -- nothing to add.")
+        (princ "\nTHERMOLIGHT: the water's edge and the cover are the same -- nothing to add.")
         nil)
       (spa:askother2)))
 
@@ -18132,7 +18132,7 @@
               (setq out (cons v out) i (1+ i))))))
   (reverse out))
 
-;; A quad of width w by length l with its bottom-left at org.
+;; A quad w across by l up with its bottom-left at org.
 (defun spa:quadat (org w l)
   (list org
         (cal:v+ org (list w 0.0))
@@ -18205,11 +18205,11 @@
 ;;;  AUTO-HINGE it.  Hinges run north-south, splitting the cover into
 ;;;  side-by-side pieces along its west-east length.
 ;;;
-;;;  1.  SPILLAWAYS -- places a hinge cannot go.  Asked in a loop that
-;;;      always defaults to No: a CORNER spillaway blocks a typed length
+;;;  1.  SPILLWAYS -- places a hinge cannot go.  Asked in a loop that
+;;;      always defaults to No: a CORNER spillway blocks a typed length
 ;;;      from that (hypotenuse) corner along both of its walls; a WALL
-;;;      spillaway is a typed overall length assumed centred on its
-;;;      wall.  A left/right wall spillaway cannot collide with a
+;;;      spillway is a typed overall length assumed centred on its
+;;;      wall.  A left/right wall spillway cannot collide with a
 ;;;      north-south hinge, so it is only recorded.
 ;;;
 ;;;  2.  The "Spa Cover Details" block supplies the GRADE and TAPER
@@ -18221,7 +18221,7 @@
 ;;;        pieces       which piece counts are acceptable
 ;;;
 ;;;  3.  The FEWEST pieces that fit the foam width are used, spaced
-;;;      evenly, then nudged off any spillaway zone.  A nudge keeps
+;;;      evenly, then nudged off any spillway zone.  A nudge keeps
 ;;;      every piece inside the foam width; when no nudge works the
 ;;;      piece count is bumped, and failing everything the even layout
 ;;;      is kept and the report says which hinge is in a zone.
@@ -18231,7 +18231,7 @@
 ;;;  pair, Velcro between bundles -- so a 5-piece cover reads Hinge /
 ;;;  Velcro / Velcro / Hinge, and an odd count leaves one flat piece
 ;;;  at or beside the centre.  The leftmost hinge is always a fold and
-;;;  no two folds are ever adjacent.  (Thermo-Light: all velcro.)
+;;;  no two folds are ever adjacent.  (THERMOLIGHT: all velcro.)
 ;;;
 ;;;  The linework matches the office template's sample: the fold hinge
 ;;;  is a DASHED2 line on COVER scaled to a 5" dash, velcro hinges are
@@ -18470,7 +18470,7 @@
 ;; hinge inside each pair, velcro between bundles), an odd count leaving
 ;; one flat piece at or beside the centre.  The leftmost hinge is always
 ;; a fold, no two folds are ever adjacent, and 2- and 3-piece covers
-;; come out exactly as they always have.  allvel (Thermo-Light) forces
+;; come out exactly as they always have.  allvel (THERMOLIGHT) forces
 ;; every hinge to velcro.  Returns a list of "H" / "V", west to east.
 (defun spa:hingetypes (n allvel / hc m zone p out)
   (setq hc (1- n)
@@ -18529,34 +18529,34 @@
 (defun spa:hask (msg back)
   (spa:askd msg nil nil back nil))
 
-;; Ask the spillaways.  Returns them as measured -- (kind name length),
+;; Ask the spillways.  Returns them as measured -- (kind name length),
 ;; kind "Corner" or "Wall" -- NOT as x-intervals: the spa may still be
 ;; turned a quarter turn to get a hinge clear of one, and the turn is
 ;; applied where the zones are worked out (spa:spillzones).
 ;;
 ;; This is one of the repo's commit-as-you-go loops, so Back follows
-;; that convention: it steps back a question within a spillaway, and
-;; from the first question of one it REMOVES the spillaway just
+;; that convention: it steps back a question within a spillway, and
+;; from the first question of one it REMOVES the spillway just
 ;; committed before re-asking.  The feedback wording is the shared one.
 (defun spa:askspill ( / spills loc cnr d wall v stage done)
   (setq spills nil done nil)
-  (princ "\n(a spillaway is named on the spa AS MEASURED; the drawing may be turned to clear it)")
+  (princ "\n(a spillway is named on the spa AS MEASURED; the drawing may be turned to clear it)")
   (while (not done)
-    (setq v (cal:askkw "Is there a spillaway" "Yes No" "Yes/No"
+    (setq v (cal:askkw "Is there a spillway" "Yes No" "Yes/No"
                        (cond ((spa:kw-canon spa:*spill-default* '("Yes" "No")))
                              ("No"))
                        (if spills t nil)))
     (cond
-      ;; Back from the top question: drop the last spillaway and re-ask
+      ;; Back from the top question: drop the last spillway and re-ask
       ((eq v 'CAL-BACK)
        (if spills
            (progn
-             (princ "\nStepping back one spillaway.")
+             (princ "\nStepping back one spillway.")
              (setq spills (cdr spills)))
-           (princ "\nAlready at the first spillaway.")))
+           (princ "\nAlready at the first spillway.")))
       ((= v "No") (setq done t))
       (t
-       ;; one spillaway, its own questions Back-able among themselves
+       ;; one spillway, its own questions Back-able among themselves
        (setq stage 0)
        (while (and stage (< stage 3))
          (cond
@@ -18564,7 +18564,7 @@
             ;; the bracket carries only what a click may send, so the
             ;; "(centred)" note lives in the question (STANDARDS 1)
             (setq loc (cal:askkw
-                        "Spillaway location (a wall one is centred on it)"
+                        "Spillway location (a wall one is centred on it)"
                         "Corner Wall" "Corner/Wall"
                         (cond ((spa:kw-canon spa:*spillloc-default*
                                              '("Corner" "Wall")))
@@ -18583,7 +18583,7 @@
            (t
             (setq d (spa:hask (if (= loc "Corner")
                                   "Length from the corner to keep clear of hinges"
-                                  "Overall length of the spillaway (centred)")
+                                  "Overall length of the spillway (centred)")
                               t))
             (if (eq d 'CAL-BACK)
                 (setq stage 1)
@@ -18594,11 +18594,11 @@
                                          (list "Wall" wall d))
                                      spills))
                   (if (and (= loc "Wall") (member wall '("Left" "Right")))
-                      (princ "\n(a left/right wall spillaway cannot meet a north-south hinge)"))
+                      (princ "\n(a left/right wall spillway cannot meet a north-south hinge)"))
                   (setq stage 3)))))))))
   (reverse spills))
 
-;;; ---------- spillaways in drawing space ----------
+;;; ---------- spillways in drawing space ----------
 ;;;
 ;;;  One quarter turn CLOCKWISE is the turn this file makes, and it
 ;;;  carries every wall and corner round with the shape:
@@ -18606,7 +18606,7 @@
 ;;;      bottom -> left    right -> bottom    top -> right    left -> top
 ;;;      A (BL) -> TL      B (BR) -> BL       C (TR) -> BR    D (TL) -> TR
 ;;;
-;;;  which is the whole reason a turn can save a hinge: a spillaway that
+;;;  which is the whole reason a turn can save a hinge: a spillway that
 ;;;  was on the top or the bottom wall, square in the path of every
 ;;;  north-south hinge, comes to rest on a side wall where no hinge can
 ;;;  reach it.
@@ -18629,8 +18629,8 @@
             (t "TopRight"))
       c))
 
-;; The forbidden x-intervals a spillaway list makes of the run [x1 x2]
-;; with the shape drawn turned or not.  A corner spillaway blocks its
+;; The forbidden x-intervals a spillway list makes of the run [x1 x2]
+;; with the shape drawn turned or not.  A corner spillway blocks its
 ;; typed length in from that end of the run; a top or bottom wall one
 ;; blocks its length centred on the wall; a left or right wall one
 ;; blocks nothing at all -- no north-south hinge can meet it.
@@ -18652,7 +18652,7 @@
                                forb))))))
   forb)
 
-;; One report row per spillaway, named as it was MEASURED -- that is how
+;; One report row per spillway, named as it was MEASURED -- that is how
 ;; the field sheet reads -- with where it ended up on the drawing added
 ;; when the turn moved it.
 (defun spa:spillrows (spills turn / rows sp nm as)
@@ -18672,7 +18672,7 @@
                                    nil (caddr sp))))))
   rows)
 
-;; Is this a Thermo-Light cover?  Its water's edge and cover size are
+;; Is this a THERMOLIGHT cover?  Its water's edge and cover size are
 ;; the same thing, and every one of its hinges is velcro.
 (defun spa:thermop ()
   (and spa:*grade* (= spa:*grade* "THERMOLIGHT")))
@@ -18687,7 +18687,7 @@
   (cal:osup)
   ;; entsel answers nil for Enter AND for a click that hit nothing, and
   ;; a miss taken for the skip spent the one offer this run makes: the
-  ;; GRADE went unread and a Thermo-Light cover was drawn as a Standard
+  ;; GRADE went unread and a THERMOLIGHT cover was drawn as a Standard
   ;; one, with nothing said.  ERRNO 7 tells the two apart.  It is
   ;; sticky, so it is cleared before each pick and read straight after;
   ;; the clear is wrapped because an engine that makes ERRNO read-only
@@ -18780,7 +18780,7 @@
 ;; in a 48 x 144/96 and a 49-1/2 x 102 -- and one can work where the
 ;; other will not: the wider sheet needs fewer hinges, the longer one
 ;; lets a hinge run further.  So every option is solved and SCORED on
-;; what it satisfies -- dodging the spillaways (4), fitting the foam
+;; what it satisfies -- dodging the spillways (4), fitting the foam
 ;; length (2), an acceptable piece count (1) -- and only then on fewest
 ;; pieces.  Returns (n xs fw fl solved lenok pcok maxchord score).
 (defun spa:hbest (desc x1 x2 forb opts allowed / best bestsc opt fw fl nmin
@@ -18809,9 +18809,9 @@
 
 ;;; ---------- which way round to draw the spa ----------
 ;;;
-;;;  Hinges run north-south, so a spillaway on the top or the bottom
+;;;  Hinges run north-south, so a spillway on the top or the bottom
 ;;;  wall stands in the way of every one of them while the same
-;;;  spillaway on a side wall cannot touch any.  A quarter turn moves it
+;;;  spillway on a side wall cannot touch any.  A quarter turn moves it
 ;;;  there -- the drafter's own dodge -- and it is taken here whenever
 ;;;  the spa laid out the way the long-overall rule wants cannot get its
 ;;;  hinges clear and the other way round can.  Both ways round are
@@ -18921,24 +18921,24 @@
             (spa:valnote "NO COVER OUTLINE - HINGES LAID ON THE WATER'S EDGE"))
         (setq grade (if spa:*grade* spa:*grade* "STANDARD")
               taper spa:*taper*
-              ;; Thermo-Light is velcro throughout -- no fold hinge
+              ;; THERMOLIGHT is velcro throughout -- no fold hinge
               allvel (spa:thermop))
         (if allvel
-            (spa:advise "THERMO-LIGHT: EVERY HINGE IS VELCRO - NO FOLD HINGE"))
+            (spa:advise "THERMOLIGHT: EVERY HINGE IS VELCRO - NO FOLD HINGE"))
         (setq fo (spa:foamopts grade taper)
               opts (car fo)
               allowed (cadr fo))
         (if (not (caddr fo))
             (spa:valnote (strcat "GRADE/TAPER " grade " " taper
                                  " NOT ON THE FOAM SHEET - 48/96 ASSUMED")))
-        ;; 3 -- the spillaway zones as the spa was finally drawn, then
+        ;; 3 -- the spillway zones as the spa was finally drawn, then
         ;; the foam sheet and the layout on it
         (setq spa:*hingerows* (spa:spillrows spa:*spills* spa:*turned*)
               forb (spa:spillzones spa:*spills* x1 x2 spa:*turned*)
               best (spa:hbest desc x1 x2 forb opts allowed)
               n (car best) xs (cadr best) fw (caddr best) fl (nth 3 best))
         (if (not (nth 4 best))
-            (spa:valnote "SPILLAWAY ZONES COULD NOT ALL BE AVOIDED - CHECK HINGES"))
+            (spa:valnote "SPILLWAY ZONES COULD NOT ALL BE AVOIDED - CHECK HINGES"))
         (if (not (spa:hallow n allowed))
             (spa:valnote (strcat (itoa n) " PIECES NOT ACCEPTABLE FOR "
                                  (spa:gradeshort grade) " " taper)))
@@ -18974,7 +18974,7 @@
                                          " > " (rtos fl 2 0) ")")))
                 (if (spa:inforb x forb)
                     (spa:valnote (strcat "HINGE " (itoa (1+ k))
-                                         " FALLS IN A SPILLAWAY ZONE")))))
+                                         " FALLS IN A SPILLWAY ZONE")))))
           (setq k (1+ k)))
         (if (null fl)
             (spa:valnote "THERMOLIGHT: HINGE LENGTH N/A - VERIFY"))
@@ -19406,19 +19406,19 @@
            (spa:wp (list -110.0 -90.0)) (spa:wp (list 350.0 320.0)))
   (princ "\nA gray guide spa is shown -- the RED element is the dimension being asked for.")
   (princ "\nCorners: A bottom-left, B bottom-right, C top-right, D top-left.")
-  (princ "\n(Enter at the length takes the width, i.e. a square spa)")
+  (princ "\n(Enter at the width takes the length, i.e. a square spa)")
   (princ "\n(Back re-asks the previous question)")
 
   ;; -------- the two overalls (a moulded shell is a true rectangle)
   (defun rc:sides ( / ans)
     (setq ans (spa:askseqb
-                (list (list 'w 'REQ "Overall WIDTH across (A-B)"
+                (list (list 'w 'REQ "Overall LENGTH across (A-B)"
                             (append (cdr (assoc 'ab pv)) (cdr (assoc 'cd pv))
                                     (spa:lbl pv '(lA lB))))
-                      ;; the width is offered back as the length, so a
+                      ;; the length is offered back as the width, so a
                       ;; square spa is one measurement and Enter -- type
                       ;; a different value to decline it
-                      (list 'l 'SUG "Overall LENGTH up (A-D)"
+                      (list 'l 'SUG "Overall WIDTH up (A-D)"
                             (append (cdr (assoc 'da pv)) (cdr (assoc 'bc pv))
                                     (spa:lbl pv '(lA lD)))
                             '(w)))
@@ -19503,8 +19503,8 @@
   (spa:stages (list 'rc:sides 'rc:corners))
 
   ;; -------------------------------------------------- hinges, asked now
-  ;; The auto-hinge offer and the spillaways come BEFORE anything is
-  ;; drawn because their answers can still turn the spa -- a spillaway
+  ;; The auto-hinge offer and the spillways come BEFORE anything is
+  ;; drawn because their answers can still turn the spa -- a spillway
   ;; no north-south hinge can dodge is dodged by turning the cover
   ;; instead, and there is no turning it once it is on the screen.  The
   ;; grade + taper come later (spa:hingedetails, below, once the second
@@ -19523,7 +19523,7 @@
   ;; were typed in.  Turning the cover a quarter turn clockwise carries
   ;; the corners round with it: the corner that was B lands bottom-left,
   ;; so the treatments and their letters rotate one step with the shape.
-  ;; A spillaway that blocks every hinge one way round and none the
+  ;; A spillway that blocks every hinge one way round and none the
   ;; other overrules the long overall -- see spa:pickturn.
   (setq turn (spa:pickturn
                (> l w)
@@ -19863,8 +19863,8 @@
         (spa:valnote "V LONGER THAN A - ADJUSTED")))
 
   ;; -------------------------------------------------- hinges, asked now
-  ;; the auto-hinge offer and the spillaways, before anything is drawn,
-  ;; so a spillaway can still turn the spa -- and with the guide still
+  ;; the auto-hinge offer and the spillways, before anything is drawn,
+  ;; so a spillway can still turn the spa -- and with the guide still
   ;; up, because it is the only spa on the screen until the real one is
   ;; drawn below.  The grade + taper come later -- spa:hingedetails,
   ;; below, once the second outline is settled.
@@ -19872,7 +19872,7 @@
 
   ;; -------------------------------------------------- orientation
   ;; the long overall runs west to east; a quarter turn swaps the two
-  ;; overalls and, with them, the flats and the cut legs.  A spillaway
+  ;; overalls and, with them, the flats and the cut legs.  A spillway
   ;; no hinge can dodge one way round overrules that (spa:pickturn).
   (setq turn (spa:pickturn
                (> aov bov)
@@ -20109,8 +20109,8 @@
               aov (if (spa:sq ans 'a) (spa:sq ans 'a) bov)))
       (setq aov bov))
 
-  ;; the auto-hinge offer and the spillaways are asked before anything
-  ;; is drawn, so a spillaway can still turn the spa (a round one turns
+  ;; the auto-hinge offer and the spillways are asked before anything
+  ;; is drawn, so a spillway can still turn the spa (a round one turns
   ;; too: the spillway travels with it), and the guide stays up across
   ;; them -- it is the only spa on the screen until the real one is
   ;; drawn below.  The grade + taper come later -- spa:hingedetails,
@@ -20118,7 +20118,7 @@
   (spa:hingeask)
 
   ;; an out-of-round spa lies with its long overall west to east, unless
-  ;; a spillaway no hinge can dodge asks for the other way round
+  ;; a spillway no hinge can dodge asks for the other way round
   (setq turn (spa:pickturn
                (> aov bov)
                (list (list "ROUND" (list (* 0.5 bov) (* 0.5 aov)) bov aov)
@@ -20343,17 +20343,17 @@
 
      ;; ------------------------------------------------ grade + taper first
      ;; The Spa Cover Details block is read UP FRONT because its grade can
-     ;; settle the next question outright: a Thermo-Light cover's water's
+     ;; settle the next question outright: a THERMOLIGHT cover's water's
      ;; edge and cover size are the same thing, so there is nothing to ask
      ;; and nothing to add later.  It is also the ONE place it is asked
      ;; for: here the drafter's own drawing is still on the screen to
      ;; click, which after the guide goes up it is not.  Skipping is an
      ;; answer -- the taper is typed in the hinge pass instead, and a
-     ;; Thermo-Light grade is simply never read.
+     ;; THERMOLIGHT grade is simply never read.
      (princ "\nThe Spa Cover Details block sets the grade and taper.")
      (princ "\n(asked once -- skip it and any taper the hinges need is typed later)")
      (spa:readblock)
-     ;; the form's grade/taper land HERE, before the Thermo-Light branch,
+     ;; the form's grade/taper land HERE, before the THERMOLIGHT branch,
      ;; so a form grade of THERMOLIGHT behaves exactly like the block's
      (spa:formdetails)
      ;; The three questions in front of every measurement - the drawing
@@ -20363,7 +20363,7 @@
      ;; off, and until now the only way to change it was to start again.
      ;; A form-supplied answer is spent as it is read (STANDARDS 7.2), so
      ;; backing into a question the form filled in asks it at the
-     ;; keyboard.  Thermo-Light settles the mode without asking, so on the
+     ;; keyboard.  THERMOLIGHT settles the mode without asking, so on the
      ;; way back that step is stepped over rather than stopped on.
      (setq sstep 1)
      (while (<= sstep 3)
@@ -20373,8 +20373,8 @@
               (progn
                 (spa:setmode "Coversize")
                 (setq spa:*taper* spa:*thermotaper*)
-                (princ "\nThermo-Light: the water's edge and the cover size are the same.")
-                (spa:advise "THERMO-LIGHT: WATER'S EDGE = COVER SIZE, ONE OUTLINE"))
+                (princ "\nTHERMOLIGHT: the water's edge and the cover size are the same.")
+                (spa:advise "THERMOLIGHT: WATER'S EDGE = COVER SIZE, ONE OUTLINE"))
               (spa:setmode
                 (spa:askkwf 'mode
                             "Is this drawing at the water's edge or the cover size"
@@ -20500,7 +20500,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "092326 REV17")
+(setq tut:*version* "092326 REV18")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -20561,7 +20561,7 @@
     "    taper is typed at the hinge pass instead.  GRADE and TAPER are"
     "    read off the tags, and the 'Grade:' / 'Taper:' prefixes are"
     "    stripped."
-    "2.  Water's edge or cover size.  NOT asked on Thermo-Light -- the"
+    "2.  Water's edge or cover size.  NOT asked on THERMOLIGHT -- the"
     "    two are the same thing there, so it draws the cover size."
     "3.  Shape: Rectangle, Octagon or Round."
     "4.  Insertion base point (Enter = 0,0).  Your own object snaps stay"
@@ -20571,7 +20571,7 @@
     "    re-asks the previous question, right across the input phase."
     "    A ROUND spa takes ONE measurement -- the diameter; type O at"
     "    it only if the spa measured out of round.  A RECTANGLE offers"
-    "    the width back as the length, so Enter makes it square."
+    "    the length back as the width, so Enter makes it square."
     "    Any measurement may be typed in MILLIMETRES with the unit on"
     "    the number -- 600mm, 1524mm -- and is converted to inches."
     "    No space before the mm: the spacebar is Enter at a distance"
@@ -20584,14 +20584,14 @@
     "    typed in full: 90, ROUNDED, DIAG, NG)."
     "    Asked one at a time, corner A's answer autofills B, C and D"
     "    -- Enter accepts."
-    "7.  Auto-hinge?  Then the spillaways, in a loop defaulting to No."
-    "    ASKED BEFORE ANYTHING IS DRAWN: a spillaway no hinge can dodge"
+    "7.  Auto-hinge?  Then the spillways, in a loop defaulting to No."
+    "    ASKED BEFORE ANYTHING IS DRAWN: a spillway no hinge can dodge"
     "    is dodged by turning the spa, and nothing already on the screen"
     "    can be turned.  The grey guide spa stays up across these, and"
     "    comes down only as the real outline goes up in its place."
     "8.  Draw the other outline as well?  By Offset (give the lap) or by"
     "    Dims (give it as measured; the two are drawn concentric)."
-    "    Skipped on Thermo-Light.  Then the taper, typed, if the block"
+    "    Skipped on THERMOLIGHT.  Then the taper, typed, if the block"
     "    did not give it -- asked NOW, not with step 7, because it turns"
     "    nothing: by here the cover is on the screen, or the offer to"
     "    add one has been declined.  The hinges are drawn at the end all"
@@ -20626,12 +20626,12 @@
     "    one can work where the other will not.  Every sheet is solved"
     "    and scored before fewest pieces is even considered."
     "*   HOW MANY HINGES AND WHERE.  The fewest pieces that fit the foam"
-    "    width, evenly spaced, nudged off the spillaway zones."
+    "    width, evenly spaced, nudged off the spillway zones."
     "*   FOLD OR VELCRO, per the Hinge Arrangement Chart: the pieces"
     "    fold up in PAIRS from both ends -- a sewn fold hinge inside"
     "    each pair, velcro between bundles -- so 5 pieces read Hinge /"
     "    Velcro / Velcro / Hinge, and an odd count leaves one flat"
-    "    piece at or beside the centre.  Thermo-Light: all velcro."))
+    "    piece at or beside the centre.  THERMOLIGHT: all velcro."))
 
 (setq tut:*checks*
   (list
@@ -20651,11 +20651,11 @@
     "  - a hinge longer than the foam length is still drawn, and the"
     "    report says by how much"
     "  - a piece count the taper does not allow is still drawn, flagged"
-    "  - a hinge that ends up inside a spillaway zone is flagged"
-    "  - spillaway zones that could not all be dodged are flagged"
-    "  - a left/right wall spillaway cannot meet a north-south hinge, so"
+    "  - a hinge that ends up inside a spillway zone is flagged"
+    "  - spillway zones that could not all be dodged are flagged"
+    "  - a left/right wall spillway cannot meet a north-south hinge, so"
     "    it is recorded but blocks nothing"
-    "  - Thermo-Light has no published hinge length: a verify note"
+    "  - THERMOLIGHT has no published hinge length: a verify note"
     "  - a grade/taper not on the foam sheet falls back to 48 x 96"
     ""
     "HARDWARE (advisory, in cyan -- recommendations, not failures)"
@@ -20664,7 +20664,7 @@
     "      Economy            all three upon request only"
     "      Standard & Deluxe  over 120 / over 108 / over 120"
     "      Ultra              over 108 / never    / over 96"
-    "      Thermo-Light       always   / never    / never"
+    "      THERMOLIGHT        always   / never    / never"
     ""
     "INPUT"
     "  - a block that is not named Spa Cover Details is read anyway,"
@@ -20873,7 +20873,7 @@
                   "(5 pieces would read Hinge/Velcro/Velcro/Hinge.)"
                   ""
                   "Each hinge runs the full 110\", well inside the 144\""
-                  "foam length.  Had a spillaway been declared, the even"
+                  "foam length.  Had a spillway been declared, the even"
                   "stations would have been nudged off it.")
             '(lambda ()
                (setvar "CLAYER" "DIMENSION")
@@ -32232,7 +32232,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "092326 REV27") ; announced on load.  The
+(setq pf:*version*      "092326 REV28") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -37441,14 +37441,15 @@
       (princ "\n\n  That is the whole flow.  TUTORIALABHD Checks lists every")
       (princ "\n  rule; ABHD runs it on your survey; ADAB does just the")
       (princ "\n  bottom over any perimeter.")
+      ;; Enter keeps the demo; only an explicit Yes sweeps it
       (initget "Yes No")
-      (if (= "Yes" ((lambda (v) (if lzd:ask (lzd:ask "\n  Keep the demo drawing to poke at? [Yes/No] <No>: " v) v))
+      (if (= "Yes" ((lambda (v) (if lzd:ask (lzd:ask "\n  Erase the demo drawing? [Yes/No] <No>: " v) v))
                      (getkword
-                       "\n  Keep the demo drawing to poke at? [Yes/No] <No>: ")))
+                       "\n  Erase the demo drawing? [Yes/No] <No>: ")))
+        (princ "\n  Swept - the drawing is as it was.")
         (progn
           (setq pf-temp nil)
-          (princ "\n  Kept - erase it whenever; every piece is stamped ABHD."))
-        (princ "\n  Swept - the drawing is as it was.")))))
+          (princ "\n  Kept - erase it whenever; every piece is stamped ABHD."))))))
 
 (defun c:TUTORIALABHD ( / mode pf-temp pf-phase *error* pf-old-err)
   (setq pf-temp   nil
@@ -51266,7 +51267,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.13"     ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.14"     ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -52316,11 +52317,11 @@
                   "      The report above is printed on every real run."
                   ""))))
 
-      ;; cleanup
+      ;; cleanup -- Enter keeps the demo; only an explicit Yes erases it
       (initget "Yes No")
-      (if (/= "No" ((lambda (v) (if lzd:ask (lzd:ask "\nErase the demo pool and its bead? [Yes/No] <Yes>: " v) v))
+      (if (= "Yes" ((lambda (v) (if lzd:ask (lzd:ask "\nErase the demo drawing? [Yes/No] <No>: " v) v))
                      (getkword
-                       "\nErase the demo pool and its bead? [Yes/No] <Yes>: ")))
+                       "\nErase the demo drawing? [Yes/No] <No>: ")))
         (progn
           (setq left (autobead-demo-sweep))
           (if (> left 0)
@@ -75372,7 +75373,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.28")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.29")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -77707,7 +77708,10 @@
           ;; still closes the undo group and puts CMDECHO back
           (setq rmark (entlast))
           (dchk:scan)))
-      (if (cal:ask-yn "\n  Erase the practice drawing now?" "Yes")
+      ;; Enter keeps the practice drawing; only an explicit Yes erases it
+      (initget "Yes No")
+      (if (= "Yes" ((lambda (v) (if lzd:ask (lzd:ask "\n  Erase the practice drawing? [Yes/No] <No>: " v) v))
+                     (getkword "\n  Erase the practice drawing? [Yes/No] <No>: ")))
         (progn
           ;; an erase that is refused (a locked layer) is counted, so
           ;; the line at the end never says "erased" over objects that
@@ -89482,7 +89486,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.25")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.26")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -94015,7 +94019,10 @@
           ;; still closes the undo group and puts CMDECHO back
           (setq rmark (entlast))
           (lfc:scan-core nil)))
-      (if (cal:ask-yn "\n  Erase the practice drawing now?" "Yes")
+      ;; Enter keeps the practice drawing; only an explicit Yes erases it
+      (initget "Yes No")
+      (if (= "Yes" ((lambda (v) (if lzd:ask (lzd:ask "\n  Erase the practice drawing? [Yes/No] <No>: " v) v))
+                     (getkword "\n  Erase the practice drawing? [Yes/No] <No>: ")))
         (progn
           ;; an erase that is refused (a locked layer) is counted, so
           ;; the line at the end never says "erased" over objects that
@@ -94439,7 +94446,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.20")
+(setq *paddle-version* "v1.21")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -96069,8 +96076,8 @@
                        " pad(s) along the curve, on layer \"" *paddle-layer* "\"."))
         (paddle--pause)
         (initget "Yes No")
-        (if (= ((lambda (v) (if lzd:ask (lzd:ask "\nErase the demonstration? [Yes/No] <No>: " v) v))
-                 (getkword "\nErase the demonstration? [Yes/No] <No>: ")) "Yes")
+        (if (= ((lambda (v) (if lzd:ask (lzd:ask "\nErase the demo drawing? [Yes/No] <No>: " v) v))
+                 (getkword "\nErase the demo drawing? [Yes/No] <No>: ")) "Yes")
             (progn
               ;; the layer can still be locked from the palette while a
               ;; pause waits, and entdel then refuses: say what stayed
@@ -100654,7 +100661,7 @@
 ;;;      new point count and repeat from step 6 with the new polyline as
 ;;;      the path.
 ;;;  10. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
-;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
+;;;      Every dimension is then drawn at once, on the DIMENSION layer.
 ;;;
 ;;; The offset side is fixed once from the direction click in step 2 and
 ;;; reused for every round, so all offsets stay on the same side of the
@@ -100780,7 +100787,7 @@
 ;;; Properties
 ;;;   * The offset polylines take the layer, colour, linetype, lineweight
 ;;;     and linetype scale of the object they were offset from.
-;;;   * The dimensions go on the DIMENSIONS layer (created if missing)
+;;;   * The dimensions go on the DIMENSION layer (created if missing)
 ;;;     and use the dimension style picked in step 9 when the drawing
 ;;;     has it; otherwise the current style is used and a note is
 ;;;     printed.
@@ -100839,7 +100846,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.24")
+(setq *perp-version* "v0.25")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -100906,6 +100913,10 @@
 ;; either way and both keywords are still offered.  Anything that is
 ;; neither keyword is ignored and "STandard" stands.
 (setq perp:*dimstyle-default* "STandard")
+
+;; The layer every dimension goes on (made if missing, ACI 4) -- the
+;; shop-wide DIMENSION layer the other drawing tools use.
+(setq perp:*dimlayer* "DIMENSION")    ; layer the dimensions are drawn on
 
 ;;; -------------------- the length ruler --------------------------------
 ;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
@@ -101758,10 +101769,10 @@
   ;; Guides live on their own layer so a locked current layer cannot stop
   ;; them being erased; the START arrow and the boundary probe both draw
   ;; on it.  Offset polylines go on the source object's own layer;
-  ;; dimensions go on DIMENSIONS.  Made once, ahead of the chain below,
+  ;; dimensions go on perp:*dimlayer*.  Made once, ahead of the chain below,
   ;; which can come back through the click step more than once.
   (cal:ensure-layer "PERPPTS-TEMP" 1)     ; guides, erased before the command ends
-  (cal:ensure-layer "DIMENSIONS"   4)
+  (cal:ensure-layer perp:*dimlayer* 4)
   ;; the length ruler, not up yet: it stands beside the length prompts
   ;; on the guide layer, and perp:finish takes it down with the guides
   (setq rl (cal:ruler-new "PERPPTS-TEMP" (perp:ruler-style)))
@@ -102342,7 +102353,7 @@
                    "\" is not in this drawing - using the current style \""
                    cdim "\" instead.")))
 
-  (setvar "CLAYER" "DIMENSIONS")
+  (setvar "CLAYER" perp:*dimlayer*)
   (foreach pr (reverse dimPairs)
     (command "._DIMALIGNED" (car pr) (cadr pr) (cadr pr)))
 
@@ -102351,7 +102362,7 @@
   (princ (strcat "\nDone: " (itoa iter) " round(s), "
                  (itoa total) " points, "
                  (itoa iter) " polyline(s) on layer \"" srcLayer "\" and "
-                 (itoa total) " dimensions on layer \"DIMENSIONS\"."))
+                 (itoa total) " dimensions on layer \"" perp:*dimlayer* "\"."))
   (if lzd:end (lzd:end "PERPPTS"))
   (princ))
 
@@ -102438,7 +102449,7 @@
 ;;;      new point count and repeat from step 6 with the new polyline as
 ;;;      the path.
 ;;;   9. Pick the dimension style, STANDARD INCHES or SIDE STANDARD.
-;;;      Every dimension is then drawn at once, on the DIMENSIONS layer.
+;;;      Every dimension is then drawn at once, on the DIMENSION layer.
 ;;;
 ;;; Steps 1 to 4 are one chain: Back at the click re-opens the
 ;;; selection, Back at the width question re-opens the click, and Back
@@ -102558,7 +102569,7 @@
 ;;; Properties
 ;;;   * The offset polylines take the layer, colour, linetype, lineweight
 ;;;     and linetype scale of the curve they were offset from.
-;;;   * The dimensions go on the DIMENSIONS layer (created if missing)
+;;;   * The dimensions go on the DIMENSION layer (created if missing)
 ;;;     and use the dimension style picked in step 9 when the drawing
 ;;;     has it; otherwise the current style is used and a note is
 ;;;     printed.
@@ -102623,7 +102634,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.24")
+(setq *cperp-version* "v0.25")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -102682,6 +102693,10 @@
 ;; either way and both keywords are still offered.  Anything that is
 ;; neither keyword is ignored and "STandard" stands.
 (setq cperp:*dimstyle-default* "STandard")
+
+;; The layer every dimension goes on (made if missing, ACI 4) -- the
+;; shop-wide DIMENSION layer the other drawing tools use.
+(setq cperp:*dimlayer* "DIMENSION")    ; layer the dimensions are drawn on
 
 ;;; -------------------- the length ruler --------------------------------
 ;;;  DIMSTAMP's ruler, as a helper any LENGTH prompt can stand beside.
@@ -103363,7 +103378,7 @@
   ;; there.  Made once, ahead of the chain below, which can come back
   ;; through the click step more than once.
   (cal:ensure-layer "PERPPTS-TEMP" 1)
-  (cal:ensure-layer "DIMENSIONS"   4)
+  (cal:ensure-layer cperp:*dimlayer* 4)
   ;; the length ruler, not up yet: it stands beside the length prompts
   ;; on the guide layer, and cperp:finish takes it down with the guides
   (setq rl (cal:ruler-new "PERPPTS-TEMP" (cperp:ruler-style)))
@@ -103890,7 +103905,7 @@
                    "\" is not in this drawing - using the current style \""
                    cdim "\" instead.")))
 
-  (setvar "CLAYER" "DIMENSIONS")
+  (setvar "CLAYER" cperp:*dimlayer*)
   (foreach pr (reverse dimPairs)
     (command "._DIMALIGNED" (car pr) (cadr pr) (cadr pr)))
 
@@ -103899,7 +103914,7 @@
   (princ (strcat "\nDone: " (itoa iter) " round(s), "
                  (itoa total) " points, "
                  (itoa iter) " polyline(s) on layer \"" srcLayer "\" and "
-                 (itoa total) " dimensions on layer \"DIMENSIONS\"."))
+                 (itoa total) " dimensions on layer \"" cperp:*dimlayer* "\"."))
   (if lzd:end (lzd:end "CPERPPTS"))
   (princ))
 
@@ -103950,7 +103965,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.10")
+(setq *tutperp-version* "v0.11")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -104167,7 +104182,7 @@
                   "  * the offset polyline takes the layer, colour, linetype,"
                   "    lineweight and linetype scale of the source line"
                   "  * dimensions are drawn at the very end, all at once, on"
-                  "    the DIMENSIONS layer (created if missing)"
+                  "    the DIMENSION layer (created if missing)"
                   "  * you pick STANDARD INCHES or SIDE STANDARD; if the"
                   "    drawing lacks that style the current style is used"
                   "    and a note is printed"
@@ -104313,7 +104328,7 @@
                   "STAGE 6 - the dimensions."
                   "One aligned dimension per point, from the line to its"
                   "offset point.  In the real command these are drawn at the"
-                  "very end, all at once, on the DIMENSIONS layer, in the"
+                  "very end, all at once, on the DIMENSION layer, in the"
                   "style you pick: STANDARD INCHES or SIDE STANDARD."))
       (tutp:pause)
 
@@ -104348,11 +104363,11 @@
                   "like; a single U undoes the whole run."))
       (tutp:pause)
 
-      ;; keep or erase the demo
-      (initget "Keep Erase")
-      (setq ans (getkword "\nKeep the demo drawing? [Keep/Erase] <Keep>: "))
-      (if lzd:ask (lzd:ask "\nKeep the demo drawing? [Keep/Erase] <Keep>: " ans) ans)
-      (if (equal ans "Erase")
+      ;; erase the demo only on an explicit Yes -- Enter keeps it
+      (initget "Yes No")
+      (setq ans (getkword "\nErase the demo drawing? [Yes/No] <No>: "))
+      (if lzd:ask (lzd:ask "\nErase the demo drawing? [Yes/No] <No>: " ans) ans)
+      (if (equal ans "Yes")
         (progn
           (foreach e ents (if (and e (entget e)) (entdel e)))
           (setq ents nil)))))
@@ -104409,7 +104424,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.11")
+(setq *tutcperp-version* "v0.12")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -104688,7 +104703,7 @@
                   "  * the polyline takes the layer, colour, linetype,"
                   "    lineweight and linetype scale of the source curve"
                   "  * dimensions are drawn at the end, all at once, on the"
-                  "    DIMENSIONS layer, in STANDARD INCHES or SIDE"
+                  "    DIMENSION layer, in STANDARD INCHES or SIDE"
                   "    STANDARD (current style if the drawing lacks it)"
                   ""
                   "Safety net"
@@ -104795,7 +104810,7 @@
                   "    plain lightweight polyline with arc segments, never a"
                   "    spline - passing exactly through every point;"
                   "  * one aligned dimension per point (in the real command"
-                  "    these land on the DIMENSIONS layer at the end, in the"
+                  "    these land on the DIMENSION layer at the end, in the"
                   "    style you pick)."))
       (setq crv (tutc:round crv lens))
       (tutc:pause)
@@ -104817,11 +104832,11 @@
                   "one U undoes the whole run."))
       (tutc:pause)
 
-      ;; keep or erase the demo
-      (initget "Keep Erase")
-      (setq ans (getkword "\nKeep the demo drawing? [Keep/Erase] <Keep>: "))
-      (if lzd:ask (lzd:ask "\nKeep the demo drawing? [Keep/Erase] <Keep>: " ans) ans)
-      (if (equal ans "Erase")
+      ;; erase the demo only on an explicit Yes -- Enter keeps it
+      (initget "Yes No")
+      (setq ans (getkword "\nErase the demo drawing? [Yes/No] <No>: "))
+      (if lzd:ask (lzd:ask "\nErase the demo drawing? [Yes/No] <No>: " ans) ans)
+      (if (equal ans "Yes")
         (progn
           (foreach e ents (if (and e (entget e)) (entdel e)))
           (setq ents nil)))))
@@ -108906,7 +108921,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.23")
+(setq *spacheck-version* "v1.24")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -110114,7 +110129,7 @@
       (if (and tp (= g "THERMOLIGHT") (/= tp "1-3/8"))
         (setq rows (append rows
                     (list (spachk:row
-                            (strcat "Spa Cover Details: Thermo-Light is"
+                            (strcat "Spa Cover Details: THERMOLIGHT is"
                                     " always 1-3/8 flat, not " tp)
                             1)))))
       (spachk:res rows (if tp nil (list blk))))))
@@ -110557,7 +110572,7 @@
                                     (spachk:dist maxrun)
                                     (if fl
                                         (strcat " within " (spachk:dist fl) ", OK")
-                                        (strcat " - Thermo-Light length"
+                                        (strcat " - THERMOLIGHT length"
                                                 " N/A, verify")))
                             (if fl nil 2))))))
       ;; --- piece widths against the foam width.  This one DOES need
@@ -111535,7 +111550,7 @@
     "1. SPA COVER DETAILS BLOCK"
     "   One in the selection, with a readable TAPER tag.  A missing"
     "     GRADE is taken as Standard, the way SPA takes it."
-    "   Thermo-Light must be the 1-3/8 flat taper."
+    "   THERMOLIGHT must be the 1-3/8 flat taper."
     ""
     "2. THE COVER OUTLINE"
     (strcat "   Exactly one closed entity on layer " spachk:*lay-cover*
@@ -111843,8 +111858,9 @@
           ;; the report layer follows it, and nothing else does
           (setq rmark (entlast))
           (c:SPACHECKSCAN)))
-      (if (= "Yes" (cal:askkw "Erase the practice drawing"
-                                 "Yes No" "Yes/No" "Yes" nil))
+      ;; Enter keeps the practice drawing; only an explicit Yes erases it
+      (if (= "Yes" (cal:askkw "Erase the practice drawing?"
+                                 "Yes No" "Yes/No" "No" nil))
         (progn
           ;; an erase that is refused (a locked layer) is counted, so
           ;; the line at the end never says "erased" over objects that
@@ -111995,7 +112011,7 @@
 ;;;  moving anybody's drawing.  A cover wider than it is tall gets
 ;;;  upright hinges; a tall one gets flat hinges.
 ;;;
-;;;  WHAT IT DOES NOT DO.  It does not ask about spillaways: a spillway
+;;;  WHAT IT DOES NOT DO.  It does not ask about spillways: a spillway
 ;;;  is a no-go zone that SPA dodges by turning the spa, and turning is
 ;;;  not on the table here.  And it never moves, changes or erases the
 ;;;  spa outline it was handed.  Anything out of spec -- a hinge over
@@ -112009,7 +112025,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacovcreate-version* "v1.3")
+(setq *spacovcreate-version* "v1.4")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value SPACOVCREATE reads that somebody might want
@@ -112160,7 +112176,7 @@
 
 (setq scv:*foamdflt* (list (cons 48.0 96.0)))  ; when nothing matches at all
 (setq scv:*foamdpc*  (list 2 3 4 5))           ; and the counts it will accept
-(setq scv:*thermotaper* "1-3/8")  ; the one taper a Thermo-Light comes in
+(setq scv:*thermotaper* "1-3/8")  ; the one taper a THERMOLIGHT comes in
 
 ;;;  HARDWARE called for by the LONGEST hinge, per grade.  Each rule is
 ;;;  (OVER <inches>) | (ALWAYS) | (NEVER) | (REQUEST), and the three
@@ -112797,7 +112813,7 @@
 ;;
 ;; The pieces fold up in PAIRS from both ends -- a fold hinge inside
 ;; each pair, velcro between bundles -- an odd count leaving one flat
-;; piece at or beside the centre.  allvel (Thermo-Light) forces every
+;; piece at or beside the centre.  allvel (THERMOLIGHT) forces every
 ;; hinge to velcro.  Returns a list of "H" / "V", west to east.
 (defun scv:hingetypes (n allvel / hc m zone p out)
   (setq hc (1- n)
@@ -113110,7 +113126,7 @@
         opts   (car fo)
         allowed (cadr fo))
   (if allvel
-      (scv:advise "THERMO-LIGHT: EVERY HINGE IS VELCRO - NO FOLD HINGE"))
+      (scv:advise "THERMOLIGHT: EVERY HINGE IS VELCRO - NO FOLD HINGE"))
   (if (not (caddr fo))
       (scv:note (strcat "GRADE/TAPER " grade " " taper
                         " NOT ON THE FOAM SHEET - 48/96 ASSUMED")))
@@ -113304,8 +113320,8 @@
   ;; -------- draw it -------------------------------------------------
   (if (= qstep 4)
       (progn
-        ;; A Thermo-Light comes in ONE taper, so the grade settles it:
-        ;; a block with no readable TAPER tag on a Thermo-Light is not a
+        ;; A THERMOLIGHT comes in ONE taper, so the grade settles it:
+        ;; a block with no readable TAPER tag on a THERMOLIGHT is not a
         ;; taper nobody gave, it is one the grade already answered -- and
         ;; flagging that as an assumption would send a drafter hunting
         ;; for a number that was never missing.  It is still SAID, in
@@ -113314,7 +113330,7 @@
             (progn
               (if (/= taper scv:*thermotaper*)
                   (scv:advise (strcat "TAPER TAKEN FROM THE GRADE - A"
-                                      " THERMO-LIGHT IS "
+                                      " THERMOLIGHT IS "
                                       scv:*thermotaper*)))
               (setq taper scv:*thermotaper* assumed nil)))
         (if assumed
@@ -123687,7 +123703,7 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.8")
+(setq *lazspa-version* "v1.9")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -123798,13 +123814,16 @@
   ;; ---------------- Rectangle ----------------
   ;;  SPA's own header: "Corners: A bottom-left, B bottom-right, C
   ;;  top-right, D top-left", and its two overalls are named for them --
-  ;;  W runs A-B across the bottom and L runs A-D up the left end.  So W
-  ;;  is drawn UNDER the shape, on the side it is actually taped, rather
-  ;;  than borrowed from the top edge because there was room up there.
+  ;;  L, the LENGTH, runs A-B across the bottom and W, the WIDTH, runs
+  ;;  A-D up the left end: POOL's naming, the across overall the length.
+  ;;  The letters are the words shown; the store keys stay w (across)
+  ;;  and l (up).  So L is drawn UNDER the shape, on the side it is
+  ;;  actually taped, rather than borrowed from the top edge because
+  ;;  there was room up there.
   ("Rectangle" "Rectangle" "Rectangle"
    ((150 250 850 250 850 820 150 820 150 250))
-   (("W" "w" 150 920 850 920 "h" "W - overall WIDTH across (A-B)")
-    ("L" "l"  75 250  75 820 "v" "L - overall LENGTH up (A-D)"))
+   (("L" "w" 150 920 850 920 "h" "L - overall LENGTH across (A-B)")
+    ("W" "l"  75 250  75 820 "v" "W - overall WIDTH up (A-D)"))
    nil
    (("D" 105 210) ("C" 895 210) ("A" 105 860) ("B" 895 860)))
 
@@ -123945,8 +123964,8 @@
 
 (setq lzs:*second*
   '(("Rectangle"
-     ("w2" "Other outline ACROSS")
-     ("l2" "Other outline UP"))
+     ("w2" "L2 - Other outline length ACROSS")
+     ("l2" "W2 - Other outline width UP"))
     ("OCtagon"
      ("b2" "Other outline ACROSS")
      ("a2" "Other outline UP")
@@ -124356,7 +124375,7 @@
 ;;;  than one that does not, and SPA drops them unread on the way out
 ;;;  either way.
 ;;;
-;;;    grade THERMOLIGHT  a Thermo-Light cover's water's edge and cover
+;;;    grade THERMOLIGHT  a THERMOLIGHT cover's water's edge and cover
 ;;;                       size are the SAME thing, so c:SPA sets the
 ;;;                       mode itself (Coversize), spa:askother declines
 ;;;                       to offer the second outline at all, and
@@ -124369,7 +124388,7 @@
 ;;;    method Offset      the lap is asked, the by-dims overalls are not.
 ;;;    method Dims        the by-dims overalls are asked, the lap is not.
 ;;;
-;;;  Auto-hinge survives all of it: Thermo-Light covers are hinged like
+;;;  Auto-hinge survives all of it: THERMOLIGHT covers are hinged like
 ;;;  any other, only in velcro throughout.
 
 (defun lzs:dead (c / g s m)
@@ -124756,7 +124775,7 @@
   ;; than discovered at the command line
   (setq out (cons (strcat "  : text { width = 62; label = \""
                           "The Spa Cover Details block pick and the "
-                          "spillaway questions stay at the command line.\"; }")
+                          "spillway questions stay at the command line.\"; }")
                   out))
   ;; The state line.  No label here: it is written before the dialog is
   ;; shown and rewritten on every change, so a label in the file would
@@ -128303,7 +128322,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.61")
+(setq *lazpanel-version* "v3.62")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -128833,7 +128852,7 @@
     ("SMARTFILLET" "Fillet a corner after previewing every radius that fits.\nWhat it asks, in order:\n 1. Select the first line of the corner\n 2. Select the second line of the corner\n 3. Select the first line of the next corner\n 4. Select the second line of that corner")
     ("SOCONV" "Puts an SO site-survey export onto the shop's layers in one pass.\nWhat it asks, in order:\n 1. Select objects")
     ("SORECONV" "Undoes a SOCONV run - every object back on the export's own layers.\nWhat it asks, in order:\n 1. Select objects")
-    ("SPA" "Spa / hot-tub template layout.\nWhat it asks, in order:\n 1. Select the Spa Cover Details block\n 2. Is this drawing at the water's edge or the cover size\n 3. Spa shape\n 4. Insertion base point\n 5. Auto-hinge the cover\n 6. Is there a spillaway\n 7. Spillaway location (a wall one is centred on it)\n 8. Which corner\n 9. On which wall\n 10. Take it from\n 11. How far does the cover lap the water's edge\n 12. Taper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8)\n 13. Overall diameter\n 14. Are all four corners the same?\n 15. Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL")
+    ("SPA" "Spa / hot-tub template layout.\nWhat it asks, in order:\n 1. Select the Spa Cover Details block\n 2. Is this drawing at the water's edge or the cover size\n 3. Spa shape\n 4. Insertion base point\n 5. Auto-hinge the cover\n 6. Is there a spillway\n 7. Spillway location (a wall one is centred on it)\n 8. Which corner\n 9. On which wall\n 10. Take it from\n 11. How far does the cover lap the water's edge\n 12. Taper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8)\n 13. Overall diameter\n 14. Are all four corners the same?\n 15. Square Radius Cut NotGiven NG 90 ROUNDED DIAG DIAGONAL")
     ("SPACHECK" "Audits a spa sheet against what SPA draws.\nWhat it asks, in order:\n 1. Select objects")
     ("SPACHECKSCAN" "Highlight the spa drawing together with its \"Spa Cover Details\" block; runs SPACHECK's full set of audits -- built from what SPA itself draws, so a SPA-produced drawing passes and a hand-edited one shows exactly where it drifted -- but read-only, as one scan instead of a guided walk.")
     ("SPACOVCREATE" "Offsets a selected spa outline into its cover and hinges it to the taper.\nWhat it asks, in order:\n 1. Select objects\n 2. Cover offset past the spa\n 3. Select the block that gives the taper\n 4. Taper (3-2, 4-2, 4-3, 5-3, 5-4, 3-3, 1-3/8)")
@@ -133842,7 +133861,8 @@
      ("cperp:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir...")
      ("cperp:*split-default*" "\"Yes\"" "Which answer the \"Split the ... evenly, half at each end?\" question takes on Enter when a width change has...")
      ("cperp:*boundary-default*" "\"Limit\"" "Which answer the boundary's \"stop at the boundary, or run out to meet it?\" question takes on Enter: \"Limit\"...")
-     ("cperp:*dimstyle-default*" "\"STandard\"" "Which of the two dimension styles the closing question takes on Enter -- \"STandard\" (STANDARD INCHES) or \"S..."))
+     ("cperp:*dimstyle-default*" "\"STandard\"" "Which of the two dimension styles the closing question takes on Enter -- \"STandard\" (STANDARD INCHES) or \"S...")
+     ("cperp:*dimlayer*" "\"DIMENSION\"" "layer the dimensions are drawn on The layer every dimension goes on (made if missing, ACI 4) -- the shop-wi..."))
     ("PERPPTS" "lisp/perp_points/perp_points.lsp"
      ("perp:*ruler-color*" "3" "ACI colour of the rows you can PICK, carried on the entities themselves -------------------- tunables -----...")
      ("perp:*ruler-current-color*" "7" "ACI colour of the ringed CURRENT row -- the last length -- so it reads apart from the options; 7 is AutoCAD...")
@@ -133855,7 +133875,8 @@
      ("perp:*split-default*" "\"Yes\"" "Which answer the \"Split the ... evenly, half at each end?\" question takes on Enter when a width change has...")
      ("perp:*bound-default*" "\"Limit\"" "Which answer the boundary's \"stop at the boundary, or run out to meet it?\" question takes on Enter: \"Limit\"...")
      ("perp:*join-default*" "\"Straight\"" "What the FIRST round's \"how should the points be joined?\" question offers on Enter, before there is a round...")
-     ("perp:*dimstyle-default*" "\"STandard\"" "Which of the two dimension styles the closing question takes on Enter -- \"STandard\" (STANDARD INCHES) or \"S..."))
+     ("perp:*dimstyle-default*" "\"STandard\"" "Which of the two dimension styles the closing question takes on Enter -- \"STandard\" (STANDARD INCHES) or \"S...")
+     ("perp:*dimlayer*" "\"DIMENSION\"" "layer the dimensions are drawn on The layer every dimension goes on (made if missing, ACI 4) -- the shop-wi..."))
     ("PERPMARK" "lisp/perpmark/PERPMARK.lsp"
      ("pm:*marklayer*" "\"PERPMARK\"" "Layer the circles and the perpendicular lines are drawn on. Change it to put the run's working marks somewh...")
      ("pm:*markcolor*" "1" "ACI colour that layer is CREATED with, on a drawing that lacks it. A number, not 'auto: these marks are the...")
@@ -134118,8 +134139,8 @@
      ("spa:*pv-col*" "'auto" "guide outline: 'auto picks the grey for the background (8 is nearly the stock dark one), a number is used e...")
      ("spa:*pvx-col*" "7" "measuring tie (white) grey for the background (8 is nearly the stock dark one), a number is used exactly as...")
      ("spa:*hi-col*" "1" "the element being asked for (red) grey for the background (8 is nearly the stock dark one), a number is use...")
-     ("spa:*pv-w*" "240.0" "nominal guide width The RECTANGLE guide's nominal box. The octagon and round guides keep their own ring in...")
-     ("spa:*pv-l*" "200.0" "nominal guide length The RECTANGLE guide's nominal box. The octagon and round guides keep their own ring in...")
+     ("spa:*pv-w*" "240.0" "nominal guide length (across) The RECTANGLE guide's nominal box. The octagon and round guides keep their ow...")
+     ("spa:*pv-l*" "200.0" "nominal guide width (up) The RECTANGLE guide's nominal box. The octagon and round guides keep their own rin...")
      ("spa:*pv-th*" "12.0" "guide corner-letter height The RECTANGLE guide's nominal box. The octagon and round guides keep their own r...")
      ("spa:*pv-tie*" "10.0" "guide tie-letter height The RECTANGLE guide's nominal box. The octagon and round guides keep their own ring...")
      ("spa:*pv-lbl*" "22.0" "how far a rectangle corner letter sits out The RECTANGLE guide's nominal box. The octagon and round guides...")
@@ -134129,7 +134150,7 @@
      ("spa:*foamtab*" "(list (list \"ECONOMY\" \"3-2\" (list (cons 48.0 96.0)) (list 2)) (list \"STANDARD\" \"3-2\" (list (cons 48.0 144.0) (cons 49.5 102.0)) (list 2)) (list \"STANDARD\" \"4-2\" (list (cons 48.0 96.0) (cons 49.5 102.0)) (list 2 3 4)) (list \"STANDARD\" \"4-3\" (list (cons 48.0 144.0)) (list 2 3 4)) (list \"STANDARD\" \"5-3\" (list (cons 48.0 96.0)) (list 2 3 4 5)) (list \"STANDARD\" \"5-4\" (list (cons 48.0 96.0)) (list 2 3 4 5)) (list \"STANDARD\" \"3-3\" (list (cons 48.0 144.0)) (list 2 3 4 5)) (list \"ULTRA\" \"3-2\" (list (cons 48.0 144.0)) (list 2)) (list \"ULTRA\" \"4-3\" (list (cons 48.0 96.0)) (list 2 3 4)) (list \"ULTRA\" \"3-3\" (list (cons 48.0 144.0)) (list 2 3 4 5)) (list \"THERMOLIGHT\" \"1-3/8\" (list (cons 53.0 nil)) (list 2 3 4 5)))" "---- the foam sheet THE SHOP DATA THIS ROUTINE IS BUILT ON. Grade and taper -- read off the Spa Cover Detai...")
      ("spa:*foamdflt*" "(list (cons 48.0 96.0))" "assumed when nothing matches")
      ("spa:*foamdpc*" "(list 2 3 4 5)" "and the counts it will accept")
-     ("spa:*thermotaper*" "\"1-3/8\"" "the one taper a Thermo-Light comes in")
+     ("spa:*thermotaper*" "\"1-3/8\"" "the one taper a THERMOLIGHT comes in")
      ("spa:*hardtab*" "(list ; grade velcro double C hold down (list \"ECONOMY\" '(REQUEST) '(REQUEST) '(REQUEST)) (list \"STANDARD\" '(OVER 120.0) '(OVER 108.0) '(OVER 120.0)) (list \"ULTRA\" '(OVER 108.0) '(NEVER) '(OVER 96.0)) (list \"THERMOLIGHT\" '(ALWAYS) '(NEVER) '(NEVER)))" "---- hardware called for by the LONGEST hinge, per grade Each rule is (OVER <inches>) | (ALWAYS) | (NEVER)...")
      ("spa:*hardnames*" "(list \"VELCRO HINGES\" \"DOUBLE C CHANNEL\" \"HOLD DOWN KIT\")" "What the three columns are called in the report, in the order the table above holds them -- rename one and...")
      ("spa:*hinge-min*" "2" "a cover is never fewer pieces than this ---- the hinge placement solver The fewest pieces that fit the foam...")
@@ -134149,9 +134170,9 @@
      ("spa:*cutface-ladder*" "'(3.0 18.0 3.0)" "The two LADDERS those prompts stand on, as (LOW HIGH STEP) in inches. A spa is a small shape and its corner...")
      ("spa:*second-default*" "\"Yes\"" "What Enter means at the offer of the SECOND outline -- \"Yes\" goes on to draw the other one (the cover size...")
      ("spa:*method-default*" "\"Offset\"" "What Enter means at \"Take it from\" -- \"Offset\" builds that second outline by lapping the one already drawn,...")
-     ("spa:*spill-default*" "\"No\"" "What Enter means at \"Is there a spillaway\" -- \"No\" ends the round of spillaways, \"Yes\" opens another one. A...")
-     ("spa:*spillloc-default*" "\"Wall\"" "What Enter means at a spillaway's location -- \"Wall\" centres it on a wall and asks which wall, \"Corner\" ask...")
-     ("spa:*autohinge-default*" "\"Yes\"" "What Enter means at \"Auto-hinge the cover\" -- \"Yes\" goes on to the spillaways and lays the fold hinges out...")
+     ("spa:*spill-default*" "\"No\"" "What Enter means at \"Is there a spillway\" -- \"No\" ends the round of spillways, \"Yes\" opens another one. A s...")
+     ("spa:*spillloc-default*" "\"Wall\"" "What Enter means at a spillway's location -- \"Wall\" centres it on a wall and asks which wall, \"Corner\" asks...")
+     ("spa:*autohinge-default*" "\"Yes\"" "What Enter means at \"Auto-hinge the cover\" -- \"Yes\" goes on to the spillways and lays the fold hinges out i...")
      ("spa:*treat-default*" "\"\"" "What the FIRST corner's treatment question offers on Enter, before there is a previous answer to reuse: \"\"...")
      ("spa:*samecorners-default*" "\"Yes\"" "What Enter means at \"Are all four corners the same?\" -- \"Yes\" buys ONE round of treatment questions for all..."))
     ("SPACHECK" "lisp/spacheck/SPACHECK.lsp"
@@ -134258,7 +134279,7 @@
      ("scv:*foamtab*" "(list (list \"ECONOMY\" \"3-2\" (list (cons 48.0 96.0)) (list 2)) (list \"STANDARD\" \"3-2\" (list (cons 48.0 144.0) (cons 49.5 102.0)) (list 2)) (list \"STANDARD\" \"4-2\" (list (cons 48.0 96.0) (cons 49.5 102.0)) (list 2 3 4)) (list \"STANDARD\" \"4-3\" (list (cons 48.0 144.0)) (list 2 3 4)) (list \"STANDARD\" \"5-3\" (list (cons 48.0 96.0)) (list 2 3 4 5)) (list \"STANDARD\" \"5-4\" (list (cons 48.0 96.0)) (list 2 3 4 5)) (list \"STANDARD\" \"3-3\" (list (cons 48.0 144.0)) (list 2 3 4 5)) (list \"ULTRA\" \"3-2\" (list (cons 48.0 144.0)) (list 2)) (list \"ULTRA\" \"4-3\" (list (cons 48.0 96.0)) (list 2 3 4)) (list \"ULTRA\" \"3-3\" (list (cons 48.0 144.0)) (list 2 3 4 5)) (list \"THERMOLIGHT\" \"1-3/8\" (list (cons 53.0 nil)) (list 2 3 4 5)))" "-- the shop data the hinges are built on ----------------------------- THE FOAM SHEET. Grade and taper pick...")
      ("scv:*foamdflt*" "(list (cons 48.0 96.0))" "when nothing matches at all")
      ("scv:*foamdpc*" "(list 2 3 4 5)" "and the counts it will accept")
-     ("scv:*thermotaper*" "\"1-3/8\"" "the one taper a Thermo-Light comes in")
+     ("scv:*thermotaper*" "\"1-3/8\"" "the one taper a THERMOLIGHT comes in")
      ("scv:*hardtab*" "(list ; grade velcro double C hold down (list \"ECONOMY\" '(REQUEST) '(REQUEST) '(REQUEST)) (list \"STANDARD\" '(OVER 120.0) '(OVER 108.0) '(OVER 120.0)) (list \"ULTRA\" '(OVER 108.0) '(NEVER) '(OVER 96.0)) (list \"THERMOLIGHT\" '(ALWAYS) '(NEVER) '(NEVER)))" "HARDWARE called for by the LONGEST hinge, per grade. Each rule is (OVER <inches>) | (ALWAYS) | (NEVER) | (R...")
      ("scv:*hardnames*" "(list \"VELCRO HINGES\" \"DOUBLE C CHANNEL\" \"HOLD DOWN KIT\")" "What the three columns are called in the report, in the order the table above holds them -- rename one and...")
      ("scv:*hinge-min*" "2" "a cover is never fewer pieces than this The placement solver. The fewest pieces that fit the foam width are...")
@@ -134437,7 +134458,7 @@
     ("dim-style" ("*g2mconv-dim-style*" "*vsconv-dim-style*"))
     ("dim-xdata" ("*g2mconv-dim-xdata*" "*vsconv-dim-xdata*"))
     ("dimfix-cmd" ("*cchk-dimfix-cmd*" "*lfc-dimfix-cmd*" "spachk:*dimfix-cmd*"))
-    ("dimlayer" ("cbk:*dimlayer*" "hn:*dimlayer*" "oasis:*dimlayer*" "pm:*dimlayer*" "sf:*dimlayer*"))
+    ("dimlayer" ("cbk:*dimlayer*" "hn:*dimlayer*" "oasis:*dimlayer*" "cperp:*dimlayer*" "perp:*dimlayer*" "pm:*dimlayer*" "sf:*dimlayer*"))
     ("dimoff" ("spa:*dimoff*" "spachk:*dimoff*"))
     ("dimoff" ("hn:*dimoff*" "sf:*dimoff*"))
     ("dimrepeat" ("hn:*dimrepeat*" "sf:*dimrepeat*"))

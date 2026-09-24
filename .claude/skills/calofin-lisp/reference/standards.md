@@ -69,7 +69,7 @@ answer is the suggested default for B, C, D.
 | Defpoint fix | `Move Keep Pick` | `<Move>` |
 | Declared-feature edit | `Add Remove Keep` | `<Keep>` |
 | Tutorial selector | `Checks Demo Both` | `<Both>` |
-| Demo cleanup | `Keep Erase` | `<Keep>` |
+| Demo cleanup | `Yes No` | `<No>` -- `Erase the demo drawing? [Yes/No] <No>` (`practice drawing` in the check tutorials); Enter never erases |
 | Repeat last value | `Same` | only where a previous value exists AND Enter is taken |
 | Multi-fit pick | `1 2 3 All None Redo` | `<2>` |
 | Direction | `Clockwise COunterclockwise` | previous; `CW`/`CCW` hidden |

@@ -128,10 +128,10 @@ def test_round_out_of_round_still_available():
 # ----------------------------------------------------------- rectangle
 
 def test_rectangle_length_suggests_width():
-    """Enter at the length takes the width -- a square spa."""
+    """Enter at the width (up) takes the length (across) -- a square spa."""
     vm = run([None, 'Coversize', 'Rectangle', None,
-              84.0,            # width
-              None,            # Enter -> length takes 84
+              84.0,            # length, across
+              None,            # Enter -> the width takes 84
               'Yes', '90',     # all four the same: one round of questions
               'No', 'No'],
              'rect/suggest')
@@ -144,7 +144,7 @@ def test_rectangle_length_suggests_width():
 
 def test_rectangle_can_decline_the_suggestion():
     vm = run([None, 'Coversize', 'Rectangle', None,
-              84.0, 60.0,      # decline: type a different length
+              84.0, 60.0,      # decline: type a different width
               'Yes', '90',
               'No', 'No'],
              'rect/decline')
@@ -482,7 +482,7 @@ def test_a_spaced_mm_is_refused_not_taken_as_inches():
     assert len(asked) == 3, asked
     # the measurement sequence (spa:asks) refuses it the same way
     vm = run([None, 'Coversize', 'Rectangle', None,
-              2134.0, 'MM', '2134mm',     # the width, spaced then right
+              2134.0, 'MM', '2134mm',     # the length, spaced then right
               '1524mm',
               'Yes', '90',
               'No', 'No'],
@@ -516,8 +516,9 @@ def test_junk_is_re_asked_not_accepted():
               'Yes', '90',
               'No', 'No'],
              'mm/junk')
-    # the width prompt came round twice: junk did not slip through
-    widths = [p for p, _ in vm.prompts if 'WIDTH' in p]
+    # the across overall (the LENGTH) came round twice: junk did not
+    # slip through
+    widths = [p for p, _ in vm.prompts if 'LENGTH across' in p]
     assert len(widths) == 2, [p for p, _ in vm.prompts]
     vs, _ = plverts(vm, 'COVER')
     xs = [v[0] for v in vs]
@@ -532,7 +533,7 @@ def test_five_piece_hinge_arrangement():
               230.0, 60.0,          # 230/48 -> 5 pieces
               'Yes', '90',
               'Yes',                # auto-hinge -- asked before the draw
-              'No',                 # no spillaway
+              'No',                 # no spillway
               'No',                 # no second outline
               '4-3'],               # taper -- asked after (block offered
                                     # up front, but not read here)
@@ -550,8 +551,8 @@ def test_three_piece_hinge_arrangement():
     assert hinge_labels(vm) == ['Hinge', 'Velcro Hinge'], hinge_labels(vm)
 
 
-def test_back_in_the_spillaway_loop():
-    """Back at the top of the loop drops the spillaway just committed."""
+def test_back_in_the_spillway_loop():
+    """Back at the top of the loop drops the spillway just committed."""
     vm = run([None, 'Coversize', 'Rectangle', None,
               140.0, 60.0,
               'Yes', '90',
@@ -561,9 +562,9 @@ def test_back_in_the_spillaway_loop():
               'No',
               'No',                         # no second outline
               '4-3'],                        # taper -- asked after
-             'hinge/spillaway-back')
+             'hinge/spillway-back')
     rows = [p for p, _ in vm.prompts]
-    assert any('spillaway' in p.lower() for p in rows)
+    assert any('spillway' in p.lower() for p in rows)
 
 
 def test_octagon_runs():
@@ -725,7 +726,7 @@ def hinge_xs(vm):
 
 
 def test_hinge_questions_come_before_the_draw():
-    """The auto-hinge offer and the spillaways are asked before the
+    """The auto-hinge offer and the spillways are asked before the
     second-outline offer -- nothing on the screen can be turned, so
     they have to be.  The taper does not turn anything, so it is asked
     the other way round: after the second-outline offer, once the
@@ -928,7 +929,7 @@ def test_the_details_block_is_asked_for_once():
               140.0, 60.0,
               'Yes', '90',
               'Yes',                # auto-hinge
-              'No',                 # no spillaway
+              'No',                 # no spillway
               'No',                 # no second outline
               '4-3'],               # ...so the taper is typed, after
              'block/asked-once')
@@ -948,7 +949,7 @@ def test_a_picked_block_still_answers_the_taper():
     vm.run('c:SPA', [blk,           # the pick, reading both tags
                      'Coversize', 'Rectangle', None,
                      140.0, 60.0, 'Yes', '90',
-                     'Yes', 'No',   # auto-hinge, no spillaway
+                     'Yes', 'No',   # auto-hinge, no spillway
                      'No'])         # no second outline
     assert not [p for p, _ in vm.prompts if 'Taper' in p], \
         "the taper was asked although the block gave it"
@@ -956,7 +957,7 @@ def test_a_picked_block_still_answers_the_taper():
 
 
 def test_the_guide_stays_up_until_the_real_spa_replaces_it():
-    """The auto-hinge offer and the spillaways are asked before anything
+    """The auto-hinge offer and the spillways are asked before anything
     is drawn, so the guide is the only spa on the screen while they are
     answered.  It used to be taken away as the corners were answered,
     leaving the rest of the run to be answered at a blank screen.  The
@@ -968,7 +969,7 @@ def test_the_guide_stays_up_until_the_real_spa_replaces_it():
          140.0, 60.0,
          'Yes', '90',
          watched(notes, 'Yes'),     # auto-hinge
-         watched(notes, 'No'),      # spillaway
+         watched(notes, 'No'),      # spillway
          watched(notes, 'No'),      # second outline -- after the draw
          watched(notes, '4-3')],    # taper -- after the draw too
         'guide/stays-up')
@@ -987,7 +988,7 @@ def test_the_octagon_and_round_guides_hand_over_the_same_way():
         notes = []
         run([None, 'Coversize', shape, None] + body
             + [watched(notes, 'Yes'),   # auto-hinge
-               watched(notes, 'No'),    # spillaway
+               watched(notes, 'No'),    # spillway
                watched(notes, 'No'),    # second outline -- after the draw
                watched(notes, '4-3')],  # taper -- after the draw too
             'guide/%s' % shape)
@@ -1011,7 +1012,7 @@ def thermo_run(head):
     vm.run('c:SPA', head + [blk,              # the block, this time
                             'Rectangle', None, 140.0, 60.0,
                             'Yes', '90',
-                            'Yes', 'No'])      # auto-hinge, no spillaway
+                            'Yes', 'No'])      # auto-hinge, no spillway
     return vm
 
 
@@ -1059,7 +1060,7 @@ def test_the_octagon_cover_is_the_water_s_edge_offset_by_the_lap():
     is the one part of the offset that is not a plain shift."""
     vm = run([None, 'Watersedge', 'OCtagon', None,
               95.0, None, 'NA', 'NA', 'NA', 'NA', 'NA',
-              'Yes', 'No',            # auto-hinge, no spillaway
+              'Yes', 'No',            # auto-hinge, no spillway
               None, None, None,       # as well: Yes, Offset, 6" lap
               '4-3'],                 # the taper the hinges need
              'octagon/second-outline')
@@ -1090,10 +1091,10 @@ def test_the_round_cover_is_the_water_s_edge_plus_the_lap():
 
 def test_a_corner_spillway_follows_the_quarter_turn():
     """60 x 100 typed the tall way round is turned a quarter turn, and a
-    corner spillaway turns with it: the report names it as MEASURED and
-    says where it was drawn.  Before this no test had a corner spillaway
+    corner spillway turns with it: the report names it as MEASURED and
+    says where it was drawn.  Before this no test had a corner spillway
     at all, so the corner half of the turn table was never read."""
-    script = ['Yes', 'Corner', 'BottomLeft', 20.0,  # one corner spillaway
+    script = ['Yes', 'Corner', 'BottomLeft', 20.0,  # one corner spillway
               'No', 'No', '4-3']
     vm = run([None, 'Coversize', 'Rectangle', None, 60.0, 100.0,
               'Yes', '90', 'Yes'] + script, 'turn/corner-spill')
@@ -1102,7 +1103,7 @@ def test_a_corner_spillway_follows_the_quarter_turn():
     txt = [d[1] for d in drawn(vm, 'TEXT', 'SPA-NOTES')]
     assert 'SPILLWAY BOTTOMLEFT (DRAWN TOPLEFT)' in txt, txt
     assert hinge_labels(vm), "no hinge drawn"
-    # the same spillaway on a spa that is NOT turned keeps its name
+    # the same spillway on a spa that is NOT turned keeps its name
     vm = run([None, 'Coversize', 'Rectangle', None, 100.0, 60.0,
               'Yes', '90', 'Yes'] + script, 'turn/corner-spill-straight')
     txt = [d[1] for d in drawn(vm, 'TEXT', 'SPA-NOTES')]

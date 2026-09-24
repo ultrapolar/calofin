@@ -286,7 +286,7 @@ class _LabTour(VM):
         elif kind == 'getkword':
             ans = ('Database' if 'Which lesson' in prompt else
                    'Demo' if 'Checks prints' in prompt else
-                   'Keep' if 'Keep the demo' in prompt else None)
+                   'No' if 'Erase the demo' in prompt else None)
             if ans is None:
                 raise LispError(f"unscripted question: {prompt!r}", self)
         else:

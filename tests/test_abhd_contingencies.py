@@ -1215,7 +1215,7 @@ check("...and it draws nothing at all",
 # the demo on a drawing that has none of ABHD's layers -- which is the
 # drawing a first-time user runs it in
 vm = newvm()
-run(vm, 'c:TUTORIALABHD', ['Demo', (0.0, 0.0)] + [None] * 5 + ['No'])
+run(vm, 'c:TUTORIALABHD', ['Demo', (0.0, 0.0)] + [None] * 5 + ['Yes'])
 check("Demo draws the practice pool, the three fits and the bottom",
       'A surveyor shot these points' in said(vm)
       and 'Pool bottom added' in said(vm))
@@ -1224,7 +1224,8 @@ check("...and sweeps every last piece of it when told to",
       "%d left" % len(live(vm)))
 
 vm = newvm()
-run(vm, 'c:TUTORIALABHD', ['Demo', (0.0, 0.0)] + [None] * 5 + ['Yes'])
+# Enter at "Erase the demo drawing? [Yes/No] <No>" keeps it
+run(vm, 'c:TUTORIALABHD', ['Demo', (0.0, 0.0)] + [None] * 5 + [None])
 kept_demo = live(vm)
 unstamped = [e for e in kept_demo
              if not any((isinstance(g, list) and g and g[0] == -3)

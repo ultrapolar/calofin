@@ -99,7 +99,8 @@ meant to be copied out.
 The demo asks for a clear spot (about 1000 x 500 drawing units at the
 default size; a point in the current UCS, Enter its origin) and a size
 unit, and offers to erase everything it drew on
-the way out. The whole run is one undo group either way, and `OSMODE`,
+the way out (`Erase the demo drawing? [Yes/No] <No>` -- Enter keeps it,
+only Yes erases). The whole run is one undo group either way, and `OSMODE`,
 `CMDECHO` and `CLAYER` are restored whether the run finishes, errors, or
 is cancelled with Esc.
 
@@ -120,7 +121,7 @@ is cancelled with Esc.
 * The three demo layers are **created** if the drawing lacks them, and
   thawed, unlocked and switched back on if it has them in a state that
   would hide the result.
-* **Erase** finds the demo the same way lesson 1 finds anything: it
+* **Yes** (erase) finds the demo the same way lesson 1 finds anything: it
   walks the database with `entnext` and deletes what is on the three
   demo layers. Anything else you happen to have put on those layers goes
   with it — which is why they are named `LISPLAB-*`.
@@ -145,7 +146,7 @@ duplicates, with three different comparators; `lab:msort`'s stability is
 checked directly, and against the sort-twice route that depends on it.
 The tour is then taken in every lesson/mode combination, with the drawn
 rows read back out of the VM's drawing to confirm they really are the
-sorted orders, plus a frozen-and-switched-off demo layer, the Erase
+sorted orders, plus a frozen-and-switched-off demo layer, the Yes (erase)
 path, and an all-Enter run.
 
 `CALOFIN_LISP_ROOT=shared python3 tests/test_lisplab.py` reruns the lot

@@ -125,7 +125,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.23")
+(setq *spacheck-version* "v1.24")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -1409,7 +1409,7 @@
       (if (and tp (= g "THERMOLIGHT") (/= tp "1-3/8"))
         (setq rows (append rows
                     (list (spachk:row
-                            (strcat "Spa Cover Details: Thermo-Light is"
+                            (strcat "Spa Cover Details: THERMOLIGHT is"
                                     " always 1-3/8 flat, not " tp)
                             1)))))
       (spachk:res rows (if tp nil (list blk))))))
@@ -1852,7 +1852,7 @@
                                     (spachk:dist maxrun)
                                     (if fl
                                         (strcat " within " (spachk:dist fl) ", OK")
-                                        (strcat " - Thermo-Light length"
+                                        (strcat " - THERMOLIGHT length"
                                                 " N/A, verify")))
                             (if fl nil 2))))))
       ;; --- piece widths against the foam width.  This one DOES need
@@ -2867,7 +2867,7 @@
     "1. SPA COVER DETAILS BLOCK"
     "   One in the selection, with a readable TAPER tag.  A missing"
     "     GRADE is taken as Standard, the way SPA takes it."
-    "   Thermo-Light must be the 1-3/8 flat taper."
+    "   THERMOLIGHT must be the 1-3/8 flat taper."
     ""
     "2. THE COVER OUTLINE"
     (strcat "   Exactly one closed entity on layer " spachk:*lay-cover*
@@ -3175,8 +3175,9 @@
           ;; the report layer follows it, and nothing else does
           (setq rmark (entlast))
           (c:SPACHECKSCAN)))
-      (if (= "Yes" (spachk:askkw "Erase the practice drawing"
-                                 "Yes No" nil "Yes" nil))
+      ;; Enter keeps the practice drawing; only an explicit Yes erases it
+      (if (= "Yes" (spachk:askkw "Erase the practice drawing?"
+                                 "Yes No" nil "No" nil))
         (progn
           ;; an erase that is refused (a locked layer) is counted, so
           ;; the line at the end never says "erased" over objects that
