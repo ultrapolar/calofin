@@ -191,6 +191,20 @@
 ;;;     picks are always made by hand.
 ;;; ======================================================================
 
+;;; -------------------- shop terms --------------------------------------
+;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
+;;;  own way -- the knobs that read one say which.  The shop's spelling
+;;;  is the profile value CalofinTerm-<ID>, set from LAZTUNE's Terms
+;;;  page; with none, the shipped one.  Read as the file loads, so the
+;;;  reader sits here, ABOVE the knobs that call it (the grouped build
+;;;  takes it from CALOFIN-LIB.lsp as cal:term).  Only drawing text is
+;;;  ever a term: keywords and prompts are answered by forms, the
+;;;  palette and LAZDIAG's replays by their exact spelling.  The table
+;;;  of terms is tools/terms.py.
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
 ;;; ------------------------------ SETTINGS ------------------------------
 ;;;  THE KNOBS, all of them, in one place.  Each is defined only if it
 ;;;  is not already set, so this file, CORNERSTP.lsp and HEMISTEP.lsp
@@ -208,10 +222,6 @@
 ;; you give, so this does not size a step: it is the slack the U mode
 ;; measures with, and *cs-join-fuzz* below is derived from it.
 ;; nil = derive it from *cs-tol-inch* through the drawing's INSUNITS.
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
-;;;
-
 (if (not (boundp '*cs-width-tol*)) (setq *cs-width-tol* nil))
 
 ;; What that tolerance is in INCHES when it is derived - the shop reads
@@ -366,10 +376,41 @@
 ;; beads the step faces and leaves the walls bare.
 (if (not (boundp '*cs-beadsides-default*)) (setq *cs-beadsides-default* "All"))
 
+;;; NORMIESTEP only: the SHOP TERMS it writes into the drawing --
+;;; wording, not a size.  Each reads the shop's CalofinTerm-<ID>
+;;; through the term reader above, so LAZTUNE's Terms page moves it in every
+;;; tool that writes it at once; the literal is the shipped spelling.
+
+;; NORMIESTEP only.  The suffix after the one corner mark that stands
+;; for the run's other corners.
+(if (not (boundp '*cs-typ-note*)) (setq *cs-typ-note* (cal:term "typ-note" " Typ.")))
+
+;; NORMIESTEP only.  The note on a corner the order sheet
+;; never gave, on the leader off its boxed "?".
+(if (not (boundp '*cs-ng-note*)) (setq *cs-ng-note* (cal:term "ng-note" "Not Given")))
+
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.21") ; printed on load and at command start so a
+(setq *ns-version* "v3.22") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
+
+;;; ------------------------- shop terms, re-read ------------------------
+;;
+;; A re-APPLOAD re-reads the shop's terms, as every tool with a bare
+;; setq does.  The boundp guard on the two term knobs above keeps what
+;; was there before this load -- right for a setting a sibling step
+;; file declared, wrong for a term, whose old value is usually only the
+;; spelling the LAST load read: a CalofinTerm- changed since would be
+;; passed by until a LAZTUNE Terms change pushed it.  So a term knob
+;; still holding what the last load read reads the profile again; one
+;; holding anything else -- a value of the drafter's own -- is left.
+;; *ns-term-read* is that record, by term id; nil before the first load.
+(if (equal *cs-typ-note* (cdr (assoc "typ-note" *ns-term-read*)))
+  (setq *cs-typ-note* (cal:term "typ-note" " Typ.")))
+(if (equal *cs-ng-note* (cdr (assoc "ng-note" *ns-term-read*)))
+  (setq *cs-ng-note* (cal:term "ng-note" "Not Given")))
+(setq *ns-term-read* (list (cons "typ-note" *cs-typ-note*)
+                           (cons "ng-note" *cs-ng-note*)))
 
 ;;; ------------------------- vector helpers -----------------------------
 
@@ -759,6 +800,14 @@
 ;; the tblsearch behind it.
 (defun ns-name (v dflt) (if (= (type v) 'STR) v dflt))
 
+;; The two SHOP TERMS NORMIESTEP writes into the drawing, read through
+;; ns-name like every other name setting: a knob that is not text --
+;; the T this family's settings test puts in every knob -- draws the
+;; term as the profile or the shipped wording has it, never a strcat
+;; error half way through the marks.
+(defun ns-typnote () (ns-name *cs-typ-note* (cal:term "typ-note" " Typ.")))
+(defun ns-ngnote () (ns-name *cs-ng-note* (cal:term "ng-note" "Not Given")))
+
 ;; A setting NAME as a note says it back: quoted when it is one, and
 ;; named for what it is when it is not - a note that quotes T as a name
 ;; reads like a layer somebody forgot to make, rather than a setting
@@ -1071,7 +1120,7 @@
   (command "_.LEADER"
            "_non" (trans (ns-add pt (ns-scl outd (* 8.4 r))) 0 1)
            "_non" (trans (ns-add pt (ns-scl outd (* 11.4 r))) 0 1)
-           "" "Not Given" "")
+           "" (ns-ngnote) "")
   (if oldl (setvar "CLAYER" oldl)))
 
 ;; entities created since MARK (nil = since the drawing was empty)
@@ -2031,7 +2080,7 @@
         (progn
           (setq mcs  (ns-markpts mode sp u dir wid cum corner lastinn
                                  base arm1 arm2)
-                msfx (if (cdr mcs) " Typ." "")
+                msfx (if (cdr mcs) (ns-typnote) "")
                 mc   nil)
           (foreach m mcs
             (if (and (null mc) (or (= rtype "NotGiven") (caddr m)))

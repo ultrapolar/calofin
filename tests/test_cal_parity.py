@@ -70,6 +70,12 @@ INPUTS = {
     # one already on the step, and a minimum just past one
     "cal:floor-shown": ["47.8", "48.0", "0.0", "-2.5", "3.00009"],
     "cal:ceil-shown": ["3.01", "48.0", "0.0", "-2.5", "3.00001"],
+    # a shop term: nothing in the profile, a spelling of the shop's
+    # (set by the argument itself, so both halves read the same
+    # profile), and an empty one that falls back to the shipped text
+    "cal:term": ['"typ-note" " Typ."', '"never-set" "Not Given"',
+                 '(progn (setenv "CalofinTerm-par" " TYP") "par") " Typ."',
+                 '(progn (setenv "CalofinTerm-par" "") "par") " Typ."'],
     "cal:2d": ["'(1.5 2.5 3.5)", "'(0.0 0.0 0.0)", "'(-4.0 7.25)"],
     "cal:andjoin": ['\'("a" "b" "c") "and"', '\'("only") "and"',
                     '\'("a" "b") "or"', "nil \"and\""],

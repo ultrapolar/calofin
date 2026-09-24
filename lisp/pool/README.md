@@ -1472,6 +1472,8 @@ holds this table and the block together, so neither can drift from the other.
 | `pool:*mark-r*` | `0.18` | circle radius on the corner point |
 | `pool:*mark-lead*` | `1.2` | how far out the mark's own text sits |
 | `pool:*ng-lead*` | `1.5` | where the "Not Given" leader leaves the box |
+| `pool:*typ-note*` | `" Typ."` | The suffix after the one corner callout that stands for a group of equal corners. A **shop term** (`typ-note`): read from the profile's `CalofinTerm-typ-note` as the file loads, so LAZTUNE's Terms page changes it here and in every other tool that writes it; a LAZTUNE value set on this knob itself still wins |
+| `pool:*ng-note*` | `"Not Given"` | The note on a corner the order sheet never gave, on the leader off its boxed `?` and under its row in the report's Given marks. A **shop term** (`ng-note`): read from the profile's `CalofinTerm-ng-note` as the file loads, so LAZTUNE's Terms page changes it here and in every other tool that writes it; a LAZTUNE value set on this knob itself still wins |
 | `pool:*ng-off*` | `2.05` | ... and how far out that note sits |
 | `pool:*rad-off*` | `0.9` | radius dim, dragged out past the arc |
 | `pool:*cut-off*` | `0.5` | cut-face dim, out past the face |

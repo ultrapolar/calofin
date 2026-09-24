@@ -57,8 +57,10 @@ run python3 tools/check_perf.py --tier lisp
 run python3 tools/check_lazdiag.py
 
 # Whole-tree but quick, and both are easy to break from a single edit:
-# a new prompt with no Back, and a tier left behind.
+# a new prompt with no Back, a shop term spelt around its knob, and a
+# tier left behind.
 run python3 tools/check_back.py
+run python3 tools/check_terms.py
 run python3 tools/check_standards.py
 
 echo

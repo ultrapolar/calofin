@@ -1,0 +1,13 @@
+# tools/check_terms.py rule T3: a shop term's default spelled as a string
+# in CODE outside a tunables block.  Each line here is a site that NAMES
+# the wording rather than writing it into the drawing -- console prose,
+# a tutorial sentence -- with the reason it stays literal.  One line per
+# site, keyed by the lisp/ path (a shared/parts/ twin's finding maps to
+# its source):
+#     file|defun|string|reason
+# A line nothing matches any more is stale and fails the check.
+lisp/cornerstp/NORMIESTEP.lsp|c:NORMIESTEP|\n  Not Given: |a console line naming the NotGiven TREATMENT the drafter chose (after its keyword), not the note drawn on the corner -- it explains what NotGiven does, in the shipped vocabulary the prompts use
+lisp/pool/TUTORIALPOOL.LSP|tutorial:c4|NotGiven -- the order sheet never said. Built square, but circled with a \"?\" and a Not Given note (top-right, above) so nobody reads it as a measured 90.|tutorial prose on the command line describing the treatment beside its keyword; the demo drawing above it is drawn by POOL and carries the shop's term
+lisp/spa/TUTORIALSPA.LSP|<top>|    a Typ. suffix, at the bottom-right.  Mixed corners are called|TUTORIALSPA's help text, printed on the command line: it teaches the Typ. rule by its shipped name, not text in a drawing
+lisp/spa/TUTORIALSPA.LSP|tut:demo|Had all four matched, ONE callout with Typ. would do.|a tutorial step's caption on the command line (tut:say), explaining the Typ. rule; the callouts the step draws come from SPA's knob
+lisp/fitabhd/FITABHD.lsp|fit:dims-lines|Not Given - drawn square|a row of FITABHD's fit report, printed on the command line only (fit:dims-lines' one caller princs it): it describes the NotGiven treatment the fit read, it is not the corner note drawn in a drawing

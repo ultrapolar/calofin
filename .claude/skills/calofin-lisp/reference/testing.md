@@ -209,6 +209,7 @@ tests/test_back_nav.py
 | `test_shared.py` | the whole grouped build in one session + the bundle; fails if a held-back command leaks in |
 | `test_ruler_copies.py` | every embedded length-ruler copy, byte for byte against the library |
 | `test_theme.py` | the `ink` colour table, and every standalone copy against the library |
+| `test_terms.py` | the shop terms: every tool writes the shop's `CalofinTerm-*` spelling, LAZTUNE's Terms page, the knob-over-term precedence, LAZBACKUP's `[Terms]` |
 | `test_tunables.py` | the tunables block: one block, knobs in it, state out of it |
 | `test_back_nav.py` | Undo beside every Back, the typed predicate, threaded chains walked backwards |
 | `test_lazpanel.py` | the panel roster against `headline_commands()` |

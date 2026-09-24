@@ -66,9 +66,12 @@ DEPTHS = [7.5, 10.75, 10.75, 10.5]     # 3 steps -> 4 depths
 #: a knob's value is an atom -- a number, a string, a keyword -- or a
 #: quoted LIST, which the two ruler ladders are: (LOW HIGH STEP).  The
 #: list alternative comes first, since [^)]* would stop at its own
-#: closing paren and hand back half a form.
+#: closing paren and hand back half a form -- and so does a SHOP TERM,
+#: a knob read through the term reader: (ns-term "typ-note" " Typ.")
+#: here, (cal:term ...) in the grouped twin.
 KNOB = re.compile(r"\(if\s+\(not\s+\(boundp\s+'(\*cs-[\w-]+\*)\)\)\s*"
-                  r"\(setq\s+\1\s+('\([^()]*\)|[^)]*)\)\)")
+                  r"\(setq\s+\1\s+(\([a-z]+[:-]term\s+\"[^\"]*\"\s+\"[^\"]*\"\)"
+                  r"|'\([^()]*\)|[^)]*)\)\)")
 READER = re.compile(r"\((?:cs|hs|ns)-num\s+(\*cs-[\w-]+\*)\s+")
 REFERENCE = re.compile(r"\*cs-[\w-]+\*")
 

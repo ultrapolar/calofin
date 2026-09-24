@@ -207,6 +207,18 @@ The knobs one file keeps to itself:
 | `*cs-bench-default*` | CORNERSTP | `"No"` | What Enter answers at "Add a bench along a wall?", the question an inside-out run asks before it draws. `"Yes"` goes straight on to picking the wall, so a shop that benches most runs stops typing the word; both words stay on the prompt either way |
 | `*cs-boundary-default*` | HEMISTEP | `"Yes"` | What Enter answers at "Draw the reconstructed boundary through the step ends?". `"No"` leaves the steps standing on their own and rebuilds no hemisphere through them |
 | `*cs-treat-default*` | NORMIESTEP | `"Square"` | What the FIRST corner-treatment question offers on Enter -- one of `"Square"`, `"Radius"`, `"Cut"` or `"NotGiven"`, in any case. A re-ask behind a size question still offers the answer before it, as it always has; this only decides where that chain starts |
+| `*cs-typ-note*` | NORMIESTEP | `" Typ."` | The suffix after the one corner mark that stands for the run's other corners. A **shop term** (`typ-note`): read from the profile's `CalofinTerm-typ-note` as the file loads, so LAZTUNE's Terms page changes it here and in every other tool that writes it; a LAZTUNE value set on this knob itself still wins |
+| `*cs-ng-note*` | NORMIESTEP | `"Not Given"` | The note on a corner the order sheet never gave, on the leader off its boxed `?`. A **shop term** (`ng-note`): read from the profile's `CalofinTerm-ng-note` as the file loads, so LAZTUNE's Terms page changes it here and in every other tool that writes it; a LAZTUNE value set on this knob itself still wins |
+
+The two term knobs sit under the family's `boundp` guard like every
+other `*cs-*` setting, which on its own would keep a re-APPLOAD from
+re-reading the profile. So below the block NORMIESTEP remembers what
+each term read gave it (`*ns-term-read*`) and, on a re-load, re-reads a
+term knob that still holds exactly that; one holding anything else -- a
+value of the drafter's own -- is left alone. The one gap: a knob moved
+by LAZTUNE's Terms page and then a `CalofinTerm-` edited by hand, with
+no LAZTUNE in between, keeps the Terms page's value until the next
+Terms change or a fresh session.
 | `*cs-cut-given-default*` | NORMIESTEP | `"Offset"` | Which of a Cut corner's two sizes Enter asks for: the `"Offset"` back along each line, or the `"Cut"` face across them. Either gives the other, so this is the one the shop's order sheets quote |
 
 Deliberately not settings, in any of the three: the epsilons the

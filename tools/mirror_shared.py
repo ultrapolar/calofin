@@ -72,6 +72,9 @@ TOOLS = {
     'SPA': {
         'src': 'lisp/spa/SPA.LSP',
         'swap': {
+            # the shop-term reader: one body, the library's is it
+            # (tests/test_terms.py holds every copy to one text)
+            'spa:term': 'cal:term',
             'spa:shown-step': 'cal:shown-step',
             'spa:floor-shown': 'cal:floor-shown',
             # the ink table: one body, and the library's is it
@@ -468,6 +471,9 @@ TOOLS = {
     'SMARTFILLET': {
         'src': 'lisp/smartfillet/SMARTFILLET.lsp',
         'swap': {
+            # the shop-term reader: one body, the library's is it
+            # (tests/test_terms.py holds every copy to one text)
+            'sf:term': 'cal:term',
             'sf:askkw': 'cal:askkw', 'sf:askyn': 'cal:askyn',
             'sf:syssave': 'cal:syssave',
             'sf:sysrestore': 'cal:sysrestore',
@@ -494,6 +500,9 @@ TOOLS = {
     'HONEFILLET': {
         'src': 'lisp/honefillet/HONEFILLET.lsp',
         'swap': {
+            # the shop-term reader: one body, the library's is it
+            # (tests/test_terms.py holds every copy to one text)
+            'hn:term': 'cal:term',
             'hn:askkw': 'cal:askkw', 'hn:askyn': 'cal:askyn',
             'hn:syssave': 'cal:syssave',
             'hn:sysrestore': 'cal:sysrestore',
@@ -788,6 +797,9 @@ TOOLS = {
     'POOL': {
         'src': 'lisp/pool/POOL.LSP',
         'swap': {
+            # the shop-term reader: one body, the library's is it
+            # (tests/test_terms.py holds every copy to one text)
+            'pool:term': 'cal:term',
             'pool:ftin': 'cal:ftin',
             'pool:shown-step': 'cal:shown-step',
             'pool:floor-shown': 'cal:floor-shown',
@@ -1799,6 +1811,9 @@ TOOLS = {
     'NORMIESTEP': {
         'src': 'lisp/cornerstp/NORMIESTEP.lsp',
         'swap': {
+            # the shop-term reader: one body, the library's is it
+            # (tests/test_terms.py holds every copy to one text)
+            'ns-term': 'cal:term',
             'ns-layerok': 'cal:layer-usable-p',
             'ns-dot': 'cal:dot',
             'ns-askkw': 'cal:askkw',
@@ -1975,6 +1990,9 @@ TOOLS = {
     'AutoDim': {
         'src': 'lisp/autodim/AutoDim.lsp',
         'swap': {
+            # the shop-term reader: one body, the library's is it
+            # (tests/test_terms.py holds every copy to one text)
+            'ad:term': 'cal:term',
             'ad:mid': 'cal:midn', 'ad:dot': 'cal:dotn',
             'ad:askkw': 'cal:askkw', 'ad:askyn': 'cal:askyn',
             'ad:ssbox': 'cal:bbox-ss', 'ad:entbox': 'cal:bbox-ent',

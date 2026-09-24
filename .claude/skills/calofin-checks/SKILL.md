@@ -1,6 +1,6 @@
 ---
 name: calofin-checks
-description: Decoding a failing check or test in the calofin repo - make check, make test, make parity, or any of check_lisp / check_scope / check_standards / check_lazdiag / check_handlers / check_leaks / check_writes / check_offered / check_input / check_values / check_tier_parity / check_osnap / check_color / check_perf / check_back / check_vb / check_dcl / check_registry, and the generator staleness checks (mirror_shared, release_lisp, build_shared_bundle, gen_ui_data, gen_ui_charts, gen_knobs, gen_ribbon_icons, gen_agents_md / a stale AGENTS.md). Use when a check is red, a test fails, or a tier has drifted, to find the cause and the fix without reading the checker's source.
+description: Decoding a failing check or test in the calofin repo - make check, make test, make parity, or any of check_lisp / check_scope / check_standards / check_lazdiag / check_handlers / check_leaks / check_writes / check_offered / check_input / check_values / check_tier_parity / check_osnap / check_color / check_perf / check_terms / check_back / check_vb / check_dcl / check_registry, and the generator staleness checks (mirror_shared, release_lisp, build_shared_bundle, gen_ui_data, gen_ui_charts, gen_knobs, gen_ribbon_icons, gen_agents_md / a stale AGENTS.md). Use when a check is red, a test fails, or a tier has drifted, to find the cause and the fix without reading the checker's source.
 ---
 
 # Decoding a calofin check failure
@@ -239,6 +239,27 @@ The rule in one line: **a theme colour reaches a CUE only** — something
 the command draws and takes away again. Anything still in the drawing
 when the command returns takes a number. Both stay knobs; `LAZTUNE`
 retunes either.
+
+---
+
+## `check_terms.py` — a shop term spelt around its knob
+
+A **shop term** is drawing text a shop may spell its own way — `typ-note`
+(`" Typ."`) and `ng-note` (`"Not Given"`). `tools/terms.py` is the table:
+each term's default and its **member knobs**, one per tool that writes
+the wording, each read through the tool's term reader:
+`(setq pool:*typ-note* (pool:term "typ-note" " Typ."))`.
+
+| Rule | Message says | Fix |
+| --- | --- | --- |
+| T1 | a member is missing, not read through `x:term`, reads another term, ships another literal, or its twin does not read `cal:term` | make the block line `(x:term "ID" DEFAULT)`; re-run `mirror_shared.py` |
+| T2 | `join term X` — a knob ships the default under its own name | read it through the term reader and add it to X's `members` |
+| T3 | the default spelled as a string in code outside a knob form (a defun inside a long block's span counts; so does a bare `(x:term "ID" LIT)` in place of the knob, or one whose LIT is another term's default -- only a fallback beside its member knob, NORMIESTEP's `ns-typnote`, is exempt) | use the knob; if it is console/tutorial prose that NAMES the wording, add `file|defun|string|reason` to `tools/terms_baseline.txt` (the lisp/ path; stale lines fail) |
+| T4 | a reader is not the six-line text, sits below the block, or has no `'x:term': 'cal:term'` swap | copy POOL.LSP's `pool:term`, prefix changed, above the block; add the swap |
+
+After adding a member: `python3 tools/gen_knobs.py` (it writes
+`lzp:*terms*` and the term's `lzp:*knobfam*` family). Only drawing text
+is ever a term — never a keyword or prompt wording.
 
 ---
 

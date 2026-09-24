@@ -242,11 +242,21 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v2.4")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v2.5")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
 
+;;; -------------------- shop terms --------------------------------------
+;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
+;;;  own way -- the knobs that read one say which.  The shop's spelling
+;;;  is the profile value CalofinTerm-<ID>, set from LAZTUNE's Terms
+;;;  page; with none, the shipped one.  Read as the file loads, so the
+;;;  reader sits here, ABOVE the knobs that call it (the grouped build
+;;;  takes it from CALOFIN-LIB.lsp as cal:term).  Only drawing text is
+;;;  ever a term: keywords and prompts are answered by forms, the
+;;;  palette and LAZDIAG's replays by their exact spelling.  The table
+;;;  of terms is tools/terms.py.
 ;;; ======================================================================
 ;;;  SETTINGS
 ;;;
@@ -390,9 +400,13 @@
 ;; A measurement that repeats around the perimeter is called out once,
 ;; on the first one found, and the rest are left to that note.
 
-(setq ad:*typ-note*   " Typ.")  ; appended to the one dim that stands
+(setq ad:*typ-note*   (cal:term "typ-note" " Typ."))
+                                ; appended to the one dim that stands
                                 ; for its group - the wording POOL.LSP
-                                ; already uses for the same job
+                                ; already uses for the same job.  A
+                                ; SHOP TERM: the shop's CalofinTerm-
+                                ; typ-note through the term reader
+                                ; above, which LAZTUNE's Terms page sets
 (setq ad:*typ-lines*  2)        ; equal straight sides it takes before
                                 ; one is noted and the rest left to it;
                                 ; below this count every one is

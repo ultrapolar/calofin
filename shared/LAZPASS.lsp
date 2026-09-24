@@ -101,7 +101,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v2.8")
+(setq cal:*version* "v2.9")
 
 
 ;;  WHAT IS LOADED, AND AT WHICH VERSION.  Every tool reports its own
@@ -390,6 +390,21 @@
 (defun cal:setting (key dflt / v)
   (setq v (getenv key))
   (if (and v (/= v "")) v dflt))
+
+;; A SHOP TERM: wording a tool writes INTO THE DRAWING that the shop may
+;; spell its own way -- " Typ." after the one dimension that stands for
+;; a group, "Not Given" on a corner the order sheet never gave.  The
+;; profile value CalofinTerm-<ID> holds the shop's spelling, DFLT the
+;; shipped one.  Only drawing text is a term: a keyword or a prompt
+;; never is, because forms, the palette and LAZDIAG's replays answer
+;; them by their exact spelling.  Each tool reads its terms into a knob
+;; of its tunables block as it loads (tool:term in a lisp/ file, the
+;; same body under the tool's prefix); LAZTUNE's Terms page sets the
+;; profile value and every loaded member knob at once, and a per-tool
+;; LAZTUNE override still wins over it.  The table of terms is
+;; tools/terms.py; lzp:*terms* in LAZPANEL is generated from it.
+(defun cal:term (id dflt)
+  (cal:setting (strcat "CalofinTerm-" id) dflt))
 
 ;; What CalofinTheme has been set to: 'dark, 'light, or nil for "work
 ;; it out".  One override for both probes below, because a drafter who
@@ -3872,8 +3887,18 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092326 REV43")
+(setq pool:*version* "092426 REV44")
 
+;;; -------------------- shop terms --------------------------------------
+;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
+;;;  own way -- the knobs that read one say which.  The shop's spelling
+;;;  is the profile value CalofinTerm-<ID>, set from LAZTUNE's Terms
+;;;  page; with none, the shipped one.  Read as the file loads, so the
+;;;  reader sits here, ABOVE the knobs that call it (the grouped build
+;;;  takes it from CALOFIN-LIB.lsp as cal:term).  Only drawing text is
+;;;  ever a term: keywords and prompts are answered by forms, the
+;;;  palette and LAZDIAG's replays by their exact spelling.  The table
+;;;  of terms is tools/terms.py.
 ;;; -------------------- tunables ----------------------------------------
 ;;;
 ;;;  EVERY KNOB THIS TOOL HAS IS IN THIS BLOCK.  Each one is WRITTEN
@@ -4284,6 +4309,20 @@
 ;;;  ALONG the pool and L is the hopper's own width, and a 40' pool's H
 ;;;  has nothing to do with the gap at its side.
 (setq pool:*hopoffset-ladder* '(24.0 72.0 6.0))
+
+;;;  ...and the SHOP TERMS it writes into the drawing -- wording, not a
+;;;  size.  Each reads the shop's CalofinTerm-<ID> through the term
+;;;  reader above, so LAZTUNE's Terms page moves it in every tool that writes
+;;;  it at once; the literal is the shipped spelling, and a LAZTUNE
+;;;  value set on the knob itself still wins over the shop's.
+
+;; The suffix after the one corner callout that stands for a group
+;; of equal corners -- "?" and "90%%d" marks included.
+(setq pool:*typ-note* (cal:term "typ-note" " Typ."))
+
+;; The note on a corner the order sheet never gave: on the leader off
+;; its boxed "?", and under its row in the report's Given marks.
+(setq pool:*ng-note* (cal:term "ng-note" "Not Given"))
 
 ;;; -------------------- run state (not tunables) ----------------------
 ;;;
@@ -7573,7 +7612,7 @@
                      pool:*sq90-tol*))
             (setq ock k))))
   (pool:dimtreat1 (nth ock hce) octy (nth ock hcarcs) (nth ock pts)
-                  (pool:unit (cal:v- (nth ock pts) cen)) doff " Typ."
+                  (pool:unit (cal:v- (nth ock pts) cen)) doff pool:*typ-note*
                   (pool:polywedge pts ock))
   (pool:dimtreat1 (nth 4 hce) icty (nth 4 hcarcs) (nth 4 pts)
                   (pool:unit
@@ -7926,7 +7965,7 @@
         (progn
           (setq y (- y lh))
           (pool:textc (list (+ x (* pool:*rep-c1* h)) y) h
-                      (if tgt (strcat (pool:fmtgiven tgt) " Given") "Not Given")
+                      (if tgt (strcat (pool:fmtgiven tgt) " Given") pool:*ng-note*)
                       lay pool:*col-bad*)
           (if tgt (setq pool:*giventxts* (cons (cons (entlast) tgt) pool:*giventxts*))))))
   (foreach n notes
@@ -8360,7 +8399,7 @@
   (command "_.LEADER"
            (pool:wp (cal:v+ p (cal:v* outd (* pool:*ng-lead* doff))))
            (pool:wp (cal:v+ p (cal:v* outd (* pool:*ng-off* doff))))
-           "" "Not Given" ""))
+           "" pool:*ng-note* ""))
 
 ;; One corner's annotation, whichever of the four treatments it
 ;; carries.  ang is the corner's real wedge angle, and it decides
@@ -8426,7 +8465,7 @@
                   (equal (cadr cc) (cadr (car corners)) 1.0e-6)))
         (setq same nil)))
   (if (or pool:*insq* same)
-      (setq ilist (list 1) sfx " Typ.")
+      (setq ilist (list 1) sfx pool:*typ-note*)
       (setq ilist (list 0 1 2 3) sfx ""))
   (foreach i ilist
     (setq p (nth i quad)
@@ -8474,7 +8513,7 @@
       (setq cc (nth i corners))
       (pool:dimtreat1 (nth i ces) (car cc) (nth i arcs) (nth i pts)
                       (pool:unit (cal:v- (nth i pts) cen)) doff
-                      (if (and same (> (length g) 1)) " Typ." "")
+                      (if (and same (> (length g) 1)) pool:*typ-note* "")
                       (pool:polywedge pts i)))))
 
 ;; Re-draw the guide rectangle's corners with the chosen treatments so
@@ -16253,8 +16292,18 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092326 REV36")
+(setq spa:*version* "092426 REV37")
 
+;;; -------------------- shop terms --------------------------------------
+;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
+;;;  own way -- the knobs that read one say which.  The shop's spelling
+;;;  is the profile value CalofinTerm-<ID>, set from LAZTUNE's Terms
+;;;  page; with none, the shipped one.  Read as the file loads, so the
+;;;  reader sits here, ABOVE the knobs that call it (the grouped build
+;;;  takes it from CALOFIN-LIB.lsp as cal:term).  Only drawing text is
+;;;  ever a term: keywords and prompts are answered by forms, the
+;;;  palette and LAZDIAG's replays by their exact spelling.  The table
+;;;  of terms is tools/terms.py.
 ;;; -------------------- tunables ----------------------------------------
 ;;;
 ;;;  EVERY KNOB THIS TOOL HAS IS IN THIS BLOCK.  Each one is WRITTEN
@@ -16668,6 +16717,20 @@
 ;; and D with A's answer autofilling the rest.  A shop whose spas
 ;; differ corner to corner sets "No" and starts at corner A.
 (setq spa:*samecorners-default* "Yes")
+
+;;;  ...and the SHOP TERMS it writes into the drawing -- wording, not a
+;;;  size.  Each reads the shop's CalofinTerm-<ID> through the term
+;;;  reader above, so LAZTUNE's Terms page moves it in every tool that writes
+;;;  it at once; the literal is the shipped spelling, and a LAZTUNE
+;;;  value set on the knob itself still wins over the shop's.
+
+;; The suffix after the one corner or cut callout that stands for a
+;; group of equal ones.
+(setq spa:*typ-note* (cal:term "typ-note" " Typ."))
+
+;; The note on a corner the order sheet never gave, on the leader off
+;; its boxed "?".
+(setq spa:*ng-note* (cal:term "ng-note" "Not Given"))
 
 ;;; -------------------- run state (not tunables) ----------------------
 ;;;
@@ -19152,7 +19215,7 @@
   (command "_.LEADER"
            (spa:wp (cal:v+ p (cal:v* outd (* spa:*ng-lead* doff))))
            (spa:wp (cal:v+ p (cal:v* outd (* spa:*ng-off* doff))))
-           "" "Not Given" ""))
+           "" spa:*ng-note* ""))
 
 ;; One corner's callout, laid out the way POOL's rectangle does it
 ;; (pool:dimtreat1): the note sits OUTSIDE the corner, on the line out
@@ -19206,7 +19269,7 @@
 (defun spa:dimcornersat (quad corners cen doff ref inb / allsame i)
   (setq allsame (spa:samecorners corners))
   (foreach i (if allsame (list ref) (list 0 1 2 3))
-    (spa:dimcorner1 quad corners cen doff i (if allsame " Typ." "") inb))
+    (spa:dimcorner1 quad corners cen doff i (if allsame spa:*typ-note* "") inb))
   (princ))
 
 ;; The first outline's callouts: the Typ. one at the bottom-right (B),
@@ -19994,7 +20057,7 @@
   ;; the corner cut itself -- one callout on the bottom-right cut, Typ.
   ;; because all four cuts of an octagon are the same
   (setq p (nth 1 pts) q (nth 2 pts))
-  (spa:dimalg p q (spa:outoffp p q pts (* spa:*oct-off* doff)) " Typ.")
+  (spa:dimalg p q (spa:outoffp p q pts (* spa:*oct-off* doff)) spa:*typ-note*)
 
   ;; the second outline, in ITS dimension style, plus its cut face
   (if meth
@@ -20009,7 +20072,7 @@
             (spa:dimoveralls t (nth 7 pts2) (nth 2 pts2) (nth 0 pts2) (nth 5 pts2)
                              xlo yhi))
         (setq p (nth 5 pts2) q (nth 6 pts2))
-        (spa:dimalg p q (spa:outoffp p q pts2 (* spa:*oct-off* doff)) " Typ.")
+        (spa:dimalg p q (spa:outoffp p q pts2 (* spa:*oct-off* doff)) spa:*typ-note*)
         (spa:setmode mode1)
         ;; and how far the cover laps the water's edge, at the bottom
         (spa:dimstyle spa:*ds-cover* th 1.0)
@@ -52631,11 +52694,21 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v2.4")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v2.5")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
 
+;;; -------------------- shop terms --------------------------------------
+;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
+;;;  own way -- the knobs that read one say which.  The shop's spelling
+;;;  is the profile value CalofinTerm-<ID>, set from LAZTUNE's Terms
+;;;  page; with none, the shipped one.  Read as the file loads, so the
+;;;  reader sits here, ABOVE the knobs that call it (the grouped build
+;;;  takes it from CALOFIN-LIB.lsp as cal:term).  Only drawing text is
+;;;  ever a term: keywords and prompts are answered by forms, the
+;;;  palette and LAZDIAG's replays by their exact spelling.  The table
+;;;  of terms is tools/terms.py.
 ;;; ======================================================================
 ;;;  SETTINGS
 ;;;
@@ -52779,9 +52852,13 @@
 ;; A measurement that repeats around the perimeter is called out once,
 ;; on the first one found, and the rest are left to that note.
 
-(setq ad:*typ-note*   " Typ.")  ; appended to the one dim that stands
+(setq ad:*typ-note*   (cal:term "typ-note" " Typ."))
+                                ; appended to the one dim that stands
                                 ; for its group - the wording POOL.LSP
-                                ; already uses for the same job
+                                ; already uses for the same job.  A
+                                ; SHOP TERM: the shop's CalofinTerm-
+                                ; typ-note through the term reader
+                                ; above, which LAZTUNE's Terms page sets
 (setq ad:*typ-lines*  2)        ; equal straight sides it takes before
                                 ; one is noted and the rest left to it;
                                 ; below this count every one is
@@ -63617,6 +63694,20 @@
 ;;;     picks are always made by hand.
 ;;; ======================================================================
 
+;;; -------------------- shop terms --------------------------------------
+;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
+;;;  own way -- the knobs that read one say which.  The shop's spelling
+;;;  is the profile value CalofinTerm-<ID>, set from LAZTUNE's Terms
+;;;  page; with none, the shipped one.  Read as the file loads, so the
+;;;  reader sits here, ABOVE the knobs that call it (the grouped build
+;;;  takes it from CALOFIN-LIB.lsp as cal:term).  Only drawing text is
+;;;  ever a term: keywords and prompts are answered by forms, the
+;;;  palette and LAZDIAG's replays by their exact spelling.  The table
+;;;  of terms is tools/terms.py.
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+
 ;;; ------------------------------ SETTINGS ------------------------------
 ;;;  THE KNOBS, all of them, in one place.  Each is defined only if it
 ;;;  is not already set, so this file, CORNERSTP.lsp and HEMISTEP.lsp
@@ -63634,10 +63725,6 @@
 ;; you give, so this does not size a step: it is the slack the U mode
 ;; measures with, and *cs-join-fuzz* below is derived from it.
 ;; nil = derive it from *cs-tol-inch* through the drawing's INSUNITS.
-;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
-;;; Generic helpers live there under cal: - see STANDARDS.md.
-;;;
-
 (if (not (boundp '*cs-width-tol*)) (setq *cs-width-tol* nil))
 
 ;; What that tolerance is in INCHES when it is derived - the shop reads
@@ -63792,10 +63879,41 @@
 ;; beads the step faces and leaves the walls bare.
 (if (not (boundp '*cs-beadsides-default*)) (setq *cs-beadsides-default* "All"))
 
+;;; NORMIESTEP only: the SHOP TERMS it writes into the drawing --
+;;; wording, not a size.  Each reads the shop's CalofinTerm-<ID>
+;;; through the term reader above, so LAZTUNE's Terms page moves it in every
+;;; tool that writes it at once; the literal is the shipped spelling.
+
+;; NORMIESTEP only.  The suffix after the one corner mark that stands
+;; for the run's other corners.
+(if (not (boundp '*cs-typ-note*)) (setq *cs-typ-note* (cal:term "typ-note" " Typ.")))
+
+;; NORMIESTEP only.  The note on a corner the order sheet
+;; never gave, on the leader off its boxed "?".
+(if (not (boundp '*cs-ng-note*)) (setq *cs-ng-note* (cal:term "ng-note" "Not Given")))
+
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.21") ; printed on load and at command start so a
+(setq *ns-version* "v3.22") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
+
+;;; ------------------------- shop terms, re-read ------------------------
+;;
+;; A re-APPLOAD re-reads the shop's terms, as every tool with a bare
+;; setq does.  The boundp guard on the two term knobs above keeps what
+;; was there before this load -- right for a setting a sibling step
+;; file declared, wrong for a term, whose old value is usually only the
+;; spelling the LAST load read: a CalofinTerm- changed since would be
+;; passed by until a LAZTUNE Terms change pushed it.  So a term knob
+;; still holding what the last load read reads the profile again; one
+;; holding anything else -- a value of the drafter's own -- is left.
+;; *ns-term-read* is that record, by term id; nil before the first load.
+(if (equal *cs-typ-note* (cdr (assoc "typ-note" *ns-term-read*)))
+  (setq *cs-typ-note* (cal:term "typ-note" " Typ.")))
+(if (equal *cs-ng-note* (cdr (assoc "ng-note" *ns-term-read*)))
+  (setq *cs-ng-note* (cal:term "ng-note" "Not Given")))
+(setq *ns-term-read* (list (cons "typ-note" *cs-typ-note*)
+                           (cons "ng-note" *cs-ng-note*)))
 
 ;;; ------------------------- vector helpers -----------------------------
 
@@ -64185,6 +64303,14 @@
 ;; the tblsearch behind it.
 (defun ns-name (v dflt) (if (= (type v) 'STR) v dflt))
 
+;; The two SHOP TERMS NORMIESTEP writes into the drawing, read through
+;; ns-name like every other name setting: a knob that is not text --
+;; the T this family's settings test puts in every knob -- draws the
+;; term as the profile or the shipped wording has it, never a strcat
+;; error half way through the marks.
+(defun ns-typnote () (ns-name *cs-typ-note* (cal:term "typ-note" " Typ.")))
+(defun ns-ngnote () (ns-name *cs-ng-note* (cal:term "ng-note" "Not Given")))
+
 ;; A setting NAME as a note says it back: quoted when it is one, and
 ;; named for what it is when it is not - a note that quotes T as a name
 ;; reads like a layer somebody forgot to make, rather than a setting
@@ -64497,7 +64623,7 @@
   (command "_.LEADER"
            "_non" (trans (ns-add pt (ns-scl outd (* 8.4 r))) 0 1)
            "_non" (trans (ns-add pt (ns-scl outd (* 11.4 r))) 0 1)
-           "" "Not Given" "")
+           "" (ns-ngnote) "")
   (if oldl (setvar "CLAYER" oldl)))
 
 ;; entities created since MARK (nil = since the drawing was empty)
@@ -65457,7 +65583,7 @@
         (progn
           (setq mcs  (ns-markpts mode sp u dir wid cum corner lastinn
                                  base arm1 arm2)
-                msfx (if (cdr mcs) " Typ." "")
+                msfx (if (cdr mcs) (ns-typnote) "")
                 mc   nil)
           (foreach m mcs
             (if (and (null mc) (or (= rtype "NotGiven") (caddr m)))
@@ -106586,10 +106712,20 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.9")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.10")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
+;;; -------------------- shop terms --------------------------------------
+;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
+;;;  own way -- the knobs that read one say which.  The shop's spelling
+;;;  is the profile value CalofinTerm-<ID>, set from LAZTUNE's Terms
+;;;  page; with none, the shipped one.  Read as the file loads, so the
+;;;  reader sits here, ABOVE the knobs that call it (the grouped build
+;;;  takes it from CALOFIN-LIB.lsp as cal:term).  Only drawing text is
+;;;  ever a term: keywords and prompts are answered by forms, the
+;;;  palette and LAZDIAG's replays by their exact spelling.  The table
+;;;  of terms is tools/terms.py.
 ;;; -------------------- tunables ------------------------------------
 
 (setq sf:*first*      6.0)   ; the smallest radius offered, and the step
@@ -106670,6 +106806,16 @@
 (setq sf:*typ*        t)
 (setq sf:*minang*     0.02)  ; how far off straight (radians) two legs
                              ; must be before there is a corner at all
+
+;;;  ...and the SHOP TERMS it writes into the drawing -- wording, not a
+;;;  size.  Each reads the shop's CalofinTerm-<ID> through the term
+;;;  reader above, so LAZTUNE's Terms page moves it in every tool that writes
+;;;  it at once; the literal is the shipped spelling, and a LAZTUNE
+;;;  value set on the knob itself still wins over the shop's.
+
+;; The suffix after the one radius callout that stands for its
+;; repeats -- the callout reads "<>" and then this.
+(setq sf:*typ-note* (cal:term "typ-note" " Typ."))
 
 ;;; -------------------- run-time state -------------------------------
 ;;; Not knobs: what a run keeps while it runs, ruled off from the block
@@ -107298,8 +107444,8 @@
   (if (and dim (setq ed (entget dim)))
     (progn
       (setq ed (if (assoc 1 ed)
-                 (subst (cons 1 "<> Typ.") (assoc 1 ed) ed)
-                 (append ed (list (cons 1 "<> Typ.")))))
+                 (subst (cons 1 (strcat "<>" sf:*typ-note*)) (assoc 1 ed) ed)
+                 (append ed (list (cons 1 (strcat "<>" sf:*typ-note*))))))
       (entmod ed)
       (entupd dim))))
 
@@ -107498,7 +107644,10 @@
                        (if (= 1 made) "" "s") " filleted at "
                        (sf:rlabel r)
                        (if (and sf:*typ* (> made 1) dim1)
-                         " -- the one dimension now reads Typ."
+                         (strcat " -- the one dimension now reads "
+                                 ;; one space, whether or not the
+                                 ;; shop's term begins with one
+                                 (vl-string-trim " " sf:*typ-note*))
                          "")
                        "."))))
 
@@ -107715,10 +107864,20 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *honefillet-version* "v1.7")  ; announced on load; release_lisp.py
+(setq *honefillet-version* "v1.8")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
+;;; -------------------- shop terms --------------------------------------
+;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
+;;;  own way -- the knobs that read one say which.  The shop's spelling
+;;;  is the profile value CalofinTerm-<ID>, set from LAZTUNE's Terms
+;;;  page; with none, the shipped one.  Read as the file loads, so the
+;;;  reader sits here, ABOVE the knobs that call it (the grouped build
+;;;  takes it from CALOFIN-LIB.lsp as cal:term).  Only drawing text is
+;;;  ever a term: keywords and prompts are answered by forms, the
+;;;  palette and LAZDIAG's replays by their exact spelling.  The table
+;;;  of terms is tools/terms.py.
 ;;; -------------------- tunables ------------------------------------
 
 (setq hn:*first*      6.0)   ; the smallest radius in the COARSE fan --
@@ -107815,6 +107974,16 @@
 (setq hn:*typ*        t)
 (setq hn:*minang*     0.02)  ; how far off straight (radians) two legs
                              ; must be before there is a corner at all
+
+;;;  ...and the SHOP TERMS it writes into the drawing -- wording, not a
+;;;  size.  Each reads the shop's CalofinTerm-<ID> through the term
+;;;  reader above, so LAZTUNE's Terms page moves it in every tool that writes
+;;;  it at once; the literal is the shipped spelling, and a LAZTUNE
+;;;  value set on the knob itself still wins over the shop's.
+
+;; The suffix after the one radius callout that stands for its
+;; repeats -- the callout reads "<>" and then this.
+(setq hn:*typ-note* (cal:term "typ-note" " Typ."))
 
 ;;; -------------------- run-time state -------------------------------
 ;;; Not knobs: what a run keeps while it runs, ruled off from the block
@@ -108508,8 +108677,8 @@
   (if (and dim (setq ed (entget dim)))
     (progn
       (setq ed (if (assoc 1 ed)
-                 (subst (cons 1 "<> Typ.") (assoc 1 ed) ed)
-                 (append ed (list (cons 1 "<> Typ.")))))
+                 (subst (cons 1 (strcat "<>" hn:*typ-note*)) (assoc 1 ed) ed)
+                 (append ed (list (cons 1 (strcat "<>" hn:*typ-note*))))))
       (entmod ed)
       (entupd dim))))
 
@@ -108739,7 +108908,10 @@
                        (if (= 1 made) "" "s") " filleted at "
                        (hn:rlabel r)
                        (if (and hn:*typ* (> made 1) dim1)
-                         " -- the one dimension now reads Typ."
+                         (strcat " -- the one dimension now reads "
+                                 ;; one space, whether or not the
+                                 ;; shop's term begins with one
+                                 (vl-string-trim " " hn:*typ-note*))
                          "")
                        "."))))
 
@@ -128322,7 +128494,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.62")
+(setq *lazpanel-version* "v3.63")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -133028,7 +133200,7 @@
      ("ad:*band-feet*" "1.0" "two dims across the same two points are the same dim when their dimension lines are within this of each oth...")
      ("ad:*angle-tol*" "1e-3" "RADIANS: two lines within this of parallel are parallel (finding the treads), and a line within this of hor...")
      ("ad:*merge-tol*" "1e-4" "DRAWING UNITS: two points closer than this are one. Break points on a floor dims line are merged by it so n...")
-     ("ad:*typ-note*" "\" Typ.\"" "appended to the one dim that stands for its group - the wording POOL.LSP already uses for the same job")
+     ("ad:*typ-note*" "\" Typ.\"" "appended to the one dim that stands for its group - the wording POOL.LSP already uses for the same job. A S...")
      ("ad:*typ-lines*" "2" "equal straight sides it takes before one is noted and the rest left to it; below this count every one is di...")
      ("ad:*typ-curves*" "4" "the same for equal radii. Higher than the sides on purpose: a pair or a trio of matching curves reads bette...")
      ("ad:*typ-default*" "\"Typ\"" "the Enter answer at the question AUTODIM puts before it dimensions the perimeter: \"Typ\" notes a repeated si...")
@@ -133248,7 +133420,9 @@
      ("*cs-mark-r*" "0.5" "Radius of the circle that mark is drawn on, in TEXT HEIGHTS - so it tracks DIMSCALE (or the annotation scal...")
      ("*cs-sq90-deg*" "20.0" "How far off 90 a corner may sit, in DEGREES, and still be marked \"90%%d\". The mark ASSERTS a right angle, s...")
      ("*cs-treat-default*" "\"Square\"" "NORMIESTEP only. What the FIRST corner-treatment question offers on Enter - one of \"Square\", \"Radius\", \"Cut...")
-     ("*cs-cut-given-default*" "\"Offset\"" "NORMIESTEP only. Which of a Cut corner's two sizes Enter asks for: the \"Offset\" back along each line, or th..."))
+     ("*cs-cut-given-default*" "\"Offset\"" "NORMIESTEP only. Which of a Cut corner's two sizes Enter asks for: the \"Offset\" back along each line, or th...")
+     ("*cs-typ-note*" "\" Typ.\"" "NORMIESTEP only. The suffix after the one corner mark that stands for the run's other corners.")
+     ("*cs-ng-note*" "\"Not Given\"" "NORMIESTEP only. The note on a corner the order sheet never gave, on the leader off its boxed \"?\"."))
     ("COVERCHECK" "lisp/covercheck/covercheck.lsp"
      ("*cchk-pool-layer*" "\"POOL\"" "The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these ar...")
      ("*cchk-cover-layer*" "\"COVER\"" "The pool outline and, when one is drawn, the cover. Both are read for their ByLayer properties, so these ar...")
@@ -133509,7 +133683,8 @@
      ("hn:*dimoff*" "nil" "nil = one radius past the arc matches the dims beside it")
      ("hn:*dimrepeat*" "nil" "one callout plus \"Typ.\" is how the sheet reads; set T to dimension every corner matches the dims beside it")
      ("hn:*typ*" "t" "reads; set T to dimension every corner")
-     ("hn:*minang*" "0.02" "how far off straight (radians) two legs must be before there is a corner at all reads; set T to dimension e..."))
+     ("hn:*minang*" "0.02" "how far off straight (radians) two legs must be before there is a corner at all reads; set T to dimension e...")
+     ("hn:*typ-note*" "\" Typ.\"" "The suffix after the one radius callout that stands for its repeats -- the callout reads \"<>\" and then this."))
     ("LAZDIAG" "lisp/lazdiag/LAZDIAG.lsp"
      ("lzd:*max-ents*" "400" "How many entities a report will copy. A run that drew ten thousand things before falling over is a real fai...")
      ("lzd:*max-log*" "200" "How many transcript lines are kept. A tutorial loop can princ for ever; the last 200 lines are the ones tha...")
@@ -134013,7 +134188,9 @@
      ("pool:*wallheight-ladder*" "'(36.0 54.0 3.0)" "C, the shallow depth ...and the three the DEPTH chain stands on. A pool's depths are as short a list as its...")
      ("pool:*deepdepth-ladder*" "'(60.0 96.0 6.0)" "D, the deep end ...and the three the DEPTH chain stands on. A pool's depths are as short a list as its corn...")
      ("pool:*breakdepth-ladder*" "'(36.0 96.0 6.0)" "C2, between the two ...and the three the DEPTH chain stands on. A pool's depths are as short a list as its...")
-     ("pool:*hopoffset-ladder*" "'(24.0 72.0 6.0)" "...and the one the HOPPER OFFSETS stand on: M and K, the gap the hopper leaves to the top side and to the b..."))
+     ("pool:*hopoffset-ladder*" "'(24.0 72.0 6.0)" "...and the one the HOPPER OFFSETS stand on: M and K, the gap the hopper leaves to the top side and to the b...")
+     ("pool:*typ-note*" "\" Typ.\"" "The suffix after the one corner callout that stands for a group of equal corners -- \"?\" and \"90%%d\" marks i...")
+     ("pool:*ng-note*" "\"Not Given\"" "The note on a corner the order sheet never gave: on the leader off its boxed \"?\", and under its row in the..."))
     ("POOLSIDE" "lisp/poolside/POOLSIDE.lsp"
      ("psd:*base*" "(list 0.0 0.0)" "insertion base for this run")
      ("psd:*pv-col*" "'auto" "guide outline color: 'auto picks it for the background (grey either way round), a number is used as given")
@@ -134059,7 +134236,8 @@
      ("sf:*dimoff*" "nil" "nil = one radius past the arc matches the dims beside it")
      ("sf:*dimrepeat*" "nil" "one callout plus \"Typ.\" is how the sheet reads; set T to dimension every corner matches the dims beside it")
      ("sf:*typ*" "t" "reads; set T to dimension every corner")
-     ("sf:*minang*" "0.02" "how far off straight (radians) two legs must be before there is a corner at all reads; set T to dimension e..."))
+     ("sf:*minang*" "0.02" "how far off straight (radians) two legs must be before there is a corner at all reads; set T to dimension e...")
+     ("sf:*typ-note*" "\" Typ.\"" "The suffix after the one radius callout that stands for its repeats -- the callout reads \"<>\" and then this."))
     ("SOCONV" "lisp/soconv/SOCONV.lsp"
      ("*soconv-map*" "'((\"Pool Perimeter\" \"*\" \"POOL\") (\"Obstacles\" \"*\" \"POOL\") (\"LEICA_DISTO_POINT_ENTITY\" \"POINT\" \"POINTS\") (\"Existing Anchorss\" \"POINT\" \"POINTS\") (\"Existing Anchors\" \"POINT\" \"POINTS\") (\"Dimensions\" \"TEXT,MTEXT\" \"TEXT\") (\"Dimensions\" \"*\" \"DIMENSION\"))" "The conversion itself, one row per rule: (source-layer entity-types destination-layer) Both patterns are wc...")
      ("*soconv-colors*" "'((\"POOL\" . 4) ; cyan, as POOL.LSP creates it (\"POINTS\" . 6) ; magenta - the pink survey points read as (\"TEXT\" . 4) (\"DIMENSION\" . 141))" "What to CREATE a destination layer with when the drawing has not got it. An existing layer is never recolou...")
@@ -134174,7 +134352,9 @@
      ("spa:*spillloc-default*" "\"Wall\"" "What Enter means at a spillway's location -- \"Wall\" centres it on a wall and asks which wall, \"Corner\" asks...")
      ("spa:*autohinge-default*" "\"Yes\"" "What Enter means at \"Auto-hinge the cover\" -- \"Yes\" goes on to the spillways and lays the fold hinges out i...")
      ("spa:*treat-default*" "\"\"" "What the FIRST corner's treatment question offers on Enter, before there is a previous answer to reuse: \"\"...")
-     ("spa:*samecorners-default*" "\"Yes\"" "What Enter means at \"Are all four corners the same?\" -- \"Yes\" buys ONE round of treatment questions for all..."))
+     ("spa:*samecorners-default*" "\"Yes\"" "What Enter means at \"Are all four corners the same?\" -- \"Yes\" buys ONE round of treatment questions for all...")
+     ("spa:*typ-note*" "\" Typ.\"" "The suffix after the one corner or cut callout that stands for a group of equal ones.")
+     ("spa:*ng-note*" "\"Not Given\"" "The note on a corner the order sheet never gave, on the leader off its boxed \"?\"."))
     ("SPACHECK" "lisp/spacheck/SPACHECK.lsp"
      ("spachk:*lay-cover*" "\"COVER\"" "the cover outline and the hinges Layers SPA draws on -- the audit is only as right as these are.")
      ("spachk:*lay-water*" "\"POOL\"" "the water's edge outline Layers SPA draws on -- the audit is only as right as these are.")
@@ -134402,6 +134582,8 @@
 ;; decision; LAZTUNE's "Set everywhere" writes the lot.
 (setq lzp:*knobfam*
   '(
+    ("term:typ-note" ("pool:*typ-note*" "spa:*typ-note*" "*cs-typ-note*" "hn:*typ-note*" "sf:*typ-note*" "ad:*typ-note*"))
+    ("term:ng-note" ("pool:*ng-note*" "spa:*ng-note*" "*cs-ng-note*"))
     ("advice-color" ("abp:*advice-color*" "spachk:*advice-color*"))
     ("align" ("*mohamaddle-align*" "*paddle-align*"))
     ("anchor-min" ("*cfchk-anchor-min*" "*cchk-anchor-min*" "*dchk-anchor-min*" "*lfc-anchor-min*"))
@@ -134657,6 +134839,17 @@
     ("zoom-margin" ("*cchk-zoom-margin*" "*dchk-zoom-margin*" "*lfc-zoom-margin*" "spachk:*zoom-margin*"))
     ("zoom-out" ("*cchk-zoom-out*" "*dchk-zoom-out*" "*lfc-zoom-out*"))
    ))
+
+;; The SHOP TERMS: drawing text a shop may spell its own way, from
+;; tools/terms.py -- (ID DEFAULT MEANING (MEMBER-KNOB ...)).  LAZTUNE's
+;; Terms page lists these and writes CalofinTerm-<ID>.
+(setq lzp:*terms*
+  '(
+    ("typ-note" " Typ." "the suffix on the one dimension that stands for a group of equal ones"
+     ("pool:*typ-note*" "spa:*typ-note*" "*cs-typ-note*" "hn:*typ-note*" "sf:*typ-note*" "ad:*typ-note*"))
+    ("ng-note" "Not Given" "the note on a corner the order sheet never gave"
+     ("pool:*ng-note*" "spa:*ng-note*" "*cs-ng-note*"))
+   ))
 ;;; <<< lzp:*knobs*
 
 ;;; -------------------- carrying it with you -----------------------------
@@ -134694,7 +134887,7 @@
 ;; overrides are skipped in Alias/Caption, the same convention
 ;; lzp:kv-write already keeps for the registry copy; a Settings key is
 ;; written even when empty, because empty there is Auto, a real answer.
-(defun lzp:backup-writebody (fh / p k na nc)
+(defun lzp:backup-writebody (fh / p k na nc nt r v)
   (setq na 0 nc 0)
   (write-line (strcat lzp:*backup-header* " -- " *lazpanel-version*) fh)
   (write-line "[Alias]" fh)
@@ -134711,7 +134904,14 @@
   ;; set: the text they typed, exactly as the profile holds it
   (write-line "[Knobs]" fh)
   (foreach k (lzp:knob-index) (write-line (strcat k "=" (lzp:knob-get k)) fh))
-  (list na nc (length (lzp:backup-keys)) (length (lzp:knob-index))))
+  ;; ...and the shop's own wording, one line per term it has spelt
+  ;; (CalofinTerm-<id>), exactly as typed -- a leading space included
+  (setq nt 0)
+  (write-line "[Terms]" fh)
+  (foreach r lzp:*terms*
+    (if (setq v (lzp:term-get (car r)))
+      (progn (write-line (strcat (car r) "=" v) fh) (setq nt (1+ nt)))))
+  (list na nc (length (lzp:backup-keys)) (length (lzp:knob-index)) nt))
 
 ;; The file a typed answer names, as a FULL path.  A bare name used to
 ;; be opened as typed, so it landed in whatever folder AutoCAD's
@@ -134768,6 +134968,10 @@
                    (if (= (caddr counts) 1) "" "s") " and "
                    (itoa (cadddr counts)) " default"
                    (if (= (cadddr counts) 1) "" "s")
+                   (if (and (nth 4 counts) (> (nth 4 counts) 0))
+                     (strcat " (and " (itoa (nth 4 counts)) " shop term"
+                             (if (= (nth 4 counts) 1) "" "s") ")")
+                     "")
                    " of yours to " full "."))
     (princ (strcat "\nCould not write " full "."))))
 
@@ -134822,6 +135026,7 @@
        (t (setq lzp:*capsof* (lzp:put-pair key val lzp:*capsof*)) "")))
     ((= section "Settings") (lzp:backup-apply-setting key val))
     ((= section "Knobs") (lzp:knob-import key val))
+    ((= section "Terms") (lzp:term-import key val))
     (t (strcat key "=" val " (not inside a known section)"))))
 
 ;; Read every line, section by section, applying as it goes -- under
@@ -134940,6 +135145,12 @@
 (setq lzp:*tunetool* nil)         ; which tool the dropdown is on
 (setq lzp:*tunesel* nil)          ; the highlighted knob's name
 (setq lzp:*tunenames* nil)        ; the names on the list, in row order
+(setq lzp:*termvals* nil)         ; pending terms: (id . text), nil = Alec's
+
+;; The dropdown's last entry is not a tool: it is the Terms page, the
+;; shop's own wording for text the tools write into the drawing.
+;; NOT A KNOB: the label of a dropdown entry the code tests by position.
+(setq lzp:*tune-termlabel* "Terms (drawing wording)")
 
 (defun lzp:knobkey (sym)
   (strcat "CalofinKnob-" (vl-string-translate ":*" ".~" sym)))
@@ -135083,7 +135294,9 @@
     ((not (setq p (lzp:knob-parse text)))
      "not a value: a number, \"a string\", 'a-symbol or '(a list)")
     ((not (setq s (lzp:knob-shipped sym))) nil)
-    (t (lzp:knob-typewhy (cadr s) (cadr p)))))
+    ((lzp:knob-typewhy (cadr s) (cadr p)))
+    ;; a member of a shop term is that term's wording, with its rules
+    ((if (lzp:knob-termid sym) (lzp:term-why (cadr p))))))
 
 ;; TEXT as the value to put in SYM's global: parsed, and widened to a
 ;; real where Alec's choice is one.
@@ -135094,9 +135307,14 @@
 (defun lzp:knob-apply (sym value)
   (vl-catch-all-apply 'eval (list (list 'setq (read sym) (list 'quote value)))))
 
-;; Alec's choice, put back into this session's global.
-(defun lzp:knob-restore (sym / s)
-  (if (setq s (lzp:knob-shipped sym)) (lzp:knob-apply sym (cadr s))))
+;; Alec's choice, put back into this session's global -- or, for a
+;; knob that is a member of a SHOP TERM, the shop's spelling of it:
+;; the per-tool value was the only thing standing over the term, so
+;; taking it away hands the knob back to the term, not past it.
+(defun lzp:knob-restore (sym / s id)
+  (cond
+    ((setq id (lzp:knob-termid sym)) (lzp:knob-apply sym (lzp:term-value id)))
+    ((setq s (lzp:knob-shipped sym)) (lzp:knob-apply sym (cadr s)))))
 
 ;; Every stored override, applied to this session.  How many took.
 (defun lzp:knobs-apply ( / n k v)
@@ -135113,6 +135331,136 @@
   (cond
     ((setq why (lzp:knob-why sym text)) (strcat sym "=" text " (" why ")"))
     (t (lzp:knob-set sym text) "")))
+
+;; ---- shop terms
+;;
+;;  A SHOP TERM is wording a tool writes INTO THE DRAWING that the shop
+;;  may spell its own way -- " Typ." after the one dimension that stands
+;;  for a group, "Not Given" on a corner the order sheet never gave.  It
+;;  is a NAMED GROUP OF KNOBS: every tool that writes the wording has a
+;;  knob for it, read from the profile's CalofinTerm-<ID> through the
+;;  tool's own term reader as the file loads.  lzp:*terms* (generated
+;;  from tools/terms.py) says which knobs are one term.
+;;
+;;  PRECEDENCE: the shipped spelling, under the shop's CalofinTerm-<ID>,
+;;  under a value set on one member knob in LAZTUNE (lzp:knobs-apply
+;;  puts that back over the term at every panel open).  Setting a term
+;;  here writes the profile and moves every member knob loaded in this
+;;  session at once -- all but one the drafter has set for themselves.
+;;
+;;  Only drawing text is ever a term.  Keywords and prompt wording are
+;;  not, and cannot be made so: LAZFORM, LAZSPA, LAZSTEP, the palette
+;;  and LAZDIAG's replays answer a prompt by its exact spelling.
+
+(defun lzp:termkey (id) (strcat "CalofinTerm-" id))
+
+;; The lzp:*terms* row for ID -- (ID DEFAULT MEANING (MEMBER ...)) --
+;; or nil for a term this build does not have.
+(defun lzp:term-row (id / r out)
+  (foreach r lzp:*terms* (if (= (car r) id) (setq out r)))
+  out)
+
+;; The term SYM is a member of, or nil.
+(defun lzp:knob-termid (sym / r out)
+  (foreach r lzp:*terms* (if (member sym (cadddr r)) (setq out (car r))))
+  out)
+
+;; The shop's spelling, or nil when it has none.  Read RAW, not through
+;; lzp:profread: that trims, and " Typ." begins with its space.
+(defun lzp:term-get (id / v)
+  (setq v (getenv (lzp:termkey id)))
+  (if (and v (/= v "")) v))
+
+;; What the term reads as now: the shop's spelling, else the shipped.
+(defun lzp:term-value (id / r)
+  (cond ((lzp:term-get id))
+        ((setq r (lzp:term-row id)) (cadr r))))
+
+;; Why TEXT cannot be a term's spelling, or nil when it can.  A label
+;; is written into the drawing as typed, so it takes any plain text --
+;; but not none (a callout with its note gone), and not the few
+;; characters the two places it lands read as CODES rather than text:
+;; every typ-note site is dimension text, where <> is the measurement
+;; a second time, and ng-note is written both as a LEADER's MTEXT and
+;; as a plain TEXT entity (POOL's report table), where \P, \L and { }
+;; are formatting in the one and printed as typed in the other -- so
+;; one shop spelling would come out two ways on one sheet.
+(defun lzp:term-why (text)
+  (cond
+    ((/= (type text) 'STR) "not text")
+    ((= (vl-string-trim " \t" text) "")
+     "a term cannot be empty -- Alec's choice puts the shipped wording back")
+    ((vl-string-search "<>" text)
+     "no <> in a term -- a dimension reads it as the measurement, drawn twice")
+    ((or (vl-string-search "\\" text) (vl-string-search "{" text)
+         (vl-string-search "}" text))
+     (strcat "no \\ or { } in a term -- MTEXT reads them as formatting codes"
+             " and a TEXT entity prints them, so it would be drawn two ways"))))
+
+;; Every member knob of ID loaded in this session takes the term's
+;; value now -- except one the drafter has set in LAZTUNE, which wins.
+;; How many moved.
+(defun lzp:term-push (id / r v m n)
+  (setq r (lzp:term-row id) v (lzp:term-value id) n 0)
+  (if r
+    (foreach m (cadddr r)
+      (if (and (boundp (read m)) (not (lzp:knob-get m)))
+        (progn (lzp:knob-apply m v) (setq n (1+ n))))))
+  n)
+
+;; The tools whose member knob of ID keeps a value of its own -- set
+;; on the knob in LAZTUNE, stored or pending in the dialog -- and so
+;; does NOT follow the term.  Named, for the Terms page's state line and
+;; the report, because a Terms change that moves five tools of six
+;; says so rather than "every tool".
+(defun lzp:term-held (id / r m p t2 out)
+  (if (setq r (lzp:term-row id))
+    (foreach m (cadddr r)
+      (setq p (assoc m lzp:*tunevals*))
+      (if (and (if p (/= (cdr p) "") (lzp:knob-get m))
+               (setq t2 (lzp:knob-tool m)) (not (member t2 out)))
+        (setq out (append out (list t2))))))
+  out)
+
+;; "..., except POOL and SPA, which keep a value set on their own knob"
+;; -- or "" when every member follows.
+(defun lzp:term-heldwords (held)
+  (if held
+    (strcat ", except " (lzp:commajoin held nil)
+            (if (cdr held)
+              ", which keep a value set on their own knob"
+              ", which keeps a value set on its own knob")
+            " (Set everywhere there hands it back)")
+    ""))
+
+;; Set ID's spelling to TEXT: the profile, then this session.  The
+;; number of member knobs moved, or the reason as a string.
+(defun lzp:term-set (id text / why)
+  (cond
+    ((not (lzp:term-row id)) "not a term this build has")
+    ((setq why (lzp:term-why text)) why)
+    (t (setenv (lzp:termkey id) text) (lzp:term-push id))))
+
+;; Back to the shipped spelling, in the profile and this session.
+(defun lzp:term-clear (id)
+  (setenv (lzp:termkey id) "")
+  (lzp:term-push id))
+
+;; One imported line of LAZBACKUP's [Terms] section: "" when applied,
+;; else the reason, the shape lzp:knob-import answers in.
+(defun lzp:term-import (id text / why)
+  (cond
+    ((not (lzp:term-row id)) (strcat id "=" text " (not a term this build has)"))
+    ((setq why (lzp:term-why text)) (strcat id "=" text " (" why ")"))
+    (t (lzp:term-set id text) "")))
+
+;; The tools that write ID, named, for the dialog's meaning line.
+(defun lzp:term-tools (id / r m t2 out)
+  (if (setq r (lzp:term-row id))
+    (foreach m (cadddr r)
+      (if (and (setq t2 (lzp:knob-tool m)) (not (member t2 out)))
+        (setq out (append out (list t2))))))
+  (lzp:commajoin out nil))
 
 ;; ---- the dialog
 
@@ -135146,6 +135494,41 @@
 ;; What the list shows and the box holds for SYM: the pending answer,
 ;; else the stored override, else Alec's choice -- and whether it is
 ;; the drafter's own.  (text yours-p)
+(defun lzp:tune-terms-p ()
+  (and lzp:*tunetool* (= lzp:*tunetool* (length lzp:*knobs*))))
+
+;; A term's text as the list shows it: quoted, so a leading space --
+;; " Typ." has one -- can be seen.
+(defun lzp:term-q (s) (strcat "\"" s "\""))
+
+;; What the Terms page shows and the box holds for ID: the pending
+;; answer, else the shop's, else Alec's choice.  (text yours-p)
+(defun lzp:term-text (id / p v r)
+  (setq r (lzp:term-row id))
+  (cond
+    ((setq p (assoc id lzp:*termvals*))
+     (if (null (cdr p)) (list (cadr r) nil) (list (cdr p) t)))
+    ((setq v (lzp:term-get id)) (list v t))
+    (t (list (cadr r) nil))))
+
+(defun lzp:term-listrow (id / r tx)
+  (setq r (lzp:term-row id) tx (lzp:term-text id))
+  (strcat id "  =  " (lzp:term-q (car tx))
+          (if (cadr tx) (strcat "   (the shop's; Alec's choice "
+                                (lzp:term-q (cadr r)) ")") "")
+          "   -  " (lzp:trunc (caddr r) 60)))
+
+(defun lzp:term-put (id text)
+  (setq lzp:*termvals*
+        (cons (cons id text)
+              (vl-remove (assoc id lzp:*termvals*) lzp:*termvals*))))
+
+;; The pending terms that will not be written: ids, in order.
+(defun lzp:term-bad ( / p out)
+  (foreach p lzp:*termvals*
+    (if (and (cdr p) (lzp:term-why (cdr p))) (setq out (cons (car p) out))))
+  (reverse out))
+
 (defun lzp:tune-text (sym / p v e)
   (setq e (lzp:knob-entry sym))
   (cond
@@ -135179,12 +135562,30 @@
 ;; The state line, and OK with it -- greyed while a pending answer
 ;; will not read, and re-checked at OK (lzp:tune-ok) as every other
 ;; editor here does.
-(defun lzp:tune-state ( / bad tx e kin)
-  (setq bad (lzp:tune-bad))
+(defun lzp:tune-state ( / bad tbad tx e kin held)
+  (setq bad (lzp:tune-bad) tbad (lzp:term-bad))
   (lzp:settile "state"
     (cond
       (bad (strcat (car bad) ": "
                    (lzp:knob-why (car bad) (cdr (assoc (car bad) lzp:*tunevals*)))))
+      (tbad (strcat (car tbad) ": "
+                    (lzp:term-why (cdr (assoc (car tbad) lzp:*termvals*)))))
+      ((and (lzp:tune-terms-p) lzp:*tunesel* (lzp:term-row lzp:*tunesel*))
+       (setq tx (lzp:term-text lzp:*tunesel*)
+             held (lzp:term-held lzp:*tunesel*))
+       (cond
+         (held
+          (strcat (if (cadr tx) "The shop's" "Alec's choice")
+                  " -- every tool that writes it follows"
+                  (lzp:term-heldwords held)))
+         ((cadr tx)
+          (strcat "The shop's -- Alec's choice is "
+                  (lzp:term-q (cadr (lzp:term-row lzp:*tunesel*)))
+                  ".  OK keeps it in your AutoCAD profile and every tool"
+                  " that writes it follows now"))
+         (t
+          (strcat "Alec's choice -- type the shop's own wording (any text,"
+                  " spaces kept); OK writes it into every tool that uses it"))))
       ((and lzp:*tunesel* (setq e (lzp:knob-entry lzp:*tunesel*)))
        (setq tx (lzp:tune-text lzp:*tunesel*))
        (setq kin (lzp:knob-kin lzp:*tunesel*))
@@ -135196,13 +135597,20 @@
                    " OK keeps yours in your AutoCAD profile"))
          (if kin (strcat ".  Also in " (lzp:knob-kinwords kin)) "")))
       (t "")))
-  (lzp:setmode "accept" (if bad 1 0))
+  (lzp:setmode "accept" (if (or bad tbad) 1 0))
+  ;; a term already reaches every tool that writes it
   (lzp:setmode "tune_all"
-               (if (and lzp:*tunesel* (lzp:knob-kin lzp:*tunesel*)) 0 1))
+               (if (and (not (lzp:tune-terms-p))
+                        lzp:*tunesel* (lzp:knob-kin lzp:*tunesel*)) 0 1))
   (princ))
 
 (defun lzp:tune-show ( / e tx)
   (cond
+    ((and (lzp:tune-terms-p) lzp:*tunesel* (setq e (lzp:term-row lzp:*tunesel*)))
+     (lzp:settile "tune_val" (car (lzp:term-text lzp:*tunesel*)))
+     (lzp:settile "tune_meaning"
+                  (strcat lzp:*tunesel* ": " (caddr e) " -- written by "
+                          (lzp:term-tools lzp:*tunesel*))))
     ((and lzp:*tunesel* (setq e (lzp:knob-entry lzp:*tunesel*)))
      (setq tx (lzp:tune-text lzp:*tunesel*))
      (lzp:settile "tune_val" (car tx))
@@ -135213,11 +135621,17 @@
 ;; The list for the tool the dropdown is on, keeping the highlight
 ;; where it was or putting it on the first row.
 (defun lzp:tune-refill ( / tl e i sel)
-  (setq tl (nth lzp:*tunetool* lzp:*knobs*) lzp:*tunenames* nil)
+  (setq lzp:*tunenames* nil)
   (start_list "tune_list")
-  (foreach e (cddr tl)
-    (add_list (lzp:tune-row (car e)))
-    (setq lzp:*tunenames* (append lzp:*tunenames* (list (car e)))))
+  (if (lzp:tune-terms-p)
+    (foreach e lzp:*terms*
+      (add_list (lzp:term-listrow (car e)))
+      (setq lzp:*tunenames* (append lzp:*tunenames* (list (car e)))))
+    (progn
+      (setq tl (nth lzp:*tunetool* lzp:*knobs*))
+      (foreach e (cddr tl)
+        (add_list (lzp:tune-row (car e)))
+        (setq lzp:*tunenames* (append lzp:*tunenames* (list (car e)))))))
   (end_list)
   (setq i 0 sel 0)
   (foreach e lzp:*tunenames*
@@ -135241,12 +135655,19 @@
 ;; back to Alec's choice; anything else is kept as typed and checked,
 ;; and OK is greyed while it will not read.
 (defun lzp:tune-val (v / sh)
-  (if lzp:*tunesel*
-    (progn
-      (setq sh (cadr (lzp:knob-entry lzp:*tunesel*))
-            v  (vl-string-trim " \t" v))
-      (lzp:tune-put lzp:*tunesel* (if (= v sh) "" v))
-      (lzp:tune-refill)))
+  (cond
+    ;; a term is text written as typed -- spaces kept, the leading one
+    ;; of " Typ." included -- and its shipped wording typed back in is
+    ;; the same as the button
+    ((and (lzp:tune-terms-p) lzp:*tunesel* (lzp:term-row lzp:*tunesel*))
+     (lzp:term-put lzp:*tunesel*
+                   (if (= v (cadr (lzp:term-row lzp:*tunesel*))) nil v))
+     (lzp:tune-refill))
+    (lzp:*tunesel*
+     (setq sh (cadr (lzp:knob-entry lzp:*tunesel*))
+           v  (vl-string-trim " \t" v))
+     (lzp:tune-put lzp:*tunesel* (if (= v sh) "" v))
+     (lzp:tune-refill)))
   (princ))
 
 ;; Every OTHER knob that spells the same shop decision as SYM.
@@ -135295,7 +135716,9 @@
             ;; last item rather than "D and E and 6 more"
             (strcat (lzp:commajoin out t) " and " (itoa (- n 5)) " more")
             (lzp:commajoin out nil))
-          " -- Set everywhere gives them all this value"))
+          (if (lzp:knob-termid (car kin))
+            " -- Set everywhere makes it the shop term they all follow"
+            " -- Set everywhere gives them all this value")))
 
 ;; "Set everywhere": whatever is in the box, queued for every knob that
 ;; spells this same decision, the selected one included.  It queues
@@ -135303,22 +135726,43 @@
 ;; typed one does -- each sibling's own kind is tested at OK and a
 ;; sibling that will not take it is skipped and named, not forced --
 ;; and Cancel still throws the lot away.
-(defun lzp:tune-all ( / kin tx k)
-  (if (and lzp:*tunesel* (setq kin (lzp:knob-kin lzp:*tunesel*)))
-    (progn
-      (setq tx (car (lzp:tune-text lzp:*tunesel*)))
-      (lzp:tune-put lzp:*tunesel* tx)
-      (foreach k kin (lzp:tune-put k tx))
-      (lzp:tune-refill)))
+;;
+;; A knob that is a member of a SHOP TERM is the exception: everywhere
+;; IS the term.  Six per-tool values would each stand over the term
+;; (the precedence), so the Terms page could never move them again and
+;; would not say why.  So the box's text becomes the term's pending
+;; spelling, every member that holds a value of its own is queued back
+;; to follow it, and the page turns to Terms to show what OK will write.
+(defun lzp:tune-all ( / kin tx k id p)
+  (cond
+    ((lzp:tune-terms-p) nil)
+    ((and lzp:*tunesel* (setq id (lzp:knob-termid lzp:*tunesel*)))
+     (setq tx (car (lzp:tune-text lzp:*tunesel*)) p (lzp:knob-parse tx))
+     (if (and p (eq (type (cadr p)) 'STR))
+       (progn
+         (lzp:term-put id (if (= (cadr p) (cadr (lzp:term-row id))) nil (cadr p)))
+         (foreach k (cadddr (lzp:term-row id))
+           (if (or (lzp:knob-get k) (assoc k lzp:*tunevals*)) (lzp:tune-put k "")))
+         (setq lzp:*tunetool* (length lzp:*knobs*) lzp:*tunesel* id)
+         (lzp:settile "tune_tool" (itoa lzp:*tunetool*))
+         (lzp:tune-refill))))
+    ((and lzp:*tunesel* (setq kin (lzp:knob-kin lzp:*tunesel*)))
+     (setq tx (car (lzp:tune-text lzp:*tunesel*)))
+     (lzp:tune-put lzp:*tunesel* tx)
+     (foreach k kin (lzp:tune-put k tx))
+     (lzp:tune-refill)))
   (princ))
 
 (defun lzp:tune-reset ()
-  (if lzp:*tunesel*
-    (progn (lzp:tune-put lzp:*tunesel* "") (lzp:tune-refill)))
+  (cond
+    ((and (lzp:tune-terms-p) lzp:*tunesel*)
+     (lzp:term-put lzp:*tunesel* nil) (lzp:tune-refill))
+    (lzp:*tunesel*
+     (lzp:tune-put lzp:*tunesel* "") (lzp:tune-refill)))
   (princ))
 
 (defun lzp:tune-ok ()
-  (if (lzp:tune-bad) (lzp:tune-state) (done_dialog 1))
+  (if (or (lzp:tune-bad) (lzp:term-bad)) (lzp:tune-state) (done_dialog 1))
   (princ))
 
 ;; The one place LAZTUNE writes: every pending answer to the profile,
@@ -135327,8 +135771,18 @@
 ;; button: DCL fires the box's action before the default button's, so
 ;; OK with a bad value still in the box lands anyway -- the same
 ;; reason lzp:set-write leaves an unreadable colour alone.
-(defun lzp:tune-write ( / p ns nc)
-  (setq ns 0 nc 0)
+(defun lzp:tune-write ( / p ns nc nt held h)
+  (setq ns 0 nc 0 nt 0)
+  ;; the terms first, so a member knob's own value -- applied below by
+  ;; lzp:knobs-apply -- lands over the shop's wording, never under it
+  (foreach p (reverse lzp:*termvals*)
+    (cond
+      ((null (cdr p))
+       (if (lzp:term-get (car p))
+         (progn (lzp:term-clear (car p)) (setq nt (1+ nt)))))
+      ((not (lzp:term-why (cdr p)))
+       (lzp:term-set (car p) (cdr p))
+       (setq nt (1+ nt)))))
   (foreach p (reverse lzp:*tunevals*)
     (cond
       ((= (cdr p) "")
@@ -135340,17 +135794,23 @@
        (lzp:knob-set (car p) (cdr p))
        (setq ns (1+ ns)))))
   (lzp:knobs-apply)
-  (list ns nc))
+  ;; the tools a changed term did NOT reach, for the report
+  (foreach p lzp:*termvals*
+    (foreach h (lzp:term-held (car p))
+      (if (not (member h held)) (setq held (append held (list h))))))
+  (list ns nc nt held))
 
 ;; Open it, wire it, and hand back what OK wrote -- or nil.  The tool
 ;; dropdown opens on the tool it was last left on in this session.
 (defun lzp:tune-edit (dcl / rc tl out)
-  (if (null lzp:*tunetool*) (setq lzp:*tunetool* 0))
+  (if (or (null lzp:*tunetool*) (> lzp:*tunetool* (length lzp:*knobs*)))
+    (setq lzp:*tunetool* 0))
   (cond
     ((not (new_dialog "lazpanel_tune" dcl)) nil)
     (t
      (start_list "tune_tool")
      (foreach tl lzp:*knobs* (add_list (car tl)))
+     (add_list lzp:*tune-termlabel*)
      (end_list)
      (set_tile "tune_tool" (itoa lzp:*tunetool*))
      (action_tile "tune_tool" "(lzp:tune-tool $value)")
@@ -135363,7 +135823,7 @@
      (lzp:tune-refill)
      (setq rc (start_dialog))
      (if (= rc 1) (setq out (lzp:tune-write)))
-     (setq lzp:*tunevals* nil)
+     (setq lzp:*tunevals* nil lzp:*termvals* nil)
      out)))
 
 (defun lzp:tune-report (res)
@@ -135374,7 +135834,13 @@
                       " set to a value of yours, " (itoa (cadr res))
                       " back to Alec's choice -- "
                       (itoa (length (lzp:knob-index)))
-                      " of yours in all, applied now and at every panel open."))))
+                      " of yours in all, applied now and at every panel open."))
+       (if (and (caddr res) (> (caddr res) 0))
+         (princ (strcat "\nLAZPANEL: " (itoa (caddr res)) " shop term"
+                        (if (= (caddr res) 1) "" "s")
+                        " changed -- in your AutoCAD profile, and in every"
+                        " tool loaded now that writes it"
+                        (lzp:term-heldwords (cadddr res)) ".")))))
   (princ))
 
 (defun c:LAZTUNE ( / *error* f dcl res)
@@ -135383,13 +135849,13 @@
   (defun *error* (msg)
     (if (and dcl (>= dcl 0)) (unload_dialog dcl))
     (if f (vl-file-delete f))
-    (setq lzp:*tunevals* nil)
+    (setq lzp:*tunevals* nil lzp:*termvals* nil)
     (if (and msg (not (wcmatch (strcase msg) "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
       (princ (strcat "\nLAZTUNE error: " msg)))
     (if lzd:report (lzd:report "LAZTUNE" *lazpanel-version* msg))
     (princ))
   (if lzd:begin (lzd:begin "LAZTUNE" *lazpanel-version*))
-  (setq lzp:*tunevals* nil)
+  (setq lzp:*tunevals* nil lzp:*termvals* nil)
   (cond
     ((not (setq f (lzp:write-dcl)))
      (princ "\nLAZTUNE error: could not write the dialog file."))
@@ -135545,9 +136011,9 @@
   cal:osdown cal:osup cal:pad cal:perp cal:plural
   cal:proj-param cal:pt-line-dist cal:ruler-new cal:ruler-off cal:ruler-show
   cal:signed-dang cal:spikes cal:sublist cal:sysrestore cal:syssave
-  cal:tan cal:text cal:trim cal:ui cal:undobegin
-  cal:undoend cal:unit cal:unitn cal:v* cal:v+
-  cal:v- cal:vlen cal:zeropad2
+  cal:tan cal:term cal:text cal:trim cal:ui
+  cal:undobegin cal:undoend cal:unit cal:unitn cal:v*
+  cal:v+ cal:v- cal:vlen cal:zeropad2
 ))
 (setq lazpass:*nohelper* nil)
 (foreach n lazpass:*helpers*

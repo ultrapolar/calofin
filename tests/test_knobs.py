@@ -102,7 +102,8 @@ for tool, d, f, ns in rows:
             missing.append((rel, name))
         elif lit.count('(') != lit.count(')'):
             continue        # the line rule cut a wrapped list short
-        elif ' '.join(lit.split()) != have[name]:
+        elif (knobs.term_call(lit) or (None, ' '.join(lit.split())))[1] \
+                != have[name]:
             differing.append((rel, name, lit, have[name]))
 check("every knob test_tunables.py counts is in the table (%d files)"
       % len(rows), not missing, repr(missing[:5]))

@@ -91,6 +91,7 @@ at a different size:
 | `sf:*smallstyle*` | `"STANDARD INCHES"` | …this dimension style, when the drawing has it — POOL's small-dimension rule, so a fillet callout matches the dims beside it |
 | `sf:*dimoff*` | `nil` | How far past the arc the dimension text sits. `nil` = one radius, and never less than 12 |
 | `sf:*dimrepeat*` | `nil` | Dimension every repeat corner too. The default is one callout plus `Typ.`, which is how the sheet reads |
+| `sf:*typ-note*` | `" Typ."` | The suffix after the one radius callout that stands for its repeats (the callout reads `<>` and then this). A **shop term** (`typ-note`): read from the profile's `CalofinTerm-typ-note` as the file loads, so LAZTUNE's Terms page changes it here and in every other tool that writes it; a LAZTUNE value set on this knob itself still wins |
 | `sf:*typ*` | `T` | Re-letter that one callout `<> Typ.` once a repeat has been cut at the same radius |
 | `sf:*minang*` | `0.02` | How far off straight (radians) two legs must be before there is a corner at all |
 

@@ -124,7 +124,21 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092326 REV43")
+(setq pool:*version* "092426 REV44")
+
+;;; -------------------- shop terms --------------------------------------
+;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
+;;;  own way -- the knobs that read one say which.  The shop's spelling
+;;;  is the profile value CalofinTerm-<ID>, set from LAZTUNE's Terms
+;;;  page; with none, the shipped one.  Read as the file loads, so the
+;;;  reader sits here, ABOVE the knobs that call it (the grouped build
+;;;  takes it from CALOFIN-LIB.lsp as cal:term).  Only drawing text is
+;;;  ever a term: keywords and prompts are answered by forms, the
+;;;  palette and LAZDIAG's replays by their exact spelling.  The table
+;;;  of terms is tools/terms.py.
+(defun pool:term (id dflt / v)
+  (setq v (getenv (strcat "CalofinTerm-" id)))
+  (if (and v (/= v "")) v dflt))
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -536,6 +550,20 @@
 ;;;  ALONG the pool and L is the hopper's own width, and a 40' pool's H
 ;;;  has nothing to do with the gap at its side.
 (setq pool:*hopoffset-ladder* '(24.0 72.0 6.0))
+
+;;;  ...and the SHOP TERMS it writes into the drawing -- wording, not a
+;;;  size.  Each reads the shop's CalofinTerm-<ID> through the term
+;;;  reader above, so LAZTUNE's Terms page moves it in every tool that writes
+;;;  it at once; the literal is the shipped spelling, and a LAZTUNE
+;;;  value set on the knob itself still wins over the shop's.
+
+;; The suffix after the one corner callout that stands for a group
+;; of equal corners -- "?" and "90%%d" marks included.
+(setq pool:*typ-note* (pool:term "typ-note" " Typ."))
+
+;; The note on a corner the order sheet never gave: on the leader off
+;; its boxed "?", and under its row in the report's Given marks.
+(setq pool:*ng-note* (pool:term "ng-note" "Not Given"))
 
 ;;; -------------------- run state (not tunables) ----------------------
 ;;;
@@ -4486,7 +4514,7 @@
                      pool:*sq90-tol*))
             (setq ock k))))
   (pool:dimtreat1 (nth ock hce) octy (nth ock hcarcs) (nth ock pts)
-                  (pool:unit (pool:v- (nth ock pts) cen)) doff " Typ."
+                  (pool:unit (pool:v- (nth ock pts) cen)) doff pool:*typ-note*
                   (pool:polywedge pts ock))
   (pool:dimtreat1 (nth 4 hce) icty (nth 4 hcarcs) (nth 4 pts)
                   (pool:unit
@@ -4864,7 +4892,7 @@
         (progn
           (setq y (- y lh))
           (pool:textc (list (+ x (* pool:*rep-c1* h)) y) h
-                      (if tgt (strcat (pool:fmtgiven tgt) " Given") "Not Given")
+                      (if tgt (strcat (pool:fmtgiven tgt) " Given") pool:*ng-note*)
                       lay pool:*col-bad*)
           (if tgt (setq pool:*giventxts* (cons (cons (entlast) tgt) pool:*giventxts*))))))
   (foreach n notes
@@ -5298,7 +5326,7 @@
   (command "_.LEADER"
            (pool:wp (pool:v+ p (pool:v* outd (* pool:*ng-lead* doff))))
            (pool:wp (pool:v+ p (pool:v* outd (* pool:*ng-off* doff))))
-           "" "Not Given" ""))
+           "" pool:*ng-note* ""))
 
 ;; One corner's annotation, whichever of the four treatments it
 ;; carries.  ang is the corner's real wedge angle, and it decides
@@ -5364,7 +5392,7 @@
                   (equal (cadr cc) (cadr (car corners)) 1.0e-6)))
         (setq same nil)))
   (if (or pool:*insq* same)
-      (setq ilist (list 1) sfx " Typ.")
+      (setq ilist (list 1) sfx pool:*typ-note*)
       (setq ilist (list 0 1 2 3) sfx ""))
   (foreach i ilist
     (setq p (nth i quad)
@@ -5412,7 +5440,7 @@
       (setq cc (nth i corners))
       (pool:dimtreat1 (nth i ces) (car cc) (nth i arcs) (nth i pts)
                       (pool:unit (pool:v- (nth i pts) cen)) doff
-                      (if (and same (> (length g) 1)) " Typ." "")
+                      (if (and same (> (length g) 1)) pool:*typ-note* "")
                       (pool:polywedge pts i)))))
 
 ;; Re-draw the guide rectangle's corners with the chosen treatments so

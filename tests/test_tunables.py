@@ -183,10 +183,17 @@ def split_block(src, markers):
 
 
 def knobs_in(block, ns):
-    """[(name, default)] in the order the block sets them."""
-    return [(m.group(1), m.group(2).strip()) for m in re.finditer(
-        r'^\(setq (' + ns + r':\*[a-z0-9-]+\*)\s+(.*?)\)[ \t]*(?:;.*)?$',
-        block, re.M)]
+    """[(name, default)] in the order the block sets them.  A knob read
+    through the tool's shop-term reader -- (pool:term "typ-note" " Typ.")
+    -- has the literal the reader falls back to as its default."""
+    out = []
+    for m in re.finditer(
+            r'^\(setq (' + ns + r':\*[a-z0-9-]+\*)\s+(.*?)\)[ \t]*(?:;.*)?$',
+            block, re.M):
+        dflt = m.group(2).strip()
+        tm = re.match(r'^\(' + ns + r':term\s+"[a-z0-9-]+"\s+(".*")\)$', dflt)
+        out.append((m.group(1), tm.group(1) if tm else dflt))
+    return out
 
 
 def assigned(src, ns):
@@ -360,7 +367,12 @@ for tool, path, ns, _readme, mk in FILES:
         continue
     block, rest = split_block(src, mk)
     BLOCKS[tool] = (src, block, rest, ns)
+    # the one defun allowed above the block is the SHOP-TERM reader: the
+    # block calls it (a knob that reads a term), so it has to be defined
+    # first -- tools/terms.py, and tests/test_terms.py holds its text
     first_defun = src.index('\n(defun ')
+    while src.startswith('\n(defun %s:term ' % ns, first_defun):
+        first_defun = src.index('\n(defun ', first_defun + 1)
     check("%s: it comes before the first defun" % tool,
           src.index(mk[0]) < first_defun,
           "a knob defined after the code that reads it is nil while "
