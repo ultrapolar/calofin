@@ -12,3 +12,7 @@ C:TUTORIALAUTOBEAD|autobead-build|the tutorial opens no group and moves no setti
 C:TUTORIALSPACHECK|spachk:scan|spachk:demo ends its undo group and puts CLAYER/CMDECHO back before (c:SPACHECKSCAN); the practice drawing is left on purpose, as it is on a clean run
 C:ABCDEF|c:abhd|ABCDEF's handler only closes its undo group, and the group is closed before abcdef:to-abhd runs; the ABHD run joins ABCDEF's LAZDIAG run, so a failure in it is filed under ABCDEF with both commands' answers
 C:XYPLOT|c:abhd|as ABCDEF: the plot's undo group is closed before xyp:to-abhd, XYPLOT's handler has nothing else to put back, and the ABHD run joins XYPLOT's LAZDIAG run
+C:POOL|c:hemistep|the steps go in LAST: POOL's undo group is closed, its sysvars restored and its error mode popped before pool:stepsafter hands the shallow wall over; the step run joins POOL's LAZDIAG run
+C:POOL|c:normiestep|as HEMISTEP: nothing of POOL's is open at the hand-over; pool:stepdims re-opens its own undo group and error mode AFTER NORMIESTEP returns, under POOL's handler
+C:POOL|c:cornerstp|as HEMISTEP: nothing of POOL's is open at the hand-over, and the step run joins POOL's LAZDIAG run
+C:POOL|c:paddle|the pads go in LAST, as AUTODIM's do: POOL's undo group, sysvars and error mode are all back before pool:stepsafter hands PADDLE the new perimeter

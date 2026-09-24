@@ -350,7 +350,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.16") ; printed on load and at command start so a
+(setq *cs-version* "v4.17") ; printed on load and at command start so a
                             ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -1531,6 +1531,29 @@
 
 ;;; --------------------------- main command ----------------------------
 
+;; A selection another command hands CORNERSTP -- POOL's shallow-end
+;; wall, when a pool is drawn with steps -- through the global
+;; *calofin-handoff*, which PADDLE, AUTODIM and TYDRN read the same
+;; way.  It holds ("CORNERSTP" SELECTION), is read only here, and is
+;; cleared at the read whoever it was for (and by the handler, for a
+;; failure before the read), so a handoff never outlives its call.
+;; The selection comes back narrowed to what is still in the drawing,
+;; or nil -- and nil falls through to the pickfirst probe and the
+;; prompt, exactly as a typed CORNERSTP does.
+(setq *calofin-handoff* nil)
+
+(defun cs-handed ( / h ss i e)
+  (setq h                 *calofin-handoff*
+        *calofin-handoff* nil)
+  (if (and (listp h) (= (car h) "CORNERSTP") (cadr h))
+    (progn
+      (setq ss (ssadd) i 0)
+      (repeat (sslength (cadr h))
+        (setq e (ssname (cadr h) i)
+              i (1+ i))
+        (if (entget e) (ssadd e ss)))
+      (if (< 0 (sslength ss)) ss))))
+
 (defun c:CORNERSTP ( / *error* cs-popstep undoflag ss i en ed et zf
                        straights arcrecs lines diag arcr cand o1 o2
                        score best j k tmp w1 w2 corner ang c r a1 a2
@@ -1547,6 +1570,7 @@
                        qstep qdir bstep bmiss lastwid rl rr dflt)
 
   (defun *error* (msg)
+    (setq *calofin-handoff* nil)     ; one never read goes with the run
     (cs-fclear)                     ; both exits clear the form store
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (cs-setstyle oldstyle))
@@ -1621,8 +1645,9 @@
                    " tolerance is taken as " (rtos tol) ".")))
 
   ;; ---- 1. selection ---------------------------------------------------
-  ;; a pickfirst selection if there is one, otherwise ask for it
-  (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  ;; a selection POOL handed over (its shallow-end wall), else a
+  ;; pickfirst selection if there is one, otherwise ask for it
+  (setq ss (cond ((cs-handed)) ((ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
   (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn

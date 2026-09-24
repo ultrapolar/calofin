@@ -3872,7 +3872,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092326 REV43")
+(setq pool:*version* "092426 REV44")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -4285,6 +4285,24 @@
 ;;;  has nothing to do with the gap at its side.
 (setq pool:*hopoffset-ladder* '(24.0 72.0 6.0))
 
+;; ---- steps at the shallow end
+;;;
+;;;  Once the pool is in, POOL offers steps at its SHALLOW end -- the
+;;;  right-hand wall, the one the slope break faces (pool:steps).  With
+;;;  a hopper drawn they are HEMISTEP, NORMIESTEP or CORNERSTP, inside
+;;;  the pool; with none, one plain box step outside the wall.
+(setq pool:*steps-default* "None")  ; what Enter answers at the steps
+                                    ; question: "None", or "Hemi",
+                                    ; "Normie", "Corner" to make a step
+                                    ; the usual answer
+(setq pool:*steps-eoff*    12.0)    ; after NORMIESTEP steps INTO the
+                                    ; pool, the overall E dim moves down
+                                    ; to this far in from the BOTTOM
+                                    ; wall, in SIDE STANDARD
+(setq pool:*steps-fuzz*    0.01)    ; how near a drawn wall's ends must
+                                    ; sit to the shallow wall's line to
+                                    ; be that wall, in inches
+
 ;;; -------------------- run state (not tunables) ----------------------
 ;;;
 ;;;  Declared here because AutoLISP wants a global declared at top
@@ -4332,6 +4350,14 @@
 ;; An L pool's mirror flips the PLAN top-to-bottom; a longitudinal
 ;; section is unchanged by that, so these are held out of it.
 (setq pool:*profents*  nil)
+
+;; The SHALLOW end, as the flow that reached the pool-bottom gate saw
+;; it: an assoc list keyed a b c d (the frame whose b->c side is the
+;; shallow wall), doff and th, whether a bottom was drawn, and -- when
+;; the standard hopper drew it -- the slope break and its E dim.  Set
+;; per run by pool:shallowset; nil means the shape offers no steps.
+(setq pool:*shallow*   nil)
+(setq pool:*runmark*   nil)             ; (entlast) when this run began
 
 ;; A square-cornered quad, for the flows whose frame has no corner
 ;; treatments of its own to pass on (the oval and mutt hoppers).
@@ -5250,11 +5276,14 @@
 ;; Like the store, both are cleared on the way out of c:POOL -- both
 ;; exits -- so neither a cover run nor a form run can leave the next
 ;; POOL silently bottomless or silently un-asked.
-(defun pool:askbottom ()
-  (cond
-    (pool:*nobottom* nil)
-    (pool:*hasbottom* t)
-    (t (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil))))
+(defun pool:askbottom ( / v)
+  (setq v (cond
+            (pool:*nobottom* nil)
+            (pool:*hasbottom* t)
+            (t (cal:askyn "Add pool bottom (hopper) detail?" "Yes" nil))))
+  ;; the steps offered at the end hang off this answer (pool:steps)
+  (pool:shput 'bottom (if v t nil))
+  v)
 
 ;; Does this treatment cut real geometry off the corner?  NotGiven
 ;; does NOT: its corner is built square, so everything that asks
@@ -7274,7 +7303,7 @@
                             cen p pr k w hh xmin xmax ymax ymin doff th
                             odim rows lbls dv mquad sq4 elast hxg
                             octy ocsz icty icsz oc ic hcs hce hcarcs ock
-                            rbox mprims mlbls soff ink)
+                            rbox mprims mlbls soff ink shb)
   (setq oldclay (getvar "CLAYER")
         ;; the fade/guide colour, resolved once for the whole flow:
         ;; hx:sides/hx:diags each re-ask the live guide's sides one at
@@ -7635,6 +7664,13 @@
   ;; this virtual frame (dv has no corner at all; E's real treatment
   ;; is sized for the true reflex angle against D, not against dv), so
   ;; they stay plain "Square" the way they always have.
+  ;; the shallow end is the wing's end wall: B-C on a true L, with A-B
+  ;; and D-C its side walls; the far end C-D on a lazy L, whose wing
+  ;; runs out at 45 between B-C and E-D (pool:steps)
+  (pool:shallowset (if lazy
+                     (list (nth 1 pts) (nth 2 pts) (nth 3 pts) (nth 4 pts))
+                     (list (nth 0 pts) (nth 1 pts) (nth 2 pts) (nth 3 pts)))
+                   doff th)
   (if (pool:askbottom)
       (progn
         ;; per the reference: the break line drops from the inner
@@ -7671,6 +7707,14 @@
         (setq pts (mapcar '(lambda (p) (list (car p)
                                              (- (+ ymin ymax) (cadr p))))
                           pts))
+        ;; ...and so does the shallow end: the same wall, its two
+        ;; corners swapped top for bottom
+        (setq shb (pool:shget 'bottom))
+        (pool:shallowset (if lazy
+                           (list (nth 4 pts) (nth 3 pts) (nth 2 pts) (nth 1 pts))
+                           (list (nth 3 pts) (nth 2 pts) (nth 1 pts) (nth 0 pts)))
+                         doff th)
+        (pool:shput 'bottom shb)
         (princ "\nPool mirrored -- the wing swapped sides, deep end still on the left.")))
 
   (if failed (setq notes (cons "CROSS DIMS FAILED" notes)))
@@ -9316,6 +9360,13 @@
               c2 wh)))
   (setq gg (pool:hopcalc quad corners h g e m k))
   (pool:hopdraw gg pool:*lay-pool* tie)
+  ;; the slope break and the E chain ends, for the steps (pool:stepdims)
+  ;; -- not for an L, whose E runs to the break's drop, not to a wall
+  (if (not lmode)
+    (progn
+      (pool:shput 'brk (list (cadr (assoc 'brkb gg)) (cadr (assoc 'brkt gg))))
+      (pool:shput 'pbrk (cadr (assoc 'pbrk gg)))
+      (pool:shput 'pr (cadr (assoc 'pr gg)))))
   ;; side profile below the plan, per the style
   (if wh
       (pool:profdraw x0 y0 toth wh
@@ -9345,6 +9396,7 @@
                                           (cadr (assoc (cadr tl) gg)))
                                 (if (caddr tl) (cadr (assoc 'voff gg))
                                     (list 0.0 0.0))))
+          (if (and (eq (car tl) 'pbrk) (not lmode)) (pool:shput 'edim (entlast)))
           (if (cadddr tl) (pool:dimred)))))
   ;; profile depths: C at the shallow wall, D at the deep end.  These
   ;; belong to the section, so they join pool:*profents* and stay put
@@ -9639,6 +9691,7 @@
 ;; Returns the report rows (nil if skipped).
 (defun pool:hopper (quad corners doff th / btype xmin xmax ymin ymax
                                            a b c d cen sres ln xi)
+  (pool:shallowset quad doff th)
   (if (not (pool:askbottom))
       nil
       (progn
@@ -10383,6 +10436,14 @@
 
 (defun pool:hopovaldsp (quad tipl tipr doff th / btype u v sres p xi
                                                  lline rline bline tline)
+  ;; the shallow end is the right one, the body's frame through its tip
+  (setq u (pool:unit (cal:v- tipr tipl))
+        v (cal:perp u))
+  (pool:shallowset (pool:bodyquad (list tipl v) (list tipr v)
+                                  (list (car quad) (cal:v- (cadr quad) (car quad)))
+                                  (list (cadddr quad)
+                                        (cal:v- (caddr quad) (cadddr quad))))
+                   doff th)
   (if (not (pool:askbottom))
       nil
       (progn
@@ -10422,6 +10483,12 @@
 
 (defun pool:hopgrecdsp (pts doff th / btype cen p u pl pr sres xi ln
                                       lline rline bline tline)
+  ;; the shallow end is the right end wall, between its corner cuts
+  (pool:shallowset (pool:bodyquad (list (nth 7 pts) (cal:v- (nth 6 pts) (nth 7 pts)))
+                                  (list (nth 2 pts) (cal:v- (nth 3 pts) (nth 2 pts)))
+                                  (list (nth 0 pts) (cal:v- (nth 1 pts) (nth 0 pts)))
+                                  (list (nth 5 pts) (cal:v- (nth 4 pts) (nth 5 pts))))
+                   doff th)
   (if (not (pool:askbottom))
       nil
       (progn
@@ -12567,6 +12634,13 @@
 ;; tip, like every home sheet), square hopper corners, no corner
 ;; ties -- the ends are too varied to tie the hopper back to.
 (defun pool:hopmuttdsp (quad tipl tipr doff th / btype u v)
+  (setq u (pool:unit (cal:v- tipr tipl))
+        v (cal:perp u))
+  (pool:shallowset (pool:bodyquad (list tipl v) (list tipr v)
+                                  (list (car quad) (cal:v- (cadr quad) (car quad)))
+                                  (list (cadddr quad)
+                                        (cal:v- (caddr quad) (cadddr quad))))
+                   doff th)
   (if (not (pool:askbottom))
       nil
       (progn
@@ -12598,6 +12672,428 @@
                            (apply 'max (mapcar 'cadr quad))
                            doff th)))))
 
+;;; -------------------- steps at the shallow end ------------------------
+;;;
+;;;  Once the pool is in, POOL offers steps at its SHALLOW end -- the
+;;;  b->c wall of the frame each shape's bottom dispatcher works in,
+;;;  the wall the slope break faces.  Steps always go there.
+;;;
+;;;  WITH A HOPPER the steps are one of the three step routines,
+;;;  inside the pool: HEMISTEP, NORMIESTEP or CORNERSTP.  POOL finds the
+;;;  drawn wall (and, for CORNERSTP, the side wall and corner treatment
+;;;  of the corner asked for) and hands it over in *calofin-handoff*,
+;;;  the way AUTODIM and LINGUTTER hand PADDLE a perimeter; the routine
+;;;  then asks its own questions.  A shallow end that is a curve (an
+;;;  oval, a round pool) has no straight wall to hand, so the routine
+;;;  asks for its own selection.  When NORMIESTEP's steps face INTO the
+;;;  pool, the overall E dim (break to wall) moves down near the bottom
+;;;  wall in SIDE STANDARD, and a new floor dim takes its place on the
+;;;  H/G/F/E chain: slope break to the first step (pool:stepdims).
+;;;
+;;;  WITHOUT ONE there are no treads to lay out: the step is a plain
+;;;  box OUTSIDE the wall, centered on it, given by its overall width
+;;;  and length only.  The wall is broken round it, the step is
+;;;  dimensioned, and PADDLE pads the whole new perimeter.
+;;;
+;;;  The hand-overs come AFTER the run has closed its undo group and
+;;;  given the drafter's settings back -- an Esc inside the routine runs
+;;;  only the routine's own handler, so nothing of POOL's may be open
+;;;  then (tools/handler_baseline.txt).  pool:steps asks, while the run
+;;;  is still open; pool:stepsafter hands over, once it is not.
+
+(setq *calofin-handoff* nil)
+
+;; A WORLD point in the local frame the flows draw in -- pool:ww's
+;; inverse, for reading drawn geometry back against the flow's points.
+(defun pool:wl (w / u)
+  (setq u (trans w 0 1))
+  (list (- (car u) (car pool:*base*)) (- (cadr u) (cadr pool:*base*))))
+
+;; Record the shallow end: QUAD's b->c side is the shallow wall.  Each
+;; shape's bottom dispatcher calls this BEFORE the pool-bottom gate, so
+;; the gate's answer lands in it too (pool:askbottom).
+(defun pool:shallowset (quad doff th)
+  (setq pool:*shallow*
+        (list (cons 'a (car quad)) (cons 'b (cadr quad))
+              (cons 'c (caddr quad)) (cons 'd (cadddr quad))
+              (cons 'doff doff) (cons 'th th))))
+
+(defun pool:shget (key) (cdr (assoc key pool:*shallow*)))
+
+;; Add or replace KEY -- a no-op when this shape recorded no shallow
+;; end (an L pool's hopper frame is not a wall of the pool)
+(defun pool:shput (key v)
+  (if pool:*shallow*
+    (setq pool:*shallow*
+          (cons (cons key v)
+                (vl-remove (assoc key pool:*shallow*) pool:*shallow*)))))
+
+;; (U N LEN): the unit along the shallow wall b->c, the unit normal
+;; pointing OUT of the pool through it, and the wall's length
+(defun pool:shframe ( / a b c d cen u n)
+  (setq a (pool:shget 'a) b (pool:shget 'b)
+        c (pool:shget 'c) d (pool:shget 'd)
+        cen (cal:v* (cal:v+ (cal:v+ a b) (cal:v+ c d)) 0.25)
+        u (pool:unit (cal:v- c b))
+        n (cal:perp u))
+  (if (< (cal:dot (cal:v- b cen) n) 0.0) (setq n (cal:v* n -1.0)))
+  (list u n (distance b c)))
+
+;; Every entity this run drew on the pool layer whose type is in TYPES
+(defun pool:runents (types / e ed out)
+  (setq e (if pool:*runmark* (entnext pool:*runmark*) (entnext)))
+  (while e
+    (setq ed (entget e))
+    (if (and ed
+             (wcmatch (cdr (assoc 0 ed)) types)
+             (= (strcase (cond ((cdr (assoc 8 ed))) (""))) (strcase pool:*lay-pool*)))
+      (setq out (cons e out)))
+    (setq e (entnext e)))
+  (reverse out))
+
+;; The two ends of a LINE or ARC, in the local frame
+(defun pool:ends (e / ed c r a1 a2)
+  (setq ed (entget e))
+  (if (= "ARC" (cdr (assoc 0 ed)))
+    (progn
+      (setq c  (cdr (assoc 10 ed)) r (cdr (assoc 40 ed))
+            a1 (cdr (assoc 50 ed)) a2 (cdr (assoc 51 ed)))
+      (list (pool:wl (list (+ (car c) (* r (cos a1)))
+                           (+ (cadr c) (* r (sin a1))) (caddr c)))
+            (pool:wl (list (+ (car c) (* r (cos a2)))
+                           (+ (cadr c) (* r (sin a2))) (caddr c)))))
+    (list (pool:wl (cdr (assoc 10 ed))) (pool:wl (cdr (assoc 11 ed))))))
+
+;; The end of E nearer to P, and the one further from it
+(defun pool:nearend (e p / pe)
+  (setq pe (pool:ends e))
+  (if (< (distance (car pe) p) (distance (cadr pe) p)) (car pe) (cadr pe)))
+
+(defun pool:farend (e p / pe)
+  (setq pe (pool:ends e))
+  (if (< (distance (car pe) p) (distance (cadr pe) p)) (cadr pe) (car pe)))
+
+;; Is P on the infinite line through P0 along the unit U?
+(defun pool:online (p p0 u)
+  (< (abs (cal:dot (cal:v- p p0) (cal:perp u))) pool:*steps-fuzz*))
+
+;; Is E a LINE lying along the infinite line through P0 along U?
+(defun pool:online2 (e p0 u / pe)
+  (setq pe (pool:ends e))
+  (and (= "LINE" (cdr (assoc 0 (entget e))))
+       (pool:online (car pe) p0 u)
+       (pool:online (cadr pe) p0 u)))
+
+;; The drawn LINE that is the shallow wall: both ends on the b->c line
+;; and within its span.  nil when the end is a curve (an oval, a round
+;; pool) or nothing this run drew lies there.
+(defun pool:shwall ( / fr u len b out e pe t1 t2)
+  (setq fr  (pool:shframe)
+        u   (car fr)
+        len (caddr fr)
+        b   (pool:shget 'b))
+  (foreach e (pool:runents "LINE")
+    (setq pe (pool:ends e)
+          t1 (cal:dot (cal:v- (car pe) b) u)
+          t2 (cal:dot (cal:v- (cadr pe) b) u))
+    (if (and (null out)
+             (pool:online2 e b u)
+             (> (abs (- t1 t2)) pool:*steps-fuzz*)
+             (> (min t1 t2) (- pool:*steps-fuzz*))
+             (< (max t1 t2) (+ len pool:*steps-fuzz*)))
+      (setq out e)))
+  out)
+
+;; This run's entities of TYPES with an end on P, less those in EXCL
+(defun pool:touching (p excl types / out e pe)
+  (foreach e (pool:runents types)
+    (if (not (member e excl))
+      (progn
+        (setq pe (pool:ends e))
+        (if (or (< (distance (car pe) p) pool:*steps-fuzz*)
+                (< (distance (cadr pe) p) pool:*steps-fuzz*))
+          (setq out (cons e out))))))
+  out)
+
+;; The shallow corner at WHICH ('b the bottom one, 'c the top) as the
+;; selection CORNERSTP takes: the wall, the side wall meeting it there,
+;; and the corner treatment between them when it has one.  nil when the
+;; corner cannot be traced -- CORNERSTP then asks for its own walls.
+(defun pool:shcorner (wall which / p0 sdir near side treat tr sd ss)
+  ;; the side wall's line: a->b for the bottom corner, d->c for the top
+  (setq p0   (pool:shget (if (eq which 'b) 'a 'd))
+        sdir (pool:unit (cal:v- (pool:shget which) p0))
+        near (pool:nearend wall (pool:shget which)))
+  (foreach tr (pool:touching near (list wall) "LINE,ARC")
+    (cond
+      (side)
+      ;; a square corner: the side wall runs straight to the wall
+      ((pool:online2 tr p0 sdir) (setq side tr))
+      ;; otherwise a treatment -- when its far end meets the side wall.
+      ;; A hopper tie off the same corner ends inside the pool instead.
+      (t
+       (foreach sd (pool:touching (pool:farend tr near) (list wall tr) "LINE")
+         (if (and (null side) (pool:online2 sd p0 sdir))
+           (setq side sd treat tr))))))
+  (if side
+    (progn
+      (setq ss (ssadd))
+      (ssadd wall ss)
+      (ssadd side ss)
+      (if treat (ssadd treat ss))
+      ss)))
+
+;; A positive length the form may already hold under KEY, else asked
+;; (with Back).  Returns the length or CAL-BACK.
+(defun pool:stepnum (key msg / v)
+  (if (and (pool:fhas key) (numberp (setq v (pool:ftake key))) (> v 0))
+    (* 1.0 v)
+    (pool:asks 'REQ msg nil nil t nil)))
+
+;; THE STEPS QUESTION, once the pool is in.  Returns what is to happen
+;; after the run has handed the drafter's settings back, for
+;; pool:stepsafter: (TOOL name selection layer), (PADDLE selection) or
+;; nil.  A form sheet that says nothing about steps draws without
+;; stopping, as it does everywhere else in the run.
+(defun pool:steps ()
+  (cond
+    ((null pool:*shallow*) nil)
+    ((pool:shget 'bottom)
+     (if (or (not pool:*formrun*) (pool:fhas 'steps)) (pool:stepsin)))
+    ((or (not pool:*formrun*) (pool:fhas 'extstep)) (pool:stepsout))))
+
+;; With a hopper: which routine, and for CORNERSTP which corner.
+(defun pool:stepsin ( / kind which done wall ss)
+  (while (not done)
+    (setq kind (pool:askkwf 'steps "Add steps at the shallow end"
+                            "Hemi Normie Corner None"
+                            "Hemi/Normie/Corner/None"
+                            ;; a knob spelt some other way is not a
+                            ;; keyword this prompt offers
+                            (cond ((if (= (type pool:*steps-default*) 'STR)
+                                        (pool:fkword pool:*steps-default*
+                                                     "Hemi Normie Corner None")))
+                                  ("None"))
+                            nil)
+          done t)
+    (if (= kind "Corner")
+      (progn
+        (setq which (pool:askkwf 'stepcorner
+                                 "Which shallow corner do the steps come out of"
+                                 "Bottom Top" "Bottom/Top" "Bottom" t))
+        (if (eq which 'CAL-BACK)
+          (progn (princ "\nStepping back one question.") (setq done nil))))))
+  (if (/= kind "None")
+    (progn
+      (setq wall (pool:shwall))
+      (cond
+        ((null wall)
+         (princ (strcat "\nThe shallow end is not one straight wall - select"
+                        " it yourself when the step routine asks.")))
+        ((= kind "Corner")
+         (if (null (setq ss (pool:shcorner wall (if (= which "Top") 'c 'b))))
+           (princ (strcat "\nThat corner could not be traced - select its"
+                          " walls yourself when CORNERSTP asks."))))
+        (t (setq ss (ssadd wall (ssadd)))))
+      (list 'TOOL
+            (cdr (assoc kind '(("Hemi" . "HEMISTEP") ("Normie" . "NORMIESTEP")
+                               ("Corner" . "CORNERSTP"))))
+            ss))))
+
+;; Without one: a box step outside the wall, centered on it -- its
+;; overall width along the wall and its length out from it, nothing
+;; else.  Drawn, dimensioned and let into the perimeter here, while the
+;; run is open; PADDLE comes after (pool:stepsafter).
+(defun pool:stepsout ( / stage go wall fr u n pe w1 w2 wlen w l m
+                         s1 s2 o1 o2 doff odl)
+  (setq stage 0)
+  (while (< stage 3)
+    (cond
+      ((= stage 0)
+       (setq go (pool:askynf 'extstep "Add a step outside the shallow end"
+                             "No" nil))
+       (cond
+         ((not go) (setq stage 3))
+         ((null (setq wall (pool:shwall)))
+          (princ (strcat "\nThe shallow end is not one straight wall, so"
+                         " there is nothing to set a step on - left off."))
+          (setq go nil stage 3))
+         (t
+          (setq fr   (pool:shframe)
+                u    (car fr)
+                n    (cadr fr)
+                pe   (pool:ends wall)
+                ;; w1 toward b, w2 toward c
+                w1   (if (< (cal:dot (cal:v- (car pe) (cadr pe)) u) 0.0)
+                       (car pe) (cadr pe))
+                w2   (if (eq w1 (car pe)) (cadr pe) (car pe))
+                wlen (distance w1 w2)
+                stage 1))))
+      ((= stage 1)
+       (setq w (pool:stepnum 'extwidth "Step width - along the shallow wall"))
+       (cond
+         ((eq w 'CAL-BACK) (princ "\nStepping back one question.") (setq stage 0))
+         ((> w (+ wlen pool:*steps-fuzz*))
+          (princ (strcat "\nThat is wider than the straight wall it sits on ("
+                         (rtos wlen 4 4) ") - give a width up to that.")))
+         (t (setq stage 2))))
+      (t
+       (setq l (pool:stepnum 'extlen "Step length - out from the wall"))
+       (if (eq l 'CAL-BACK)
+         (progn (princ "\nStepping back one question.") (setq stage 1))
+         (setq stage 3)))))
+  (if go
+    (progn
+      (setq m    (cal:mid w1 w2)
+            s1   (if (< (- wlen w) pool:*steps-fuzz*) w1
+                   (cal:v- m (cal:v* u (* 0.5 w))))
+            s2   (if (< (- wlen w) pool:*steps-fuzz*) w2
+                   (cal:v+ m (cal:v* u (* 0.5 w))))
+            o1   (cal:v+ s1 (cal:v* n l))
+            o2   (cal:v+ s2 (cal:v* n l))
+            doff (pool:shget 'doff))
+      ;; the wall is broken round the step: what is left of it either
+      ;; side, and the step's three sides between
+      (if (entdel wall)
+        (progn
+          (if (> (distance w1 s1) pool:*steps-fuzz*) (pool:line w1 s1 pool:*lay-pool*))
+          (pool:line s1 o1 pool:*lay-pool*)
+          (pool:line o1 o2 pool:*lay-pool*)
+          (pool:line o2 s2 pool:*lay-pool*)
+          (if (> (distance s2 w2) pool:*steps-fuzz*) (pool:line s2 w2 pool:*lay-pool*))
+          ;; its width across the outer face, its length along the side
+          ;; toward the top wall
+          (setq odl (getvar "CLAYER"))
+          (setvar "CLAYER" pool:*lay-dim*)
+          (pool:dimalg o1 o2 (cal:v+ (cal:mid o1 o2) (cal:v* n doff)))
+          (pool:dimalg s2 o2 (cal:v+ (cal:mid s2 o2) (cal:v* u (* 0.6 doff))))
+          (setvar "CLAYER" odl)
+          (princ "\nStep drawn outside the shallow end, the wall broken round it.")
+          (list 'PADDLE (pool:perimss)))
+        (progn
+          (princ "\nThe shallow wall could not be changed (a locked layer?) - no step drawn.")
+          nil)))))
+
+;; The perimeter this run drew -- every LINE and ARC on the pool layer.
+;; Only asked for with no bottom drawn, so no hopper line is among them.
+(defun pool:perimss ( / ss e)
+  (setq ss (ssadd))
+  (foreach e (pool:runents "LINE,ARC,LWPOLYLINE") (ssadd e ss))
+  ss)
+
+;; The hand-overs, once c:POOL has closed its undo group and put the
+;; drafter's settings back.  Each routine is its own file and may not
+;; be loaded: an unbound c: symbol is nil, which is the test here, and
+;; the pool is already drawn either way.
+(defun pool:stepsafter (plan / name ss mark lay)
+  (cond
+    ((null plan) nil)
+    ((eq (car plan) 'PADDLE)
+     (if c:PADDLE
+       (progn
+         (princ "\nHanding the new perimeter to PADDLE for the pads...")
+         (setq *calofin-handoff* (list "PADDLE" (cadr plan)))
+         (c:PADDLE)
+         (setq *calofin-handoff* nil))
+       (princ (strcat "\nPADDLE is not loaded, so no pads were placed.  APPLOAD"
+                      " PADDLE.lsp (or shared/LAZPASS.lsp) and type PADDLE."))))
+    (t
+     (setq name (cadr plan)
+           ss   (caddr plan)
+           mark (entlast)
+           lay  (getvar "CLAYER"))
+     (if (cond ((= name "HEMISTEP") c:HEMISTEP)
+               ((= name "NORMIESTEP") c:NORMIESTEP)
+               (t c:CORNERSTP))
+       (progn
+         (princ (strcat "\nHanding the shallow end to " name "..."))
+         (if ss (setq *calofin-handoff* (list name ss)))
+         (cond ((= name "HEMISTEP") (c:HEMISTEP))
+               ((= name "NORMIESTEP") (c:NORMIESTEP))
+               (t (c:CORNERSTP)))
+         (setq *calofin-handoff* nil)
+         (if (= name "NORMIESTEP") (pool:stepdims mark lay)))
+       (princ (strcat "\n" name " is not loaded, so no steps were drawn.  APPLOAD"
+                      " its file (or shared/LAZPASS.lsp) and type " name "."))))))
+
+;; After NORMIESTEP: when its steps face INTO the pool, the overall E
+;; dim (slope break to shallow wall) moves down near the bottom wall in
+;; SIDE STANDARD, and a floor dim from the break to the first step --
+;; the tread nearest the break -- takes its place on the H/G/F/E chain.
+;; The treads are the LINEs it drew on LAY, the layer current when it
+;; was called, parallel to the wall over its span; one on the pool side
+;; of the wall is a step into the pool.  The run is re-opened round the
+;; edit the way c:POOL opens it, so an Esc here is c:POOL's handler's.
+(defun pool:stepdims (mark lay / fr u n len b e ed pe d1 d2 t1 t2 deep dp
+                                 a c d bot loc brk edim p1 p2 pbrk pr p3)
+  (setq fr  (pool:shframe)
+        u   (car fr)
+        n   (cadr fr)
+        len (caddr fr)
+        b   (pool:shget 'b)
+        e   (if mark (entnext mark) (entnext)))
+  (while e
+    (setq ed (entget e))
+    (if (and ed (= "LINE" (cdr (assoc 0 ed)))
+             ;; entmake with no 8 lands on the current layer
+             (= (strcase (cond ((cdr (assoc 8 ed))) (lay))) (strcase lay)))
+      (progn
+        (setq pe (list (pool:wl (cdr (assoc 10 ed))) (pool:wl (cdr (assoc 11 ed))))
+              ;; depth INTO the pool from the wall, and place along it
+              d1 (- (cal:dot (cal:v- (car pe) b) n))
+              d2 (- (cal:dot (cal:v- (cadr pe) b) n))
+              t1 (cal:dot (cal:v- (car pe) b) u)
+              t2 (cal:dot (cal:v- (cadr pe) b) u))
+        (if (and (< (abs (- d1 d2)) pool:*steps-fuzz*)
+                 (> (abs (- t1 t2)) pool:*steps-fuzz*)
+                 (> (min t1 t2) (- pool:*steps-fuzz*))
+                 (< (max t1 t2) (+ len pool:*steps-fuzz*))
+                 (> d1 pool:*steps-fuzz*)
+                 (or (null deep) (> d1 deep)))
+          (setq deep d1 dp (car pe)))))
+    (setq e (entnext e)))
+  (setq edim (pool:shget 'edim)
+        brk  (pool:shget 'brk)
+        pbrk (pool:shget 'pbrk)
+        pr   (pool:shget 'pr))
+  (cond
+    ((null deep)
+     (princ "\nNo steps into the pool, so the shallow dims stay as they were."))
+    ((not (and edim (entget edim) brk pbrk pr))
+     (princ (strcat "\nThis bottom has no E dim to move (no slope break"
+                    " off the wall), so the shallow dims stay as they were.")))
+    (t
+     (if *push-error-using-command* (*push-error-using-command*))
+     (setq pool:*undo-open* nil)
+     (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER" "AUNITS" "ANGBASE" "ANGDIR"))
+     (setq pool:*dimstyle0* (getvar "DIMSTYLE"))
+     (setvar "CMDECHO" 0)
+     (setq pool:*undo-open* (cal:undobegin))
+     (setvar "OSMODE" 0)
+     (setvar "CLAYER" pool:*lay-dim*)
+     ;; a line *steps-eoff* in from the bottom wall, parallel to it
+     (setq a   (pool:shget 'a)
+           c   (pool:shget 'c)
+           d   (pool:shget 'd)
+           bot (pool:unit (cal:perp (cal:v- b a))))
+     (if (< (cal:dot (cal:v- d a) bot) 0.0) (setq bot (cal:v* bot -1.0)))
+     (setq loc (cal:v+ a (cal:v* bot pool:*steps-eoff*))
+           p1  (pool:linex loc (cal:v- b a) (car brk) (cal:v- (cadr brk) (car brk)))
+           p2  (pool:linex loc (cal:v- b a) b (cal:v- c b))
+           ;; where the H/G/F/E chain line meets the first step
+           p3  (pool:linex pbrk (cal:v- pr pbrk) dp u))
+     (if (entdel edim)
+       (pool:dimalgs p1 p2 (cal:mid p1 p2))
+       (princ "\n(the E dim could not be moved - a locked layer?)"))
+     (pool:dimflbeg)
+     (pool:dimalg pbrk p3 (cal:mid pbrk p3))
+     (pool:dimflend)
+     (if pool:*undo-open* (setq pool:*undo-open* (cal:undoend)))
+     (cal:sysrestore)
+     (if *pop-error-mode* (*pop-error-mode*))
+     (princ (strcat "\nE moved down to the bottom wall in SIDE STANDARD;"
+                    " the break is dimensioned to the first step.")))))
+
 ;;; -------------------- sysvar save / restore --------------------------
 ;;; The snapshot of the user's settings lives in a GLOBAL and is taken
 ;;; only when no snapshot is already pending: if a previous run died
@@ -12610,7 +13106,7 @@
 
 ;;; -------------------- main command -----------------------------------
 
-(defun c:POOL ( / *error* ptype base pstep)
+(defun c:POOL ( / *error* ptype base pstep plan)
 
   (defun *error* (msg)
     (if (and msg
@@ -12641,6 +13137,8 @@
     ;; mode resets the evaluator, a local of c:POOL reads nil in here
     (if pool:*undo-open* (setq pool:*undo-open* (cal:undoend)))
     (if *pop-error-mode* (*pop-error-mode*))
+    ;; a step hand-off an Esc cut short before the routine read it
+    (setq *calofin-handoff* nil)
     (if lzd:report (lzd:report "POOL" pool:*version* msg))
     (princ))
   (if lzd:begin (lzd:begin "POOL" pool:*version*))
@@ -12678,6 +13176,10 @@
            ;; and the flag that says it has been said travels in here
            pool:*ruler* nil
            pool:*profents* nil
+           ;; the shallow end is recorded afresh by whichever flow runs,
+           ;; and what this run draws is everything after this mark
+           pool:*shallow* nil
+           pool:*runmark* (entlast)
            pool:*sideon* nil
            pool:*flooron* nil
            pool:*dimstyle0* (getvar "DIMSTYLE")
@@ -12769,6 +13271,10 @@
        ((= ptype "MUtt") (pool:muttflow))
        (t (pool:quadflow ptype)))
 
+     ;; ------------------------------------------------ steps
+     ;; asked while the run is open; handed over once it is closed
+     (setq plan (pool:steps))
+
      ;; ------------------------------------------------ finish
      (command "_.ZOOM" "_Extents")
      (if pool:*undo-open* (setq pool:*undo-open* (cal:undoend)))
@@ -12776,7 +13282,10 @@
      (pool:fclear)
      (pool:rulerkill)
      (setq pool:*nobottom* nil pool:*hasbottom* nil pool:*formrun* nil)
-     (if *pop-error-mode* (*pop-error-mode*))))
+     (if *pop-error-mode* (*pop-error-mode*))
+     ;; nothing of this run is open now, so the step routine or PADDLE
+     ;; can take over -- an Esc in there runs only its own handler
+     (pool:stepsafter plan)))
   (if lzd:end (lzd:end "POOL"))
   (princ))
 
@@ -59127,7 +59636,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.16") ; printed on load and at command start so a
+(setq *cs-version* "v4.17") ; printed on load and at command start so a
                             ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -59813,6 +60322,29 @@
 
 ;;; --------------------------- main command ----------------------------
 
+;; A selection another command hands CORNERSTP -- POOL's shallow-end
+;; wall, when a pool is drawn with steps -- through the global
+;; *calofin-handoff*, which PADDLE, AUTODIM and TYDRN read the same
+;; way.  It holds ("CORNERSTP" SELECTION), is read only here, and is
+;; cleared at the read whoever it was for (and by the handler, for a
+;; failure before the read), so a handoff never outlives its call.
+;; The selection comes back narrowed to what is still in the drawing,
+;; or nil -- and nil falls through to the pickfirst probe and the
+;; prompt, exactly as a typed CORNERSTP does.
+(setq *calofin-handoff* nil)
+
+(defun cs-handed ( / h ss i e)
+  (setq h                 *calofin-handoff*
+        *calofin-handoff* nil)
+  (if (and (listp h) (= (car h) "CORNERSTP") (cadr h))
+    (progn
+      (setq ss (ssadd) i 0)
+      (repeat (sslength (cadr h))
+        (setq e (ssname (cadr h) i)
+              i (1+ i))
+        (if (entget e) (ssadd e ss)))
+      (if (< 0 (sslength ss)) ss))))
+
 (defun c:CORNERSTP ( / *error* cs-popstep undoflag ss i en ed et zf
                        straights arcrecs lines diag arcr cand o1 o2
                        score best j k tmp w1 w2 corner ang c r a1 a2
@@ -59829,6 +60361,7 @@
                        qstep qdir bstep bmiss lastwid rl rr dflt)
 
   (defun *error* (msg)
+    (setq *calofin-handoff* nil)     ; one never read goes with the run
     (cs-fclear)                     ; both exits clear the form store
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (cs-setstyle oldstyle))
@@ -59903,8 +60436,9 @@
                    " tolerance is taken as " (rtos tol) ".")))
 
   ;; ---- 1. selection ---------------------------------------------------
-  ;; a pickfirst selection if there is one, otherwise ask for it
-  (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  ;; a selection POOL handed over (its shallow-end wall), else a
+  ;; pickfirst selection if there is one, otherwise ask for it
+  (setq ss (cond ((cs-handed)) ((ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
   (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
@@ -61536,7 +62070,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.26") ; printed on load and at command start so a
+(setq *hs-version* "v3.27") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -62330,6 +62864,29 @@
 
 ;;; --------------------------- main command -----------------------------
 
+;; A selection another command hands HEMISTEP -- POOL's shallow-end
+;; wall, when a pool is drawn with steps -- through the global
+;; *calofin-handoff*, which PADDLE, AUTODIM and TYDRN read the same
+;; way.  It holds ("HEMISTEP" SELECTION), is read only here, and is
+;; cleared at the read whoever it was for (and by the handler, for a
+;; failure before the read), so a handoff never outlives its call.
+;; The selection comes back narrowed to what is still in the drawing,
+;; or nil -- and nil falls through to the pickfirst probe and the
+;; prompt, exactly as a typed HEMISTEP does.
+(setq *calofin-handoff* nil)
+
+(defun hs-handed ( / h ss i e)
+  (setq h                 *calofin-handoff*
+        *calofin-handoff* nil)
+  (if (and (listp h) (= (car h) "HEMISTEP") (cadr h))
+    (progn
+      (setq ss (ssadd) i 0)
+      (repeat (sslength (cadr h))
+        (setq e (ssname (cadr h) i)
+              i (1+ i))
+        (if (entget e) (ssadd e ss)))
+      (if (< 0 (sslength ss)) ss))))
+
 (defun c:HEMISTEP ( / *error* hs-popstep undoflag ss i en ed et zf
                       lin lp1 lp2 pieces arcs cmode sp spc dir u
                       q hp bscr best side pt inref stopf cum n wid dep
@@ -62343,6 +62900,7 @@
                       wnoun bstep bmiss s hstep rl rr dflt)
 
   (defun *error* (msg)
+    (setq *calofin-handoff* nil)     ; one never read goes with the run
     (hs-fclear)                     ; both exits clear the form store
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (hs-setstyle oldstyle))
@@ -62411,8 +62969,9 @@
                    " tolerance is taken as " (rtos tol) ".")))
 
   ;; ---- 1. selection ----------------------------------------------------
-  ;; a pickfirst selection if there is one, otherwise ask for it
-  (setq ss (ssget "_I" '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  ;; a selection POOL handed over (its shallow-end wall), else a
+  ;; pickfirst selection if there is one, otherwise ask for it
+  (setq ss (cond ((hs-handed)) ((ssget "_I" '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))))
   (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
@@ -63793,7 +64352,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.21") ; printed on load and at command start so a
+(setq *ns-version* "v3.22") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -64733,6 +65292,29 @@
 
 ;;; --------------------------- main command -----------------------------
 
+;; A selection another command hands NORMIESTEP -- POOL's shallow-end
+;; wall, when a pool is drawn with steps -- through the global
+;; *calofin-handoff*, which PADDLE, AUTODIM and TYDRN read the same
+;; way.  It holds ("NORMIESTEP" SELECTION), is read only here, and is
+;; cleared at the read whoever it was for (and by the handler, for a
+;; failure before the read), so a handoff never outlives its call.
+;; The selection comes back narrowed to what is still in the drawing,
+;; or nil -- and nil falls through to the pickfirst probe and the
+;; prompt, exactly as a typed NORMIESTEP does.
+(setq *calofin-handoff* nil)
+
+(defun ns-handed ( / h ss i e)
+  (setq h                 *calofin-handoff*
+        *calofin-handoff* nil)
+  (if (and (listp h) (= (car h) "NORMIESTEP") (cadr h))
+    (progn
+      (setq ss (ssadd) i 0)
+      (repeat (sslength (cadr h))
+        (setq e (ssname (cadr h) i)
+              i (1+ i))
+        (if (entget e) (ssadd e ss)))
+      (if (< 0 (sslength ss)) ss))))
+
 (defun c:NORMIESTEP ( / *error* ns-popstep ns-ask-size undoflag ss i en ed et zf
                         segs mode base side arm1 arm2 corner fuzz
                         sp u dir pt s d1 d2 f1 f2 reflen tol txth
@@ -64751,6 +65333,7 @@
                         bstep bmiss rredo rl rr szv dflt)
 
   (defun *error* (msg)
+    (setq *calofin-handoff* nil)     ; one never read goes with the run
     (ns-fclear)                     ; both exits clear the form store
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (ns-setstyle oldstyle))
@@ -64846,8 +65429,9 @@
                    ", so ends within " (rtos fuzz) " count as joined.")))
 
   ;; ---- 1. selection ----------------------------------------------------
-  ;; a pickfirst selection if there is one, otherwise ask for it
-  (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  ;; a selection POOL handed over (its shallow-end wall), else a
+  ;; pickfirst selection if there is one, otherwise ask for it
+  (setq ss (cond ((ns-handed)) ((ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
   (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
@@ -133992,7 +134576,10 @@
      ("pool:*wallheight-ladder*" "'(36.0 54.0 3.0)" "C, the shallow depth ...and the three the DEPTH chain stands on. A pool's depths are as short a list as its...")
      ("pool:*deepdepth-ladder*" "'(60.0 96.0 6.0)" "D, the deep end ...and the three the DEPTH chain stands on. A pool's depths are as short a list as its corn...")
      ("pool:*breakdepth-ladder*" "'(36.0 96.0 6.0)" "C2, between the two ...and the three the DEPTH chain stands on. A pool's depths are as short a list as its...")
-     ("pool:*hopoffset-ladder*" "'(24.0 72.0 6.0)" "...and the one the HOPPER OFFSETS stand on: M and K, the gap the hopper leaves to the top side and to the b..."))
+     ("pool:*hopoffset-ladder*" "'(24.0 72.0 6.0)" "...and the one the HOPPER OFFSETS stand on: M and K, the gap the hopper leaves to the top side and to the b...")
+     ("pool:*steps-default*" "\"None\"" "what Enter answers at the steps question: \"None\", or \"Hemi\", \"Normie\", \"Corner\" to make a step the usual an...")
+     ("pool:*steps-eoff*" "12.0" "after NORMIESTEP steps INTO the pool, the overall E dim moves down to this far in from the BOTTOM wall, in...")
+     ("pool:*steps-fuzz*" "0.01" "how near a drawn wall's ends must sit to the shallow wall's line to be that wall, in inches pool, the overa..."))
     ("POOLSIDE" "lisp/poolside/POOLSIDE.lsp"
      ("psd:*base*" "(list 0.0 0.0)" "insertion base for this run")
      ("psd:*pv-col*" "'auto" "guide outline color: 'auto picks it for the background (grey either way round), a number is used as given")

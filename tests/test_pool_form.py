@@ -56,10 +56,16 @@ def snapshot(vm):
     return out
 
 
+# A typed run ends at the steps question (a form run that says nothing
+# about steps is not asked it); Enter declines, so both sides draw the
+# same pool.
+STEPS_NO = [None]
+
+
 def by_prompts(script):
     vm = VM()
     vm.load(LSP)
-    vm.run('c:POOL', script)
+    vm.run('c:POOL', list(script) + STEPS_NO)
     return vm
 
 
@@ -298,7 +304,7 @@ def depth_asked(vm):
 
 cv = VM()
 cv.load(LSP)
-cv.run('c:POOLCOVER', COVER)
+cv.run('c:POOLCOVER', COVER + STEPS_NO)
 assert not bottom_asked(cv), \
     "cover mode still asked for the bottom: %r" % bottom_asked(cv)
 assert not depth_asked(cv), \
@@ -313,7 +319,8 @@ print("   %d entities drawn, bottom never asked, %d prompts answered"
 pl = VM()
 pl.load(LSP)
 pl.run('c:POOL',
-       LEAD + ["Wedge", 30.0, 180.0, None, 60.0, None, 40.0, 60.0, "No"])
+       LEAD + ["Wedge", 30.0, 180.0, None, 60.0, None, 40.0, 60.0, "No"]
+       + STEPS_NO)
 assert bottom_asked(pl), "plain POOL stopped asking about the bottom"
 assert not pl.globals.get('pool:*nobottom*'), \
     "a typed POOL set the cover flag"
@@ -349,7 +356,7 @@ print("   %d entities, the gate never asked, the flag cleared on the way out"
 both = VM()
 both.load(LSP)
 both.eval(parse_all('(setq pool:*hasbottom* T pool:*nobottom* T)')[0])
-both.run('c:POOLCOVER', COVER)
+both.run('c:POOLCOVER', COVER + STEPS_NO)
 assert not bottom_asked(both) and not depth_asked(both), \
     "the two flags together asked something: %r" % both.prompts
 assert len([r for r in snapshot(both)]) == len(snapshot(cv)), \
@@ -386,11 +393,17 @@ assert not any('body corners' in p for p, _ in i.prompts), \
     "the body-corner family was asked despite the form answering it"
 assert not any('end-tip corners' in p for p, _ in i.prompts), \
     "the end-tip family was asked despite the form answering it"
-assert len(h.prompts) - len(i.prompts) == 4, \
+# the steps question ends a typed run only: a sheet that says nothing
+# about steps is not stopped for it, so it is left out of the count
+def _asked(vm):
+    return [p for p, _ in vm.prompts if 'shallow end' not in str(p)]
+
+
+assert len(_asked(h)) - len(_asked(i)) == 4, \
     "the form should have answered exactly the gate, two treatments " \
-    "and one size (got %d)" % (len(h.prompts) - len(i.prompts))
+    "and one size (got %d)" % (len(_asked(h)) - len(_asked(i)))
 print("   gate, both family treatments and the cut size all from the "
-      "form; %d prompts saved" % (len(h.prompts) - len(i.prompts)))
+      "form; %d prompts saved" % (len(_asked(h)) - len(_asked(i))))
 
 
 # --------------------------------------------------------------------
@@ -455,9 +468,9 @@ for bad, label in (('0.0', 'zero'), ('-240.0', 'negative'),
     m = by_form("'((b . %s))" % bad,
                 GREC_LEAD + ["Yes", "Cut", 24.0, "Square", "No"])
     same(h, m, "grecian B = %s from the form" % label)
-    assert len(m.prompts) == len(h.prompts), \
+    assert len(_asked(m)) == len(_asked(h)), \
         "B = %s: the refused answer did not fall through to the prompt " \
-        "(%d prompts, typed run %d)" % (label, len(m.prompts), len(h.prompts))
+        "(%d prompts, typed run %d)" % (label, len(_asked(m)), len(_asked(h)))
 print("   zero, negative and NA on B each re-asked; the pool is the typed one")
 
 

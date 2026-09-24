@@ -286,7 +286,8 @@ def pool_scenarios():
                   480.0, 240.0, "Square",
                   "Yes", "Normal",
                   60.0, 90.0, 240.0, 90.0,
-                  60.0, 120.0, 60.0])
+                  60.0, 120.0, 60.0,
+                  None])                  # no steps
     # radius corners: arcs on the outline and on the live guide (moved
     # by entmod as the answers come in), DIMRADIUS picking the arc
     w, u = same_drawing('out of square, radius corners', POOLF, 'c:POOL',
@@ -295,7 +296,8 @@ def pool_scenarios():
                          "Radius", 24.0,
                          None, None, None, None, None, None,
                          "Ends", 340.0, 340.0, 340.0, 340.0,
-                         "No", "No"])
+                         "No", "No",
+                         None])           # no step outside
     if u is not None:
         # the radius dims pick their arc ON it: the pick is a UCS point
         # the command reads, the arc is World data
@@ -321,17 +323,31 @@ def pool_scenarios():
                   360.0, 240.0, 480.0, "NA",
                   "Yes", "Normal",
                   70.0, 150.0, "NA", "NA", 110.0, 90.0,
-                  None, 100.0, None, "NA"])
+                  None, 100.0, None, "NA",
+                  None])                  # no steps
+    # a step OUTSIDE the shallow end: the wall is read back off the
+    # drawing (World data) against the flow's points (UCS), so a turned
+    # UCS that lost the step would break the wall in the wrong place
+    w, u = same_drawing('rectangle, no bottom, step outside', POOLF, 'c:POOL',
+                        ["Insquare", "Rectangle", BASE,
+                         480.0, 240.0, "Square",
+                         "No",
+                         "Yes", 96.0, 36.0])
+    if u is not None:
+        check('the shallow wall is broken round the step',
+              len(entities(u, 'LINE', 'POOL')) == 3 + 5,
+              repr(len(entities(u, 'LINE', 'POOL'))))
     # round in square: a circle; out of round: an ELLIPSE whose major
     # axis is a World direction, on the plan and on the guide
     same_drawing('round, in square', POOLF, 'c:POOL',
                  ["Insquare", "ROU", BASE, 420.0,
                   "Yes", "Normal",
                   70.0, 150.0, "NA", "NA", 110.0, 90.0,
-                  90.0, 240.0, 90.0, "NA"])
+                  90.0, 240.0, 90.0, "NA",
+                  None])                  # no steps
     w, u = same_drawing('round, out of round', POOLF, 'c:POOL',
                         ["Outofsquare", "ROU", BASE, 420.0, 300.0,
-                         "No"])
+                         "No", None])     # no bottom, no step
     if u is not None:
         ells = entities(u, 'ELLIPSE', live=False)
         check('the out-of-round pool and its guide are ellipses',

@@ -368,7 +368,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.21") ; printed on load and at command start so a
+(setq *ns-version* "v3.22") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -1308,6 +1308,29 @@
 
 ;;; --------------------------- main command -----------------------------
 
+;; A selection another command hands NORMIESTEP -- POOL's shallow-end
+;; wall, when a pool is drawn with steps -- through the global
+;; *calofin-handoff*, which PADDLE, AUTODIM and TYDRN read the same
+;; way.  It holds ("NORMIESTEP" SELECTION), is read only here, and is
+;; cleared at the read whoever it was for (and by the handler, for a
+;; failure before the read), so a handoff never outlives its call.
+;; The selection comes back narrowed to what is still in the drawing,
+;; or nil -- and nil falls through to the pickfirst probe and the
+;; prompt, exactly as a typed NORMIESTEP does.
+(setq *calofin-handoff* nil)
+
+(defun ns-handed ( / h ss i e)
+  (setq h                 *calofin-handoff*
+        *calofin-handoff* nil)
+  (if (and (listp h) (= (car h) "NORMIESTEP") (cadr h))
+    (progn
+      (setq ss (ssadd) i 0)
+      (repeat (sslength (cadr h))
+        (setq e (ssname (cadr h) i)
+              i (1+ i))
+        (if (entget e) (ssadd e ss)))
+      (if (< 0 (sslength ss)) ss))))
+
 (defun c:NORMIESTEP ( / *error* ns-popstep ns-ask-size undoflag ss i en ed et zf
                         segs mode base side arm1 arm2 corner fuzz
                         sp u dir pt s d1 d2 f1 f2 reflen tol txth
@@ -1326,6 +1349,7 @@
                         bstep bmiss rredo rl rr szv dflt)
 
   (defun *error* (msg)
+    (setq *calofin-handoff* nil)     ; one never read goes with the run
     (ns-fclear)                     ; both exits clear the form store
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (ns-setstyle oldstyle))
@@ -1421,8 +1445,9 @@
                    ", so ends within " (rtos fuzz) " count as joined.")))
 
   ;; ---- 1. selection ----------------------------------------------------
-  ;; a pickfirst selection if there is one, otherwise ask for it
-  (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  ;; a selection POOL handed over (its shallow-end wall), else a
+  ;; pickfirst selection if there is one, otherwise ask for it
+  (setq ss (cond ((ns-handed)) ((ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
   (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
