@@ -138,7 +138,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.63")
+(setq *lazpanel-version* "v3.64")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -5850,7 +5850,10 @@
      ("pool:*breakdepth-ladder*" "'(36.0 96.0 6.0)" "C2, between the two ...and the three the DEPTH chain stands on. A pool's depths are as short a list as its...")
      ("pool:*hopoffset-ladder*" "'(24.0 72.0 6.0)" "...and the one the HOPPER OFFSETS stand on: M and K, the gap the hopper leaves to the top side and to the b...")
      ("pool:*typ-note*" "\" Typ.\"" "The suffix after the one corner callout that stands for a group of equal corners -- \"?\" and \"90%%d\" marks i...")
-     ("pool:*ng-note*" "\"Not Given\"" "The note on a corner the order sheet never gave: on the leader off its boxed \"?\", and under its row in the..."))
+     ("pool:*ng-note*" "\"Not Given\"" "The note on a corner the order sheet never gave: on the leader off its boxed \"?\", and under its row in the...")
+     ("pool:*steps-default*" "\"None\"" "what Enter answers at the steps question: \"None\", or \"Hemi\", \"Normie\", \"Corner\" to make a step the usual an...")
+     ("pool:*steps-eoff*" "12.0" "after NORMIESTEP steps INTO the pool, the overall E dim moves down to this far in from the BOTTOM wall, in...")
+     ("pool:*steps-fuzz*" "0.01" "how near a drawn wall's ends must sit to the shallow wall's line to be that wall, in inches pool, the overa..."))
     ("POOLSIDE" "lisp/poolside/POOLSIDE.lsp"
      ("psd:*base*" "(list 0.0 0.0)" "insertion base for this run")
      ("psd:*pv-col*" "'auto" "guide outline color: 'auto picks it for the background (grey either way round), a number is used as given")

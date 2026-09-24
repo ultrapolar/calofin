@@ -120,8 +120,10 @@ BASE = (0.0, 0.0, 0.0)
 
 
 def pool_run(vm, script):
+    # every finished run ends at POOL's steps question (steps at the
+    # shallow end), which Enter declines -- as the other POOL suites do
     try:
-        vm.run('c:POOL', script)
+        vm.run('c:POOL', list(script) + [None])
     except LispError as e:
         raise AssertionError("POOL: %s" % e) from None
     return vm

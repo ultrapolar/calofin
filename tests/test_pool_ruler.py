@@ -73,7 +73,9 @@ def fresh():
 def run(script, label):
     vm = fresh()
     try:
-        vm.run('c:POOL', list(script))
+        # the trailing Enter declines the steps question every finished
+        # run ends at -- these runs are about the ruler
+        vm.run('c:POOL', list(script) + [None])
     except LispError as e:
         raise AssertionError("[%s] %s" % (label, e)) from None
     return vm

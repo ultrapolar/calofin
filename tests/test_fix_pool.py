@@ -185,7 +185,8 @@ vm = pool_vm()
 layer(vm, 'POOL-RULER', 4)
 attempt("POOL locked ruler",
         lambda: vm.run('c:POOL', ["Insquare", "Rectangle"] + BASE +
-                       [480.0, 240.0, "Radius", 24.0, "No"]))
+                       [480.0, 240.0, "Radius", 24.0, "No",
+                        None]))           # no step outside the shallow end
 check("POOL: the ruler was drawn at all",
       any(vm.layer_of(e) == 'POOL-RULER' for e in vm.entities))
 check("POOL: nothing is left on POOL-RULER", not live_on(vm, 'POOL-RULER'),
@@ -217,7 +218,8 @@ vm.loads('(entmake (list \'(0 . "LAYER") \'(100 . "AcDbSymbolTableRecord")'
          ' \'(62 . -7) \'(6 . "Continuous")))')
 attempt("POOL off+locked ruler",
         lambda: vm.run('c:POOL', ["Insquare", "Rectangle"] + BASE +
-                       [480.0, 240.0, "Radius", 24.0, "No"]))
+                       [480.0, 240.0, "Radius", 24.0, "No",
+                        None]))           # no step outside the shallow end
 rec = vm.loads('(tblsearch "LAYER" "POOL-RULER")') or []
 check("POOL: an OFF ruler layer stays off",
       next((g.b for g in rec if isinstance(g, Dot) and g.a == 62), 0) < 0)
@@ -228,7 +230,8 @@ check("POOL: an OFF ruler layer stays off",
 GIVEN_RUN = (["Outofsquare", "Rectangle"] + BASE +
              [240.0, 240.0, 120.0, 120.0, "Square", None, None, None,
               268.0, 400.0, "No", "Yes"])
-CLEAN_RUN = ["Insquare", "Rectangle"] + BASE + [480.0, 240.0, "Square", "No"]
+CLEAN_RUN = ["Insquare", "Rectangle"] + BASE + [480.0, 240.0, "Square", "No",
+                                            None]    # and no step
 
 
 def given_texts(vm):
@@ -296,7 +299,8 @@ def pick_first_mark(vm):
 
 vm = pool_vm()
 attempt("miss then pick",
-        lambda: vm.run('c:POOL', GIVEN_RUN + [MISS, pick_first_mark, None]))
+        lambda: vm.run('c:POOL', GIVEN_RUN + [MISS, pick_first_mark, None,
+                                            None]))   # ...and no step
 said = ''.join(vm.printed)
 check("the miss was named", 'Nothing there - click the dimension text' in said)
 check("the pick after it still flipped a mark",

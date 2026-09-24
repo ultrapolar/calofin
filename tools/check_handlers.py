@@ -483,15 +483,52 @@ class Tracer:
         self.fn_ref(f[0], bound, via, wrapped, line)
 
 
+def is_pop_stmt(f):
+    """(*pop-error-mode*), bare or behind its (if *pop-error-mode* ...)
+    guard -- a statement after which the pushing command's body runs
+    in the default error mode again"""
+    if head(f) == "*pop-error-mode*":
+        return True
+    return (head(f) == "if" and len(f) >= 3 and is_sym(f[1])
+            and f[1].lower() == "*pop-error-mode*"
+            and head(f[2]) == "*pop-error-mode*")
+
+
+def calls_before_pop(forms):
+    """the heads called in FORMS, taken as a statement sequence: a pop
+    statement ends its own sequence, so what a body calls AFTER its pop
+    -- POOL handing the steps to HEMISTEP once its run is closed -- is
+    not reached pushed.  Only the pushing defun's own body is read this
+    way; a pop in one branch does not end a sibling branch, and a
+    nested defun (the handler) is read whole, as before."""
+    out = set()
+    for f in forms:
+        if is_pop_stmt(f):
+            break
+        if not isinstance(f, list) or not f:
+            continue
+        h = head(f)
+        if h in ("defun", "lambda", "quote", "function"):
+            out |= direct_calls(f)
+            continue
+        if h:
+            out.add(h)
+            out |= calls_before_pop(f[1:])
+        else:
+            out |= calls_before_pop(f)
+    return out
+
+
 def pushed_by_caller(tier):
-    """name -> the pushing defun whose run reaches it (before any pop is
-    not modelled: reaching is enough to say the mode CAN be pushed)"""
+    """name -> the pushing defun whose run reaches it.  A pop is
+    modelled only in the pushing defun's own body (calls_before_pop);
+    below that, reaching is enough to say the mode CAN be pushed"""
     out = {}
     for path, d, chain in tier.owner_defuns():
         if not (is_sym(d[1]) and calls_push(d)):
             continue
         src = d[1].lower()
-        todo = list(direct_calls(list(body_of(d))))
+        todo = list(calls_before_pop(list(body_of(d))))
         seen = set()
         while todo:
             c = todo.pop()

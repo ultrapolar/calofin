@@ -374,7 +374,8 @@ try:
                       "Radius", 60.0, type_back("Too large", seen),
                       None, None, None, None, None, None,
                       "Ends", 258.339, 258.339, 258.339, 258.339,
-                      "No", "No"])
+                      "No", "No",
+                      None])              # no step outside the shallow end
     ran = None
 except LispError as e:
     ran = str(e)

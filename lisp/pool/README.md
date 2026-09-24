@@ -569,6 +569,57 @@ per-entity color/linetype/lineweight override, so their look comes
 entirely from that style and the `DIMENSION` layer, same as every
 other dim the routine draws.
 
+### Steps at the shallow end
+
+Once the pool is drawn, POOL offers steps. They always go at the
+**shallow end** — the right-hand wall, the one the slope break faces.
+
+**With a hopper drawn**, the question is
+
+```
+Add steps at the shallow end [Hemi/Normie/Corner/None] <None>:
+```
+
+and the answer hands the shallow wall to `HEMISTEP`, `NORMIESTEP` or
+`CORNERSTP` (`Corner` first asks `Which shallow corner do the steps
+come out of [Bottom/Top/Back]`, and hands over that corner's two walls
+and its treatment). The routine is not re-asked for its selection; it
+asks everything else it always asks — the side the steps go, the
+width, the treads, dims, profile, bead. It runs AFTER POOL has closed
+its own undo group and given your settings back, so an Esc inside it
+is that routine's alone, and `U` takes the steps back before it takes
+the pool. A shallow end that is a curve (an oval, a round pool) has no
+straight wall to hand over, and one POOL cannot trace falls back the
+same way: the routine asks you to select it, as a typed command would.
+The routine has to be loaded (`shared/LAZPASS.lsp` carries all of
+them); when it is not, POOL says so and the pool stands as drawn.
+
+**When `NORMIESTEP`'s steps face INTO the pool**, the dimensions are
+rearranged round them: the overall `E` dim (slope break to shallow
+wall) moves down to `pool:*steps-eoff*` (12") in from the bottom wall,
+in `SIDE STANDARD`, and a new floor dim on the H/G/F/E chain measures
+from the slope break to the first step — the tread nearest the break.
+A bottom with no E dim to move (a wedge, E = 0, the sport and the
+shapes' own Normal hoppers) keeps its dims and says so.
+
+**With no hopper** there are no treads to lay out:
+
+```
+Add a step outside the shallow end [Yes/No] <No>:
+Step width - along the shallow wall [Back]:
+Step length - out from the wall [Back]:
+```
+
+The step is a plain box OUTSIDE the wall, centered on it, no tread
+offsets. The wall is broken round it so the step is part of the
+perimeter, its width and length are dimensioned, and `PADDLE` then pads
+the whole new perimeter (its inside corners where the step meets the
+wall). A width wider than the straight wall is refused and asked again.
+
+A form run that carries no `steps` / `extstep` key draws without
+stopping to ask — see the form keys below. L pools are not offered
+steps: their hopper frame's right side is the slope break, not a wall.
+
 ### In-square vs out-of-square
 
 The very first prompt asks whether the pool is in-square. **In-square**
@@ -1110,6 +1161,9 @@ The keyword questions have named keys:
 | `btype` | `Bottom type` |
 | `htype` | Grecian `Hopper type` (`Square`/`SIX-sided`) |
 | `hmode` | `SIX-sided corners measured by` (`Offsets`/`Letters`) |
+| `steps` | `Add steps at the shallow end` (`Hemi`/`Normie`/`Corner`/`None`) — with a hopper |
+| `stepcorner` | `Which shallow corner do the steps come out of` (`Bottom`/`Top`) |
+| `extstep` | `Add a step outside the shallow end` (`Yes`/`No`) — with no hopper; `extwidth` and `extlen` are its two lengths |
 
 Keyword values are strings spelling one of the words the bracket
 shows (case-blind, but a word the question does not offer — or a
@@ -1534,6 +1588,9 @@ holds this table and the block together, so neither can drift from the other.
 | `pool:*deepdepth-ladder*` | `'(60.0 96.0 6.0)` | ...and for D, the deep end |
 | `pool:*breakdepth-ladder*` | `'(36.0 96.0 6.0)` | ...and for C2, which lands between the two |
 | `pool:*hopoffset-ladder*` | `'(24.0 72.0 6.0)` | ...and for the two HOPPER OFFSETS, M and K — the gap the hopper leaves to the top side and to the bottom side. 2' to 6' by 6", which is what `ABHD` (`*PF-HOP-OFF-LADDER*`) and `FITABHD` (`fit:*hop-side-ladder*`, `fit:*hop-back-ladder*`) offer at the same question: a hopper offset is one number whichever tool is asking for it. The rest of the chain is not on it — H, G, F and E are stations ALONG the pool and L is the hopper's own width |
+| `pool:*steps-default*` | `"None"` | What Enter answers at `Add steps at the shallow end`: `"Hemi"`, `"Normie"` or `"Corner"` makes that routine the usual answer. A value that is none of the four reads as `"None"` |
+| `pool:*steps-eoff*` | `12.0` | After `NORMIESTEP` puts steps INTO the pool, how far in from the BOTTOM wall the overall `E` dim moves to, in inches |
+| `pool:*steps-fuzz*` | `0.01` | How near a drawn wall's ends must sit to the shallow wall's line (and a corner's pieces to each other) to be read as that wall, in inches |
 
 Three kinds of thing are deliberately **not** in that block, and the
 block says so: run state (set and cleared by a run, not tuned), the

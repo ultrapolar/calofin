@@ -19,13 +19,20 @@ LSP = os.path.join(os.path.dirname(__file__), '..',
                    'lisp', 'pool', 'POOL.LSP')
 
 
+# Every finished run ends at the steps question (steps at the shallow
+# end, or a step outside it when there is no bottom); Enter declines
+# it.  The scenarios here are about the pool, so run() answers it.
+# The steps themselves are test_pool_steps.py's.
+STEPS_NO = [None]
+
+
 def run(script, label, dimstyles=()):
     vm = VM()
     vm.load(LSP)
     for s in dimstyles:
         vm.tables['DIMSTYLE'].add(s)
     try:
-        vm.run('c:POOL', script)
+        vm.run('c:POOL', list(script) + STEPS_NO)
     except LispError as e:
         raise AssertionError(f"[{label}] {e}") from None
     return vm
@@ -1626,7 +1633,7 @@ def run_units(lunits):
     v.load(LSP)
     v.sysvars['LUNITS'] = lunits
     v.run('c:POOL', ["Insquare", "Rectangle"] + BASE +
-          [480.0, 240.0, "Square", "No"])
+          [480.0, 240.0, "Square", "No"] + STEPS_NO)
     return [d for d in drawn(v, 'TEXT', 'POOL-NOTES')]
 
 
@@ -1646,7 +1653,7 @@ vm.run('c:POOL', ["Outofsquare", "Grecian"] + BASE +
         324.00, 61.00, 60.00, 96.00, 84.00,
         "Simple", 389.00, 388.50,
         None,                     # anything to record? Enter = No
-        "No"])
+        "No"] + STEPS_NO)
 _tx = [d.get(1) for d in drawn(vm, 'TEXT', 'POOL-NOTES')]
 assert any(isinstance(t, str) and (t.startswith('+') or t.startswith('-'))
            and '"' not in t and "'" not in t and '.' in t for t in _tx), \

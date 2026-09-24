@@ -1472,7 +1472,8 @@ try:
     vm2.run('c:POOL',
             ["Outofsquare", "Rectangle", (0.0, 0.0, 0.0),
              240.0, 240.0, 120.0, 120.0] + CORNERS + CROSS +
-            ["Yes", "Wedge", 30.0, 180.0] + REST + [40.0, 60.0, "No"])
+            ["Yes", "Wedge", 30.0, 180.0] + REST + [40.0, 60.0, "No"]
+            + [None])       # typed, so the steps question: Enter = none
 except LispError as e:
     raise AssertionError("prompt run: %s" % e) from None
 b = snapshot(vm2)
@@ -1550,7 +1551,8 @@ try:
     vs2.run('c:POOL',
             ["Insquare", "Rectangle", (0.0, 0.0, 0.0), 240.0, 120.0,
              "Square", "Yes", "Sport",
-             20.0, 40.0, 60.0, 40.0, 80.0, 30.0, 60.0, 30.0, 40.0, 60.0])
+             20.0, 40.0, 60.0, 40.0, 80.0, 30.0, 60.0, 30.0, 40.0, 60.0,
+             None])         # no steps
 except LispError as e:
     raise AssertionError("sport prompt run: %s" % e) from None
 sb = snapshot(vs2)
@@ -1844,7 +1846,8 @@ gi2 = stubbed(with_pool=True)
 gi2.run('c:POOL',
         ["Insquare", "Grecian", (0.0, 0.0, 0.0), "Overall",
          360.0, 200.0, 240.0, 60.0, 50.0, 100.0, 78.0,
-         "Yes", "Cut", 12.0, "Cut", 8.0, "No"])
+         "Yes", "Cut", 12.0, "Cut", 8.0, "No",
+         None])             # no step outside the shallow end
 gb = snapshot(gi2)
 assert ga == gb, (
     "the in-square grecian sheet drew a different pool: %d entities from "
@@ -1871,7 +1874,8 @@ go2.run('c:POOL',
          "Simple", 300.0, 300.0, "Yes",
          # A B RB RT C D LT LB -- body 12, tips 8, the order POOL asks
          "Cut", 12.0, "Cut", 12.0, "Cut", 8.0, "Cut", 8.0,
-         "Cut", 12.0, "Cut", 12.0, "Cut", 8.0, "Cut", 8.0, "No", "No"])
+         "Cut", 12.0, "Cut", 12.0, "Cut", 8.0, "Cut", 8.0, "No", "No",
+         None])             # no step outside the shallow end
 gd = snapshot(go2)
 assert gc == gd, (
     "the fanned-out grecian sheet drew a different pool: %d entities from "
@@ -1919,7 +1923,8 @@ vl2 = stubbed(with_pool=True)
 vl2.run('c:POOL',
         ["Insquare", "L", (0.0, 0.0, 0.0),
          480.0, 180.0, 240.0, 120.0, 240.0, 300.0,
-         "Yes", "Cut", 12.0, "Square", "No", "No"])
+         "Yes", "Cut", 12.0, "Square", "No", "No",
+         None])             # no step outside the shallow end
 lb = snapshot(vl2)
 assert la == lb, (
     "the L sheet drew a different pool: %d entities from the chart, %d from "

@@ -1,5 +1,5 @@
 ;;; ======================================================================
-;;; STEPS_092426_REV416-326-322.lsp
+;;; STEPS_092426_REV417-327-323.lsp
 ;;; ----------------------------------------------------------------------
 ;;; GENERATED - do not edit.  Rebuild it with:
 ;;;     python3 tools/release_lisp.py
@@ -8,9 +8,9 @@
 ;;; included below verbatim from its source in lisp/cornerstp/, in the
 ;;; order its REV number appears in the filename above:
 ;;;
-;;;     CORNERSTP.lsp   v4.16 -> REV416   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
-;;;     HEMISTEP.lsp    v3.26 -> REV326   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
-;;;     NORMIESTEP.lsp  v3.22 -> REV322   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
+;;;     CORNERSTP.lsp   v4.17 -> REV417   CORNERSTP, TUTORIALCORNERSTP, CORNERSTPVER
+;;;     HEMISTEP.lsp    v3.27 -> REV327   HEMISTEP, TUTORIALHEMISTEP, HEMISTEPVER
+;;;     NORMIESTEP.lsp  v3.23 -> REV323   NORMIESTEP, TUTORIALNORMIESTEP, NORMIESTEPVER
 ;;;
 ;;; LOAD:  APPLOAD this one file (or drag it into the drawing
 ;;;        window) and every command listed above comes with it.
@@ -22,7 +22,7 @@
 ;;; ======================================================================
 
 ;;; ======================================================================
-;;; >>> CORNERSTP.lsp (v4.16) - verbatim from lisp/cornerstp/CORNERSTP.lsp
+;;; >>> CORNERSTP.lsp (v4.17) - verbatim from lisp/cornerstp/CORNERSTP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; CORNERSTP.lsp
@@ -376,7 +376,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.16") ; printed on load and at command start so a
+(setq *cs-version* "v4.17") ; printed on load and at command start so a
                             ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -1557,6 +1557,29 @@
 
 ;;; --------------------------- main command ----------------------------
 
+;; A selection another command hands CORNERSTP -- POOL's shallow-end
+;; wall, when a pool is drawn with steps -- through the global
+;; *calofin-handoff*, which PADDLE, AUTODIM and TYDRN read the same
+;; way.  It holds ("CORNERSTP" SELECTION), is read only here, and is
+;; cleared at the read whoever it was for (and by the handler, for a
+;; failure before the read), so a handoff never outlives its call.
+;; The selection comes back narrowed to what is still in the drawing,
+;; or nil -- and nil falls through to the pickfirst probe and the
+;; prompt, exactly as a typed CORNERSTP does.
+(setq *calofin-handoff* nil)
+
+(defun cs-handed ( / h ss i e)
+  (setq h                 *calofin-handoff*
+        *calofin-handoff* nil)
+  (if (and (listp h) (= (car h) "CORNERSTP") (cadr h))
+    (progn
+      (setq ss (ssadd) i 0)
+      (repeat (sslength (cadr h))
+        (setq e (ssname (cadr h) i)
+              i (1+ i))
+        (if (entget e) (ssadd e ss)))
+      (if (< 0 (sslength ss)) ss))))
+
 (defun c:CORNERSTP ( / *error* cs-popstep undoflag ss i en ed et zf
                        straights arcrecs lines diag arcr cand o1 o2
                        score best j k tmp w1 w2 corner ang c r a1 a2
@@ -1573,6 +1596,7 @@
                        qstep qdir bstep bmiss lastwid rl rr dflt)
 
   (defun *error* (msg)
+    (setq *calofin-handoff* nil)     ; one never read goes with the run
     (cs-fclear)                     ; both exits clear the form store
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (cs-setstyle oldstyle))
@@ -1647,8 +1671,9 @@
                    " tolerance is taken as " (rtos tol) ".")))
 
   ;; ---- 1. selection ---------------------------------------------------
-  ;; a pickfirst selection if there is one, otherwise ask for it
-  (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  ;; a selection POOL handed over (its shallow-end wall), else a
+  ;; pickfirst selection if there is one, otherwise ask for it
+  (setq ss (cond ((cs-handed)) ((ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
   (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
@@ -2954,7 +2979,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> HEMISTEP.lsp (v3.26) - verbatim from lisp/cornerstp/HEMISTEP.lsp
+;;; >>> HEMISTEP.lsp (v3.27) - verbatim from lisp/cornerstp/HEMISTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; HEMISTEP.lsp
@@ -3274,7 +3299,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.26") ; printed on load and at command start so a
+(setq *hs-version* "v3.27") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -4565,6 +4590,29 @@
 
 ;;; --------------------------- main command -----------------------------
 
+;; A selection another command hands HEMISTEP -- POOL's shallow-end
+;; wall, when a pool is drawn with steps -- through the global
+;; *calofin-handoff*, which PADDLE, AUTODIM and TYDRN read the same
+;; way.  It holds ("HEMISTEP" SELECTION), is read only here, and is
+;; cleared at the read whoever it was for (and by the handler, for a
+;; failure before the read), so a handoff never outlives its call.
+;; The selection comes back narrowed to what is still in the drawing,
+;; or nil -- and nil falls through to the pickfirst probe and the
+;; prompt, exactly as a typed HEMISTEP does.
+(setq *calofin-handoff* nil)
+
+(defun hs-handed ( / h ss i e)
+  (setq h                 *calofin-handoff*
+        *calofin-handoff* nil)
+  (if (and (listp h) (= (car h) "HEMISTEP") (cadr h))
+    (progn
+      (setq ss (ssadd) i 0)
+      (repeat (sslength (cadr h))
+        (setq e (ssname (cadr h) i)
+              i (1+ i))
+        (if (entget e) (ssadd e ss)))
+      (if (< 0 (sslength ss)) ss))))
+
 (defun c:HEMISTEP ( / *error* hs-popstep undoflag ss i en ed et zf
                       lin lp1 lp2 pieces arcs cmode sp spc dir u
                       q hp bscr best side pt inref stopf cum n wid dep
@@ -4578,6 +4626,7 @@
                       wnoun bstep bmiss s hstep rl rr dflt)
 
   (defun *error* (msg)
+    (setq *calofin-handoff* nil)     ; one never read goes with the run
     (hs-fclear)                     ; both exits clear the form store
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (hs-setstyle oldstyle))
@@ -4646,8 +4695,9 @@
                    " tolerance is taken as " (rtos tol) ".")))
 
   ;; ---- 1. selection ----------------------------------------------------
-  ;; a pickfirst selection if there is one, otherwise ask for it
-  (setq ss (ssget "_I" '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))
+  ;; a selection POOL handed over (its shallow-end wall), else a
+  ;; pickfirst selection if there is one, otherwise ask for it
+  (setq ss (cond ((hs-handed)) ((ssget "_I" '((0 . "LINE,ARC,CIRCLE,LWPOLYLINE,POLYLINE"))))))
   (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn
@@ -5654,7 +5704,7 @@
 (princ)
 
 ;;; ======================================================================
-;;; >>> NORMIESTEP.lsp (v3.22) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
+;;; >>> NORMIESTEP.lsp (v3.23) - verbatim from lisp/cornerstp/NORMIESTEP.lsp
 ;;; ======================================================================
 ;;; ======================================================================
 ;;; NORMIESTEP.lsp
@@ -6049,7 +6099,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.22") ; printed on load and at command start so a
+(setq *ns-version* "v3.23") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- shop terms, re-read ------------------------
@@ -7547,6 +7597,29 @@
 
 ;;; --------------------------- main command -----------------------------
 
+;; A selection another command hands NORMIESTEP -- POOL's shallow-end
+;; wall, when a pool is drawn with steps -- through the global
+;; *calofin-handoff*, which PADDLE, AUTODIM and TYDRN read the same
+;; way.  It holds ("NORMIESTEP" SELECTION), is read only here, and is
+;; cleared at the read whoever it was for (and by the handler, for a
+;; failure before the read), so a handoff never outlives its call.
+;; The selection comes back narrowed to what is still in the drawing,
+;; or nil -- and nil falls through to the pickfirst probe and the
+;; prompt, exactly as a typed NORMIESTEP does.
+(setq *calofin-handoff* nil)
+
+(defun ns-handed ( / h ss i e)
+  (setq h                 *calofin-handoff*
+        *calofin-handoff* nil)
+  (if (and (listp h) (= (car h) "NORMIESTEP") (cadr h))
+    (progn
+      (setq ss (ssadd) i 0)
+      (repeat (sslength (cadr h))
+        (setq e (ssname (cadr h) i)
+              i (1+ i))
+        (if (entget e) (ssadd e ss)))
+      (if (< 0 (sslength ss)) ss))))
+
 (defun c:NORMIESTEP ( / *error* ns-popstep ns-ask-size undoflag ss i en ed et zf
                         segs mode base side arm1 arm2 corner fuzz
                         sp u dir pt s d1 d2 f1 f2 reflen tol txth
@@ -7565,6 +7638,7 @@
                         bstep bmiss rredo rl rr szv dflt)
 
   (defun *error* (msg)
+    (setq *calofin-handoff* nil)     ; one never read goes with the run
     (ns-fclear)                     ; both exits clear the form store
     (if undoflag (vl-catch-all-apply 'command-s (list "_.UNDO" "_End")))
     (if oldstyle (ns-setstyle oldstyle))
@@ -7660,8 +7734,9 @@
                    ", so ends within " (rtos fuzz) " count as joined.")))
 
   ;; ---- 1. selection ----------------------------------------------------
-  ;; a pickfirst selection if there is one, otherwise ask for it
-  (setq ss (ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))
+  ;; a selection POOL handed over (its shallow-end wall), else a
+  ;; pickfirst selection if there is one, otherwise ask for it
+  (setq ss (cond ((ns-handed)) ((ssget "_I" '((0 . "LINE,ARC,LWPOLYLINE,POLYLINE"))))))
   (if lzd:watch (lzd:watch ss) ss)
   (if (null ss)
     (progn

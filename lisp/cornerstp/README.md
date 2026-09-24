@@ -139,6 +139,16 @@ Per routine:
   far off 90 still counts). `?` asserts nothing about the angle and is
   drawn at any.
 
+**Called from POOL.** When a pool is drawn with a hopper, `POOL` asks
+`Add steps at the shallow end [Hemi/Normie/Corner/None]` and hands the
+chosen routine the shallow wall (for `CORNERSTP`, the corner's two
+walls and its treatment) through the global `*calofin-handoff*` --
+`("NORMIESTEP" <selection>)` -- read before the pickfirst probe and
+cleared at the read and by the handler, the way `PADDLE` takes a
+perimeter from `AUTODIM`. The selection prompt is then skipped and
+everything after it is asked as usual. Nothing handed (a curved
+shallow end) and the routine asks for its selection as always.
+
 ## Install & run
 
 1. In AutoCAD run `APPLOAD` and load the file(s) you need -- or load
