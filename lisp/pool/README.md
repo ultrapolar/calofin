@@ -640,15 +640,20 @@ right, clear of it by the usual gap -- after PADDLE, so the pads count.
 
 ```
 Add a step outside the shallow end [Yes/No] <No>:
+Pick the wall the step goes on [Back] <the shallow wall>:
 Step size, 4' out by 6' or 8' along the wall [4x6/4x8/Custom/Back] <4x6>:
-Step width - along the shallow wall [Back]:      (Custom only)
+Step width - along the wall [Back]:              (Custom only)
 Step length - out from the wall [Back]:          (Custom only)
 Where does the step sit on the wall [Center/Offset/Back] <Center>:
 ```
 
+**Which wall** comes first: pick any straight wall of the pool (snaps
+live; the nearest straight piece to the pick is taken), or Enter for the
+shallow wall. The step goes OUT of the pool through that wall.
+
 **Where on the wall** is asked, not assumed: `Center` puts it on the
-middle of the wall's straight span; `Offset` asks you to pick a point on
-the wall (a corner, a skimmer -- snaps are live) and the distance from
+middle of the wall's straight span; `Offset` asks you to pick the point on
+the wall you are offsetting from (a corner, a skimmer -- snaps are live) and the distance from
 it to the step's NEAR side, and the step runs from there toward the
 middle of the wall. One that would run past the end of the wall is
 refused and asked again.

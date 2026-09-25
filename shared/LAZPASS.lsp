@@ -3893,7 +3893,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092526 REV48")
+(setq pool:*version* "092526 REV49")
 
 ;;; -------------------- shop terms --------------------------------------
 ;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
@@ -13118,38 +13118,40 @@
                                ("Corner" . "CORNERSTP"))))
             ss))))
 
-;; Without one: a box step outside the wall, centered on it -- its
-;; overall width along the wall and its length out from it, nothing
-;; else.  Drawn, dimensioned and let into the perimeter here, while the
-;; run is open; PADDLE comes after (pool:stepsafter).
-(defun pool:stepsout ( / stage go wall fr u n pe w1 w2 wlen w l m
+;; Without one: a box step outside a wall -- its overall width along
+;; the wall and its length out from it, nothing else.  The drafter
+;; picks the WALL first (Enter is the shallow one), then the size, then
+;; where along the wall it sits (pool:alongwall: Center, or Offset from
+;; a point they pick).  Drawn, dimensioned and let into the perimeter
+;; here, while the run is open; PADDLE comes after (pool:stepsafter).
+(defun pool:stepsout ( / stage go wall u n pe w1 w2 wlen w l m
                          s1 s2 o1 o2 doff odl sz)
   (setq stage 0)
-  (while (< stage 5)
+  (while (< stage 6)
     (cond
       ((= stage 0)
        (setq go (pool:askynf 'extstep "Add a step outside the shallow end"
                              "No" nil))
+       (setq stage (if go 1 6)))
+      ;; which wall: picked, or Enter for the shallow one
+      ((= stage 1)
+       (setq wall (pool:pickwall))
        (cond
-         ((not go) (setq stage 5))
-         ((null (setq wall (pool:shwall)))
-          (princ (strcat "\nThe shallow end is not one straight wall, so"
-                         " there is nothing to set a step on - left off."))
-          (setq go nil stage 5))
+         ((eq wall 'CAL-BACK) (princ "\nStepping back one question.") (setq stage 0))
+         ((null wall)
+          (princ (strcat "\nThere is no straight wall there to set a step on -"
+                         " pick a straight wall of the pool.")))
          (t
-          (setq fr   (pool:shframe)
-                u    (car fr)
-                n    (cadr fr)
-                pe   (pool:ends wall)
-                ;; w1 toward b, w2 toward c
-                w1   (if (< (cal:dot (cal:v- (car pe) (cadr pe)) u) 0.0)
-                       (car pe) (cadr pe))
-                w2   (if (eq w1 (car pe)) (cadr pe) (car pe))
+          (setq pe   (pool:ends wall)
+                w1   (car pe)
+                w2   (cadr pe)
+                u    (pool:unit (cal:v- w2 w1))
+                n    (pool:outward w1 w2)
                 wlen (distance w1 w2)
-                stage 1))))
+                stage 2))))
       ;; the two sizes a step comes in, or its own two lengths.  A
       ;; sheet that gives the lengths has said Custom already
-      ((= stage 1)
+      ((= stage 2)
        (setq sz (if (and (pool:fhas 'extwidth) (not (pool:fhas 'extsize)))
                   "Custom"
                   (pool:askkwf 'extsize "Step size, 4' out by 6' or 8' along the wall"
@@ -13160,34 +13162,34 @@
                                      ("4x6"))
                                t)))
        (cond
-         ((eq sz 'CAL-BACK) (princ "\nStepping back one question.") (setq stage 0))
-         ((= sz "Custom") (setq stage 2))
+         ((eq sz 'CAL-BACK) (princ "\nStepping back one question.") (setq stage 1))
+         ((= sz "Custom") (setq stage 3))
          (t
           (setq l 48.0
                 w (if (= sz "4x8") 96.0 72.0))
           (if (> w (+ wlen pool:*steps-fuzz*))
             (princ (strcat "\nA " sz " step is wider than the straight wall it"
                            " sits on (" (rtos wlen 4 4) ") - pick another size."))
-            (setq stage 4)))))
-      ((= stage 4)
-       (setq m (pool:alongwall w1 u wlen w))
-       (if (eq m 'CAL-BACK)
-         (progn (princ "\nStepping back one question.")
-                (setq stage (if (= sz "Custom") 3 1)))
-         (setq stage 5)))
-      ((= stage 2)
-       (setq w (pool:stepnum 'extwidth "Step width - along the shallow wall"))
+            (setq stage 5)))))
+      ((= stage 3)
+       (setq w (pool:stepnum 'extwidth "Step width - along the wall"))
        (cond
-         ((eq w 'CAL-BACK) (princ "\nStepping back one question.") (setq stage 1))
+         ((eq w 'CAL-BACK) (princ "\nStepping back one question.") (setq stage 2))
          ((> w (+ wlen pool:*steps-fuzz*))
           (princ (strcat "\nThat is wider than the straight wall it sits on ("
                          (rtos wlen 4 4) ") - give a width up to that.")))
-         (t (setq stage 3))))
-      (t
+         (t (setq stage 4))))
+      ((= stage 4)
        (setq l (pool:stepnum 'extlen "Step length - out from the wall"))
        (if (eq l 'CAL-BACK)
-         (progn (princ "\nStepping back one question.") (setq stage 2))
-         (setq stage 4)))))
+         (progn (princ "\nStepping back one question.") (setq stage 3))
+         (setq stage 5)))
+      (t
+       (setq m (pool:alongwall w1 u wlen w))
+       (if (eq m 'CAL-BACK)
+         (progn (princ "\nStepping back one question.")
+                (setq stage (if (= sz "Custom") 4 2)))
+         (setq stage 6)))))
   (if go
     (progn
       ;; m is where the step starts along the wall (pool:alongwall);
@@ -13220,7 +13222,59 @@
           (princ "\nThe shallow wall could not be changed (a locked layer?) - no step drawn.")
           nil)))))
 
-;; Where along the shallow wall a step WIDE across sits, from its W1
+;; The straight wall a step outside goes on: picked (snaps live, any
+;; wall of the pool this run drew), or Enter for the shallow wall.  A
+;; sheet that says nothing about it takes the shallow wall unasked.
+;; Returns the LINE, nil when nothing straight is there, or CAL-BACK.
+(defun pool:pickwall ( / p lp best bd e pe d)
+  (if (and pool:*formrun* (not (pool:fhas 'extwall)))
+    (pool:shwall)
+    (progn
+      (cal:osup)
+      (initget "Back Undo")
+      (setq p (getpoint "\nPick the wall the step goes on [Back] <the shallow wall>: "))
+      (if lzd:ask (lzd:ask "Pick the wall the step goes on" p) p)
+      (cal:osdown)
+      (cond
+        ((member p '("Back" "Undo")) 'CAL-BACK)
+        ((null p) (pool:shwall))
+        (t
+         ;; the nearest straight piece of the perimeter to the pick
+         (setq lp (pool:ucsl p))
+         (foreach e (pool:runents "LINE")
+           (setq pe (pool:ends e)
+                 d  (pool:segdist lp (car pe) (cadr pe)))
+           (if (or (null bd) (< d bd)) (setq bd d best e)))
+         best)))))
+
+;; Distance from P to the segment A-B
+(defun pool:segdist (p a b / ab tt)
+  (setq ab (cal:v- b a))
+  (if (< (cal:dot ab ab) 1.0e-12)
+    (distance p a)
+    (progn
+      (setq tt (max 0.0 (min 1.0 (/ (cal:dot (cal:v- p a) ab) (cal:dot ab ab)))))
+      (distance p (cal:v+ a (cal:v* ab tt))))))
+
+;; Is P inside the perimeter this run drew?  A ray to +X counted across
+;; every LINE and ARC chord on the pool layer: odd is inside.
+(defun pool:inperim (p / n e pe a b)
+  (setq n 0)
+  (foreach e (pool:runents "LINE,ARC")
+    (setq pe (pool:ends e) a (car pe) b (cadr pe))
+    (if (and (/= (> (cadr a) (cadr p)) (> (cadr b) (cadr p)))
+             (< (car p) (+ (car a) (/ (* (- (cadr p) (cadr a)) (- (car b) (car a)))
+                                      (- (cadr b) (cadr a))))))
+      (setq n (1+ n))))
+  (= 1 (rem n 2)))
+
+;; The unit normal to the wall W1-W2 that points OUT of the pool
+(defun pool:outward (w1 w2 / n m)
+  (setq n (cal:perp (pool:unit (cal:v- w2 w1)))
+        m (cal:mid w1 w2))
+  (if (pool:inperim (cal:v+ m n)) (cal:v* n -1.0) n))
+
+;; Where along the wall a step WIDE across sits, from its W1
 ;; end (the one toward b) -- asked, not assumed, since a step is not
 ;; always in the middle:
 ;;   Center  on the middle of the wall's straight span
@@ -13246,8 +13300,8 @@
       (t
        (cal:osup)
        (initget "Back Undo")
-       (setq p (getpoint "\nPick the point on the wall to offset from [Back]: "))
-       (if lzd:ask (lzd:ask "Pick the point on the wall to offset from" p) p)
+       (setq p (getpoint "\nPick the point on the wall you are offsetting from [Back]: "))
+       (if lzd:ask (lzd:ask "Pick the point on the wall you are offsetting from" p) p)
        (cal:osdown)
        (if (and p (listp p))
          (progn

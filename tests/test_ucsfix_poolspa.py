@@ -332,7 +332,7 @@ def pool_scenarios():
                         ["Insquare", "Rectangle", BASE,
                          480.0, 240.0, "Square",
                          "No",
-                         "Yes", "Custom", 96.0, 36.0, None])
+                         "Yes", None, "Custom", 96.0, 36.0, None])
     if u is not None:
         check('the shallow wall is broken round the step',
               len(entities(u, 'LINE', 'POOL')) == 3 + 5,
