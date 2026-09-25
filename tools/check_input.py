@@ -64,7 +64,10 @@ Three rules, over every tier (a dated twin is what a shop pins to):
           whose first prompt taught a spelling its unified prompt could
           not take.  The generated knob catalog (lzp:*knobs*) is not read:
           it is transcribed from tunables comments that describe a size,
-          and the comment is where such a spelling would be fixed.
+          and the comment is where such a spelling would be fixed.  Nor
+          is a self-test table (X:selftests): its strings are the values
+          a failure report compares a helper's answer against -- what
+          the tool's ftin WRITES -- never a spelling shown to type.
 
 Sites that are decisions somebody made stay in tools/input_baseline.txt
 with the reason, check_back's pattern: file|defun|what it asks|why.  A
@@ -140,6 +143,10 @@ SPEAK = frozenset((
 LZD = "lzd:"
 #: top-level data that is not a prompt, a hint or a caption
 GENERATED = frozenset(("lzp:*knobs*", "lzp:*knobfam*"))
+#: the self-test table every file carries (X:selftests, check_lazdiag):
+#: its literals are the values a failure report compares a helper's
+#: answer against, and a feet-inch formatter's answer has the space
+TABLE = "selftests"
 
 
 # ---------------------------------------------------------------------
@@ -969,6 +976,10 @@ def space_sites(tier, path, forms):
         if h and h.startswith(LZD):
             return      # LAZDIAG's transcript copy of a prompt: not shown
         if h == "defun" and len(f) > 1:
+            if (sym(f[1]) or "").lower().endswith(TABLE):
+                return  # a self-test table: values a report compares,
+                        # never shown -- "3'-4 1/2\"" is what ftin
+                        # WRITES, pinned, not a spelling anyone types
             owner, label, chain = f, sym(f[1]) or "?", []
         chain.append(f)
         for x in f:
