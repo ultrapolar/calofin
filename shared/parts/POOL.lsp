@@ -95,7 +95,13 @@
 ;;;           close by is spread over the three WING sides.  Past the
 ;;;           1" side tolerance that is a bad tape, so those sides are
 ;;;           dimensioned red, listed red in the report and called out
-;;;           as "SIDES DO NOT CLOSE" under it.
+;;;           as "SIDES DO NOT CLOSE" under it.  In-square, a side
+;;;           that was not taped may be answered NA on either L: the
+;;;           shape is taken as perfect, and a perfect L closes in X
+;;;           and in Y, so up to two missing sides read back off the
+;;;           other four (pool:hexclosena).  Two that the closure
+;;;           cannot tell apart, or one that would come out zero or
+;;;           less, is asked for as a measurement instead.
 ;;;
 ;;;  Every cross-dim prompt also accepts NA when that measurement was
 ;;;  not taken in the field: the fitter skips it and the report shows
@@ -127,7 +133,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092426 REV45")
+(setq pool:*version* "092526 REV46")
 
 ;;; -------------------- shop terms --------------------------------------
 ;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
@@ -3444,6 +3450,90 @@
         d (cal:v+ e (list (* s2 u) (* s2 u))))
   (list a b c d e f))
 
+;; lst with its i-th element replaced by v.
+(defun pool:hexsetnth (lst i v / k)
+  (setq k -1)
+  (mapcar '(lambda (x) (setq k (1+ k)) (if (= k i) v x)) lst))
+
+;; In-square L / Lazy L with sides answered NA: a perfect shape closes
+;; on itself, which is two equations -- the walk A->B->...->F->A comes
+;; back to where it started in X and in Y -- so up to TWO sides that
+;; were never taped read back off the other four.  Each side's entry
+;; is how far one unit of it moves the walk (X Y):
+;;
+;;   true L :  A-B less C-D less E-F in X;  B-C less D-E less F-A in Y
+;;   lazy L :  the bends run at 45 degrees, so B-C / C-D / D-E each
+;;             move both X and Y by 0.7071 of their length
+(defun pool:hexcf (lazy / u)
+  (setq u 0.7071067812)
+  (if lazy
+      (list (list 1.0 0.0) (list u u) (list (- u) u)
+            (list (- u) (- u)) (list -1.0 0.0) (list 0.0 -1.0))
+      (list (list 1.0 0.0) (list 0.0 1.0) (list -1.0 0.0)
+            (list 0.0 -1.0) (list -1.0 0.0) (list 0.0 -1.0))))
+
+;; Can the sides at indices NA be read off the rest?  One always can;
+;; two only when they move the walk different ways -- A-B with E-F on
+;; either L, A-B/C-D/E-F among themselves or B-C/D-E/F-A among
+;; themselves on a true L, and the two parallel bends B-C/D-E on a
+;; lazy one, cannot be told apart.  Three or more is too much missing.
+(defun pool:hexnaok (na lazy / cf c1 c2)
+  (setq cf (pool:hexcf lazy))
+  (cond
+    ((null na) t)
+    ((null (cdr na)) t)
+    ((cddr na) nil)
+    (t
+     (setq c1 (nth (car na) cf)
+           c2 (nth (cadr na) cf))
+     (> (abs (- (* (car c1) (cadr c2)) (* (car c2) (cadr c1)))) 1.0e-9))))
+
+;; ONE missing side is read in the least-squares sense (on a true L it
+;; sits in one equation only, so that equation is closed exactly and
+;; any tape error in the other is left for the build to show); TWO are
+;; solved exactly.  Returns the six sides with the gaps filled, or nil
+;; when pool:hexnaok refuses the gaps or a filled side comes out zero
+;; or negative (the taped ones disagree with the shape).
+(defun pool:hexclosena (sides lazy / cf k v rx ry na c c1 c2 det x1 x2 out bad)
+  (setq cf (pool:hexcf lazy)
+        rx 0.0 ry 0.0 na nil k 0)
+  (foreach v sides
+    (if v
+        (setq rx (+ rx (* v (car (nth k cf))))
+              ry (+ ry (* v (cadr (nth k cf)))))
+        (setq na (cons k na)))
+    (setq k (1+ k)))
+  (setq na (reverse na))
+  (cond
+    ((null na) (setq out sides))
+    ((not (pool:hexnaok na lazy)) nil)
+    ((null (cdr na))
+     (setq c (nth (car na) cf)
+           x1 (/ (- (+ (* (car c) rx) (* (cadr c) ry)))
+                 (+ (* (car c) (car c)) (* (cadr c) (cadr c))))
+           out (list x1)))
+    (t
+     (setq c1 (nth (car na) cf)
+           c2 (nth (cadr na) cf)
+           det (- (* (car c1) (cadr c2)) (* (car c2) (cadr c1)))
+           x1 (/ (+ (* (- rx) (cadr c2)) (* (car c2) ry)) det)
+           x2 (/ (+ (* (- (car c1)) ry) (* rx (cadr c1))) det)
+           out (list x1 x2))))
+  (cond
+    ((null out) nil)
+    ((null na) out)
+    (t
+     (foreach v out (if (<= v 0.001) (setq bad t)))
+     (if bad
+         nil
+         (progn
+           (setq k 0)
+           (mapcar '(lambda (v)
+                      (if v
+                          v
+                          (progn (setq k (1+ k)) (nth (1- k) out))))
+                   sides))))))
+
 ;; Side constraints (banded by +/-band) for the hexagon.
 (defun pool:hexsidecon (sides band w / k out pr)
   (setq k 0 out nil)
@@ -3581,7 +3671,7 @@
                             cen p pr k w hh xmin xmax ymax ymin doff th
                             odim rows lbls dv mquad sq4 elast hxg
                             octy ocsz icty icsz oc ic hcs hce hcarcs ock
-                            rbox mprims mlbls soff ink shb)
+                            rbox mprims mlbls soff ink shb hxna hxq)
   (setq oldclay (getvar "CLAYER")
         ;; the fade/guide colour, resolved once for the whole flow:
         ;; hx:sides/hx:diags each re-ask the live guide's sides one at
@@ -3650,28 +3740,70 @@
   (princ "\nA gray guide pool is shown -- the RED element is the dimension being asked for.")
   (princ "\nCorners: A bottom-left, B bottom-right, C right end top, D inner corner, E wing corner, F top-left.")
   (princ "\n(Back re-asks the previous question, right back to the start)")
-  (defun hx:sides ( / ans)
+  ;; In-square, a side that was not taped may be answered NA: the shape
+  ;; is taken as perfect and the side read back off the others
+  ;; (hx:closena).  Out of square the sides are what the fit bends
+  ;; around, so every one of them is still required.
+  (defun hx:sides ( / ans sk)
+  (setq sk (if pool:*insq* 'NAX 'REQ)
+        hxq (if lazy
+                (list (list 'ab "Main side A-B (bottom)" 'ab '(lA lB))
+                      (list 'bc "Lower bend side B-C (45 deg)" 'bc '(lB lC))
+                      (list 'cd "Far end C-D" 'cd '(lC lD))
+                      (list 'de "Upper bend side D-E (45 deg)" 'de '(lD lE))
+                      (list 'ef "Top side E-F" 'ef '(lE lF))
+                      (list 'fa "Left end F-A" 'fa '(lF lA)))
+                (list (list 'ab "Side A-B (bottom, full length)" 'ab '(lA lB))
+                      (list 'bc "End B-C (right end, full height)" 'bc '(lB lC))
+                      (list 'cd "Side C-D (top of wing)" 'cd '(lC lD))
+                      (list 'de "Step D-E (down to the inner corner)" 'de '(lD lE))
+                      (list 'ef "Side E-F (top of main section)" 'ef '(lE lF))
+                      (list 'fa "End F-A (left end)" 'fa '(lF lA)))))
   (setq ans (pool:askseqb
               (mapcar '(lambda (q)
-                         (list (car q) 'REQ (cadr q)
+                         (list (car q) sk (cadr q)
                                (append (cdr (assoc (caddr q) pv))
                                        (pool:lbl pv (cadddr q)))))
-                      (if lazy
-                          (list (list 'ab "Main side A-B (bottom)" 'ab '(lA lB))
-                                (list 'bc "Lower bend side B-C (45 deg)" 'bc '(lB lC))
-                                (list 'cd "Far end C-D" 'cd '(lC lD))
-                                (list 'de "Upper bend side D-E (45 deg)" 'de '(lD lE))
-                                (list 'ef "Top side E-F" 'ef '(lE lF))
-                                (list 'fa "Left end F-A" 'fa '(lF lA)))
-                          (list (list 'ab "Side A-B (bottom, full length)" 'ab '(lA lB))
-                                (list 'bc "End B-C (right end, full height)" 'bc '(lB lC))
-                                (list 'cd "Side C-D (top of wing)" 'cd '(lC lD))
-                                (list 'de "Step D-E (down to the inner corner)" 'de '(lD lE))
-                                (list 'ef "Side E-F (top of main section)" 'ef '(lE lF))
-                                (list 'fa "End F-A (left end)" 'fa '(lF lA)))))
+                      hxq)
               nil ink)
         sides (mapcar '(lambda (k) (pool:sq ans k)) '(ab bc cd de ef fa)))
+    (hx:closena)
     nil)
+  ;; Fill the NA sides off a perfect shape (pool:hexclosena).  When the
+  ;; gaps cannot be closed, one of them is asked for as a measurement
+  ;; and the rest tried again: the last gap whose answer leaves the
+  ;; others readable (pool:hexnaok), else simply the last.  hxna keeps
+  ;; which sides were never taped, for the report's N/A targets.
+  (defun hx:closena ( / k v full keys pick q)
+    (setq keys (list 'ab 'bc 'cd 'de 'ef 'fa)
+          hxna nil k 0)
+    (foreach v sides
+      (if (null v) (setq hxna (cons k hxna)))
+      (setq k (1+ k)))
+    (setq hxna (reverse hxna))
+    (while (and hxna (not (setq full (pool:hexclosena sides lazy))))
+      (setq pick nil)
+      (foreach k hxna
+        (if (pool:hexnaok (vl-remove k hxna) lazy) (setq pick k)))
+      (if (null pick) (setq pick (last hxna)))
+      (setq q (nth pick hxq))
+      (princ (strcat "\n" (cadr q)
+                     (if (pool:hexnaok hxna lazy)
+                         " is needed -- without it the other sides do not close the shape."
+                         " is needed -- the NA sides cannot all be read off the others.")))
+      (setq v (pool:askh (cadr q)
+                         (append (cdr (assoc (caddr q) pv))
+                                 (pool:lbl pv (cadddr q)))
+                         nil)
+            sides (pool:hexsetnth sides pick v)
+            hxna (vl-remove pick hxna))
+      (pool:pvnote (nth pick keys) v ink))
+    (if full (setq sides full))
+    (foreach k hxna
+      (princ (strcat "\nSide " (nth k pool:*hexsidenames*) " not measured -- "
+                     (pool:fmtlen (nth k sides))
+                     (if lazy " closes the lazy L." " closes the L.")))
+      (pool:pvnote (nth k keys) (nth k sides) ink)))
   ;; cross dims only when out-of-square; in-square squares up to sides.
   ;; The diagonals join the guide now that the sides are all in, on the
   ;; live ring the guide has reshaped itself to.
@@ -3781,9 +3913,12 @@
   ;; +/-side-tol band is not reported as a bad measurement.
   (setq soff nil k 0)
   (foreach pr pool:*hexsides*
-    (if (> (abs (- (distance (nth (car pr) pts) (nth (cadr pr) pts))
-                   (nth k sides)))
-           (+ pool:*side-tol* 0.05))
+    ;; a side read off the others (NA) was never taped, so it cannot
+    ;; be off the tape
+    (if (and (not (member k hxna))
+             (> (abs (- (distance (nth (car pr) pts) (nth (cadr pr) pts))
+                        (nth k sides)))
+                (+ pool:*side-tol* 0.05)))
         (setq soff (cons k soff)))
     (setq k (1+ k)))
   (setq soff (reverse soff))
@@ -3911,7 +4046,7 @@
   (setq rows nil k 0)
   (foreach pr pool:*hexsides*
     (setq rows (cons (pool:vrow (strcat "SIDE " (nth k pool:*hexsidenames*))
-                                (nth k sides)
+                                (if (member k hxna) nil (nth k sides))
                                 (distance (nth (car pr) pts)
                                           (nth (cadr pr) pts))
                                 k soff)

@@ -112,6 +112,8 @@ are added to the guide the moment the last perimeter answer is in.
 Any **cross dimension** prompt also accepts `NA` when that measurement
 wasn't taken in the field: the fitter simply skips it and the report
 shows `N/A` for its target/delta (the as-drawn value is still listed).
+An **in-square L or Lazy L's sides** take `NA` too — the perfect
+shape gives them back (see *L / Lazy L pools*).
 An **oval's side lengths** take `NA` as well — the overall and the
 width give them back (see *Oval ends*).
 
@@ -1038,6 +1040,27 @@ TAPE, RE-MEASURE`** is written under the table (with the same warning
 at the command line). Six sides that miss each other by a foot are not
 a pool that got drawn slightly small — they are a measurement to go
 back and take again.
+
+**In-square, a side that wasn't taped can be `NA`** — on either L.
+The shape is taken as **perfect** (square corners on a true L, exact
+45° bends on a lazy L), and a perfect L closes on itself: walking
+A→B→…→F comes back to A in **X** and in **Y**. That is two equations,
+so up to **two** missing sides read back off the other four:
+
+* true L: `A-B = C-D + E-F` and `B-C = D-E + F-A`;
+* lazy L: the same two, with the bends counted at 0.7071 of their
+  length in each direction.
+
+The command line says what each gap came to (`Side F-A not measured --
+15'-0" closes the L.`) and the report lists its target as `N/A`, so a
+read-back side is never flagged as off the tape. When the gaps can't
+be closed the routine asks for one of them as a measurement and tries
+again — three or more gaps; two that move the walk the same way (`A-B`
+with `E-F` on either L, two of `A-B`/`C-D`/`E-F` or of `B-C`/`D-E`/
+`F-A` on a true L, the two parallel bends on a lazy L); or a gap that
+would come out zero or negative. It picks a gap whose answer leaves
+the rest readable. **Out of square every side is still required** —
+the sides are what the fit bends around.
 
 ### Guided input
 
