@@ -99,7 +99,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.10")  ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.11")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -1385,6 +1385,57 @@
 (defun c:ABCURCHECKVER ()
   (princ (strcat "\nABCURCHECK " *abcurcheck-version* " loaded."))
   (princ))
+
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun acc:selftests ()
+  (list
+    (list "seg-curv: a CCW arc turns left, so its curvature is positive"
+          '(acc:seg-curv '((0 0) (10 0) 1.0))  0.2)
+    (list "seg-t1: a CCW semicircle ends heading straight up"
+          '(acc:seg-t1 '((0 0) (10 0) 1.0))  (* 0.5 pi))
+    (list "signed-dang: 10 to 350 degrees is -20, not 340"
+          '(acc:deg (cal:signed-dang (acc:rad 10.0) (acc:rad 350.0)))  -20.0)
+    (list "band: no turn at all is tangent"  '(acc:band 0.0)  "tangent")
+    (list "joints: the first corner of a CCW square turns +90"
+          '(acc:deg (acc:j-ang (car (acc:joints
+              '(((0 0) (10 0) 0.0) ((10 0) (10 10) 0.0)
+                ((10 10) (0 10) 0.0) ((0 10) (0 0) 0.0)) nil))))  90.0)
+    (list "crossings finds the one pair in a bow-tie"
+          '(acc:crossings '(((0.0 0.0) (10.0 10.0) 0.0) ((10.0 10.0) (10.0 0.0) 0.0)
+                            ((10.0 0.0) (0.0 10.0) 0.0) ((0.0 10.0) (0.0 0.0) 0.0)))
+          '((1 3)))
+    (list "dupe-segs: a segment drawn back over itself is doubled"
+          '(acc:dupe-segs '(((0 0) (10 0) 0.5) ((10 0) (0 0) -0.5)))  '((1 2)))
+    (list "dupe-segs: a round spa's two halves are not"
+          '(acc:dupe-segs '(((0 0) (10 0) 1.0) ((10 0) (0 0) 1.0)))  nil)
+    (list "inflections counts an S twice round the ring, seam included"
+          '(acc:inflections '(((0 0) (10 0) 0.5) ((10 0) (20 0) -0.5)))  2)
+    (list "g0-fault names the crossing in a bow-tie"
+          '(acc:g0-fault (acc:measure
+              '(((0.0 0.0) (10.0 10.0) 0.0) ((10.0 10.0) (10.0 0.0) 0.0)
+                ((10.0 0.0) (0.0 10.0) 0.0) ((0.0 10.0) (0.0 0.0) 0.0)) nil))
+          "1 crossing segment(s)")
+    (list "grade: a square with no corner declared is Rough"
+          '(car (acc:grade (acc:measure
+              '(((0 0) (10 0) 0.0) ((10 0) (10 10) 0.0)
+                ((10 10) (0 10) 0.0) ((0 10) (0 0) 0.0)) nil)))  "Rough")
+    (list "grade: the same square with every corner declared is Smooth"
+          '(car (acc:grade (acc:measure
+              '(((0 0) (10 0) 0.0) ((10 0) (10 10) 0.0)
+                ((10 10) (0 10) 0.0) ((0 10) (0 0) 0.0))
+              '((10 0) (10 10) (0 10) (0 0)))))  "Smooth")))
+
+(foreach c '("ABCURCHECK" "ABCURCHECKSCAN" "ABCURCHECKRESCUE")
+  (setq *calofin-selftests*
+        (cons (cons c 'acc:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

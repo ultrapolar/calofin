@@ -2002,7 +2002,12 @@
 ;;;    * the tool, its version, and whether it came from a standalone
 ;;;      file or from LAZPASS;
 ;;;    * the error text, the last step the tool got to, AutoCAD's own
-;;;      ERRNO / CMDNAMES / LASTPROMPT, and the sysvars that matter.
+;;;      ERRNO / CMDNAMES / LASTPROMPT, and the sysvars that matter;
+;;;    * the tool's OWN SELF TESTS -- its helpers on inputs whose answers
+;;;      are known -- run on that machine after the failure, so the
+;;;      report says whether the arithmetic was sound where it ran or
+;;;      whether a knob, a unit setting or the AutoCAD version had
+;;;      already changed an answer before the drafter typed one.
 ;;;
 ;;;  WHY A SEPARATE FILE AND NOT THE USER'S DRAWING.  The first design
 ;;;  put the report into the open drawing and asked the user to click
@@ -2055,7 +2060,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.7")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.8")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -2106,6 +2111,8 @@
 (setq lzd:*inside* nil)    ; the reporter is running -- refuse re-entry
 (setq lzd:*last* nil)      ; the last report, for LAZDIAG to write again
 (setq lzd:*lastfile* nil)  ; where it went, nil if it could not be written
+(setq lzd:*selfres* nil)   ; ((TOOL passed total) ...) of the self tests the
+                           ; last report ran, for the log's FAIL record
 
 ;;; -------------------- small helpers -----------------------------------
 
@@ -3149,6 +3156,13 @@
                                               ", which " (lzd:str tool)
                                               " ran")))
                       (cdr (cdr (cdr (cdr out)))))))
+  ;; the tool's own helpers, run here and now: a report about LAZDIAG
+  ;; itself (the self test, or a failure of the reporter) runs every
+  ;; table loaded, since nothing else is there to blame
+  (setq lzd:*selfres* nil)
+  (setq out (append out (if (= (strcase (lzd:str tool)) "LAZDIAG")
+                          (lzd:selftest-sweep)
+                          (lzd:selftest-lines tool))))
   (setq out (append out (lzd:oddities)))
   (setq out (append out (list "" "THE RUN, PROMPT BY PROMPT")))
   (setq out (append out
@@ -3178,6 +3192,221 @@
                 "Send this file to whoever maintains calofin.  It holds"
                 "the failure and no more of your drawing than the failure"
                 "needed; your own drawing was not changed.")))
+
+;;; -------------------- the tool's own self tests -----------------------
+;;;
+;;;  Everything above says what the RUN did.  None of it says whether
+;;;  the tool's own arithmetic was sound on the machine it ran on, and
+;;;  a helper giving a wrong answer there looks exactly like a wrong
+;;;  answer typed at a prompt.  What differs between two machines is
+;;;  what no transcript carries: the drafter's LUNITS and DIMZIN, a
+;;;  knob LAZTUNE moved, a shop term, an AutoCAD whose rtos rounds the
+;;;  other way.
+;;;
+;;;  So every tool carries a short TABLE of self tests -- its own
+;;;  helpers on inputs whose answers are known -- and a report runs the
+;;;  failed tool's table after the failure, on that machine, in that
+;;;  session, and writes the results in.  An entry is one of
+;;;
+;;;    (label expression expected)   passes when the expression's value
+;;;                                  is EQUAL to expected, to 1e-6
+;;;    (label expression)            passes when the value is not nil;
+;;;                                  the value is written down either
+;;;                                  way, so an expression that hands
+;;;                                  back the thing it checked puts
+;;;                                  that thing in the report
+;;;
+;;;  and the tool registers the table under every command that reports:
+;;;
+;;;    (defun pool:selftests ()
+;;;      (list (list "ftin of 12.5" '(pool:ftin 12.5) "1'-0 1/2\"") ...))
+;;;    (foreach c '("POOL" "POOLCOVER")
+;;;      (setq *calofin-selftests*
+;;;            (cons (cons c 'pool:selftests) *calofin-selftests*)))
+;;;
+;;;  The registry is a plain global rather than a call into this file,
+;;;  so a tool registers whether LAZDIAG loads before it, after it, or
+;;;  never: an unbound list is nil and consing onto nil is a list.  The
+;;;  newest registration is found first, so a file APPLOADed again
+;;;  after an edit runs its new table.  tools/check_lazdiag.py fails a
+;;;  tool with no table, or one of fewer than three entries, and
+;;;  tests/test_selftests.py runs every table in the VM at both tiers,
+;;;  so what a report says a test EXPECTS is what the tree's own suite
+;;;  has already confirmed -- a FAIL in a report is this machine
+;;;  disagreeing with the developer's, not a stale expectation.
+;;;
+;;;  Nothing in a table may prompt, draw, or run a command: it is
+;;;  evaluated from inside *error*.  Each entry runs under a catch of
+;;;  its own, so one that throws is one FAIL line naming the error and
+;;;  not the end of the report; the table is capped at lzd:*selfmax*,
+;;;  because it is a handful of known answers, not a suite.
+
+;; NOT A KNOB: how many entries of one tool's table are run.  A table
+;; is a handful of known answers evaluated from inside *error*; past
+;; this it is a suite, and a suite belongs in tests/.  A cap a drafter
+;; could retune would be a report that runs fewer tests on the machine
+;; that needs them most.
+(setq lzd:*selfmax* 40)
+
+;; The table registered for TOOL -- the symbol of the function that
+;; builds it -- or nil.  Case-insensitive, like every other tool-name
+;; comparison here.
+(defun lzd:tests-of (tool / want out e)
+  (setq want (strcase (lzd:str tool)))
+  (foreach e *calofin-selftests*
+    (if (and (null out) (listp e) (cdr e)
+             (= (strcase (lzd:str (car e))) want))
+      (setq out (cdr e))))
+  out)
+
+;; A value for a report line.  lzd:enc writes any list that starts
+;; with two numbers as a POINT, which is right for a transcript -- a
+;; pick is one -- and wrong for a table's value: (52.5 T) is not a
+;; point, and a list of twelve numbers is not one either, and both came
+;; out as three coordinates.  So only a list of exactly two or three
+;; numbers is a point here; any other list is written element by
+;; element.  Cut so one long list cannot make a line wider than the
+;; report's text block.
+(defun lzd:short (v / s x n allnum)
+  (cond
+    ((and (listp v) v (listp (cdr v)))
+     (setq n 0 allnum T)
+     (foreach x v
+       (setq n (1+ n))
+       (if (not (numberp x)) (setq allnum nil)))
+     (if (and allnum (member n '(2 3)))
+       (setq s (lzd:enc v))
+       (progn
+         (setq s "(")
+         (foreach x v
+           (setq s (strcat s (if (= s "(") "" " ") (lzd:short x))))
+         (setq s (strcat s ")")))))
+    (t (setq s (lzd:enc v))))
+  (if (> (strlen s) 100) (strcat (substr s 1 97) "...") s))
+
+;; One entry, run: (ok . line).  Under its own catch, and every branch
+;; is a line -- an entry that is not even a list gets one too, because
+;; the table is the tool's, and a malformed one is the tool's fault to
+;; read about, not the reporter's to die on.
+(defun lzd:runtest (tst / label r ok line)
+  (cond
+    ((not (and (listp tst) (cdr tst) (listp (cdr tst))))
+     (setq ok nil
+           line (strcat "  FAIL  (not an entry: " (lzd:short tst) ")")))
+    (t
+     (setq label (lzd:str (car tst))
+           r     (vl-catch-all-apply 'eval (list (cadr tst))))
+     (cond
+       ((vl-catch-all-error-p r)
+        (setq ok nil
+              line (strcat "  FAIL  " label ": raised "
+                           (lzd:str (vl-catch-all-error-message r)))))
+       ((cddr tst)
+        (setq ok (if (equal r (caddr tst) 1e-6) T nil)
+              line (if ok
+                     (strcat "  ok    " label " = " (lzd:short r))
+                     (strcat "  FAIL  " label ": expected "
+                             (lzd:short (caddr tst)) ", got "
+                             (lzd:short r)))))
+       (t
+        (setq ok (if r T nil)
+              line (if ok
+                     (strcat "  ok    " label " = " (lzd:short r))
+                     (strcat "  FAIL  " label ": nil")))))))
+  (cons ok line))
+
+;; TOOL's table, run: (passed total lines).  The counts go into
+;; lzd:*selfres* for the log's FAIL record.  The function that BUILDS
+;; the table is the tool's too, so it runs under a catch as well.
+(defun lzd:selftest-run (tool / fn r tests tst res n np out)
+  (setq fn (lzd:tests-of tool) n 0 np 0)
+  (cond
+    ((null fn)
+     (setq out (list (strcat "  (none registered for " (lzd:str tool)
+                             " -- the tool predates self tests)"))))
+    (t
+     (setq r (vl-catch-all-apply fn nil))
+     (cond
+       ((vl-catch-all-error-p r)
+        (setq n 1
+              out (list (strcat "  FAIL  the table itself raised "
+                                (lzd:str (vl-catch-all-error-message r))))))
+       ((not (listp r))
+        (setq n 1
+              out (list (strcat "  FAIL  the table is not a list: "
+                                (lzd:short r)))))
+       ((null r)
+        (setq out (list "  (the table is empty)")))
+       (t
+        (setq tests (lzd:firstn r lzd:*selfmax*))
+        (foreach tst tests
+          (setq res (lzd:runtest tst) n (1+ n))
+          (if (car res) (setq np (1+ np)))
+          (setq out (append out (list (cdr res)))))
+        (if (> (length r) lzd:*selfmax*)
+          (setq out (append out
+                            (list (strcat "  (" (itoa (- (length r) lzd:*selfmax*))
+                                          " more not run: lzd:*selfmax* is "
+                                          (itoa lzd:*selfmax*) ")")))))))))
+  (setq lzd:*selfres* (cons (list (strcase (lzd:str tool)) np n)
+                            lzd:*selfres*))
+  (list np n out))
+
+;; The verdict under a table, which is the line somebody reads first.
+(defun lzd:selftest-verdict (tool np n)
+  (cond
+    ((= n 0) nil)
+    ((= np n)
+     (list (strcat "  " (itoa np) " of " (itoa n) " passed: "
+                   (lzd:str tool) "'s own arithmetic is sound on this")
+           "  machine, so the failure is in this run's answers and geometry"
+           "  (below), not in its helpers."))
+    (t
+     (list (strcat "  " (itoa np) " of " (itoa n) " passed.  A FAIL is "
+                   (lzd:str tool) "'s own code giving a")
+           "  different answer HERE than on the machine it was written on --"
+           "  a knob LAZTUNE moved, a shop term, LUNITS or DIMZIN, or the"
+           "  AutoCAD version -- before any answer of this run was read."
+           "  Look there first."))))
+
+;; The section of a failure report: the failed tool's table, then the
+;; table of every command it ran inside this run (lzd:*inner*), since a
+;; failure filed under XYPLOT may be ABHD's arithmetic.
+(defun lzd:selftest-lines (tool / names e nm r out)
+  (setq names (list (strcase (lzd:str tool))))
+  (foreach e (reverse lzd:*inner*)
+    (if (not (member (car e) names))
+      (setq names (append names (list (car e))))))
+  (setq out (list "THE TOOL'S OWN SELF TESTS, RUN HERE AFTER THE FAILURE"))
+  (foreach nm names
+    (setq r (lzd:selftest-run nm))
+    (if (cdr names) (setq out (append out (list (strcat "  " nm ":")))))
+    (setq out (append out (caddr r)
+                      (lzd:selftest-verdict nm (car r) (cadr r)))))
+  (append out (list "")))
+
+;; Every table loaded, for a report about LAZDIAG itself -- the self
+;; test above all: one line per tool and its FAIL lines under it.
+;; Grouped by table, since a file registers one table under each of
+;; its commands, and named by the first command it registered.
+(defun lzd:selftest-sweep ( / e seen tools tl r l out)
+  (foreach e (reverse *calofin-selftests*)
+    (if (and (listp e) (cdr e) (not (member (cdr e) seen)))
+      (setq seen  (cons (cdr e) seen)
+            tools (append tools (list (strcase (lzd:str (car e))))))))
+  (setq out (list "SELF TESTS OF EVERY TOOL LOADED IN THIS SESSION"
+                  "  (each tool's own helpers on inputs whose answers are known;"
+                  "   a FAIL is a helper answering differently on this machine)"))
+  (if (null tools)
+    (setq out (append out (list "  (no tool has registered a table)"))))
+  (foreach tl tools
+    (setq r (lzd:selftest-run tl))
+    (setq out (append out (list (strcat "  " (lzd:pad tl 20) (itoa (car r))
+                                        " of " (itoa (cadr r)) " passed"))))
+    (foreach l (caddr r)
+      (if (wcmatch l "  FAIL*")
+        (setq out (append out (list (strcat "  " l)))))))
+  (append out (list "")))
 
 ;;; -------------------- building the whole report -----------------------
 
@@ -3384,6 +3613,16 @@
     (setq out (append out (list (strcat "    err   " (lzd:str msg))))))
   (if file
     (setq out (append out (list (strcat "    file  " (lzd:str file))))))
+  ;; the self tests the report ran: how many of the tool's own helpers
+  ;; still answered right on this machine, against a month of runs
+  (if (and (= outcome "FAIL") lzd:*selfres*)
+    (foreach n (reverse lzd:*selfres*)
+      (setq out (append out
+                        (list (strcat "    self  " (car n) " "
+                                      (if (= (caddr n) 0)
+                                        "no self tests registered"
+                                        (strcat (itoa (cadr n)) "/"
+                                                (itoa (caddr n)) " passed"))))))))
   ;; the prompts, newest last, only where somebody will read them
   (if (= outcome "FAIL")
     (progn
@@ -3642,7 +3881,7 @@
 ;; anyway: it proves the whole path -- folder, permissions, DXF -- works
 ;; on THIS machine, which is the question somebody asks precisely when
 ;; they are about to need it and cannot afford to find out then.
-(defun lzd:selftest ( / prims path d)
+(defun lzd:selftest ( / prims path d np n nt s)
   (princ "\n[calofin] Nothing has failed in this session, so this is a")
   (princ "\n[calofin] self test: a report written exactly where a real")
   (princ "\n[calofin] one would go.")
@@ -3668,6 +3907,17 @@
       (princ "\n[calofin] Set the AutoCAD environment string")
       (princ "\n[calofin] CalofinErrorDir to a folder you can write to:")
       (princ "\n[calofin]   (setenv \"CalofinErrorDir\" \"C:\\\\temp\")")))
+  ;; the sweep the report ran, summed: every loaded tool's own helpers,
+  ;; on this machine, with nothing having failed -- the one time a
+  ;; drafter can be told their build is sound BEFORE they need it
+  (if lzd:*selfres*
+    (progn
+      (setq np 0 n 0 nt 0)
+      (foreach s lzd:*selfres*
+        (setq np (+ np (cadr s)) n (+ n (caddr s)) nt (1+ nt)))
+      (princ (strcat "\n[calofin] Self tests of " (itoa nt) " loaded tool(s): "
+                     (itoa np) " of " (itoa n) " passed"
+                     (if (= np n) "." " -- the file names each FAIL.")))))
   (princ))
 
 (defun c:LAZDIAG ( / *error* oce undo-open)
@@ -3738,6 +3988,39 @@
 (defun c:LAZDIAGVER ()
   (princ (strcat "\nLAZDIAG " *lazdiag-version*))
   (princ))
+
+;;; -------------------- LAZDIAG's own self tests ------------------------
+;; What a report about LAZDIAG itself runs, beside every other loaded
+;; table: the reporter's helpers on known inputs.  Nothing here reads
+;; the drawing or the clock, and nothing goes through rtos -- lzd:num's
+;; output follows DIMZIN, so it is read back with atof rather than
+;; compared as text.
+(defun lzd:selftests ()
+  (list
+    (list "num round-trips a real"            '(atof (lzd:num 2.5))        2.5)
+    (list "num writes a non-number as 0.0"    '(lzd:num "x")               "0.0")
+    (list "pad pads to the width"             '(lzd:pad "ab" 5)            "ab   ")
+    (list "pad2 zero-fills one digit"         '(cal:zeropad2 7)                "07")
+    (list "enc quotes a string"               '(lzd:enc "a\"b")            "\"a\\\"b\"")
+    (list "enc writes nil as nil"             '(lzd:enc nil)               "nil")
+    (list "enc writes a dotted pair"          '(lzd:enc '("SHAPE" . "L"))  "(\"SHAPE\" . \"L\")")
+    (list "safe strips a file name"           '(lzd:safe "a b/c")          "a-b-c")
+    (list "join adds one backslash"           '(lzd:join "C:\\x" "y.dxf")  "C:\\x\\y.dxf")
+    (list "firstn takes the head"             '(lzd:firstn '(1 2 3) 2)     '(1 2))
+    (list "cancel-p knows an Esc"             '(lzd:cancel-p "Function cancelled"))
+    (list "cancel-p passes a real failure"    '(not (lzd:cancel-p "bad argument type")))
+    (list "oddnum flags a zero"               '(lzd:oddnum "p" 0 nil)      '("zero"))
+    (list "oddnum flags two equal answers"
+          '(lzd:oddnum "a" 12.0 '(("a" . 12.0) ("b" . 12)))  '("equals b"))
+    (list "oddpt flags two picks on one spot"
+          '(lzd:oddpt "a" '(1 2 0) '(("a" 1 2 0) ("b" 1.0 2.0 0.0)))  '("same spot as b"))
+    (list "short writes a non-point list as is" '(lzd:short '(1 T 2 3))       "(1 T 2 3)")
+    (list "runtest passes an equal value"     '(car (lzd:runtest '("t" (+ 1 1) 2))))
+    (list "runtest fails a raised error"      '(not (car (lzd:runtest '("t" (car 1) 2)))))))
+
+(foreach c '("LAZDIAG" "LAZLOG")
+  (setq *calofin-selftests*
+        (cons (cons c 'lzd:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
@@ -3893,7 +4176,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092526 REV49")
+(setq pool:*version* "092526 REV50")
 
 ;;; -------------------- shop terms --------------------------------------
 ;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
@@ -13878,6 +14161,52 @@
                  (if tutorial:*version* tutorial:*version* "not loaded")))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun pool:selftests ()
+  (list
+    (list "cornerk: a 60-degree Radius corner sets back root 3 per unit of radius"
+          '(pool:cornerk "Radius" (pool:d2r 60.0))  (sqrt 3.0))
+    (list "cornerends: a Cut face of root 2 on a square corner ends 1 along each wall"
+          '(pool:cornerends '(0.0 0.0) '(10.0 0.0) '(0.0 10.0) "Cut" (sqrt 2.0) nil)
+          '((1.0 0.0) (0.0 1.0) nil))
+    (list "hookspan: a 2 in radius at a square corner spans 0 to 2 along its wall"
+          '(pool:hookspan '(0.0 0.0) '(10.0 0.0) '(0.0 10.0) "Radius" 2.0 '(1.0 0.0))
+          '(0.0 2.0))
+    (list "treat-canon spells a typed cut Cut and refuses a word off the list"
+          '(list (pool:treat-canon "cut") (pool:treat-canon "Rounded"))  '("Cut" nil))
+    (list "fkeyof reads C2 off a depth prompt and no key off a plain one"
+          '(list (pool:fkeyof "C2 - depth where the shallow floor meets the break")
+                 (pool:fkeyof "Total pool length (arc tip to arc tip)"))
+          '(c2 nil))
+    (list "chainfix: two NA letters share what the total has left"
+          '(pool:chainfix '(10.0 nil nil) 30.0 1)  '(10.0 10.0 10.0))
+    (list "chainval lifts a negative letter to a share of the total, paid by the largest"
+          '(pool:chainval '(30.0 -2.0 20.0) 48.0)  '((24.0 4.0 20.0) (1 0)))
+    (list "greccut fills the blank leg from a taped face by Pythagoras"
+          '(pool:greccut 10.0 nil 6.0)  '(8.0 . 6.0))
+    (list "4bar closes a 3 by 4 box at 90 degrees"
+          '(pool:4bar 3.0 3.0 4.0 4.0 (* 0.5 pi))
+          '((0.0 0.0) (3.0 0.0) (3.0 4.0) (0.0 4.0)))
+    (list "sag and sagr: a 5 radius bulges 1 past a 6 chord, and back"
+          '(list (pool:sag 5.0 6.0) (pool:sagr 1.0 6.0))  '(1.0 5.0))
+    (list "btmties: a Wedge bottom asks H F M L K and skips G and E"
+          '(mapcar 'car (pool:btmties "Wedge"))  '("H" "F" "M" "L" "K"))
+    (list "ftin writes 15 ft as 15'-0\" whatever DIMZIN says, and reads to a sixteenth"
+          '(list (cal:ftin 180.0 4 4) (cal:ftin 20.0625 4 4))
+          '("15'-0\"" "1'-8 1/16\""))))
+
+(foreach c '("POOL")
+  (setq *calofin-selftests*
+        (cons (cons c 'pool:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -13930,7 +14259,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq pooldemo:*version* "092326 REV11")
+(setq pooldemo:*version* "092526 REV12")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -14340,6 +14669,44 @@
   (princ (strcat "\nPOOLDEMO " pooldemo:*version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun pooldemo:selftests ()
+  (list
+    ;; every cell draws through POOL's helpers, so this file has no
+    ;; arithmetic of its own to run: what it pins is the grid the
+    ;; cells are laid on and the state a report should find
+    (list "the grid's cell width is a positive number"
+          '(if (and (numberp pooldemo:*colw*) (> pooldemo:*colw* 0.0))
+             pooldemo:*colw*))
+    (list "the grid's cell height is a positive number"
+          '(if (and (numberp pooldemo:*rowh*) (> pooldemo:*rowh* 0.0))
+             pooldemo:*rowh*))
+    (list "a cell is wider than the 480 in pool every cell draws, so cells cannot overlap"
+          '(> pooldemo:*colw* 480.0)  T)
+    (list "a cell is taller than the 470 in its caption sits above the pool"
+          '(> pooldemo:*rowh* 470.0)  T)
+    (list "the twelve cells the run walks are all defined"
+          '(and pooldemo:c1 pooldemo:c2 pooldemo:c3 pooldemo:c4
+                pooldemo:c5 pooldemo:c6 pooldemo:c7 pooldemo:c8
+                pooldemo:c9 pooldemo:c10 pooldemo:c11 pooldemo:c12)
+          T)
+    (list "the undo group a run opens is closed by the time its report is written"
+          '(null pooldemo:*undo-open*)  T)
+    (list "the version banner reads MMDDYY REVnn"
+          '(wcmatch pooldemo:*version* "###### REV##")  T)))
+
+(foreach c '("POOLDEMO")
+  (setq *calofin-selftests*
+        (cons (cons c 'pooldemo:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -14386,7 +14753,7 @@
 ;;;      TUTORIALPOOL_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
 
-(setq tutorial:*version* "092326 REV11")
+(setq tutorial:*version* "092526 REV12")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -14804,6 +15171,39 @@
   (if lzd:end (lzd:end "TUTORIALPOOL"))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun tutorial:selftests ()
+  (list
+    ;; every topic draws through POOL's helpers or only prints, so
+    ;; this file has no arithmetic of its own to run: what it pins is
+    ;; the spacing the topics are laid on and the state a report
+    ;; should find
+    (list "the spacing between topics is a positive number"
+          '(if (and (numberp tutorial:*colw*) (> tutorial:*colw* 0.0))
+             tutorial:*colw*))
+    (list "a topic column clears the 600 in frame topic 3 draws, so topic 4 lands past it"
+          '(> tutorial:*colw* 600.0)  T)
+    (list "the nine topics the run walks are all defined"
+          '(and tutorial:c1 tutorial:c2 tutorial:c3 tutorial:c4 tutorial:c5
+                tutorial:c6 tutorial:c7 tutorial:c8 tutorial:c9)
+          T)
+    (list "the undo group a run opens is closed by the time its report is written"
+          '(null tutorial:*undo-open*)  T)
+    (list "the version banner reads MMDDYY REVnn"
+          '(wcmatch tutorial:*version* "###### REV##")  T)))
+
+(foreach c '("TUTORIALPOOL")
+  (setq *calofin-selftests*
+        (cons (cons c 'tutorial:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -14887,7 +15287,7 @@
 ;;;  The grouped build: the helpers come from CALOFIN-LIB.lsp.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.15")
+(setq *poolside-version* "v1.16")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -15960,6 +16360,51 @@
   (princ (strcat "\nPOOLSIDE " *poolside-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun psd:selftests ()
+  (list
+    (list "chain of a Normal bottom runs H G F E"
+          '(mapcar 'car (psd:chain "Normal"))  '("H" "G" "F" "E"))
+    (list "depths has one station more than the chain has runs, every style"
+          '(mapcar '(lambda (s) (- (length (psd:depths s)) (length (psd:chain s))))
+                   '("Normal" "Sport" "Wedge" "SLope" "MOdflat" "SHallow"))
+          '(1 1 1 1 1 1))
+    (list "nominal proportions of a Sport bottom sum to 1"
+          '(apply '+ (psd:nominal "Sport"))  1.0)
+    (list "slack of a Sport chain is its pad G, at index 2"
+          '(psd:slack (psd:chain "Sport"))  2)
+    (list "chainfix splits the remainder over the NA runs"
+          '(psd:chainfix '(10.0 nil nil) 40.0 0)  '(10.0 15.0 15.0))
+    (list "chainfix hands a miss of B to the slack member"
+          '(psd:chainfix '(10.0 10.0 10.0) 40.0 1)  '(10.0 20.0 10.0))
+    (list "chainval lifts a negative run to the floor out of the largest"
+          '(psd:chainval '(-4.0 30.0 10.0) 36.0)  '((3.0 23.0 10.0) (0 1)))
+    (list "stations of a Wedge run C, D, C along the chain"
+          '(psd:stations "Wedge" '(10.0 30.0) 42.0 84.0 nil)
+          '((0.0 . 42.0) (10.0 . 84.0) (40.0 . 42.0)))
+    (list "xcode finds the break by code, mirrored, with C2 equal to C"
+          '(psd:xcode "SHallow"
+                      (psd:stations "SHallow" '(10.0 20.0 30.0 40.0) 42.0 84.0 42.0)
+                      "c2" T)  10.0)
+    (list "kwknob spells a knob's sport as the prompt does"
+          '(psd:kwknob "sport" psd:*btypes*)  "Sport")
+    (list "fok: REQ refuses 0, ZER takes it, NAX takes NA"
+          '(and (not (psd:fok 'REQ 0.0)) (psd:fok 'ZER 0.0) (psd:fok 'NAX nil)))
+    (list "parse-len reads a bare 7' as 84 inches in feet"
+          '(cal:parse-len "7'")  '(84.0 T))))
+
+(foreach c '("POOLSIDE")
+  (setq *calofin-selftests*
+        (cons (cons c 'psd:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -16057,7 +16502,7 @@
 
 (vl-load-com)
 
-(setq *lazside-version* "v1.2")
+(setq *lazside-version* "v1.3")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -17068,6 +17513,69 @@
                  (itoa (length lzv:*types*)) " bottom type(s)."))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lzv:selftests ()
+  (list
+    (list "key: the letter E2 is stored as e2, POOLSIDE's own spelling"
+          '(lzv:key "E2")  "e2")
+    (list "stations: a Wedge is three, the deep one 12% along the run"
+          '(lzv:stations "Wedge")  '((90 430) (188 660) (910 430)))
+    (list "outline: the Wedge section runs down the wall, along the floor, up and back"
+          '(car (lzv:outline "Wedge"))
+          '(90 230 90 430 188 660 910 430 910 230 90 230))
+    (list "stationof: only the SHallow has a C2 station"
+          '(list (lzv:stationof "SHallow" "c2") (lzv:stationof "Normal" "c2"))
+          '(3 nil))
+    (list "keys: the Sport sheet carries its own chain and no H"
+          '(lzv:keys (lzv:chart "Sport"))
+          '("b" "e2" "f2" "g" "f1" "e1" "c" "d"))
+    (list "dims: D stands at the Wedge's deep station, not beside it"
+          '(nth 2 (assoc "D" (lzv:c-dims (lzv:chart "Wedge"))))  188)
+    ;; the sheet's stores are shadowed for the call, so the rule is read
+    ;; against known boxes and not against what the failed run left
+    (list "depthbad: a deep end no deeper than the wall is refused"
+          '((lambda ( / lzv:*chart* lzv:*vals*)
+              (setq lzv:*chart* (lzv:chart "Normal")
+                    lzv:*vals*  '(("c" . "4") ("d" . "3")))
+              (lzv:depthbad)))
+          "D must be deeper than C - the deep end is not deeper than the wall.")
+    (list "depthbad ignores a C2 left behind from the SHallow tab on a Normal"
+          '((lambda ( / lzv:*chart* lzv:*vals*)
+              (setq lzv:*chart* (lzv:chart "Normal")
+                    lzv:*vals*  '(("c" . "3") ("d" . "8") ("c2" . "9")))
+              (lzv:depthbad)))
+          nil)
+    (list "form: NA at a run travels as nil, NA at a depth is an empty box"
+          '((lambda ( / lzv:*type* lzv:*sel* lzv:*chart* lzv:*vals*)
+              (setq lzv:*type*  "Wedge"
+                    lzv:*chart* (lzv:chart "Wedge")
+                    lzv:*vals*  '(("h" . "NA") ("c" . "NA")
+                                  ("d" . "8") ("f" . "10")))
+              (lzv:form)))
+          '((style . "Wedge") (h) (f . 10.0) (d . 8.0)))
+    (list "taglist names the drawing's letters, three and a count"
+          '((lambda ( / lzv:*chart*)
+              (setq lzv:*chart* (lzv:chart "Sport"))
+              (lzv:taglist '("b" "e2" "f2" "g"))))
+          "B, E2, F2 and 1 more")
+    (list "answer reads feet and inches as inches"
+          '(cal:formanswer "2'6\"")  30.0)
+    (list "kvpack drops an empty box; kvunpack reads the rest back"
+          '(cal:kvunpack (cal:kvpack '(("b" . "30'") ("h" . "") ("c" . "4"))))
+          '(("b" . "30'") ("c" . "4")))))
+
+(foreach c '("LAZSIDE")
+  (setq *calofin-selftests*
+        (cons (cons c 'lzv:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -17325,7 +17833,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092426 REV37")
+(setq spa:*version* "092526 REV38")
 
 ;;; -------------------- shop terms --------------------------------------
 ;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
@@ -21548,6 +22056,54 @@
                  (if tut:*version* tut:*version* "not loaded")))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun spa:selftests ()
+  (list
+    (list "cornsb: a 10 cut face sets back face over root 2"
+          '(spa:cornsb '("Cut" 10.0))  7.0711)
+    (list "cornerends: a 6 radius on a square corner ends 6 up the wall"
+          '(car (spa:cornerends '(0.0 0.0) '(0.0 10.0) '(10.0 0.0) "Radius" 6.0))
+          '(0.0 6.0))
+    (list "offcorners: a radius the lap erases collapses to Square"
+          '(spa:offcorners '(("Radius" 6.0)) -6.0)  '(("Square" 0.0)))
+    (list "chordrect: a square-cornered 100 by 80 box is 80 tall mid-wall"
+          '(spa:chordrect (spa:quadat '(0.0 0.0) 100.0 80.0)
+                          '(("Square" 0.0) ("Square" 0.0)
+                            ("Square" 0.0) ("Square" 0.0))
+                          50.0)
+          '(0.0 80.0))
+    (list "octov: a measured T derives S, and S1 matches it at 45"
+          '(spa:octov 80.0 100.0 nil 70.0 nil nil nil)  '(15.0 70.0 15.0 50.0))
+    (list "hingetypes: 5 pieces read H V V H off the chart"
+          '(spa:hingetypes 5 nil)  '("H" "V" "V" "H"))
+    (list "hplace moves a hinge off a zone to its near edge"
+          '(spa:hplace 0.0 100.0 2 60.0 '((40.0 60.0)))  '(60.0))
+    (list "spillzones: a side-wall spillway blocks nothing until the turn puts it on top"
+          '(if (spa:spillzones '(("Wall" "Left" 20.0)) 0.0 100.0 nil)
+             nil
+             (spa:spillzones '(("Wall" "Left" 20.0)) 0.0 100.0 T))
+          '((40.0 60.0)))
+    (list "hardverdict says by how much the hinge is over"
+          '(cdr (spa:hardverdict '(OVER 120.0) 130.5))  "hinge 130.5 over 120")
+    (list "tapernorm puts the dash back in a bare 42"
+          '(spa:tapernorm "42")  "4-2")
+    (list "foamopts: an Economy taper only Standard carries takes its sheet"
+          '(car (spa:foamopts "ECONOMY" "4-3"))  '((48.0 . 144.0)))
+    (list "parse-len reads 4'-4 1/2\" as 52.5 inches with feet"
+          '(cal:parse-len "4'-4 1/2\"")  '(52.5 T))))
+
+(foreach c '("SPA")
+  (setq *calofin-selftests*
+        (cons (cons c 'spa:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -21596,7 +22152,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "092326 REV18")
+(setq tut:*version* "092526 REV19")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -22099,6 +22655,48 @@
   (if lzd:end (lzd:end "TUTORIALSPA"))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun tut:selftests ()
+  (list
+    ;; The tutorial has no arithmetic of its own -- it drives SPA's --
+    ;; so these pin the worked example's knobs to what its script
+    ;; promises, and the checklist tables to the shape tut:sheet reads.
+    (list "the demo cover is wider than it is tall, so it lies long-ways"
+          '(if (and (numberp tut:*w*) (numberp tut:*l*) (> tut:*w* tut:*l*))
+             tut:*w*))
+    (list "the water's edge sits a positive lap inside the cover"
+          '(if (and (numberp tut:*gap*) (> tut:*gap* 0.0)) tut:*gap*))
+    (list "corner C's cut face sets back under half the shorter wall, so SPA takes it"
+          '(if (< (* tut:*cut* 0.70711) (* 0.5 (min tut:*w* tut:*l*))) tut:*cut*))
+    (list "the foam sheet is a width and a longer length"
+          '(if (and (numberp tut:*fw*) (numberp tut:*fl*)
+                    (> tut:*fw* 0.0) (> tut:*fl* tut:*fw*))
+             tut:*fl*))
+    (list "the cover needs three pieces of that foam, so both hinge kinds get drawn"
+          '(fix (+ 0.999999 (/ tut:*w* tut:*fw*)))  3)
+    (list "the hinge run is past Standard's 108 double-C line, as the script says"
+          '(if (> tut:*l* 108.0) tut:*l*))
+    (list "the asks table numbers SPA's eight questions"
+          '(length (vl-remove-if-not '(lambda (s) (wcmatch s "#.*")) tut:*asks*))  8)
+    (list "the four checklist tables are non-empty lists of text"
+          '(if (and tut:*asks* tut:*decides* tut:*checks* tut:*draws*
+                    (not (vl-member-if '(lambda (s) (/= (type s) 'STR))
+                                       (append tut:*asks* tut:*decides*
+                                               tut:*checks* tut:*draws*))))
+             (length (append tut:*asks* tut:*decides* tut:*checks* tut:*draws*))))))
+
+(foreach c '("TUTORIALSPA")
+  (setq *calofin-selftests*
+        (cons (cons c 'tut:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -22347,7 +22945,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v9.6")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v9.7")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -25879,6 +26477,49 @@
   (princ (strcat "\nOASIS " *oasis-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun oasis:selftests ()
+  (list
+    (list "variant: a Cloud answered Rounded is the rounded-bottom ring"
+          '(oasis:variant '("Cloud" nil nil nil nil nil nil nil nil nil "Rounded"))
+          "RoundedBottom")
+    (list "leftrad: a cloud pins the left bulge at half the Y bound, whatever was typed"
+          '(oasis:leftrad "StraightBottom" 200.0 99.0)  100.0)
+    (list "topcen: a TopRight corner bulge sits its radius in from both bounds"
+          '(oasis:topcen 400.0 200.0 50.0 "TopRight" nil)  '(350.0 150.0))
+    (list "tieoff reads back the shift tiedist was printed from"
+          '(oasis:tieoff 400.0 200.0 40.0 60.0 (oasis:tiedist 400.0 200.0 40.0 60.0 -30.0))
+          -30.0)
+    (list "tieoff refuses a tie shorter than the two centres' Y gap"
+          '(oasis:tieoff 400.0 200.0 40.0 60.0 50.0)  nil)
+    (list "steps: a complex TopRight asks the placement after the right bulge"
+          '(oasis:steps '("TopRight" nil nil nil nil nil nil nil nil nil nil "Complex"))
+          '(0 11 1 2 3 4 5 6 12 7 8 9))
+    (list "fkw spells a form's keyword the way the prompt does"
+          '(oasis:fkw "rounded" "Straight Rounded")  "Rounded")
+    (list "ktrue-side: a 32 x 20 kidney with an 18 top derives 8 sides"
+          '(oasis:ktrue-side 32.0 20.0 18.0)  8.0)
+    (list "extnorm: two bulges on one bound share a normal square to it"
+          '(oasis:extnorm '(0.0 5.0) 5.0 '(20.0 3.0) 3.0)  '(0.0 -1.0))
+    (list "fillet centre lies outside the ring, right of c1->c2"
+          '(oasis:fillet '(0.0 0.0) 1.0 '(6.0 0.0) 1.0 4.0)  '(3.0 -4.0))
+    (list "pinched names the bulge the ring left out"
+          '(oasis:pinched '(("left")) "StraightBottom")  '("right"))
+    (list "parse-len reads a dashed feet-and-inches spelling"
+          '(cal:parse-len "4'-4-1/2\"")  '(52.5 T))))
+
+(foreach c '("OASIS")
+  (setq *calofin-selftests*
+        (cons (cons c 'oasis:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -25988,7 +26629,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.10")
+(setq *abcdef-version* "v5.11")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -27965,6 +28606,49 @@
   (while (< (strlen s) width) (setq s (strcat " " s)))
   s)
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun abcdef:selftests ()
+  (list
+    (list "solve: four 5\" tapes on an 8 by 6 frame meet at its middle, no residual"
+          '(abcdef:solve '((0 0) (8 0) (0 6) (8 6)) '(5.0 5.0 5.0 5.0) 1.0 1.0)
+          '(4.0 3.0 0.0 0.0 0.0 0.0 0.0))
+    (list "cc-int crosses two tapes twice, one root each side of the corner line"
+          '(abcdef:cc-int '(0 0) 5.0 '(8 0) 5.0)  '((4.0 3.0) (4.0 -3.0)))
+    (list "cc-int shares a shortfall so two tapes that miss still meet once"
+          '(abcdef:cc-int '(0 0) 3.0 '(8 0) 4.0)  '((3.5 0.0)))
+    (list "mirror-pt reflects the answer through the line of its two corners"
+          '(abcdef:mirror-pt 4.0 3.0 '(0 0) '(8 0))  '(4.0 -3.0))
+    (list "best-cut folds a 180-degree cut to 0: tapes in a line cross nowhere"
+          '(abcdef:best-cut 4.0 0.0 '((0 (0 0) 4.0) (1 (8 0) 4.0)))  0.0)
+    (list "clamp-in pulls a point back onto the frame and says how far"
+          '(abcdef:clamp-in 9.0 3.0 '(0 0 8 6))  '(8.0 3.0 1.0))
+    (list "letters names the corners a subset used, in sheet order"
+          '(abcdef:letters '((3 (8 6) 5.0) (0 (0 0) 5.0) (1 (8 0) 5.0)))  "ABD")
+    (list "confidence: four clean tapes crossing well is 99"
+          '(abcdef:confidence 4 0.0 0.0 90.0 nil nil)  99.0)
+    (list "frame-check passes a true 8 by 6 frame and names a short A-B"
+          '(and (null (abcdef:frame-check 0 0 8 0 0 6 8 6 8 6))
+                (wcmatch (abcdef:frame-check 0 0 7 0 0 6 8 6 8 6)
+                         "A-B measures*")))
+    (list "corner-ang measures a square corner from the coordinates"
+          '(abcdef:corner-ang 0 0 8 0 0 6)  90.0)
+    (list "ftin->in repairs 101-10\" on a 10-foot diagonal as 10'-10\", 130"
+          '(abcdef:ftin->in "101-10\"" 120.0)  130.0)
+    (list "in->ftin writes 476.75 as 39'-8 3/4\""
+          '(abcdef:in->ftin 476.75)  "39'-8 3/4\"")))
+
+(foreach c '("ABCDEF")
+  (setq *calofin-selftests*
+        (cons (cons c 'abcdef:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -28379,7 +29063,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.22")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.23")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -31267,6 +31951,54 @@
                  "  (commands: ABFIND, ABMOVE, ABPCREATE)"))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun abf:selftests ()
+  (list
+    (list "as-number strips the Pt. prefix, a space and a hash"
+          '(abf:as-number "Pt. #35")  "35")
+    (list "canon meets Pt.35 and 035 in the middle"
+          '(= (abf:canon "Pt.35") (abf:canon "035"))  T)
+    (list "circint takes the crossing on NEAR's side of the stakes"
+          '(abf:circint '(0.0 0.0 0.0) 5.0 '(6.0 0.0 0.0) 5.0 '(0.0 -1.0 0.0))
+          '(3.0 -4.0 0.0))
+    (list "reach says how far short two tapes fall"
+          '(abf:reach '(0.0 0.0 0.0) '(120.0 0.0 0.0) 48.0 60.0)
+          "the two arcs fall 1'-0\" short of each other")
+    (list "reach is nil when the two arcs cross"
+          '(abf:reach '(0.0 0.0 0.0) '(100.0 0.0 0.0) 60.0 60.0)  nil)
+    (list "click-side: a click on the A-B line names no side"
+          '(abf:click-side '(0.0 0.0 0.0) '(10.0 0.0 0.0) '(5.0 0.0 0.0))  nil)
+    (list "seg-dist measures to the nearer end past it"
+          '(abf:seg-dist '(13.0 4.0) '(0.0 0.0) '(10.0 0.0))  5.0)
+    (list "lines: the nearer A claims the only B, whichever A came first"
+          '(abf:ln-a (car (abf:lines (list (list '(0.0 0.0 0.0) abf:*a-name* nil)
+                                           (list '(50.0 0.0 0.0) abf:*a-name* nil)
+                                           (list '(100.0 0.0 0.0) abf:*b-name* nil)))))
+          '(50.0 0.0 0.0))
+    (list "dupe-tags letters a second point on the same line"
+          '(mapcar 'car (abf:dupe-tags '(((10.0 5.0 0.0) "3" nil) ((20.0 5.0 0.0) "3" nil))
+                                       '((1 (0.0 0.0 0.0) (100.0 0.0 0.0) "L1"))))
+          '("L1" "L1b"))
+    (list "reading rounds to the sixteenth before it counts inches"
+          '(abf:reading 35.99)  '(3 0))
+    (list "ins-delta keeps a tie up before down"
+          '(abf:ins-delta -12.0 (abf:ins-delta 12.0 (abf:ins-delta 24.0 nil)))
+          '(12.0 -12.0 24.0))
+    (list "ftin spells 30.5 as feet, inches and a reduced fraction"
+          '(cal:ftin 30.5 4 4)  "2'-6 1/2\"")))
+
+(foreach c '("ABFIND")
+  (setq *calofin-selftests*
+        (cons (cons c 'abf:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -31334,7 +32066,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.10")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.11")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -32536,6 +33268,51 @@
   (princ (strcat "\nALTABCDEF " *altabcdef-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun altabcdef:selftests ()
+  (list
+    (list "ftin->in reads a full feet-inch-fraction cell"
+          '(altabcdef:ftin->in "12'-3 1/2\"" nil)  147.5)
+    (list "ftin->in takes a bare fraction of an inch"
+          '(altabcdef:ftin->in "3 1/2\"" nil)  3.5)
+    (list "ftin->in: a dash with no foot mark still separates feet"
+          '(altabcdef:ftin->in "28-7\"" nil)  343.0)
+    (list "in->ftin writes 476.75 as 39'-8 3/4\", reduced"
+          '(altabcdef:in->ftin 476.75)  "39'-8 3/4\"")
+    (list "defrac rebuilds 314 as 3/4 and 15116 as 15/16"
+          '(list (altabcdef:defrac "314") (altabcdef:defrac "15116"))
+          '("3/4" "15/16"))
+    (list "scrub turns O, I and _ into 0, 1 and -"
+          '(altabcdef:scrub "2O'_1I4\"")  "20'-114\"")
+    (list "cc-int: two 5in circles 8in apart cross at 4,3 and 4,-3"
+          '(altabcdef:cc-int '(0.0 0.0) 5.0 '(8.0 0.0) 5.0)  '((4.0 3.0) (4.0 -3.0)))
+    (list "cc-int: circles that fall short share the gap and touch once"
+          '(altabcdef:cc-int '(0.0 0.0) 3.0 '(10.0 0.0) 5.0)  '((4.0 0.0)))
+    (list "mirror-amb-p: opposite corners leave the mirror inside the frame, adjacent ones do not"
+          '(list (altabcdef:mirror-amb-p '((0.0 0.0) (10.0 -10.0)) 7.0 -3.0 0.0 0.0 10.0 10.0)
+                 (altabcdef:mirror-amb-p '((0.0 0.0) (10.0 0.0)) 5.0 -3.0 0.0 0.0 10.0 10.0))
+          '(T nil))
+    (list "corner-ang of a square corner is 90 degrees"
+          '(altabcdef:corner-ang 0.0 0.0 10.0 0.0 0.0 10.0)  90.0)
+    (list "wholes-apart-p: 20 6 is two numbers apart, 20'-6\" is not"
+          '(list (altabcdef:wholes-apart-p "20 6") (altabcdef:wholes-apart-p "20'-6\""))
+          '(T nil))
+    (list "col-of reads the distance and name headers"
+          '(list (altabcdef:col-of "DIST FROM B") (altabcdef:col-of "POINT NAME"))
+          '(b name))))
+
+(foreach c '("ALTABCDEF")
+  (setq *calofin-selftests*
+        (cons (cons c 'altabcdef:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -33328,7 +34105,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "092326 REV28") ; announced on load.  The
+(setq pf:*version*      "092526 REV29") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -38586,6 +39363,52 @@
   (princ (strcat "\nABHD " pf:*version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun pf:selftests ()
+  (list
+    (list "circumcenter of a right triangle is its hypotenuse's middle"
+          '(pf:circumcenter '(0 0) '(4 0) '(0 4))  '(2.0 2.0))
+    (list "circumcenter refuses three collinear points"
+          '(pf:circumcenter '(0 0) '(1 1) '(2 2))  nil)
+    (list "bulge-3pt: a half circle over the top is clockwise, bulge -1"
+          '(pf:bulge-3pt '(0 0) '(1 1) '(2 0))  -1.0)
+    (list "seg-dist is radial inside an arc's sweep"
+          '(pf:seg-dist '(1 -3) '((0 0) (2 0) 1.0))  2.0)
+    (list "tangent-bulge: leaving upward for a point to the right bends clockwise"
+          '(pf:tangent-bulge '(0 0) (* 0.5 pi) '(2 0))  -1.0)
+    (list "end-tangent of a bulge-1 arc turns the chord a quarter"
+          '(pf:end-tangent '(0 0) '(2 0) 1.0)  (* 0.5 pi))
+    (list "bulge-radius: a third of a bulge over a 6 chord is a 5 radius"
+          '(pf:bulge-radius '(0 0) '(6 0) (/ 1.0 3.0))  5.0)
+    (list "radius-bulge: 5 over a 6 chord is a third, on the reference's side"
+          '(pf:radius-bulge '(0 0) '(6 0) 5.0 -0.5)  (/ -1.0 3.0))
+    (list "div-arcs rounds 10 points over 3 to 3 curves"
+          '(pf:div-arcs 10 3)  3)
+    (list "div-arcs never caps below one curve"
+          '(pf:div-arcs 1 3)  1)
+    (list "chain closes four exploded sides, turning the one drawn backwards"
+          '(pf:chain '(((0 0) (4 0) 0.0) ((4 0) (4 4) 0.0)
+                       ((0 4) (4 4) 0.0) ((0 4) (0 0) 0.0)))
+          '(((0 0) (4 0) 0.0) ((4 0) (4 4) 0.0)
+            ((4 4) (0 4) 0.0) ((0 4) (0 0) 0.0)))
+    (list "self-crosses catches a bow tie and passes a square"
+          '(and (pf:self-crosses '(((0 0) (2 2) 0.0) ((2 2) (2 0) 0.0)
+                                   ((2 0) (0 2) 0.0) ((0 2) (0 0) 0.0)))
+                (not (pf:self-crosses '(((0 0) (2 0) 0.0) ((2 0) (2 2) 0.0)
+                                        ((2 2) (0 2) 0.0) ((0 2) (0 0) 0.0))))))))
+
+(foreach c '("ABHD" "SIMPABHD" "ADAB" "TUTORIALABHD")
+  (setq *calofin-selftests*
+        (cons (cons c 'pf:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -38709,7 +39532,7 @@
 ;;; arcs is caught by the signed-turning total instead.
 ;;; ======================================================================
 
-(setq *abcurcheck-version* "v1.10")  ; announced on load; release_lisp.py
+(setq *abcurcheck-version* "v1.11")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -39996,6 +40819,57 @@
   (princ (strcat "\nABCURCHECK " *abcurcheck-version* " loaded."))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun acc:selftests ()
+  (list
+    (list "seg-curv: a CCW arc turns left, so its curvature is positive"
+          '(acc:seg-curv '((0 0) (10 0) 1.0))  0.2)
+    (list "seg-t1: a CCW semicircle ends heading straight up"
+          '(acc:seg-t1 '((0 0) (10 0) 1.0))  (* 0.5 pi))
+    (list "signed-dang: 10 to 350 degrees is -20, not 340"
+          '(acc:deg (cal:signed-dang (acc:rad 10.0) (acc:rad 350.0)))  -20.0)
+    (list "band: no turn at all is tangent"  '(acc:band 0.0)  "tangent")
+    (list "joints: the first corner of a CCW square turns +90"
+          '(acc:deg (acc:j-ang (car (acc:joints
+              '(((0 0) (10 0) 0.0) ((10 0) (10 10) 0.0)
+                ((10 10) (0 10) 0.0) ((0 10) (0 0) 0.0)) nil))))  90.0)
+    (list "crossings finds the one pair in a bow-tie"
+          '(acc:crossings '(((0.0 0.0) (10.0 10.0) 0.0) ((10.0 10.0) (10.0 0.0) 0.0)
+                            ((10.0 0.0) (0.0 10.0) 0.0) ((0.0 10.0) (0.0 0.0) 0.0)))
+          '((1 3)))
+    (list "dupe-segs: a segment drawn back over itself is doubled"
+          '(acc:dupe-segs '(((0 0) (10 0) 0.5) ((10 0) (0 0) -0.5)))  '((1 2)))
+    (list "dupe-segs: a round spa's two halves are not"
+          '(acc:dupe-segs '(((0 0) (10 0) 1.0) ((10 0) (0 0) 1.0)))  nil)
+    (list "inflections counts an S twice round the ring, seam included"
+          '(acc:inflections '(((0 0) (10 0) 0.5) ((10 0) (20 0) -0.5)))  2)
+    (list "g0-fault names the crossing in a bow-tie"
+          '(acc:g0-fault (acc:measure
+              '(((0.0 0.0) (10.0 10.0) 0.0) ((10.0 10.0) (10.0 0.0) 0.0)
+                ((10.0 0.0) (0.0 10.0) 0.0) ((0.0 10.0) (0.0 0.0) 0.0)) nil))
+          "1 crossing segment(s)")
+    (list "grade: a square with no corner declared is Rough"
+          '(car (acc:grade (acc:measure
+              '(((0 0) (10 0) 0.0) ((10 0) (10 10) 0.0)
+                ((10 10) (0 10) 0.0) ((0 10) (0 0) 0.0)) nil)))  "Rough")
+    (list "grade: the same square with every corner declared is Smooth"
+          '(car (acc:grade (acc:measure
+              '(((0 0) (10 0) 0.0) ((10 0) (10 10) 0.0)
+                ((10 10) (0 10) 0.0) ((0 10) (0 0) 0.0))
+              '((10 0) (10 10) (0 10) (0 0)))))  "Smooth")))
+
+(foreach c '("ABCURCHECK" "ABCURCHECKSCAN" "ABCURCHECKRESCUE")
+  (setq *calofin-selftests*
+        (cons (cons c 'acc:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -40081,7 +40955,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.10")
+(setq *abpcheck-version* "v1.11")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value ABPCHECK reads that someone might want to
@@ -40929,6 +41803,54 @@
   (princ (strcat "\nABPCHECK " *abpcheck-version* " loaded."))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun abp:selftests ()
+  (list
+    (list "seg-dist drops a foot onto a straight run"
+          '(abp:seg-dist '(1.0 1.0) '((0.0 0.0) (3.0 0.0) 0.0))  1.0)
+    (list "seg-dist clamps a point past the end to that end"
+          '(abp:seg-dist '(6 4) '((0 0) (3 0) 0.0))  5.0)
+    (list "seg-dist under a bulged run is the radial distance"
+          '(abp:seg-dist '(1 -2) '((0 0) (2 0) 1.0))  1.0)
+    (list "seg-dist beyond an arc's sweep takes the nearer end"
+          '(abp:seg-dist '(1 2) '((0 0) (2 0) 1.0))  (sqrt 5.0))
+    (list "dedupe keeps one of a double shot, in order"
+          '(mapcar 'abp:pt-name
+                   (cal:dedupe '((0 0 "A") (0.0000001 0 "B") (5 0 "C")) 1.0e-6))
+          '("A" "C"))
+    (list "measure keys each point by its nearest run, nearest first"
+          '(mapcar 'abp:pt-name
+                   (mapcar 'cdr (abp:measure '((5 5 "B") (1 1 "A"))
+                                             '(((0 0) (3 0) 0.0)))))
+          '("A" "B"))
+    (list "bbox is (minx miny maxx maxy)"
+          '(abp:bbox '((0 0) (4 -1) (2 3)))  '(0 -1 4 3))
+    (list "ftin spells a sixteenth-rounded inch fraction"
+          '(cal:ftin 1.875 4 4)  "0'-1 7/8\"")
+    (list "ftin writes whole feet with their zero inches, whatever DIMZIN"
+          '(cal:ftin 180.0 4 4)  "15'-0\"")
+    (list "finding is the one report line, name padded to six"
+          '(abp:finding '(1.875 3 4 "17"))
+          "Pt. 17    closest line is 0'-1 7/8\" away")
+    (list "rows: too-far heading and row, clear heading and row, not-measured advice"
+          '(mapcar 'abp:row-lvl
+                   (abp:rows '((0.5 1 1 "A") (2.0 5 5 "B")) 1.0 1 0))
+          '(3 1 3 nil 3 2))
+    (list "color-name falls back to the ACI number"
+          '(abp:color-name 9)  "colour 9")))
+
+(foreach c '("ABPCHECK" "ABPCHECKRESCUE")
+  (setq *calofin-selftests*
+        (cons (cons c 'abp:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -41036,7 +41958,7 @@
 ;;; layer everything landed on.
 ;;; ======================================================================
 
-(setq *olauto-version* "v1.4")       ; announced on load; release_lisp.py
+(setq *olauto-version* "v1.5")       ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -42535,6 +43457,50 @@
   (princ (strcat "\nOLAUTO " *olauto-version* " loaded."))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun ola:selftests ()
+  (list
+    (list "sweep of bulge 1 is a half turn"        '(ola:sweep 1.0)              pi)
+    (list "bulge-radius: a semicircle on a 10 chord has radius 5"
+          '(ola:bulge-radius '(0 0) '(10 0) 1.0)  5.0)
+    (list "seg-len measures the arc, not its chord"
+          '(ola:seg-len '((0 0) (10 0) 1.0))      (* 5.0 pi))
+    (list "arc-geom centres a semicircle on its chord"
+          '(car (ola:arc-geom '((0 0) (10 0) 1.0)))  '(5.0 0.0))
+    (list "seg-pt halfway round a CCW arc lies right of the chord"
+          '(ola:seg-pt '((0 0) (10 0) 1.0) 0.5)   '(5.0 -5.0))
+    (list "pclose lands on the arc itself, not on its chord"
+          '(ola:pclose (car (ola:prep '(((0 0) (10 0) 1.0)))) '(5 -20))  '(5.0 -5.0))
+    (list "chain turns a segment drawn the other way round"
+          '(cadr (ola:chain '(((0 0) (10 0) 0.0) ((10 10) (10 0) 0.5))))
+          '((10 0) (10 10) -0.5))
+    (list "closed-p: a square that meets itself reads closed"
+          '(ola:closed-p '(((0 0) (10 0) 0.0) ((10 0) (10 10) 0.0)
+                          ((10 10) (0 10) 0.0) ((0 10) (0 0) 0.0)))  T)
+    (list "walk spaces a closed square at its corners"
+          '(nth 2 (ola:walk '(((0 0) (10 0) 0.0) ((10 0) (10 10) 0.0)
+                              ((10 10) (0 10) 0.0) ((0 10) (0 0) 0.0)) 4 T))
+          '(10.0 10.0))
+    (list "kabsch recovers a quarter turn and a shift"
+          '(ola:xapply (ola:kabsch '((0 0) (1 0) (0 1)) '((5 5) (5 6) (4 5))) '(1 0))
+          '(5.0 6.0))
+    (list "chain-pieces counts a far jump as a second piece"
+          '(car (ola:chain-pieces '(((0 0) (10 0) 0.0) ((50 50) (60 50) 0.0))))  2)
+    (list "names joins three layers in prose"
+          '(ola:names '("A" "B" "C"))  "\"A\", \"B\" and \"C\"")))
+
+(foreach c '("OLAUTO")
+  (setq *calofin-selftests*
+        (cons (cons c 'ola:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -42628,7 +43594,7 @@
 ;;; the same one.
 ;;; ======================================================================
 
-(setq *squareup-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *squareup-version* "v1.3")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/
 
@@ -43408,6 +44374,47 @@
   (princ (strcat "\nSQUAREUP " *squareup-version* " loaded."))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun sq:selftests ()
+  (list
+    (list "angnorm folds -90 into [0, 2pi)"     '(cal:angnorm (- (* 0.5 pi)))  (* 1.5 pi))
+    (list "angnorm brings a full turn to 0"     '(cal:angnorm (* 2.0 pi))      0.0)
+    (list "dirfold makes 190 read as 10 degrees"
+          '(sq:deg (sq:dirfold (sq:rad 190.0)))  10.0)
+    (list "ang-diff of 10 and 170 is 20, not 160"
+          '(sq:deg (cal:ang-diff (sq:rad 10.0) (sq:rad 170.0)))  20.0)
+    (list "turn squares 176 degrees by turning 4"
+          '(sq:deg (sq:turn (sq:rad 176.0)))  4.0)
+    (list "turn squares 30 degrees by turning -30"
+          '(sq:deg (sq:turn (sq:rad 30.0)))  -30.0)
+    (list "deg and rad are inverses"            '(sq:deg (sq:rad 37.5))       37.5)
+    (list "tan stays finite at a half turn"     '(numberp (cal:tan (* 0.5 pi))))
+    (list "cross3 is positive for a left turn"
+          '(> (sq:cross3 '(0 0) '(1 0) '(1 1)) 0.0))
+    (list "hull drops an inside point"
+          '(not (member '(2.0 2.0) (sq:hull '((0 0) (4 0) (4 4) (0 4) (2 2))))))
+    (list "span of a 3 by 4 box is its diagonal"
+          '(car (sq:span '((0 0) (3 0) (3 4) (0 4))))  5.0)
+    (list "middle of a box's extents"           '(sq:middle '((0 0) (4 2)))   '(2.0 1.0))
+    (list "ang writes a signed angle"           '(sq:ang (sq:rad -4.25))      "-4.25")
+    (list "way names a negative turn"           '(sq:way -0.1)                "clockwise")
+    (list "tie: two equal walls one way are not a tie"
+          '(sq:tie (list (list 10.0 0.0) (list 10.0 0.0)))  nil)
+    (list "tie: an equal wall across is one"
+          '(cadr (sq:tie (list (list 10.0 0.0) (list 10.0 (* 0.5 pi)))))  (* 0.5 pi))))
+
+(foreach c '("SQUAREUP")
+  (setq *calofin-selftests*
+        (cons (cons c 'sq:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and CALOFIN-LOADER.lsp set
 ;; the flag while they load their members, because one file's greeting
 ;; is a greeting and sixty-odd of them is a wall the drafter scrolls
@@ -43665,7 +44672,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v2.8")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v2.9")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -47435,6 +48442,58 @@
   (if lzd:end (lzd:end "CABHD"))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cab:selftests ()
+  (list
+    (list "radius-bulge: a 2.5 radius over a 4 chord is the minor-arc bulge 0.5"
+          '(cab:radius-bulge '(0 0) '(4 0) 2.5 0.3)  0.5)
+    (list "radius-bulge refuses a radius shorter than half its chord"
+          '(cab:radius-bulge '(0 0) '(4 0) 1.0 0.3)  nil)
+    (list "tangent-bulge: leaving straight up for a point to the right turns clockwise"
+          '(cab:tangent-bulge '(0 0) (/ pi 2.0) '(4 0))  -1.0)
+    (list "seg-param puts the apex of a semicircle halfway along it"
+          '(cab:seg-param '(2 -2) '((0 0) (4 0) 1.0))  0.5)
+    (list "chain closes a square handed out of order, turning its reversed side round"
+          '(last (cab:chain (list (list '(0 0) '(4 0) 0.0)
+                                  (list '(4 4) '(0 4) 0.0)
+                                  (list '(4 0) '(4 4) 0.0)
+                                  (list '(0 0) '(0 4) 0.0))))
+          '((0 4) (0 0) 0.0))
+    (list "rotate-to-corner starts the walk at the sharpest turn"
+          '(car (cab:rotate-to-corner '((0 0) (4 0) (8 3) (4 6) (0 6))))
+          '(8 3))
+    (list "merge-windows splits the kink evenly when two joints disagree"
+          '(cab:merge-windows '(0.0 . 1.0) '(2.0 . 3.0))  '(1.5 . 1.5))
+    (list "self-crosses sees a bow-tie loop"
+          '(cab:self-crosses (list (list '(0 0) '(4 4) 0.0)
+                                   (list '(4 4) '(4 0) 0.0)
+                                   (list '(4 0) '(0 4) 0.0)
+                                   (list '(0 4) '(0 0) 0.0)))
+          T)
+    (list "num-in reads the first run of digits and stops there"
+          '(cab:num-in "Pt.12-15")  12)
+    (list "seam-kink: two semicircles close with no kink"
+          '(cab:seam-kink (list (list '(0 0) '(4 0) 1.0)
+                                (list '(4 0) '(0 0) 1.0)))
+          0.0)
+    (list "ftin writes 52.5 inches as feet and eighths"
+          '(cal:ftin 52.5 4 3)  "4'-4 1/2\"")
+    (list "bad-phrase lists three points with commas and an and"
+          '(vl-string-search "Pt.3, Pt.7 and Pt.9"
+                             (cab:bad-phrase '("3" "7" "9"))))))
+
+(foreach c '("CABHD")
+  (setq *calofin-selftests*
+        (cons (cons c 'cab:selftests) *calofin-selftests*)))
+
 ;; ----------------------------------------------------------------------
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
@@ -47520,7 +48579,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *pointrenamer-version* "v1.7")
+(setq *pointrenamer-version* "v1.8")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob the tool has, all of them here.
@@ -48477,6 +49536,51 @@
   (princ (strcat "\nPOINTRENAMER " *pointrenamer-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun ptr:selftests ()
+  (list
+    (list "dircanon reads ccw as the counter-clockwise keyword"
+          '(ptr:dircanon "ccw")  "COunterclockwise")
+    (list "dircanon refuses a word that names neither way"
+          '(ptr:dircanon "sideways")  nil)
+    (list "dirkey keeps a point dead on the start first"
+          '(ptr:dirkey 2.0 2.0 10.0 T)  1.0e-4)
+    (list "dirkey against the drawn order walks the long way round"
+          '(ptr:dirkey 3.0 2.0 10.0 nil)  9.0001)
+    (list "circumcenter of three points on a unit circle"
+          '(ptr:circumcenter '(0 0) '(1 -1) '(2 0))  '(1.0 0.0))
+    (list "seg-len of a semicircle of radius 1 is pi"
+          '(ptr:seg-len '((0 0) (2 0) 1.0))  pi)
+    (list "seg-near clamps a point past the end to that end"
+          '(ptr:seg-near '(6 4) '((0 0) (3 0) 0.0) 3.0)  '(5.0 . 3.0))
+    (list "loop-area of a CCW unit square is +1"
+          '(ptr:loop-area '(((0 0) (1 0) 0.0) ((1 0) (1 1) 0.0)
+                            ((1 1) (0 1) 0.0) ((0 1) (0 0) 0.0)))  1.0)
+    (list "loop-area closes an open run by its chord, negative when CW"
+          '(ptr:loop-area '(((0 0) (0 1) 0.0) ((0 1) (1 1) 0.0)
+                            ((1 1) (1 0) 0.0)))  -1.0)
+    (list "loop-area of a circle drawn as two bulges is pi r squared"
+          '(ptr:loop-area '(((0 0) (2 0) 1.0) ((2 0) (0 0) 1.0)))  pi)
+    (list "measure gives the nearest spot's station along the perimeter"
+          '(ptr:measure '(1.3 0.5)
+                        (ptr:seg-tab '(((0 0) (1 0) 0.0) ((1 0) (1 1) 0.0))))
+          '(0.3 . 1.5))
+    (list "sort-rows keeps two shots on one station in read order"
+          '(mapcar 'caddr (ptr:sort-rows '((2.0 0.0 1) (1.0 0.0 2) (1.0 0.0 0))))
+          '(0 2 1))))
+
+(foreach c '("POINTRENAMER")
+  (setq *calofin-selftests*
+        (cons (cons c 'ptr:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -48562,7 +49666,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *lobf-version* "v1.4")
+(setq *lobf-version* "v1.5")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value LOBF reads that someone might want to
@@ -49487,6 +50591,59 @@
   (princ (strcat "\nLOBF " *lobf-version* " loaded."))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lobf:selftests ()
+  (list
+    (list "dedupe: a double shot gets one vote, not two"
+          '(length (cal:dedupe '((0.0 0.0 "a") (0.0 0.0 "b") (5.0 0.0 "c")) 1e-6))  2)
+    (list "pt-name reads the number and says ? for none"
+          '(list (lobf:pt-name '(0.0 0.0 "17")) (lobf:pt-name '(0.0 0.0 nil)))
+          '("17" "?"))
+    (list "tls: three points on y=x fit a line through 1,1"
+          '(car (lobf:tls '((0.0 0.0) (1.0 1.0) (2.0 2.0))))  '(1.0 1.0))
+    (list "tls: a north-south wall fits as readily as an east-west one"
+          '(cadr (lobf:tls '((0.0 0.0) (0.0 1.0) (0.0 2.0))))  '(0.0 1.0))
+    (list "tls: every point on one spot is no line at all"
+          '(lobf:tls '((1.0 1.0) (1.0 1.0) (1.0 1.0)))  nil)
+    (list "spread: the worst and the mean distance off a line"
+          '(lobf:spread '((0.0 0.0) (1.0 1.0) (2.0 -1.0)) '(0.0 0.0) '(1.0 0.0))
+          (list 1.0 (/ 2.0 3.0)))
+    (list "drop1 sets aside the one point off the line the other three sit on"
+          '(caddr (lobf:drop1 '((0.0 0.0) (1.0 0.0) (2.0 0.0) (1.0 5.0))))  3)
+    (list "hull keeps the four corners and drops a point inside and one on an edge"
+          '(length (lobf:hull '((0.0 0.0) (4.0 0.0) (4.0 4.0) (0.0 4.0) (2.0 2.0) (2.0 0.0))))
+          4)
+    (list "minimax runs the line down the middle of the band: every point equally off it"
+          '((lambda (m) (mapcar '(lambda (p) (lobf:resid p (car m) (cadr m)))
+                                '((0.0 0.0) (4.0 0.0) (2.0 1.0))))
+            (lobf:minimax '((0.0 0.0) (4.0 0.0) (2.0 1.0))))
+          '(0.5 0.5 0.5))
+    (list "candidates: fit 2 names the point it set aside"
+          '(lobf:cand-aim (cadr (lobf:candidates '((0.0 0.0 "1") (1.0 0.0 "2")
+                                                   (2.0 0.0 "3") (1.0 5.0 "4")))))
+          "Pt. 4 set aside")
+    (list "outlier-p: five inches off three on the line is one, a tenth is not"
+          '(list (lobf:outlier-p (cadr (lobf:candidates '((0.0 0.0 "1") (1.0 0.0 "2")
+                                                          (2.0 0.0 "3") (1.0 5.0 "4")))))
+                 (lobf:outlier-p (cadr (lobf:candidates '((0.0 0.0 "1") (1.0 0.1 "2")
+                                                          (2.0 0.0 "3") (3.0 0.12 "4"))))))
+          '(T nil))
+    (list "bearing folds a line's two directions into one number"
+          '(list (lobf:bearing '(2.0 1.0)) (lobf:bearing '(-2.0 -1.0)))
+          '("26.57 deg" "26.57 deg"))))
+
+(foreach c '("LOBF")
+  (setq *calofin-selftests*
+        (cons (cons c 'lobf:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -49604,7 +50761,7 @@
 ;;  this block, and nowhere else in the file.  Edit one and APPLOAD the
 ;;  file again; to try a value for one session, type the setq at the
 ;;  command line, because every knob is read when the command runs.
-(setq *ablobf-version*   "v1.7")     ; announced on load; release_lisp.py
+(setq *ablobf-version*   "v1.8")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *ABL-POOL-LAYER*   "POOL")     ; layer the kept run ends up on -
@@ -52287,6 +53444,48 @@
   (princ (strcat "\nABLOBF " *ablobf-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun abl:selftests ()
+  (list
+    (list "bulge-3pt: an arc over the top of its chord is clockwise, bulge -1"
+          '(abl:bulge-3pt '(0 0) '(1 1) '(2 0))  -1.0)
+    (list "bulge-3pt: three collinear points are a straight 0"
+          '(abl:bulge-3pt '(0 0) '(1 0) '(2 0))  0.0)
+    (list "bulge-radius: a 6 chord with bulge 1 is a radius-3 semicircle"
+          '(abl:bulge-radius '(0 0) '(6 0) 1.0)  3.0)
+    (list "radius-bulge: radius 5 over a 6 chord, minor arc, is 1/3"
+          '(abl:radius-bulge '(0 0) '(6 0) 5.0 0.5)  (/ 1.0 3.0))
+    (list "radius-bulge: the same radius keeps a major-arc reference major"
+          '(abl:radius-bulge '(0 0) '(6 0) 5.0 2.0)  3.0)
+    (list "seg-dist measures an arc radially, not to its chord"
+          '(abl:seg-dist '(1 -3) '((0 0) (2 0) 1.0))  2.0)
+    (list "snap-arc pulls a radius of 3.02 onto the whole inch, holding its point"
+          '(abl:snap-arc '(0 0) '(6 0) 0.9 '((3 -3)) 0.1 0 nil)  '(1.0 . 0))
+    (list "max-bulge grants a neighbour span the shipped 60 degrees of slack alone: tan 15"
+          '(abl:max-bulge '(0 0) '(10 0) nil)  0.2679492)
+    (list "nice-radius-p takes 18 (a half foot) and refuses 7.5"
+          '(and (abl:nice-radius-p 18.0) (not (abl:nice-radius-p 7.5))))
+    (list "num-in reads the first run of digits out of a point label"
+          '(abl:num-in "Pt.17a")  17)
+    (list "bad-phrase lists three points with a comma and an and"
+          '(abl:bad-phrase '("12" "15" "20"))
+          (strcat *ABL-BAD-PREFIX* "Pt.12, Pt.15 and Pt.20" *ABL-BAD-MANY*))
+    (list "cand-matches finds both points a sheet numbered 17 and 017"
+          '(length (cal:cand-matches "pt 17" '(((0 0) "17") ((5 5) "18") ((9 9) "017"))))  2)
+  ))
+
+(foreach c '("ABLOBF")
+  (setq *calofin-selftests*
+        (cons (cons c 'abl:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -52363,7 +53562,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.14"     ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.15"     ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -53464,6 +54663,58 @@
 
 ;; ---------------------------------------------------------------------------
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun autobead-selftests ()
+  (list
+    (list "dot of a vector with itself is its length squared"
+          '(cal:dot '(3.0 4.0) '(3.0 4.0))  25.0)
+    (list "side: above a left-to-right line is 1, below it -1"
+          '(list (autobead-side '(5.0 1.0) '(0.0 0.0) '(10.0 0.0))
+                 (autobead-side '(5.0 -1.0) '(0.0 0.0) '(10.0 0.0)))
+          '(1 -1))
+    (list "side: a point on the line is called 1, never nil"
+          '(autobead-side '(5.0 0.0) '(0.0 0.0) '(10.0 0.0))  1)
+    (list "breakline takes the nearest step line ahead of the click, not the first listed"
+          '(autobead-breakline '(0.0 0.0 0.0) '(10.0 0.0 0.0)
+                               '(((20.0 -10.0 0.0) (20.0 10.0 0.0))
+                                 ((-5.0 -10.0 0.0) (-5.0 10.0 0.0))
+                                 ((5.0 -10.0 0.0) (5.0 10.0 0.0))))
+          2)
+    (list "breakline ignores a step line behind the click"
+          '(autobead-breakline '(0.0 0.0 0.0) '(10.0 0.0 0.0)
+                               '(((-5.0 -10.0 0.0) (-5.0 10.0 0.0))))
+          nil)
+    (list "breakline gives a step line 6in of slop past its drawn end, not 8"
+          '(list (autobead-breakline '(0.0 0.0 0.0) '(10.0 0.0 0.0)
+                                     '(((5.0 4.0 0.0) (5.0 10.0 0.0))))
+                 (autobead-breakline '(0.0 0.0 0.0) '(10.0 0.0 0.0)
+                                     '(((5.0 8.0 0.0) (5.0 10.0 0.0)))))
+          '(0 nil))
+    (list "breakline: a direction click on the step click is no direction"
+          '(autobead-breakline '(0.0 0.0 0.0) '(0.0 0.0 0.0)
+                               '(((5.0 -10.0 0.0) (5.0 10.0 0.0))))
+          nil)
+    (list "the bead offset is a positive length"
+          '(if (and (numberp *autobead-offset*) (> *autobead-offset* 0.0)) *autobead-offset*))
+    (list "the join tolerance is a small positive distance"
+          '(if (and (numberp *autobead-fuzz*) (> *autobead-fuzz* 0.0) (< *autobead-fuzz* 1.0))
+             *autobead-fuzz*))
+    (list "the output layer is a named layer"
+          '(if (and (= (type *autobead-layer*) 'STR) (> (strlen *autobead-layer*) 0))
+             *autobead-layer*))))
+
+(foreach c '("AUTOBEAD" "TUTORIALAUTOBEAD")
+  (setq *calofin-selftests*
+        (cons (cons c 'autobead-selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -53727,7 +54978,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v2.5")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v2.6")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -55702,6 +56953,43 @@
   (princ (strcat "\nAUTODIM " *autodim-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun ad:selftests ()
+  (list
+    (list "mid of (0 0) and (4 2)"                  '(cal:midn '(0 0) '(4 2))   '(2.0 1.0))
+    (list "dot of (1 2) and (3 4) is 11"            '(cal:dotn '(1 2) '(3 4))   11)
+    (list "segang folds a downward segment into [0, pi)"
+          '(ad:segang '((0 0) (0 -1)))  (* 0.5 pi))
+    (list "angdiff of 0.1 and pi-0.1 wraps round to 0.2"
+          '(ad:angdiff 0.1 (- pi 0.1))  0.2)
+    (list "numstr writes a whole number without a point"
+          '(ad:numstr 2.0)  "2")
+    (list "lineoff is signed: 3 one side of the span, -3 the other"
+          '(list (ad:lineoff '(0 0) '(10 0) '(5 3))
+                 (ad:lineoff '(0 0) '(10 0) '(5 -3)))
+          '(3.0 -3.0))
+    (list "groupsame joins 10 and 10.02 within a sixteenth, keeps 12 apart, in the order found"
+          '(ad:groupsame '((10.0) (12.0) (10.02)) 0.0625)
+          '(((10.0) (10.02)) ((12.0))))
+    (list "bulgearc: a bulge of 1 across a chord of 2 is a semicircle of radius 1"
+          '(cadr (ad:bulgearc '(0 0) '(2 0) 1.0))  1.0)
+    (list "boxlap: two boxes that do not touch do not overlap"
+          '(ad:boxlap '((0 0) (2 2)) '((3 3) (4 4)))  nil)
+    (list "stairlike-p refuses a riser that starts half a unit above the last one's foot"
+          '(ad:stairlike-p '(((1 3) (1 2)) ((2 2.5) (2 1))) 0.01)  nil)))
+
+(foreach c '("AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV")
+  (setq *calofin-selftests*
+        (cons (cons c 'ad:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -55765,7 +57053,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *bpcallout-version* "v1.11")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.12")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -56063,6 +57351,45 @@
   (princ (strcat "\nBPCALLOUT " *bpcallout-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun bp:selftests ()
+  (list
+    (list "dist measures flat: an elevation is dropped"
+          '(cal:dist '(0 0 0) '(3 4 100))                          5.0)
+    (list "nearest-point takes the closer of two within snap"
+          '(cadr (bp:nearest-point '(0 0) '(((10 0) "12") ((3 0) "15"))))  "15")
+    (list "nearest-point passes over a point beyond snap"
+          '(bp:nearest-point '(0 0) '(((100 0) "12")))            nil)
+    (list "ringed-at finds a ring centred on the same spot"
+          '(cadr (bp:ringed-at '(0 0) '(5 5) '(((5.0 5.0) "12" nil)) T))  "12")
+    (list "ringed-at: a pick that snapped to a point is that point, not a neighbour's ring"
+          '(bp:ringed-at '(2 0) '(8 0) '(((0 0) "12" nil)) T)     nil)
+    (list "ringed-at: an unsnapped pick inside a ring names that ring"
+          '(cadr (bp:ringed-at '(2 0) '(2 0) '(((0 0) "12" nil)) nil))  "12")
+    (list "drop-entry removes the ring's entry and keeps the order"
+          '(bp:drop-entry 'r2 '(((0 0) "1" r1) ((1 1) "2" r2) ((2 2) "3" r3)))
+          '(((0 0) "1" r1) ((2 2) "3" r3)))
+    (list "phrase: one point is bad"
+          '(bp:phrase '("12"))                                    "Pt.12 is bad")
+    (list "phrase: two points are bad, joined by and"
+          '(bp:phrase '("12" "15"))                               "Pt.12 and Pt.15 are bad")
+    (list "phrase: three points, commas then and"
+          '(bp:phrase '("12" "15" "20"))                          "Pt.12, Pt.15 and Pt.20 are bad")
+    (list "the ring radius knob is a positive distance"
+          '(if (and (numberp bp:*radius*) (> bp:*radius* 0)) bp:*radius*))))
+
+(foreach c '("BPCALLOUT")
+  (setq *calofin-selftests*
+        (cons (cons c 'bp:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -56127,7 +57454,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dronote-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *dronote-version* "v1.4")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -56343,6 +57670,66 @@
   (princ (strcat "\nDRONOTE " *dronote-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun dn:selftests ()
+  (list
+    (list "written ends on the note itself"
+          '(= (substr (dn:written "hello") (- (strlen (dn:written "hello")) 4))
+              "hello")
+          T)
+    (list "written puts the bullet right before the note"
+          '(= (substr (dn:written "x")
+                      (- (strlen (dn:written "x")) (strlen dn:*bullet*))
+                      (strlen dn:*bullet*))
+              dn:*bullet*)
+          T)
+    (list "with a header, written opens on it and breaks the line once (\\P)"
+          '(if (> (strlen dn:*header*) 0)
+             (= (vl-string-search "\\P" (dn:written "x")) (strlen dn:*header*))
+             (not (vl-string-search "\\P" (dn:written "x"))))
+          T)
+    (list "every note's keyword is in the bracket list"
+          '(not (vl-member-if '(lambda (n) (not (vl-string-search (car n) dn:*kws*)))
+                              dn:*notes*))
+          T)
+    (list "the bracket list names exactly as many keywords as there are notes"
+          '(= (1+ (length (vl-remove-if-not '(lambda (c) (= c 32))
+                                            (vl-string->list dn:*kws*))))
+              (length dn:*notes*))
+          T)
+    (list "the Anchors keyword finds its note"
+          '(cdr (assoc "Anchors" dn:*notes*)))
+    (list "ucsang answers an angle in whatever UCS is current"
+          '(numberp (dn:ucsang))  T)
+    (list "text height knob is a positive number"
+          '(if (and (numberp dn:*text-hgt*) (> dn:*text-hgt* 0)) dn:*text-hgt*))
+    (list "wrap width knob is a positive number"
+          '(if (and (numberp dn:*text-width*) (> dn:*text-width* 0))
+             dn:*text-width*))
+    (list "line space knob is inside MTEXT's 0.25 to 4 range"
+          '(if (and (numberp dn:*line-space*)
+                    (>= dn:*line-space* 0.25) (<= dn:*line-space* 4.0))
+             dn:*line-space*))
+    (list "layer knob is a layer name"
+          '(if (and (= (type dn:*layer*) 'STR) (> (strlen dn:*layer*) 0))
+             dn:*layer*))
+    (list "layer colour knob is an ACI number, 1 to 255"
+          '(if (and (= (type dn:*layer-color*) 'INT)
+                    (> dn:*layer-color* 0) (< dn:*layer-color* 256))
+             dn:*layer-color*))))
+
+(foreach c '("DRONOTE")
+  (setq *calofin-selftests*
+        (cons (cons c 'dn:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -56531,7 +57918,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.9")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.10")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -57424,6 +58811,46 @@
   (princ (strcat "\nDIMSTAMP " *dimstamp-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun ds:selftests ()
+  (list
+    (list "read turns 4'4.5 into the canonical spelling"
+          '(ds:read "4'4.5")  "4'-4 1/2\"")
+    (list "read spells bare feet as feet and no inches"
+          '(ds:read "4'")  "4'-0\"")
+    (list "read stamps a typed b as B"
+          '(ds:read "b")  "B")
+    (list "read refuses a word longer than a label"
+          '(ds:read "nope")  nil)
+    (list "parse refuses a measurement of nothing"
+          '(ds:parse "0")  nil)
+    (list "inches refuses a fraction over zero"
+          '(ds:inches "1/0")  nil)
+    (list "letter-index counts like spreadsheet columns"
+          '(ds:letter-index "AA")  27)
+    (list "letter-name spells the last two-letter label"
+          '(ds:letter-name 702)  "ZZ")
+    (list "tier reads a half inch past a whole one as a half"
+          '(ds:tier 12)  'half)
+    (list "rejoin puts back the fraction the spacebar cut off"
+          '(ds:rejoin "4'-6" "1/2\"")  "4'-6 1/2\"")
+    (list "rejoin leaves a change of mind alone"
+          '(ds:rejoin "34" "36")  nil)
+    (list "measure-suggestions drops rows at or below zero"
+          '(length (ds:measure-suggestions 4 nil))  11)))
+
+(foreach c '("DIMSTAMP")
+  (setq *calofin-selftests*
+        (cons (cons c 'ds:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and CALOFIN-LOADER.lsp set
 ;; the flag while they load their members.  APPLOADed alone the flag
 ;; is nil and this prints, which is the one time somebody wants to be
@@ -57471,7 +58898,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *ccprecheck-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *ccprecheck-version* "v1.6")   ; announced on load; release_lisp.py
                                         ; stamps the dated twin in releases/
 
 ;;; ======================================================================
@@ -58105,6 +59532,45 @@
   (princ (strcat "\nCCPRECHECK " *ccprecheck-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun chk:selftests ()
+  (list
+    (list "back-word takes undo in any case"
+          '(chk:back-word "undo"))
+    (list "back-word passes an ordinary answer"
+          '(not (chk:back-word "Yes"))  T)
+    (list "every back word is a string"
+          '(and chk:*back-words*
+                (not (vl-member-if '(lambda (w) (/= (type w) 'STR))
+                                   chk:*back-words*))
+                chk:*back-words*))
+    (list "trim keeps the first n summary lines, on a log bound for the test"
+          '((lambda (*chk:log*) (chk:trim 2)) '("a" "b" "c"))
+          '("a" "b"))
+    (list "seq walks a stage list to its end"
+          '(chk:seq (list (cons nil '(lambda () "x"))) nil)  nil)
+    (list "seq hands Back up from the first question of a branch"
+          '(chk:seq (list (cons nil '(lambda () 'CHK-BACK))) T)  'CHK-BACK)
+    (list "seq skips a stage whose test is false"
+          '(chk:seq (list (cons '(= 1 2) '(lambda () 'CHK-BACK))) T)  nil)
+    (list "the summary marks are text"
+          '(and (= (type chk:*note-mark*) 'STR)
+                (= (type chk:*confirm-mark*) 'STR)
+                (= (type chk:*ans-sep*) 'STR)
+                chk:*note-mark*))))
+
+(foreach c '("CCPRECHECK")
+  (setq *calofin-selftests*
+        (cons (cons c 'chk:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -58217,7 +59683,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cdcallout-version* "v1.12")  ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.13")  ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -58775,6 +60241,40 @@
   (princ (strcat "\nCDCALLOUT " *cdcallout-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cdo:selftests ()
+  (list
+    (list "canon reads PT.7 as the number 7"
+          '(atof (cdo:canon "PT.7"))  7.0)
+    (list "canon makes pt #12 and 12.0 the same point"
+          '(= (cdo:canon "pt #12") (cdo:canon "12.0"))  T)
+    (list "canon keeps a name that is not a number, upper-cased"
+          '(cdo:canon "sw corner")  "SWCORNER")
+    (list "backp takes UNDO in any case"
+          '(cal:back-word-p "undo"))
+    (list "matches lists every point a number names, in drawing order"
+          '(mapcar 'car (cdo:matches "12" '((1 . "PT12") (2 . "13") (3 . "12.0"))))
+          '(1 3))
+    (list "trim takes the blanks off both ends"
+          '(cdo:trim "  4 1/2  ")  "4 1/2")
+    (list "loc pushes the dimension line to the left of FROM->TO"
+          '(cdo:loc '(0.0 0.0 0.0) '(4.0 0.0 0.0) 1.0)  '(2.0 1.0 0.0))
+    (list "strip drops every group of one code"
+          '(cdo:strip 62 '((0 . "DIMENSION") (62 . 1) (8 . "X") (62 . 2)))
+          '((0 . "DIMENSION") (8 . "X")))))
+
+(foreach c '("CDCALLOUT")
+  (setq *calofin-selftests*
+        (cons (cons c 'cdo:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -58868,7 +60368,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cdcreate-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *cdcreate-version* "v1.7")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -59285,6 +60785,47 @@
   (princ (strcat "\nCDCREATE " *cdcreate-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cdc:selftests ()
+  (list
+    (list "loc halfway along a line is its midpoint"
+          '(cdc:loc '(0 0 0) '(4 0 0) 0.5 0.0)               '(2.0 0.0 0.0))
+    (list "loc pushes a positive offset to the LEFT of start->end"
+          '(cdc:loc '(0 0 0) '(4 0 0) 0.5 1.0)               '(2.0 1.0 0.0))
+    (list "top2 puts the text at the right end of a line drawn left to right"
+          '(cdc:top2 '(0 0 0) '(4 0 0))                      T)
+    (list "top2 puts the text at the BOTTOM of a line drawn upward"
+          '(cdc:top2 '(0 0 0) '(0 4 0))                      nil)
+    (list "textfrac read either way round adds up to one"
+          '(+ (cdc:textfrac '(0 0 0) '(4 0 0))
+              (cdc:textfrac '(4 0 0) '(0 0 0)))              1.0)
+    (list "strip drops every entry for a group code"
+          '(cdc:strip 62 '((0 . "LINE") (62 . 1) (8 . "X") (62 . 256)))
+          '((0 . "LINE") (8 . "X")))
+    (list "samept compares flat: an elevation is not a different place"
+          '(cdc:samept '(0 0 0) '(0.01 0 5) 0.05)            T)
+    (list "dimmed-p finds the tie dimensioned the other way round"
+          '(cdc:dimmed-p '(0 0) '(4 0) '(((4 0) (0 0))))     T)
+    (list "dimmed-p passes over a pair that is not this tie"
+          '(cdc:dimmed-p '(0 0) '(4 0) '(((0 0) (5 0))))     nil)
+    (list "names joins layer names with a comma"
+          '(cdc:names '("POOL" "POINTS"))                    "POOL, POINTS")
+    (list "the text position knob is a fraction of the line"
+          '(if (and (numberp cdc:*textpos*) (<= 0.0 cdc:*textpos* 1.0))
+             cdc:*textpos*))))
+
+(foreach c '("CDCREATE")
+  (setq *calofin-selftests*
+        (cons (cons c 'cdc:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -59348,7 +60889,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *checkdrawing-version* "v1.11")  ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.12")  ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -59865,6 +61406,42 @@
   (princ (strcat "\nCHECK " *checkdrawing-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cfchk:selftests ()
+  (list
+    (list "angnorm folds -90 into [0, 2pi)"
+          '(cal:angnorm (- (* 0.5 pi)))                       (* 1.5 pi))
+    (list "angnorm brings a full turn to 0"
+          '(cal:angnorm (* 2.0 pi))                           0.0)
+    (list "circumcenter of a right angle is the hypotenuse's midpoint"
+          '(cal:circumcenter '(0 0 0) '(4 0 0) '(0 4 0))      '(2.0 2.0 0))
+    (list "circumcenter takes z from the first point"
+          '(caddr (cal:circumcenter '(0 0 5) '(4 0 0) '(0 4 0)))  5)
+    (list "circumcenter refuses three collinear points"
+          '(cal:circumcenter '(0 0 0) '(1 1 0) '(2 2 0))      nil)
+    (list "color-name has a word for red"
+          '(cfchk:color-name 1)                                 "red")
+    (list "color-name spells an ACI it has no word for"
+          '(cfchk:color-name 141)                               "colour 141")
+    (list "planar-arc-p takes an arc with no normal as world XY"
+          '(cfchk:planar-arc-p '((0 . "ARC")))                  T)
+    (list "planar-arc-p refuses a mirrored (0 0 -1) arc"
+          '(cfchk:planar-arc-p '((0 . "ARC") (210 0.0 0.0 -1.0)))  nil)
+    (list "closest-of picks the nearest of a list"
+          '(cfchk:closest-of '(0 0) '((3 0) (1 1) (5 5)))       '(1 1))))
+
+(foreach c '("CHECK")
+  (setq *calofin-selftests*
+        (cons (cons c 'cfchk:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -60238,7 +61815,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.17") ; printed on load and at command start so a
+(setq *cs-version* "v4.18") ; printed on load and at command start so a
                             ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -62332,6 +63909,53 @@
   (princ (strcat "\nCORNERSTP " *cs-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cs-selftests ()
+  (list
+    (list "ptline: 3 off the line through a wall, past the wall's end"
+          '(cs-ptline '(15.0 3.0 0.0) '(0.0 0.0 0.0) '(10.0 0.0 0.0))  3.0)
+    (list "ptseg: a point 3 past and 4 off the wall's end is 5 from it"
+          '(cs-ptseg '(13.0 4.0 0.0) '(0.0 0.0 0.0) '(10.0 0.0 0.0))  5.0)
+    (list "beyond: 3 past the end of a 10 long wall"
+          '(cs-beyond '(13.0 1.0 0.0) '(0.0 0.0 0.0) '(10.0 0.0 0.0))  3.0)
+    (list "inspan: a span from 225 to 45 degrees wraps through zero and holds 270"
+          '(cs-inspan (* 1.5 pi) (* 1.25 pi) (* 0.25 pi))  T)
+    (list "bulgearc: a bulge of 1 is a half circle, radius half the chord"
+          '(cadr (cs-bulgearc '(0.0 0.0 0.0) '(2.0 0.0 0.0) 1.0))  1.0)
+    (list "bulgearc: a quarter-turn bulge from (0,0) to (1,1) centres on (0,1), its left"
+          '(car (cs-bulgearc '(0.0 0.0 0.0) '(1.0 1.0 0.0) (- (sqrt 2.0) 1.0)))
+          '(0.0 1.0 0.0))
+    (list "nearseg picks the wall nearest the pick"
+          '(cs-nearseg '(((0.0 0.0 0.0) (10.0 0.0 0.0))
+                         ((0.0 10.0 0.0) (10.0 10.0 0.0)))
+                       '(5.0 8.0 0.0))
+          '((0.0 10.0 0.0) (10.0 10.0 0.0)))
+    (list "resolve centres a held 4 on a 10 wall opening, 3 in from each wall"
+          '(cs-resolve 4.0 10.0 '(0.0 0.0 0.0) '(10.0 0.0 0.0) nil nil 1 0.125)
+          '((3.0 0.0 0.0) (7.0 0.0 0.0)))
+    (list "nestoff nests a 10 wide step 5 further out than a 0 wide one"
+          '(- (cs-nestoff 10.0 1.0) (cs-nestoff 0.0 1.0))  5.0)
+    (list "numlist reads commas, 'and' and a range"
+          '(cs-numlist "1, 3 and 5-7")  '(1 3 5 6 7))
+    (list "kwcanon spells a setting the way the prompt does, and refuses a near miss"
+          '(and (= "Outside" (cs-kwcanon "outside" '("Inside" "Outside")))
+                (null (cs-kwcanon "out" '("Inside" "Outside")))))
+    (list "parse-len and spell-len round-trip 4'-4 1/2"
+          '(cal:spell-len (cal:len-eighths (car (cal:parse-len "4'-4 1/2\""))) T nil)
+          "4'-4 1/2\"")))
+
+(foreach c '("CORNERSTP" "TUTORIALCORNERSTP")
+  (setq *calofin-selftests*
+        (cons (cons c 'cs-selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -62672,7 +64296,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.27") ; printed on load and at command start so a
+(setq *hs-version* "v3.28") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -64566,6 +66190,53 @@
   (princ (strcat "\nHEMISTEP " *hs-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun hs-selftests ()
+  (list
+    (list "cross is positive for a left turn"
+          '(cal:cross '(1.0 0.0 0.0) '(0.0 1.0 0.0))  1.0)
+    (list "circum: the circle through (5,1) (2,4) (-1,1) is centred on (2,1)"
+          '(hs-circum '(5.0 1.0 0.0) '(2.0 4.0 0.0) '(-1.0 1.0 0.0))  '(2.0 1.0 0.0))
+    (list "circum: three points on a line have no circle"
+          '(hs-circum '(0.0 0.0 0.0) '(1.0 1.0 0.0) '(2.0 2.0 0.0))  nil)
+    (list "segb: a quarter turn counterclockwise is bulge tan 22.5"
+          '(hs-segb '(1.0 0.0 0.0) '(0.0 1.0 0.0) '(0.0 0.0 0.0) T)  0.4142136)
+    (list "segb: the same ends clockwise go the long way round, bulge -tan 67.5"
+          '(hs-segb '(1.0 0.0 0.0) '(0.0 1.0 0.0) '(0.0 0.0 0.0) nil)  -2.4142136)
+    (list "bulgemid: a bulge of 1 peaks half a chord to the right of A->B"
+          '(hs-bulgemid '(0.0 0.0 0.0) '(2.0 0.0 0.0) 1.0)  '(1.0 -1.0 0.0))
+    (list "fit3: three points on the unit circle, counterclockwise"
+          '(hs-fit3 '((1.0 0.0 0.0) (0.0 1.0 0.0) (-1.0 0.0 0.0)) 0)
+          '((0.0 0.0 0.0) . T))
+    (list "blgs: a half circle in three points is two quarter-turn bulges"
+          '(hs-blgs '((1.0 0.0 0.0) (0.0 1.0 0.0) (-1.0 0.0 0.0)) nil nil)
+          '(0.4142136 0.4142136))
+    (list "safeb straightens a bulge past a half circle, and a missing one"
+          '(list (hs-safeb 1.5) (hs-safeb -0.5) (hs-safeb nil))  '(0.0 -0.5 0.0))
+    (list "open: an r=5 circle opens 10 across its centre"
+          '(caddr (hs-open '(0.0 0.0 0.0) '(1.0 0.0 0.0)
+                           (list (list "A" '(0.0 0.0 0.0) 5.0 0.0 (* 2.0 pi)))))
+          10.0)
+    (list "firstspan follows the original arc across the first step"
+          '(hs-firstspan '(1.0 0.0 0.0) '(0.0 1.0 0.0)
+                         (list "A" '(0.0 0.0 0.0) 1.0 0.0 (* 2.0 pi))
+                         '(0.7071 0.7071 0.0))
+          0.4142136)
+    (list "numlist reads commas, 'and' and a range"
+          '(hs-numlist "1, 3 and 5-7")  '(1 3 5 6 7))))
+
+(foreach c '("HEMISTEP" "TUTORIALHEMISTEP")
+  (setq *calofin-selftests*
+        (cons (cons c 'hs-selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -64977,7 +66648,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.23") ; printed on load and at command start so a
+(setq *ns-version* "v3.24") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- shop terms, re-read ------------------------
@@ -67241,6 +68912,58 @@
   (princ (strcat "\nNORMIESTEP " *ns-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun ns-selftests ()
+  (list
+    (list "ptseg: 3 above the middle of a 10 long tread is 3 off it"
+          '(ns-ptseg '(5.0 3.0 0.0) '(0.0 0.0 0.0) '(10.0 0.0 0.0))  3.0)
+    (list "inspan: a span from 225 to 45 degrees wraps through zero and holds 270"
+          '(ns-inspan (* 1.5 pi) (* 1.25 pi) (* 0.25 pi))  T)
+    (list "linecirc: a line through the centre cuts an r=2 circle at -2 and 2"
+          '(ns-linecirc '(0.0 0.0 0.0) '(1.0 0.0 0.0) '(0.0 0.0 0.0) 2.0)
+          '((-2.0 0.0 0.0) (2.0 0.0 0.0)))
+    (list "bulgepc: a bulge of 1 is a half circle, radius half the chord"
+          '(nth 4 (ns-bulgepc '(0.0 0.0 0.0) '(2.0 0.0 0.0) 1.0))  1.0)
+    (list "ucorner Cut takes 2 in along the base and 2 out along the arm"
+          '(ns-ucorner '((0.0 0.0 0.0) (10.0 0.0 0.0))
+                       '((0.0 0.0 0.0) (0.0 8.0 0.0)) "Cut" 2.0)
+          '("S" (2.0 0.0 0.0) (0.0 2.0 0.0)))
+    (list "ucorner Radius centres the fillet one radius off each leg"
+          '(nth 3 (ns-ucorner '((0.0 0.0 0.0) (10.0 0.0 0.0))
+                              '((0.0 0.0 0.0) (0.0 8.0 0.0)) "Radius" 2.0))
+          '(2.0 2.0 0.0))
+    (list "ucorner refuses an offset longer than the base"
+          '(ns-ucorner '((0.0 0.0 0.0) (10.0 0.0 0.0))
+                       '((0.0 0.0 0.0) (0.0 8.0 0.0)) "Radius" 20.0)  nil)
+    (list "sq90p: a tread across the wall is square, one along it is not"
+          '(and (ns-sq90p '(1.0 0.0 0.0) '(0.0 1.0 0.0))
+                (not (ns-sq90p '(1.0 0.0 0.0) '(1.0 0.0 0.0)))))
+    (list "markpts LINE puts the last tread's corner half a width across and the run along"
+          '(car (car (ns-markpts "LINE" '(0.0 0.0 0.0) '(1.0 0.0 0.0) '(0.0 1.0 0.0)
+                                 10.0 5.0 nil nil nil nil nil)))
+          '(5.0 5.0 0.0))
+    (list "markpts CORNER puts the one back corner a width along the wall"
+          '(car (car (ns-markpts "CORNER" nil '(1.0 0.0 0.0) nil 4.0 nil
+                                 '(0.0 0.0 0.0) '(0.0 10.0 0.0) nil nil nil)))
+          '(4.0 0.0 0.0))
+    (list "numlist reads commas, 'and' and a range"
+          '(ns-numlist "1, 3 and 5-7")  '(1 3 5 6 7))
+    (list "parse-len and spell-len round-trip 4'-4 1/2"
+          '(cal:spell-len (cal:len-eighths (car (cal:parse-len "4'-4 1/2\""))) T nil)
+          "4'-4 1/2\"")))
+
+(foreach c '("NORMIESTEP" "TUTORIALNORMIESTEP")
+  (setq *calofin-selftests*
+        (cons (cons c 'ns-selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -67396,7 +69119,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v2.1")
+(setq *lazstep-version* "v2.2")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -69025,6 +70748,64 @@
                  (itoa lzt:*max-steps*) " steps."))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lzt:selftests ()
+  (list
+    (list "runx puts step boundary 2 of 4 half way along the run"
+          '(lzt:runx 2 4 860)  480)
+    (list "curveh: half way to the crown the hemi chord is 103 of 120"
+          '(lzt:curveh 520)  103)
+    (list "tready staggers the tread row past four steps: odd on the first row, even on the second"
+          '(list (lzt:tready 1 8) (lzt:tready 2 8) (lzt:tready 2 3))
+          '(385 445 385))
+    (list "wedge-keys: a five-step hemi wedges its treads odd row first"
+          '(lzt:wedge-keys (lzt:chart "HEMISTEP" 5))
+          '("tread1" "tread3" "tread5" "tread2" "tread4"))
+    (list "depthdims: N+1 drops, the last one after the last tread"
+          '(mapcar 'car (lzt:depthdims 2 nil))  '("D1" "D2" "DA"))
+    (list "profile: one step is a drop, a tread the whole run, and a drop after it"
+          '(lzt:profile 1)
+          '((860 540 860 765) (860 765 100 765) (100 765 100 990)))
+    (list "int takes a whole number, refuses a typo and a zero, trims a space"
+          '(list (lzt:int "12") (lzt:int "12x") (lzt:int "0") (lzt:int " 7 "))
+          '(12 nil nil 7))
+    (list "brace: a brace inside a quoted label is not structure"
+          '(lzt:brace ": button { label = \"{\"; }")  0)
+    ;; the page's stores are shadowed for the call, so the rule is read
+    ;; as a fresh sheet would, whatever the failed run left in them
+    (list "skip: an Outside corner asks no measure and no bench"
+          '((lambda ( / lzt:*type* lzt:*sel* lzt:*chart* lzt:*steps*)
+              (setq lzt:*type* "CORNERSTP" lzt:*sel* '(("direction" . 2)))
+              (lzt:skip)))
+          '("beadnums" "measure" "bench" "benchoffset" "benchstep"))
+    (list "form: NA at a tread is an empty box, NA at the width travels as nil"
+          '((lambda ( / lzt:*type* lzt:*sel* lzt:*chart* lzt:*steps* lzt:*vals*)
+              (setq lzt:*type*  "NORMIESTEP"
+                    lzt:*steps* 2
+                    lzt:*chart* (lzt:chart "NORMIESTEP" 2)
+                    lzt:*vals*  '(("tread1" . "24") ("tread2" . "NA")
+                                  ("width" . "NA") ("depth1" . "6")))
+              (lzt:form)))
+          '((steps . 2) (tread1 . 24.0) (width) (depth1 . 6.0)))
+    (list "answer reads the dashed feet-inches-fraction spelling"
+          '(cal:formanswer "2'-6-1/2\"")  30.5)
+    (list "kvpack drops an empty box; kvunpack reads the rest back"
+          '(cal:kvunpack (cal:kvpack '(("tread1" . "24") ("tread2" . "")
+                                       ("width" . "3'"))))
+          '(("tread1" . "24") ("width" . "3'")))))
+
+(foreach c '("LAZSTEP")
+  (setq *calofin-selftests*
+        (cons (cons c 'lzt:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -69285,7 +71066,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.29")
+(setq *cchk-version* "v1.30")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -73666,6 +75447,59 @@
 ;; the version reporter TOOLNAMEVER, and muscle memory keeps the old one
 (defun c:COVERCHECKVERSION () (c:COVERCHECKVER))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cchk:selftests ()
+  (list
+    (list "parse-nxn reads 5 X 5 out of a spacing note"
+          '(cchk:parse-nxn "Spacing: 5 X 5")  '(5 5))
+    (list "parse-nxn finds no NxN in 5 by 5"      '(cchk:parse-nxn "5 by 5")  nil)
+    (list "na-p reads N/A as not applicable"       '(cchk:na-p "N/A")          T)
+    (list "borrow-str names a borrowed layer and its count"
+          '(cchk:borrow-str '(("CABLE" . 3)))  "3 segment(s) off layer 'CABLE'")
+    (list "date-verdict knows 1900 was not a leap year"
+          '(cchk:date-verdict "02/29/1900")
+          "'02/29/1900' - 29 is not a valid day for that month - expected MM/DD/YYYY")
+    (list "pv-area adds the bulge: a bulge-1 arc on a 10 chord is 12.5 pi"
+          '(cchk:pv-area '((0 0 1.0) (10 0 0)))  39.26990817)
+    (list "pv-chain: one gap in a square is ONE open chain, grown both ways"
+          '(mapcar 'length
+                   (cchk:pv-chain '(((10 10) (0 10) 0.0) ((0 0) (10 0) 0.0)
+                                    ((10 10) (10 0) 0.0))))
+          '(0 1))
+    (list "pv-prune-spurs cuts a borrowed run hanging off a corner, link by link"
+          '(length (cchk:pv-prune-spurs
+                     '(((0 0) (10 0) 0.0 nil) ((10 0) (10 10) 0.0 nil)
+                       ((10 10) (0 10) 0.0 nil) ((0 10) (0 0) 0.0 nil)
+                       ((10 10) (20 20) 0.0 "CABLE") ((20 20) (30 30) 0.0 "CABLE"))))
+          4)
+    (list "pv-features: the inside corner of an L gets a corner pad"
+          '(mapcar 'caddr
+                   (cchk:pv-features '((0 0 0) (10 0 0) (10 10 0) (5 10 0) (5 5 0) (0 5 0))
+                                     36.0))
+          '("corner"))
+    (list "pv-features: an inward quarter arc under 4' radius gets an arc pad"
+          '(mapcar 'caddr
+                   (cchk:pv-features '((0 0 0) (40 0 0) (40 40 0) (0 40 -0.41421356))
+                                     36.0))
+          '("arc"))
+    (list "pv-dodge slides an arc pad flush beside a corner pad"
+          '(car (cadr (cchk:pv-dodge '(((0 0) 0.0 "corner") ((20 0) 0.0 "arc")) 36.0)))
+          '(36.0 0.0))
+    (list "ftin spells 40.5 as 3'-4 1/2\" whatever DIMZIN says"
+          '(cal:ftin 40.5 4 4)  "3'-4 1/2\"")))
+
+(foreach c '("COVERCHECKRESCUE" "COVERCHECK" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN")
+  (setq *calofin-selftests*
+        (cons (cons c 'cchk:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -73766,7 +75600,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *custblock-version* "v1.4")  ; announced on load; release_lisp.py
+(setq *custblock-version* "v1.5")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -74063,6 +75897,42 @@
   (princ (strcat "\nCUSTBLOCK " *custblock-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cbk:selftests ()
+  (list
+    (list "pt adds x across and y up from the base point"
+          '(cbk:pt '(10 20 5) 4 3)                          '(14 23 5))
+    (list "pt keeps the base point's elevation"
+          '(caddr (cbk:pt '(0 0 2.5) 1 1))                  2.5)
+    (list "pt at 0 0 is the base point itself"
+          '(cbk:pt '(3 4 0) 0 0)                            '(3 4 0))
+    (list "strip drops every entry for a group code"
+          '(cbk:strip 62 '((0 . "LINE") (62 . 1) (8 . "X") (62 . 256)))
+          '((0 . "LINE") (8 . "X")))
+    (list "strip leaves a list without that code alone"
+          '(cbk:strip 62 '((0 . "LINE") (8 . "X")))         '((0 . "LINE") (8 . "X")))
+    (list "num hands the closing report text"
+          '(= (type (cbk:num 48.0)) 'STR)                   T)
+    (list "the dim stand-off knob is a positive distance"
+          '(if (and (numberp cbk:*dimoff*) (> cbk:*dimoff* 0)) cbk:*dimoff*))
+    (list "the block and dimension layer knobs are named"
+          '(and (= (type cbk:*layer*) 'STR) (> (strlen cbk:*layer*) 0)
+                (= (type cbk:*dimlayer*) 'STR) (> (strlen cbk:*dimlayer*) 0))  T)
+    (list "the session memory of the last length is empty or a number"
+          '(or (null cbk:*last-len*) (numberp cbk:*last-len*))  T)))
+
+(foreach c '("CUSTBLOCK")
+  (setq *calofin-selftests*
+        (cons (cons c 'cbk:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -74268,7 +76138,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cleardim-version* "v3.3")   ; announced on load; release_lisp.py
+(setq *cleardim-version* "v3.4")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -76300,6 +78170,46 @@
   (princ (strcat "\nCLEARDIM " *cleardim-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cd:selftests ()
+  (list
+    (list "glyphs counts 2 3/4 written in MTEXT markup -- an A code, braces, an H code, a stacked S fraction -- as 2 glyphs, not 25 characters"
+          '(cd:glyphs (strcat "\\A1" (chr 59) "2{\\H1.000000x" (chr 59)
+                              "\\S3/4" (chr 59) "}"))
+          2)
+    (list "glyphs: %%u draws nothing and %%d is one glyph, so %%u45%%d is 3"
+          '(cd:glyphs "%%u45%%d")  3)
+    (list "stack-width: 11/16 is as wide as its longer half"
+          '(cd:stack-width "11/16")  2)
+    (list "text-size: two lines at height 2 stand 5 tall, a line and a half for the second"
+          '(cadr (cd:text-size "A\\PB" 2.0 1.0))  5.0)
+    (list "hit-p: two boxes flush against each other do not overlap"
+          '(cd:hit-p (cd:box '(0 0) 0.0 2.0 2.0) (cd:box '(2 0) 0.0 2.0 2.0))  nil)
+    (list "hit-p: a segment through a box is a hit"
+          '(cd:hit-p '((-5 0) (5 0)) (cd:box '(0 0) 0.0 2.0 2.0))  T)
+    (list "signed-dang from 0.1 to -0.1 is -0.2, the short way round"
+          '(cal:signed-dang 0.1 -0.1)  -0.2)
+    (list "trk-s on an arc is arc length: a quarter turn at radius 2 is pi"
+          '(cd:trk-s (cd:trk-arc '(0 0) 2.0 nil) '(0 2))  pi)
+    (list "trk-near carries a spot just past an arc's seam the short way round"
+          '(cd:trk-near (cd:trk-arc '(0 0) 1.0 nil) 0.1 (- (* 2.0 pi) 0.1))
+          (+ (* 2.0 pi) 0.1))
+    (list "skip-text counts the skipped by reason"
+          '(cd:skip-text '(track track locked))
+          "3 skipped: 2 whose tracks could not be read, 1 on a locked layer.")))
+
+(foreach c '("CLEARDIM" "CLEARDIMSCAN")
+  (setq *calofin-selftests*
+        (cons (cons c 'cd:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and CALOFIN-LOADER.lsp set
 ;; the flag while they load their members.  APPLOADed alone the flag is
 ;; nil and this prints, which is the one time somebody wants to be told.
@@ -76355,7 +78265,7 @@
 ;;;  move OSMODE and not give it back.
 ;;; ======================================================================
 
-(setq *osr-version* "v1.0")
+(setq *osr-version* "v1.1")
 
 (vl-load-com)
 
@@ -76476,6 +78386,36 @@
   (princ))
 
 ;;; -------------------- load banner ---------------------------------------
+
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun osr:selftests ()
+  (list
+    (list "valid-p takes a plain OSMODE"        '(osr:valid-p "191")    T)
+    (list "valid-p refuses a typo atoi would read" '(osr:valid-p "12x") nil)
+    (list "valid-p refuses an empty string"     '(osr:valid-p "")       nil)
+    (list "valid-p refuses one past the top"    '(osr:valid-p "32768")  nil)
+    (list "the shipped default is an OSMODE"    '(osr:valid-p (itoa osr:*default*)) T)
+    (list "describe names the modes ticked"     '(osr:describe 3)
+          "Endpoint, Midpoint -- Object Snap on")
+    (list "describe says when none are"         '(osr:describe 0)
+          "no modes ticked -- Object Snap on")
+    (list "describe sees the OFF bit"           '(osr:describe 16385)
+          "Endpoint -- Object Snap OFF")
+    (list "every mode is a single bit"
+          '(not (vl-member-if '(lambda (p) (/= (cdr p) (logand (cdr p) (- (cdr p)))))
+                              osr:*modes*)))))
+
+(foreach c '("OSR")
+  (setq *calofin-selftests*
+        (cons (cons c 'osr:selftests) *calofin-selftests*)))
 
 (if (not *calofin-quiet*)
   (princ (strcat "\nOSR " *osr-version*
@@ -76607,7 +78547,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.29")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.30")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -79077,6 +81017,51 @@
 
 (defun c:TUTORIALDIMSCAN () (c:TUTORIALDIMCHECK))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun dchk:selftests ()
+  (list
+    (list "overlap-info: two collinear lines sharing 6 of their run overlap by 6, union 0 to 14"
+          '(dchk:overlap-info '((0.0 0.0 0.0) (10.0 0.0 0.0) nil) '((4.0 0.0 0.0) (14.0 0.0 0.0) nil))
+          '((4.0 0.0 0.0) (10.0 0.0 0.0) 6.0 (0.0 0.0 0.0) (14.0 0.0 0.0)))
+    (list "overlap-info leaves lines that only touch end to end alone"
+          '(dchk:overlap-info '((0.0 0.0 0.0) (10.0 0.0 0.0) nil) '((10.0 0.0 0.0) (20.0 0.0 0.0) nil))
+          nil)
+    (list "overlap-info: a parallel line an inch to one side is not the same line"
+          '(dchk:overlap-info '((0.0 0.0 0.0) (10.0 0.0 0.0) nil) '((4.0 1.0 0.0) (14.0 1.0 0.0) nil))
+          nil)
+    (list "seg-dir-ang folds a westward segment onto 0"
+          '(dchk:seg-dir-ang '((0.0 0.0 0.0) (-1.0 0.0 0.0) nil))  0.0)
+    (list "ang-diff of the folded directions 0 and pi-0.5 is half a radian"
+          '(cal:ang-diff 0.0 (- pi 0.5))  0.5)
+    (list "sort-recs keeps equal offsets in the order they came"
+          '(dchk:sort-recs '((2 "b") (1 "a") (2 "c") (1 "d")))
+          '((1 "a") (1 "d") (2 "b") (2 "c")))
+    (list "style-rank matches a style case-blind: the first style lower-cased ranks 0"
+          '(dchk:style-rank (strcase (car *dchk-style-order*) T))  0)
+    (list "style-rank puts a style not in the order after every listed one"
+          '(dchk:style-rank "no such style")  (length *dchk-style-order*))
+    (list "dim-order-p reviews the higher row first even when it sits to the right"
+          '(dchk:dim-order-p '(0 5.0 10.0 nil) '(0 1.0 0.0 nil) 2.0)  T)
+    (list "attn-p reddens a FLAGGED line and leaves an all-clear one alone"
+          '(and (dchk:attn-p "3 dimensions flagged") (not (dchk:attn-p "all clear"))))
+    (list "ftin spells a whole 15 feet as 15'-0\", whatever DIMZIN says"
+          '(cal:ftin 180.0 4 8)  "15'-0\"")
+    (list "circumcenter of a right triangle is the midpoint of its hypotenuse"
+          '(cal:circumcenter '(0.0 0.0 0.0) '(2.0 0.0 0.0) '(0.0 2.0 0.0))  '(1.0 1.0 0.0))
+  ))
+
+(foreach c '("DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK")
+  (setq *calofin-selftests*
+        (cons (cons c 'dchk:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -79134,7 +81119,7 @@
 ;;; ==================================================================
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
-(setq *dimcontinue-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *dimcontinue-version* "v1.7")   ; announced on load; release_lisp.py
                                          ; stamps the dated twin in releases/
 
 (defun dce:axis (ed)
@@ -79323,6 +81308,45 @@
   (princ (strcat "\nDIMCONTEND " *dimcontinue-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun dce:selftests ()
+  (list
+    (list "axis of a rotated dim is its own group-50 angle"
+          '(dce:axis '((100 . "AcDbRotatedDimension") (50 . 1.5)
+                       (13 0.0 0.0 0.0) (14 10.0 0.0 0.0)))  1.5)
+    (list "axis of an aligned dim runs from its 1st to its 2nd ext line"
+          '(dce:axis '((100 . "AcDbAlignedDimension")
+                       (13 0.0 0.0 0.0) (14 0.0 5.0 0.0)))  (* 0.5 pi))
+    (list "a rotated dim with no group 50 falls back to the ext-line angle"
+          '(dce:axis '((100 . "AcDbRotatedDimension")
+                       (13 0.0 0.0 0.0) (14 3.0 3.0 0.0)))  (* 0.25 pi))
+    (list "proj along X reads the X offset"
+          '(dce:proj '(3.0 4.0 0.0) '(0.0 0.0 0.0) 0.0)  3.0)
+    (list "proj along Y reads the Y offset"
+          '(dce:proj '(3.0 4.0 0.0) '(0.0 0.0 0.0) (* 0.5 pi))  4.0)
+    (list "proj is signed: a point behind the origin is negative"
+          '(dce:proj '(-2.0 7.0 0.0) '(0.0 0.0 0.0) 0.0)  -2.0)
+    (list "proj of the origin itself is 0 (where the seed's far line sits)"
+          '(dce:proj '(7.0 -3.0 0.0) '(7.0 -3.0 0.0) 1.1)  0.0)
+    (list "proj along a 45 degree axis is the diagonal"
+          '(dce:proj '(1.0 1.0 0.0) '(0.0 0.0 0.0) (* 0.25 pi))  (sqrt 2.0))
+    (list "a half-turn axis flips the sign"
+          '(dce:proj '(3.0 0.0 0.0) '(0.0 0.0 0.0) pi)  -3.0)
+    (list "proj is a projection: offset across the axis does not count"
+          '(dce:proj '(5.0 100.0 0.0) '(0.0 0.0 0.0) 0.0)  5.0)))
+
+(foreach c '("DIMCONTEND")
+  (setq *calofin-selftests*
+        (cons (cons c 'dce:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -79406,7 +81430,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *dronedistortion-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *dronedistortion-version* "v1.5")   ; announced on load; release_lisp.py
                                              ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -79887,6 +81911,34 @@
   (princ (strcat "\nDDFIX " *dronedistortion-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun dd-selftests ()
+  (list
+    (list "inchval reads a whole-and-fraction inch"   '(dd-inchval "6-1/2")  6.5)
+    (list "inchval reads a bare fraction"             '(dd-inchval "1/2")    0.5)
+    (list "inchval reads a plain decimal"             '(dd-inchval " 3.25 ") 3.25)
+    (list "inchval reads a blank as no inches"        '(dd-inchval "")       0.0)
+    (list "inchval refuses a zero denominator"        '(dd-inchval "1/0")    nil)
+    (list "inchval refuses text"                      '(dd-inchval "abc")    nil)
+    (list "back-word takes Back in any case"          '(cal:back-word-p "back"))
+    (list "back-word takes the short U for Undo"      '(cal:back-word-p "u"))
+    (list "back-word does not take an ordinary answer" '(cal:back-word-p "6")   nil)
+    (list "relalt->num drops DJI's leading plus"      '(dd-relalt->num "+18.90") 18.9)
+    (list "relalt->num keeps a minus"                 '(dd-relalt->num " -3.81 ") -3.81)
+    (list "num round-trips a real through atof"       '(atof (dd-num 2.125)) 2.125)))
+
+(foreach c '("DDFIX" "DDSET" "DDCAL" "DDINFO" "DDALT")
+  (setq *calofin-selftests*
+        (cons (cons c 'dd-selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -80075,7 +82127,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *droneheightgps-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *droneheightgps-version* "v1.4")   ; announced on load; release_lisp.py
                                             ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -81333,6 +83385,58 @@
   (princ (strcat "\nDDGPS " *droneheightgps-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun ddg-selftests ()
+  (list
+    (list "scan-to restarts after a false start"
+          '(ddg-scan-to '(3 3 4 9) '(3 4))  '(9))
+    (list "grab-text writes bytes as text, controls as spaces"
+          '(ddg-grab-text '(72 105 10 33) 10)  "Hi !")
+    (list "looks-jpeg reads signed bytes too"
+          '(ddg-looks-jpeg '(-1 -40 -1))  T)
+    (list "hexline drops the offset column and stops at the ASCII column"
+          '(ddg-hexline "0000  ff d8 ff e1 00 18   ......")  '(255 216 255 225 0 24))
+    (list "hexline keeps the first byte when there is no offset column"
+          '(ddg-hexline "ff d8")  '(255 216))
+    (list "xmp-attr reads DJI's attribute form"
+          '(ddg-xmp-attr "x drone-dji:RelativeAltitude=\"+18.90\" y" "RelativeAltitude")
+          "+18.90")
+    (list "xmp-num reads the element form as a number"
+          '(ddg-xmp-num "<drone-dji:RelativeAltitude>+18.90</drone-dji:RelativeAltitude>"
+                        "RelativeAltitude")  18.9)
+    (list "srat reads -1/1 as -1, not 4294967295"
+          '(ddg-srat '(255 255 255 255 1 0 0 0) 0 T)  -1.0)
+    (list "gps-coord turns 30 deg 30 min 0 sec into 30.5"
+          '(ddg-gps-coord '(0 0 0 0 0 0 0 0 12 0 0 0
+                            30 0 0 0 1 0 0 0  30 0 0 0 1 0 0 0  0 0 0 0 1 0 0 0) 0 T)  30.5)
+    (list "find-tiff skips a stray Exif with no header behind it"
+          '(ddg-find-tiff '(69 120 105 102 1 1 69 120 105 102 0 0 77 77 0 42))  '(77 77 0 42))
+    (list "exif-gps reads lat, lon, depth and hemispheres off a hand-made TIFF"
+          '(ddg-exif-gps
+            '(73 73 42 0 8 0 0 0 1 0 37 136 4 0 1 0 0 0 22
+              0 0 0 6 0 1 0 2 0 2 0 0 0 78 0 0 0 2 0
+              5 0 3 0 0 0 96 0 0 0 3 0 2 0 2 0 0 0 87
+              0 0 0 4 0 5 0 3 0 0 0 120 0 0 0 5 0 1 0
+              1 0 0 0 1 0 0 0 6 0 5 0 1 0 0 0 144 0 0
+              0 30 0 0 0 1 0 0 0 30 0 0 0 1 0 0 0 0 0
+              0 0 1 0 0 0 117 0 0 0 1 0 0 0 0 0 0 0 1
+              0 0 0 0 0 0 0 1 0 0 0 125 1 0 0 100 0 0 0))
+          '(30.5 -117.0 -3.81 T "N" "W"))
+    (list "json-num reads a quoted value"
+          '(ddg-json-num "{\"value\":\"296.61\"}" "value")  296.61)))
+
+(foreach c '("DDGPS" "DDELEV" "DDTEST")
+  (setq *calofin-selftests*
+        (cons (cons c 'ddg-selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -81492,7 +83596,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v3.8")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.9")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -86753,6 +88857,55 @@
   (c:FITABHD)
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun fit:selftests ()
+  (list
+    (list "poly-corners walks a 10 by 6 box CCW from its origin"
+          '(fit:poly-corners fit:*rect-dirs* '(0.0 10.0 6.0 0.0))
+          '((0.0 0.0) (10.0 0.0) (10.0 6.0) (0.0 6.0)))
+    (list "poly-valid refuses a box whose top wall lies below its bottom"
+          '(fit:poly-valid fit:*rect-dirs* '(0.0 10.0 -6.0 0.0))  nil)
+    (list "frame-angle reads a square turned 10 degrees as 10 degrees"
+          '(/ (* 180.0 (fit:frame-angle
+                         (fit:to-frame '((0 0) (10 0) (10 10) (0 10))
+                                       (- (/ pi 18.0)) nil)
+                         4))
+              pi)
+          10.0)
+    (list "corner-verts: a 2 radius at a right angle springs 2 back, bulge tan 22.5"
+          '(car (fit:corner-verts '(0 0) '(10 0) '(10 10) (/ pi 2.0) "Radius" 2.0))
+          '((8.0 0.0) 0.4142136))
+    (list "corner-verts: a Cut of 2 at a right angle leaves a face 2 long"
+          '((lambda (cv) (distance (car (car cv)) (car (cadr cv))))
+             (fit:corner-verts '(0 0) '(10 0) '(10 10) (/ pi 2.0) "Cut" 2.0))
+          2.0)
+    (list "bow-bulge: a 1 inch bow over a 4 inch chord is bulge 0.5"
+          '(fit:bow-bulge 1.0 4.0 '(0 0) '(4 0))  0.5)
+    (list "bulge-3pt: (0 0) through (2 -2) to (4 0) is a CCW semicircle"
+          '(fit:bulge-3pt '(0 0) '(2 -2) '(4 0))  1.0)
+    (list "solve-lin solves 2x + y = 5, x + 3y = 10"
+          '(fit:solve-lin '((2.0 1.0) (1.0 3.0)) '(5.0 10.0) 2)  '(1.0 3.0))
+    (list "held-worst sets the one worst point aside"
+          '(fit:held-worst '(1.0 5.0 3.0) 1)  3.0)
+    (list "snap-ok: a design snap may spend the one point it is allowed"
+          '(fit:snap-ok '(1.0 1.0) '(1.0 3.0) 4.0 1 nil)  T)
+    (list "oas-circint: two 5-radius circles 6 apart meet at (3 4)"
+          '(fit:oas-circint '(0 0) 5.0 '(6 0) 5.0 1.0)  '(3.0 4.0))
+    (list "fit-round finds the radius-2 circle through four of its points"
+          '(cdr (assoc 'r (fit:fit-round '((0 0) (4 0) (2 2) (2 -2)))))  2.0)))
+
+(foreach c '("FITABHD")
+  (setq *calofin-selftests*
+        (cons (cons c 'fit:selftests) *calofin-selftests*)))
+
 ;; ----------------------------------------------------------------------
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
@@ -86844,7 +88997,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v2.8")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v2.9")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -89940,6 +92093,54 @@
   (princ (strcat "\nLHD " *lh-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lh:selftests ()
+  (list
+    (list "bulge-3pt: a half circle run counter-clockwise is bulge 1"
+          '(lh:bulge-3pt '(1.0 0.0) '(0.0 1.0) '(-1.0 0.0))  1.0)
+    (list "bulge-3pt: the same half circle run clockwise is bulge -1"
+          '(lh:bulge-3pt '(-1.0 0.0) '(0.0 1.0) '(1.0 0.0))  -1.0)
+    (list "bulge-radius of a 10 chord at bulge 0.5 is 6.25"
+          '(lh:bulge-radius '(0.0 0.0) '(10.0 0.0) 0.5)  6.25)
+    (list "radius-bulge reads a bulge-radius back, sign and all"
+          '(lh:radius-bulge '(0.0 0.0) '(10.0 0.0)
+                            (lh:bulge-radius '(0.0 0.0) '(10.0 0.0) -0.5) -0.5)
+          -0.5)
+    (list "arc-geom centres a bulge-1 arc on its chord's midpoint"
+          '(car (lh:arc-geom '(0.0 0.0) '(10.0 0.0) 1.0))  '(5.0 0.0))
+    (list "seg-dist to an arc is measured radially inside its sweep"
+          '(lh:seg-dist '(5.0 -3.0) '((0.0 0.0) (10.0 0.0) 1.0))  2.0)
+    (list "chain orders loose segments, flips one, and closes the square"
+          '((lambda (ch) (if (car ch) (mapcar 'car (cdr ch))))
+            (lh:chain '(((0.0 0.0) (10.0 0.0) 0.0) ((10.0 10.0) (0.0 10.0) 0.0)
+                        ((10.0 0.0) (10.0 10.0) 0.0) ((0.0 0.0) (0.0 10.0) 0.0))))
+          '((0.0 0.0) (10.0 0.0) (10.0 10.0) (0.0 10.0)))
+    (list "merge-windows splits the difference between disjoint windows"
+          '(lh:merge-windows '(0.0 . 1.0) '(2.0 . 3.0))  '(1.5 . 1.5))
+    (list "better: fewer points written off beats a closer fit"
+          '(lh:better '(0 5.0 0) '(1 0.1 0))  T)
+    (list "rotate-to-corner starts the tour at its sharpest turn"
+          '(car (lh:rotate-to-corner '((0.0 0.0) (10.0 0.0) (2.0 1.0))))  '(10.0 0.0))
+    (list "segs-cross: an X crosses, a shared end does not"
+          '(and (lh:segs-cross '(0.0 0.0) '(4.0 4.0) '(0.0 4.0) '(4.0 0.0))
+                (not (lh:segs-cross '(0.0 0.0) '(4.0 4.0) '(4.0 4.0) '(8.0 0.0))))
+          T)
+    (list "rotate-to-point turns a tour to start at the point named"
+          '(lh:rotate-to-point '((0.0 0.0) (1.0 0.0) (2.0 0.0)) '(2.0 0.0))
+          '((2.0 0.0) (0.0 0.0) (1.0 0.0)))))
+
+(foreach c '("LHD")
+  (setq *calofin-selftests*
+        (cons (cons c 'lh:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -89984,7 +92185,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lincheck-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *lincheck-version* "v1.6")   ; announced on load; release_lisp.py
                                       ; stamps the dated twin in releases/
 
 ;;; ======================================================================
@@ -90423,6 +92624,44 @@
   (princ (strcat "\nLINCHECK " *lincheck-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lin:selftests ()
+  (list
+    (list "back-word takes a lower-case b"
+          '(if (lin:back-word "b") T)                       T)
+    (list "back-word takes the whole word Undo, case-blind"
+          '(if (lin:back-word "Undo") T)                    T)
+    (list "back-word refuses a note that only starts with one"
+          '(lin:back-word "backfill")                       nil)
+    (list "back-word refuses an empty answer (Enter)"
+          '(lin:back-word "")                               nil)
+    (list "every piece a report line is built from is text"
+          '(= (type (strcat lin:*tick* lin:*note-sep* lin:*ans-sep* lin:*indent*
+                            lin:*head-in* lin:*head-out*
+                            lin:*head-echo-in* lin:*head-echo-out*))
+              'STR)                                          T)
+    (list "the previous-answer memory is empty or a list"
+          '(or (null *lin:prev*) (listp *lin:prev*))        T)
+    (list "the report box lines up: rule and title are the same width"
+          '(= (strlen lin:*rule*) (strlen lin:*title*))    T)
+    (list "the Back words are a list of strings; value is how many"
+          '(if (and lin:*back-words*
+                    (not (member nil (mapcar '(lambda (w) (= (type w) 'STR))
+                                             lin:*back-words*))))
+             (length lin:*back-words*)))))
+
+(foreach c '("LINCHECK")
+  (setq *calofin-selftests*
+        (cons (cons c 'lin:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -90720,7 +92959,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.26")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.27")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -95388,6 +97627,48 @@
 
 (defun c:TUTORIALLINFINSCAN () (c:TUTORIALLINFINCHECK))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lfc:selftests ()
+  (list
+    (list "feet-open-p flags 5' with no inches"     '(lfc:feet-open-p "5'")           T)
+    (list "feet-open-p: a doubled apostrophe closes 5'-0''"
+          '(lfc:feet-open-p "5'-0''")  nil)
+    (list "feet-open-p leaves a possessive alone"   '(lfc:feet-open-p "Water's Edge") nil)
+    (list "len-values reads a labelled 3' 4 1/2\" as one 40.5 inch value"
+          '(lfc:len-values "Finished Wall Ht = 3' 4 1/2\"")  '(40.5))
+    (list "len-values keeps an inch list as several values"
+          '(lfc:len-values "0'', 40'', 45''")  '(0.0 40.0 45.0))
+    (list "strip-badwords takes Not Supplied out and keeps the label"
+          '(lfc:strip-badwords "Pattern: Not Supplied" '("NOT" "ERROR"))  "Pattern:")
+    (list "strip-badwords drops the comma left dangling with the phrase"
+          '(lfc:strip-badwords "Blue Marble, Not Supplied" '("NOT" "ERROR"))
+          "Blue Marble")
+    (list "date-verdict knows 1900 was not a leap year"
+          '(lfc:date-verdict "02/29/1900")
+          "'02/29/1900' - 29 is not a valid day for that month - expected MM/DD/YYYY")
+    (list "border-verdict calls half the nominal sheet SCALED DOWN"
+          '(wcmatch (lfc:border-verdict '((0 0) (352 271.8125))) "*SCALED DOWN*"))
+    (list "overlap-info measures the 5 that 0-10 and 5-15 share"
+          '(caddr (lfc:overlap-info '((0 0 0) (10 0 0) nil) '((5 0 0) (15 0 0) nil)))
+          5.0)
+    (list "sort-recs keeps equal offsets in input order"
+          '(lfc:sort-recs '((2 "a") (1 "b") (2 "c") (1 "d")))
+          '((1 "b") (1 "d") (2 "a") (2 "c")))
+    (list "ftin spells 40.5 as 3'-4 1/2\" whatever DIMZIN says"
+          '(cal:ftin 40.5 4 4)  "3'-4 1/2\"")))
+
+(foreach c '("LINFINCHECKRESCUE" "LINFINCHECK" "TUTORIALLINFINCHECK")
+  (setq *calofin-selftests*
+        (cons (cons c 'lfc:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -95426,7 +97707,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lintxtchk-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *lintxtchk-version* "v1.8")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 ;;; ======================================================================
@@ -95580,6 +97861,48 @@
   (princ (strcat "\nLINTXTCHK " *lintxtchk-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lintxtchk:selftests ()
+  (list
+    (list "height knob is a positive number of drawing units"
+          '(if (and (numberp ltc:*height*) (> ltc:*height* 0)) ltc:*height*))
+    (list "spacing knob is a positive multiple of the height"
+          '(if (and (numberp ltc:*spacing*) (> ltc:*spacing* 0)) ltc:*spacing*))
+    (list "spacing keeps one line clear of the next (1 is touching)"
+          '(>= ltc:*spacing* 1.0)  T)
+    (list "indent knob is a positive multiple of the height"
+          '(if (and (numberp ltc:*indent*) (> ltc:*indent* 0)) ltc:*indent*))
+    (list "bullet knob is text (\"\" gives a plain column)"
+          '(= (type ltc:*bullet*) 'STR)  T)
+    (list "checklist is a non-empty list"
+          '(if (and (listp ltc:*items*) (> (length ltc:*items*) 0))
+             (length ltc:*items*)))
+    (list "every checklist line is (level . text), level 0 or deeper"
+          '(not (vl-member-if
+                  '(lambda (i) (not (and (= (type (car i)) 'INT) (>= (car i) 0)
+                                         (= (type (cdr i)) 'STR)
+                                         (> (strlen (cdr i)) 0))))
+                  ltc:*items*))
+          T)
+    (list "the checklist opens on a main item, not a sub-item"
+          '(car (car ltc:*items*))  0)
+    (list "a sub-item sits at most one level under the line above it"
+          '(not (member nil (mapcar '(lambda (a b) (<= (car b) (1+ (car a))))
+                                    ltc:*items* (cdr ltc:*items*))))
+          T)))
+
+(foreach c '("LINTXTCHK")
+  (setq *calofin-selftests*
+        (cons (cons c 'lintxtchk:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -95680,7 +98003,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.21")
+(setq *paddle-version* "v1.22")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -97330,6 +99653,58 @@
   (princ (strcat "\nPADDLE " *paddle-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun paddle--selftests ()
+  (list
+    (list "in writes a quarter inch with its inch mark"  '(paddle--in 4.25)  "4.25\"")
+    (list "area of two bulge-1 halves is a unit circle's"
+          '(paddle--area '((0 0 1.0) (2 0 1.0)))  pi)
+    (list "tan-start of a CCW half circle (0 0)->(2 0) heads straight down"
+          '(paddle--tan-start '(0 0) '(2 0) 1.0)  '(0.0 -1.0))
+    (list "revseg swaps the ends, negates the bulge, keeps the entity"
+          '(paddle--revseg '((0 0) (1 0) 0.5 E))  '((1 0) (0 0) -0.5 E))
+    (list "chain closes four sides given out of order into one loop"
+          '(paddle--chain '(((0 0) (4 0) 0.0) ((4 4) (0 4) 0.0)
+                            ((4 0) (4 4) 0.0) ((0 4) (0 0) 0.0)))
+          '((((0 0 0.0) (4 0 0.0) (4 4 0.0) (0 4 0.0))) nil))
+    (list "chain grows an open run both ways into ONE chain, in walk order"
+          '(mapcar 'car (car (cadr (paddle--chain
+                                     '(((4 0) (4 4) 0.0) ((0 0) (4 0) 0.0)
+                                       ((4 4) (0 4) 0.0))))))
+          '((0 0) (4 0) (4 4)))
+    (list "features pads the one inside corner of an L, facing its way in"
+          '(paddle--features '((0 0 0.0) (4 0 0.0) (4 2 0.0)
+                               (2 2 0.0) (2 4 0.0) (0 4 0.0)) 36.0)
+          (list (list '(2 2) pi "corner")))
+    (list "features finds nothing to pad on a convex square"
+          '(paddle--features '((0 0 0.0) (4 0 0.0) (4 4 0.0) (0 4 0.0)) 36.0)  nil)
+    (list "dodge slides an arc pad flush beside a corner pad, 36 on centre"
+          '(paddle--dodge '(((0 0) 0.0 "corner") ((20 5) 0.0 "arc")) 36.0)
+          '(((0 0) 0.0 "corner") ((36.0 5) 0.0 "arc")))
+    (list "pairs takes the two gaps closest first, 1 then 4"
+          '(mapcar 'caddr (paddle--pairs (paddle--endlist
+                                           '((((0 0) (4 0) 0.0 nil))
+                                             (((4 1) (4 4) 0.0 nil)
+                                              ((4 4) (0 4) 0.0 nil))))))
+          '(1.0 4.0))
+    (list "segpt halfway round a CCW half circle is its bottom"
+          '(paddle--segpt '((0 0) (2 0) 1.0) 0.5)  '(1.0 -1.0))
+    (list "xsect of the two diagonals of a square is its middle"
+          '(paddle--xsect '((0.0 0.0) (4.0 4.0) 0.0) '((0.0 4.0) (4.0 0.0) 0.0))
+          '(2.0 2.0))))
+
+(foreach c '("PADDLE" "TUTORIALPADDLE")
+  (setq *calofin-selftests*
+        (cons (cons c 'paddle--selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -97437,7 +99812,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *mohamaddle-version* "v1.4")
+(setq *mohamaddle-version* "v1.5")
 
 ;; --- the pad itself ---
 ;; Pad sizes MOHAMADDLE offers, in the order shown at the prompt.  Each
@@ -98709,6 +101084,61 @@
   (princ (strcat "\nMOHAMADDLE " *mohamaddle-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun mohamaddle--selftests ()
+  (list
+    (list "in writes a whole size without decimals"
+          '(mohamaddle--in 36.0)  "36\"")
+    (list "the default size is one the table offers"
+          '(assoc *mohamaddle-defaultkw* *mohamaddle-sizes*))
+    (list "unit of a zero vector is nil, not a divide"
+          '(cal:unit '(0.0 0.0))  nil)
+    (list "arcdata: a bulge of 1 is a semicircle, centre on the chord"
+          '(caddr (mohamaddle--arcdata '(0.0 0.0) '(2.0 0.0) 1.0))  '(1.0 0.0))
+    (list "area: two semicircle bulges of radius 1 make pi"
+          '(mohamaddle--area '((0.0 0.0 1.0) (2.0 0.0 1.0)))  pi)
+    (list "segpt: half way along a bulge-1 arc is the bottom of the circle"
+          '(mohamaddle--segpt '((0.0 0.0) (2.0 0.0) 1.0) 0.5)  '(1.0 -1.0))
+    (list "xsect: the diagonals of a square cross at its middle"
+          '(mohamaddle--xsect '((0.0 0.0) (2.0 2.0)) '((0.0 2.0) (2.0 0.0)))  '(1.0 1.0))
+    (list "chain: four loose sides, shuffled and one reversed, are one loop"
+          '(mapcar 'length
+                   (mohamaddle--chain '(((0.0 0.0) (10.0 0.0) 0.0 nil)
+                                        ((10.0 10.0) (0.0 10.0) 0.0 nil)
+                                        ((10.0 10.0) (10.0 0.0) 0.0 nil)
+                                        ((0.0 10.0) (0.0 0.0) 0.0 nil))))
+          '(1 0))
+    (list "chain: three sides are one open chain and no loop"
+          '(mapcar 'length
+                   (mohamaddle--chain '(((0.0 0.0) (10.0 0.0) 0.0 nil)
+                                        ((10.0 10.0) (0.0 10.0) 0.0 nil)
+                                        ((10.0 10.0) (10.0 0.0) 0.0 nil))))
+          '(0 1))
+    (list "features: an L finds its one inside corner, at 5,5"
+          '(mapcar 'car (mohamaddle--features '((0.0 0.0 0.0) (10.0 0.0 0.0)
+                                                 (10.0 10.0 0.0) (5.0 10.0 0.0)
+                                                 (5.0 5.0 0.0) (0.0 5.0 0.0)) 24.0))
+          '((5.0 5.0)))
+    (list "arc-pads: a 30in semicircle takes three 24in pads, edge to edge"
+          '(mohamaddle--arc-pads '(0.0 0.0) 30.0 pi 1.0 pi 24.0)
+          '((-24.0 -18.0) (0.0 -30.0) (24.0 -18.0)))
+    (list "dodge: an arc pad over a corner pad slides flush beside it"
+          '(mapcar 'car (mohamaddle--dodge '(((0.0 0.0) 0.0 "corner")
+                                              ((15.0 0.0) 0.0 "arc")) 24.0))
+          '((0.0 0.0) (24.0 0.0)))))
+
+(foreach c '("MOHAMADDLE")
+  (setq *calofin-selftests*
+        (cons (cons c 'mohamaddle--selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and CALOFIN-LOADER.lsp set
 ;; the flag while they load their members, because one file's greeting
 ;; is a greeting and every tool's is a wall the drafter scrolls past in
@@ -98846,7 +101276,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *upadover-version* "v1.4")
+(setq *upadover-version* "v1.5")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -99933,6 +102363,60 @@
   (if lzd:end (lzd:end "UPADOVER"))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun upad:selftests ()
+  (list
+    (list "in writes a whole size without decimals"    '(upad:in 36.0)  "36\"")
+    (list "mkseg: a quarter-circle bulge from 0,0 to 1,1 centres on 0,1"
+          '(cadr (upad:mkseg '(0.0 0.0) '(1.0 1.0) (- (sqrt 2.0) 1.0)))  '(0.0 1.0))
+    (list "seg-len of an arc is its radius times its sweep"
+          '(upad:seg-len (list 'A '(0.0 0.0) 2.0 0.0 (/ pi 2.0)))  pi)
+    (list "seg-at: pi along a radius-2 quarter arc is its far end"
+          '(upad:seg-at (list 'A '(0.0 0.0) 2.0 0.0 (/ pi 2.0)) pi)  '(0.0 2.0))
+    (list "seg-closest: a pick past an arc's sweep takes the nearer end"
+          '(upad:seg-closest (list 'A '(0.0 0.0) 2.0 0.0 (/ pi 2.0)) '(0.0 -3.0))
+          '(2.0 0.0))
+    (list "project: a pick outside a 10in square lands on its wall at station 15"
+          '(upad:project '((S (0.0 0.0) (10.0 0.0)) (S (10.0 0.0) (10.0 10.0))
+                           (S (10.0 10.0) (0.0 10.0)) (S (0.0 10.0) (0.0 0.0)))
+                         '(12.0 5.0))
+          '((10.0 5.0) 15.0))
+    (list "at: station 25 of that square is half way along its top"
+          '(upad:at '((S (0.0 0.0) (10.0 0.0)) (S (10.0 0.0) (10.0 10.0))
+                      (S (10.0 10.0) (0.0 10.0)) (S (0.0 10.0) (0.0 0.0)))
+                    25.0)
+          '(5.0 10.0))
+    (list "closed-p: four sides close, three do not"
+          '(list (upad:closed-p '((S (0.0 0.0) (10.0 0.0)) (S (10.0 0.0) (10.0 10.0))
+                                  (S (10.0 10.0) (0.0 10.0)) (S (0.0 10.0) (0.0 0.0))))
+                 (upad:closed-p '((S (10.0 0.0) (10.0 10.0)) (S (10.0 10.0) (0.0 10.0))
+                                  (S (0.0 10.0) (0.0 0.0)))))
+          '(T nil))
+    (list "canon: #035 and Pt. 35 are the same point"
+          '(= (cal:canon "#035") (cal:canon "Pt. 35"))  T)
+    (list "wrap: a station past either end of a closed wall comes round"
+          '(list (upad:wrap -5.0 100.0) (upad:wrap 105.0 100.0))  '(95.0 5.0))
+    (list "far-side-p: station 90 is on the far stretch from 10 to 50"
+          '(list (upad:far-side-p 90.0 10.0 50.0 100.0)
+                 (upad:far-side-p 30.0 10.0 50.0 100.0))
+          '(T nil))
+    (list "endname names a numbered point and falls back for an unknown one"
+          '(list (upad:endname '((0.0 0.0) "17") "the start")
+                 (upad:endname '((0.0 0.0) "?") "the start"))
+          '("Pt.17" "the start"))))
+
+(foreach c '("UPADOVER")
+  (setq *calofin-selftests*
+        (cons (cons c 'upad:selftests) *calofin-selftests*)))
+
 (if (not *calofin-quiet*)
   (princ (strcat "\nUPADOVER " *upadover-version*
                  " loaded.  Type UPADOVER to run.")))
@@ -100176,7 +102660,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.12")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.13")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -101802,6 +104286,54 @@
   (princ (strcat "\nLINGUTTER " *lingutter-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lg:selftests ()
+  (list
+    (list "area of two bulge-1 halves is a unit circle's"
+          '(lg:area '((0 0 1.0) (2 0 1.0)))  pi)
+    (list "perim-len once round the unit square is 4"
+          '(lg:perim-len '((0 0 0.0) (1 0 0.0) (1 1 0.0) (0 1 0.0)))  4.0)
+    (list "bulge-of a half turn is 1"  '(lg:bulge-of pi)  1.0)
+    (list "thin-offs sorts and drops an offset within tol of the last"
+          '(lg:thin-offs '(5.0 1.0 1.05 3.0) 0.1)  '(1.0 3.0 5.0))
+    (list "build-graph drops a segment shorter than the tolerance"
+          '(lg:build-graph '(((0 0) (0.01 0) 0.0)) 0.05)  '(((0 0)) nil))
+    (list "weld drops a vertex in the middle of a straight run"
+          '(lg:weld '((0 0 0.0) (1 0 0.0) (2 0 0.0) (2 2 0.0) (0 2 0.0)))
+          '((0 0 0.0) (2 0 0.0) (2 2 0.0) (0 2 0.0)))
+    (list "weld joins two quarter arcs into a half of bulge -1"
+          '(caddr (car (lg:weld '((0 0 -0.414213562373095)
+                                  (1 1 -0.414213562373095)
+                                  (2 0 0.0) (2 -1 0.0) (0 -1 0.0)))))  -1.0)
+    (list "exterior prunes a ledge spur and welds its T out: 4 corners, area 16"
+          '((lambda (v) (if (= 4 (length v)) (abs (lg:area v))))
+             (lg:exterior '(((0 0) (4 0) 0.0) ((4 0) (4 4) 0.0)
+                            ((4 4) (0 4) 0.0) ((0 4) (0 0) 0.0)
+                            ((2 0) (2 2) 0.0)) 0.05))  16.0)
+    (list "exterior heals a half-inch gap at a 1 rung, not at 0.05"
+          '((lambda (g) (if (null (lg:exterior g 0.05))
+                            (abs (lg:area (lg:exterior g 1.0)))))
+             '(((0 0) (4 0) 0.0) ((4 0) (4 4) 0.0)
+               ((4 4) (0 4) 0.0) ((0 4) (0 0.5) 0.0)))  16.0)
+    (list "pt-arc-dist reads off the radius inside the sweep"
+          '(lg:pt-arc-dist '(1 -3) '(0 0) '(2 0) 1.0)  2.0)
+    (list "pt-inside-p sees a point inside the square"
+          '(lg:pt-inside-p '(1 1) '((0 0 0.0) (2 0 0.0) (2 2 0.0) (0 2 0.0)))  T)
+    (list "stylep folds case and takes the wildcard"
+          '(lg:stylep "cross dimensions" '("CROSS DIM*"))  T)))
+
+(foreach c '("LINGUTTER" "LINGUTTERSCAN")
+  (setq *calofin-selftests*
+        (cons (cons c 'lg:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -102080,7 +104612,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.25")
+(setq *perp-version* "v0.26")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -103600,6 +106132,44 @@
   (if lzd:end (lzd:end "PERPPTS"))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun perp:selftests ()
+  (list
+    (list "parse-segs reads 1 3-5, 8 as segments 1 3 4 5 8"
+          '(vl-sort (perp:parse-segs "1 3-5, 8" 10) '<)  '(1 3 4 5 8))
+    (list "parse-segs refuses 3-5 when there are only 4 segments"
+          '(perp:parse-segs "3-5" 4)  nil)
+    (list "pathlen of a 3 by 4 elbow is 7"
+          '(perp:pathlen '((0 0 0) (3 0 0) (3 4 0)))  7.0)
+    (list "pt-at 5 along that elbow sits 2 up the second leg"
+          '(perp:pt-at '((0 0 0) (3 0 0) (3 4 0)) 5.0)  '(3.0 2.0 0.0))
+    (list "circumcenter of the right triangle 0,0 2,0 0,2 is 1,1"
+          '(cal:circumcenter '(0.0 0.0 0.0) '(2.0 0.0 0.0) '(0.0 2.0 0.0))
+          '(1.0 1.0 0.0))
+    (list "circumcenter of three points in a line is nil"
+          '(cal:circumcenter '(0.0 0.0 0.0) '(1.0 0.0 0.0) '(2.0 0.0 0.0))  nil)
+    (list "vang from +x to +y is a positive quarter turn"
+          '(perp:vang '(1.0 0.0) '(0.0 1.0))  (* 0.5 pi))
+    (list "bulge of a quarter circle from its two tangents is root 2 minus 1"
+          '(perp:bulge '(0.0 1.0) '(-1.0 0.0) '(1.0 0.0) '(0.0 1.0))
+          (- (sqrt 2.0) 1.0))
+    (list "bulge with no tangent at either end is straight"
+          '(perp:bulge nil nil '(0.0 0.0) '(5.0 0.0))  0.0)
+    (list "scale-ctr at a quarter share sits a quarter of the way from START"
+          '(perp:scale-ctr '(0.0 0.0 0.0) '(10.0 0.0 0.0) 0.25)  '(2.5 0.0 0.0))))
+
+(foreach c '("PERPPTS")
+  (setq *calofin-selftests*
+        (cons (cons c 'perp:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -103868,7 +106438,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.25")
+(setq *cperp-version* "v0.26")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -105152,6 +107722,46 @@
   (if lzd:end (lzd:end "CPERPPTS"))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cperp:selftests ()
+  (list
+    (list "kw-canon spells side as the style table wants"
+          '(cperp:kw-canon "side" '("STandard" "SIde"))  "SIde")
+    (list "kw-canon refuses a word the question never offers"
+          '(cperp:kw-canon "Maybe" '("Yes" "No"))  nil)
+    (list "dimstyle-dflt is always one of the two keywords"
+          '(member (cperp:dimstyle-dflt) '("STandard" "SIde")))
+    (list "back-kw knows Undo as well as Back"  '(cperp:back-kw "Undo"))
+    (list "bulge of a 45 degree turn is tan(pi/8)"
+          '(cperp:bulge '(1 0) '(0 0) '(1 1))  (/ (sin (/ pi 8.0)) (cos (/ pi 8.0))))
+    (list "bulge of a chord along the tangent is 0"
+          '(cperp:bulge '(1 0) '(0 0) '(5 0))  0.0)
+    (list "scale-pt doubles about the centre, z untouched"
+          '(cperp:scale-pt '(3 4 7) '(1 2 0) 2.0)  '(5.0 6.0 7))
+    (list "scale-ctr lands a quarter of the way from START"
+          '(cperp:scale-ctr '(0 0 5) '(10 20 9) 0.25)  '(2.5 5.0 5))
+    (list "parse-len reads feet, dash and a dashed fraction"
+          '(cal:parse-len "4'-4-1/2\"")  '(52.5 T))
+    (list "parse-len reads a spaced fraction as inches"
+          '(cal:parse-len "44 1/2")  '(44.5 nil))
+    (list "spell-len writes 356 eighths in feet"
+          '(cal:spell-len 356 T nil)  "3'-8 1/2\"")
+    (list "ladder-rows grades 3 to 12 by 3 off the value"
+          '(cal:ladder-rows '(3 12 3))
+          '((96 jump) (72 quarter) (48 half) (24 quarter)))))
+
+(foreach c '("CPERPPTS")
+  (setq *calofin-selftests*
+        (cons (cons c 'cperp:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -105199,7 +107809,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.11")
+(setq *tutperp-version* "v0.12")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -105612,6 +108222,40 @@
   (if lzd:end (lzd:end "TUTORIALPERPPTS"))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun tutp:selftests ()
+  (list
+    (list "lerp halfway between two points"
+          '(tutp:lerp '(0 0 0) '(4 2 6) 0.5)  '(2.0 1.0 3.0))
+    (list "lerp at 0 is the first point"
+          '(tutp:lerp '(1 2 3) '(9 9 9) 0.0)  '(1.0 2.0 3.0))
+    (list "pathlen of a 3-4 elbow is 7"
+          '(tutp:pathlen '((0 0 0) (3 0 0) (3 4 0)))  7.0)
+    (list "pathlen of a single point is 0"
+          '(tutp:pathlen '((5 5 0)))  0.0)
+    (list "pt-at walks 5 along the elbow into its second leg"
+          '(tutp:pt-at '((0 0 0) (3 0 0) (3 4 0)) 5.0)  '(3.0 2.0 0.0))
+    (list "pt-at past the end lands on the last point"
+          '(tutp:pt-at '((0 0 0) (3 0 0)) 10.0)  '(3 0 0))
+    (list "pt-at at or below 0 is the first point"
+          '(tutp:pt-at '((1 1 0) (2 2 0)) -1.0)  '(1 1 0))
+    (list "sample spaces 3 points evenly, ends included"
+          '(tutp:sample '((0 0 0) (4 0 0)) 3)  '((0 0 0) (2.0 0.0 0.0) (4.0 0.0 0.0)))
+    (list "sample of one point is the start"
+          '(tutp:sample '((0 0 0) (4 0 0)) 1)  '((0 0 0)))))
+
+(foreach c '("TUTORIALPERPPTS")
+  (setq *calofin-selftests*
+        (cons (cons c 'tutp:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -105658,7 +108302,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.12")
+(setq *tutcperp-version* "v0.13")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -106081,6 +108725,36 @@
   (if lzd:end (lzd:end "TUTORIALCPERPPTS"))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun tutc:selftests ()
+  (list
+    (list "bulge of a 45 degree left turn is tan(pi/8)"
+          '(tutc:bulge '(1 0) '(0 0) '(1 1))  (/ (sin (/ pi 8.0)) (cos (/ pi 8.0))))
+    (list "bulge of the same turn to the right is negative"
+          '(tutc:bulge '(1 0) '(0 0) '(1 -1))  (- (/ (sin (/ pi 8.0)) (cos (/ pi 8.0)))))
+    (list "bulge of a clockwise half circle is -1"
+          '(tutc:bulge '(0 1) '(0 0) '(2 0))  -1.0)
+    (list "bulge of a chord along the tangent is 0"
+          '(tutc:bulge '(1 0) '(0 0) '(5 0))  0.0)
+    (list "bulge with no tangent falls back to straight"
+          '(tutc:bulge nil '(0 0) '(5 0))  0.0)
+    (list "bulge of a zero-length chord is 0"
+          '(tutc:bulge '(1 0) '(2 2) '(2 2))  0.0)
+    (list "bulge caps a chord folding back at 2.98 rad"
+          '(tutc:bulge '(1 0) '(0 0) '(-1 0.001))  (/ (sin 1.49) (cos 1.49)))))
+
+(foreach c '("TUTORIALCPERPPTS")
+  (setq *calofin-selftests*
+        (cons (cons c 'tutc:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -106296,7 +108970,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.11")
+(setq *perpmark-version* "v1.12")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -107664,6 +110338,46 @@
   (if lzd:end (lzd:end "PERPMARK"))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun pm:selftests ()
+  (list
+    (list "parse-len reads 4'-4-1/2'' as 52.5 inches with feet spelled"
+          '(cal:parse-len "4'-4-1/2''")  '(52.5 T))
+    (list "parse-len refuses 4'x, which is not a length"
+          '(cal:parse-len "4'x")  nil)
+    (list "spell-len writes 420 eighths in the feet family as 4'-4 1/2, inch mark trimmed"
+          '(vl-string-trim (chr 34) (cal:spell-len 420 T nil))  "4'-4 1/2")
+    (list "ruler-tier grades 8, 4, 2 and 1 eighths off as jump, half, quarter, eighth"
+          '(list (cal:ruler-tier 8) (cal:ruler-tier 4) (cal:ruler-tier 2) (cal:ruler-tier 1))
+          '(jump half quarter eighth))
+    (list "ruler-rows at 4 eighths offers 11 rows, the ones at or below zero dropped"
+          '(length (cal:ruler-rows 4 nil))  11)
+    (list "canon reads Pt.35 and #035 as the same point number"
+          '(= (pm:canon "Pt.35") (pm:canon "#035"))  T)
+    (list "mkseg: a bulge of 1 across a chord of 2 is a half circle pi long"
+          '(pm:seg-len (pm:mkseg '(0 0) '(2 0) 1.0))  pi)
+    (list "project: a point beside the second of two 10-unit walls is 14 along from the start"
+          '(caddr (pm:project (list '(S (0.0 0.0) (10.0 0.0)) '(S (10.0 0.0) (10.0 10.0)))
+                              '(12.0 4.0)))
+          14.0)
+    (list "spikes names the 30 between 10 and 12 and says 11 was expected"
+          '(cal:spikes '((0.0 . 10.0) (5.0 . 30.0) (10.0 . 12.0)) 2.0)
+          '((1 . 11.0)))
+    (list "andjoin writes three names with commas and an and"
+          '(pm:andjoin '("Pt.7" "Pt.9" "Pt.12") T)  "Pt.7, Pt.9 and Pt.12")))
+
+(foreach c '("PERPMARK")
+  (setq *calofin-selftests*
+        (cons (cons c 'pm:selftests) *calofin-selftests*)))
+
 (if (not *calofin-quiet*)
   (princ (strcat "\nPERPMARK " *perpmark-version*
                  " loaded.  Type PERPMARK to run.")))
@@ -107820,7 +110534,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.10")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.11")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -108787,6 +111501,49 @@
   (princ (strcat "\nSMARTFILLET " *smartfillet-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun sf:selftests ()
+  (list
+    (list "num letters a whole radius without decimals" '(sf:num 12.0)  "12")
+    (list "num keeps a half inch without a trailing zero" '(sf:num 13.5)  "13.5")
+    (list "rlist reads three radii out as a sentence"
+          '(sf:rlist '(3.0 9.0 15.0))  "R3, R9 and R15")
+    (list "shown-extras picks the dashed sizes out of a fan"
+          '(sf:shown-extras '(3.0 6.0 9.0 12.0))  '(3.0 9.0))
+    (list "mix rounds to a whole colour channel"       '(sf:mix 0.0 100.0 0.5)  50)
+    (list "shade: a lone preview takes the light end"
+          '(equal (sf:shade 0 1) sf:*shade-lo*)  T)
+    (list "tanlen: a 6in fillet on a right angle starts 6in back"
+          '(sf:tanlen (/ pi 4.0) 6.0)  6.0)
+    (list "rmax of a right angle is the short leg, times the fit"
+          '(/ (sf:rmax (list '(0.0 0.0) '(1.0 0.0) 100.0 '(0.0 1.0) 50.0
+                             (/ pi 4.0) 0.0 0.0))
+              sf:*fit*)
+          50.0)
+    (list "arcpts: R6 on a right angle at the origin centres at 6,6"
+          '(sf:arcpts (list '(0.0 0.0) '(1.0 0.0) 100.0 '(0.0 1.0) 50.0
+                            (/ pi 4.0) 0.0 0.0)
+                      6.0)
+          '((6.0 6.0) (6.0 0.0) (0.0 6.0)))
+    (list "fitting: the shipped fan under R20 is 3, 6, 9, 12, 18"
+          '(sf:fitting 20.0)  '(3.0 6.0 9.0 12.0 18.0))
+    (list "smallest is the 3 extra, not the first of the series"
+          '(sf:smallest)  3.0)
+    (list "candidates caps a long wall's 18 fitting radii at the 10 shown"
+          '(list (sf:howmany 100.0) (length (sf:candidates 100.0)))  '(18 10))))
+
+(foreach c '("SMARTFILLET")
+  (setq *calofin-selftests*
+        (cons (cons c 'sf:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -108972,7 +111729,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *honefillet-version* "v1.8")  ; announced on load; release_lisp.py
+(setq *honefillet-version* "v1.9")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -110051,6 +112808,51 @@
   (princ (strcat "\nHONEFILLET " *honefillet-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun hn:selftests ()
+  (list
+    (list "num letters a whole radius without decimals" '(hn:num 12.0)  "12")
+    (list "num keeps the half inch, and only that"      '(hn:num 13.5)  "13.5")
+    (list "rlist reads three radii out as a sentence"
+          '(hn:rlist '(3.0 9.0 15.0))  "R3, R9 and R15")
+    (list "halfp: R13.5 is a decision, R13 a size"
+          '(list (hn:halfp 13.5) (hn:halfp 13.0))  '(T nil))
+    (list "mix rounds to a whole colour channel"       '(hn:mix 0.0 100.0 0.5)  50)
+    (list "tanlen: a 6in fillet on a right angle starts 6in back"
+          '(hn:tanlen (/ pi 4.0) 6.0)  6.0)
+    (list "rmax of a right angle is the short leg, times the fit"
+          '(/ (hn:rmax (list '(0.0 0.0) '(1.0 0.0) 100.0 '(0.0 1.0) 50.0
+                             (/ pi 4.0) 0.0 0.0))
+              hn:*fit*)
+          50.0)
+    (list "arcpts: R6 on a right angle at the origin centres at 6,6"
+          '(hn:arcpts (list '(0.0 0.0) '(1.0 0.0) 100.0 '(0.0 1.0) 50.0
+                            (/ pi 4.0) 0.0 0.0)
+                      6.0)
+          '((6.0 6.0) (6.0 0.0) (0.0 6.0)))
+    (list "fitting: the shipped fan under R20 is 3, 6, 9, 12, 18"
+          '(hn:fitting 20.0)  '(3.0 6.0 9.0 12.0 18.0))
+    (list "howfine: 12 to 18 is thirteen half-inch steps, not twelve"
+          '(hn:howfine 12.0 18.0)  13)
+    (list "finesteps counts up in halves and ends exactly on the top"
+          '(hn:finesteps 12.0 13.0)  '(12.0 12.5 13.0))
+    (list "gapof: a 10in run earns a guide, a 2in one is too short for a dash"
+          '(list (hn:gapof (list nil nil nil nil nil nil 10.0 2.0) 1)
+                 (hn:gapof (list nil nil nil nil nil nil 10.0 2.0) 2))
+          '(10.0 nil))))
+
+(foreach c '("HONEFILLET")
+  (setq *calofin-selftests*
+        (cons (cons c 'hn:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -110201,7 +113003,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.24")
+(setq *spacheck-version* "v1.25")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -113203,6 +116005,53 @@
   (if lzd:end (lzd:end "TUTORIALSPACHECK"))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun spachk:selftests ()
+  (list
+    (list "has finds a substring and reads a nil text as no match"
+          '(if (spachk:has nil "Size") nil (spachk:has "Cover Size" "Size"))  T)
+    (list "tapernorm reads a labelled taper by its vocabulary"
+          '(spachk:tapernorm "Taper: 4-2 Flat")  "4-2")
+    (list "gradenorm reads FRP as Ultra"
+          '(spachk:gradenorm "Ultra FRP")  "ULTRA")
+    (list "fr-fold lifts -80 degrees to 10"
+          '(spachk:fr-fold (/ (* -80.0 pi) 180.0))  (/ pi 18.0))
+    (list "fr-adiff: 10 and 80 degrees are 20 apart, a quarter turn being none"
+          '(spachk:fr-adiff (/ pi 18.0) (/ (* 4.0 pi) 9.0))  (/ pi 9.0))
+    (list "fr-mode: a quarter turn is the same direction"
+          '(spachk:fr-mode (list (cons 0.0 10.0) (cons (* 0.5 pi) 5.0)))  0.0)
+    (list "hardverdict with no hinge length says so instead of guessing"
+          '(cdr (spachk:hardverdict '(OVER 120.0) nil))
+          "no hinge length to check - verify by hand")
+    (list "foampick takes the first sheet both the width and the run fit"
+          '(spachk:foampick (list (cons 48.0 96.0) (cons 49.5 102.0)) 48.0 90.0)
+          '(48.0 . 96.0))
+    (list "clusters: two boxes a hair apart are one sheet, a far one is another"
+          '(length (spachk:clusters '(((0.0 0.0) (10.0 10.0))
+                                      ((10.001 0.0) (20.0 10.0))
+                                      ((100.0 100.0) (110.0 110.0)))
+                                    0.5))
+          2)
+    (list "date-verdict refuses a day the month does not have"
+          '(spachk:date-verdict "02/30/2024")
+          "'02/30/2024' - 30 is not a valid day for that month - expected MM/DD/YYYY")
+    (list "feet-open-p: 5'-6\" is closed, 15' 6 is not"
+          '(if (spachk:feet-open-p "5'-6\"") nil (spachk:feet-open-p "15' 6"))  T)
+    (list "ftin spells 66.5 as 5'-6 1/2\" at sixteenths"
+          '(cal:ftin 66.5 4 4)  "5'-6 1/2\"")))
+
+(foreach c '("SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK")
+  (setq *calofin-selftests*
+        (cons (cons c 'spachk:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -113305,7 +116154,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacovcreate-version* "v1.4")
+(setq *spacovcreate-version* "v1.5")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value SPACOVCREATE reads that somebody might want
@@ -114678,6 +117527,60 @@
   (princ (strcat "\nSPACOVCREATE " *spacovcreate-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun scv:selftests ()
+  (list
+    (list "sweep: a bulge of 1 is a half turn"
+          '(scv:sweep 1.0)  pi)
+    (list "arcinfo: a quarter arc on a 10 chord has its centre 5 to the left"
+          '(car (scv:arcinfo '(0.0 0.0) '(10.0 0.0) (scv:bulge (* 0.5 pi))))
+          '(5.0 5.0))
+    (list "tan-out leaves a quarter arc 45 degrees off its chord"
+          '(scv:tan-out '(0.0 0.0) '(10.0 0.0) (scv:bulge (* 0.5 pi)))
+          '(0.70710678 -0.70710678))
+    (list "area2 is twice the area, positive counter-clockwise"
+          '(scv:area2 '((0.0 0.0) (10.0 0.0) (10.0 10.0) (0.0 10.0)))  200.0)
+    (list "revclosed walks the loop backwards with every bulge flipped and shifted"
+          '(scv:revclosed (list (scv:vx '(0.0 0.0) 0.5)
+                                (scv:vx '(10.0 0.0) 0.25)
+                                (scv:vx '(10.0 10.0) 0.0)))
+          '(((10.0 10.0) . -0.25) ((10.0 0.0) . -0.5) ((0.0 0.0) . 0.0)))
+    (list "offset: a 10 square by 1 is a 12 square"
+          '(mapcar 'scv:vpt
+                   (scv:offset (list (scv:vx '(0.0 0.0) 0.0)
+                                     (scv:vx '(10.0 0.0) 0.0)
+                                     (scv:vx '(10.0 10.0) 0.0)
+                                     (scv:vx '(0.0 10.0) 0.0))
+                               1.0))
+          '((-1.0 -1.0) (11.0 -1.0) (11.0 11.0) (-1.0 11.0)))
+    (list "circlep reads two half-turn vertices as a circle"
+          '(scv:circlep (list (scv:vx '(0.0 0.0) 1.0) (scv:vx '(10.0 0.0) 1.0)))
+          '((5.0 0.0) 5.0))
+    (list "hmaxpiece is the widest piece, the last one included"
+          '(scv:hmaxpiece 0.0 100.0 '(30.0 60.0))  40.0)
+    (list "hbest: a 100 wide cover on 48 foam is 3 pieces"
+          '(car (scv:hbest '((0.0 0.0) (100.0 0.0) (100.0 80.0) (0.0 80.0))
+                           0.0 100.0 (list (cons 48.0 96.0)) '(2 3 4)))
+          3)
+    (list "hingetypes: 7 pieces read H V H V V H off the chart"
+          '(scv:hingetypes 7 nil)  '("H" "V" "H" "V" "V" "H"))
+    (list "tapernorm reads a labelled taper"
+          '(scv:tapernorm "Taper: 4-2 Flat")  "4-2")
+    (list "plural keeps the singular for one"
+          '(cal:plural 1 "piece" "pieces")  "1 piece")))
+
+(foreach c '("SPACOVCREATE")
+  (setq *calofin-selftests*
+        (cons (cons c 'scv:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -114749,7 +117652,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.10") ; printed on load and at command
+(setq *stockcover-version* "v1.11") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -115316,6 +118219,40 @@
   (princ (strcat "\nSTOCKCOVER " *stockcover-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun stock:selftests ()
+  (list
+    (list "fwd turns backslashes into forward slashes"
+          '(stock:fwd "F:\\Tech\\x.dwg")  "F:/Tech/x.dwg")
+    (list "trim drops one trailing separator of either kind"
+          '(list (stock:trim "F:\\Tech\\") (stock:trim "F:/Tech/") (stock:trim "F:\\Tech"))
+          '("F:\\Tech" "F:/Tech" "F:\\Tech"))
+    (list "match takes the exact stem and is not dragged off by 5MB"
+          '(stock:match "5m" '("5MB_Tech.dwg" "5M.dwg" "5M_Tech.dwg"))  '("5M.dwg"))
+    (list "match falls back to the _Tech suffix"
+          '(stock:match "5M" '("5MB_Tech.dwg" "5M_Tech.dwg"))  '("5M_Tech.dwg"))
+    (list "match sweeps leading substrings last, in folder order"
+          '(stock:match "5M" '("5MB_Tech.dwg" "5MC.dwg" "6M.dwg"))
+          '("5MB_Tech.dwg" "5MC.dwg"))
+    (list "span is the anchors' width and height"
+          '(stock:span '((1.0 1.0 0.0) (13.0 6.0 0.0)))  '(12.0 5.0))
+    (list "shifted-p sees a box moved by exactly d"
+          '(stock:shifted-p '((0 0) (10 5)) '((3 4) (13 9)) '(3 4))  T)
+    (list "shifted-p refuses a box that moved somewhere else"
+          '(stock:shifted-p '((0 0) (10 5)) '((3 5) (13 10)) '(3 4))  nil)))
+
+(foreach c '("STOCKCOVER-CFG" "STOCKCOVER")
+  (setq *calofin-selftests*
+        (cons (cons c 'stock:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -115385,7 +118322,7 @@
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
-(setq *drone-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *drone-version* "v1.8")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -115640,6 +118577,54 @@
   (princ (strcat "\nDRONE " *drone-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun drone:selftests ()
+  (list
+    (list "csv joins two layer names the way an ssget filter wants"
+          '(drone:csv '("POOL" "SPA"))  "POOL,SPA")
+    (list "csv of one name is that name alone"
+          '(drone:csv '("SPA"))  "SPA")
+    (list "csv of no names is nil"
+          '(drone:csv nil)  nil)
+    (list "csv of the point layers is a filter wcmatch reads back"
+          '(wcmatch (car *drone-pt-layers*) (drone:csv *drone-pt-layers*))  T)
+    (list "the outline filter takes a LINE"
+          '(wcmatch "LINE" *drone-perim-types*)  T)
+    (list "the outline filter leaves TEXT and POINT to steps 1 and 2"
+          '(or (wcmatch "TEXT" *drone-perim-types*)
+               (wcmatch "POINT" *drone-perim-types*))
+          nil)
+    (list "point layers knob is a non-empty list of layer names"
+          '(and *drone-pt-layers* (listp *drone-pt-layers*)
+                (not (vl-member-if '(lambda (l) (/= (type l) 'STR))
+                                   *drone-pt-layers*)))
+          T)
+    (list "points move OFF the source layers, never onto one of them"
+          '(member *drone-dest-layer* *drone-pt-layers*)  nil)
+    (list "the spa outline moves to a layer that is not its source"
+          '(member *drone-perim-layer* *drone-perim-src*)  nil)
+    (list "text height knob is a positive number"
+          '(if (and (numberp *drone-text-height*) (> *drone-text-height* 0))
+             *drone-text-height*))
+    (list "pink is an ACI number, 1 to 255"
+          '(if (and (= (type *drone-pink*) 'INT)
+                    (> *drone-pink* 0) (< *drone-pink* 256))
+             *drone-pink*))
+    (list "orient angle knob is nil (flip only) or a number of degrees"
+          '(or (null *drone-orient-angle*) (numberp *drone-orient-angle*))  T)))
+
+(foreach c '("DRONE")
+  (setq *calofin-selftests*
+        (cons (cons c 'drone:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -115699,7 +118684,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.10")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -116230,6 +119215,44 @@
   (princ (strcat "\nTYDRN " *tydrn-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun tydrn:selftests ()
+  (list
+    (list "namelist joins two names with an and"
+          '(tydrn:namelist '("PADDLE" "CDIM"))            "PADDLE and CDIM")
+    (list "namelist puts the serial comma on three"
+          '(tydrn:namelist '("TYDRN" "PADDLE" "CDIM"))    "TYDRN, PADDLE, and CDIM")
+    (list "namelist of none is the empty string"
+          '(tydrn:namelist nil)                           "")
+    (list "stages names TYDRN and ends on the finisher; value is the 'of N' count"
+          '(if (and (member "TYDRN" (tydrn:stages))
+                    (equal (last (tydrn:stages))
+                           (if *tydrn-finish-cmd* *tydrn-finish-cmd* (last *tydrn-suite*))))
+             (length (tydrn:stages))))
+    (list "has sees this file's own command"
+          '(tydrn:has "TYDRN")                            T)
+    (list "has says no for a command nobody loaded"
+          '(tydrn:has "NOSUCHCOMMANDXYZ")                 nil)
+    (list "live-ss of nothing is nil, not an empty set"
+          '(tydrn:live-ss nil)                            nil)
+    (list "the text height knob is a positive number"
+          '(if (and (numberp *tydrn-text-height*) (> *tydrn-text-height* 0))
+             *tydrn-text-height*))
+    (list "the orient knob is nil (flip only) or an angle"
+          '(or (null *tydrn-orient-angle*) (numberp *tydrn-orient-angle*))  T)))
+
+(foreach c '("TYDRN" "TYLERDRONESUITE")
+  (setq *calofin-selftests*
+        (cons (cons c 'tydrn:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -116329,7 +119352,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.6")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -116847,6 +119870,44 @@
   (princ (strcat "\nSOCONV " *soconv-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun soconv:selftests ()
+  (list
+    (list "dest sends a Pool Perimeter line to POOL"
+          '(soconv:dest "LINE" "Pool Perimeter")          "POOL")
+    (list "dest splits Dimensions: a note goes to TEXT"
+          '(soconv:dest "MTEXT" "Dimensions")             "TEXT")
+    (list "dest splits Dimensions: the rest to DIMENSION, the row below"
+          '(soconv:dest "DIMENSION" "Dimensions")         "DIMENSION")
+    (list "dest reads layer and type case-blind"
+          '(soconv:dest "point" "existing anchorss")      "POINTS")
+    (list "dest leaves a line on the anchors layer alone"
+          '(soconv:dest "LINE" "Existing Anchors")        nil)
+    (list "add skips a spelling already in the list"
+          '(soconv:add "pool" '("POOL"))                  '("POOL"))
+    (list "bump counts one more in place"
+          '(soconv:bump "POOL" '(("POOL" . 2) ("TEXT" . 1)))
+          '(("POOL" . 3) ("TEXT" . 1)))
+    (list "color creates POOL cyan, as POOL.LSP does"
+          '(soconv:color "pool")                          4)
+    (list "tally-line writes count -> layer, comma-joined"
+          '(soconv:tally-line '(("POOL" . 69) ("POINTS" . 232)))
+          "69 -> POOL, 232 -> POINTS")
+    (list "color-for reads the colour a record kept for its source layer"
+          '(soconv:color-for "obstacles" '(("SOCONV" "Obstacles" 3)))  3)))
+
+(foreach c '("SOCONV" "SORECONV")
+  (setq *calofin-selftests*
+        (cons (cons c 'soconv:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -116948,7 +120009,7 @@
 ;;; so; nothing else about the round trip is approximate.
 ;;; ======================================================================
 
-(setq *vsconv-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *vsconv-version* "v1.6")   ; announced on load; release_lisp.py
                                  ; reads this banner and stamps the
                                  ; dated twin in releases/ from it
 
@@ -117612,6 +120673,40 @@
   (princ (strcat "\nVSCONV " *vsconv-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun vsconv:selftests ()
+  (list
+    (list "dest sends a source layer on, whatever its case"
+          '(vsconv:dest "2 coping")  "POOL")
+    (list "dest is nil for a layer the map never names"
+          '(vsconv:dest "Layer0")  nil)
+    (list "color of a destination the table never names is the default"
+          '(vsconv:color "NEW")  *vsconv-default-color*)
+    (list "csv joins names the way an ssget filter wants them"
+          '(vsconv:csv '("1 Perimeter" "2 Coping"))  "1 Perimeter,2 Coping")
+    (list "namelist joins names the way the report reads them"
+          '(vsconv:namelist '("POOL" "POINTS"))  "POOL, POINTS")
+    (list "bump counts a key up and appends a new one"
+          '(vsconv:bump "DIMENSION" (vsconv:bump "POOL" (vsconv:bump "POOL" nil)))
+          '(("POOL" . 2) ("DIMENSION" . 1)))
+    (list "add does not list one layer twice in another case"
+          '(vsconv:add "pool" (vsconv:add "POINTS" '("POOL")))  '("POOL" "POINTS"))
+    (list "color-for reads a source layer's colour off its record"
+          '(vsconv:color-for "1 perimeter" '(("e1" "1 Perimeter" 3) ("e2" "2 Coping" 4)))
+          3)))
+
+(foreach c '("VSCONV" "VSRECONV")
+  (setq *calofin-selftests*
+        (cons (cons c 'vsconv:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -117765,7 +120860,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *g2mconv-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *g2mconv-version* "v1.4")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -118557,6 +121652,48 @@
   (princ (strcat "\nG2MCONV " *g2mconv-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun g2m:selftests ()
+  (list
+    (list "rule sends a DIMENSION on the dims layer to DIMENSION"
+          '(caddr (g2m:rule "DIMENSION" "A-ANNO-DIMS - DIMENSIONES"))  "DIMENSION")
+    (list "rule ignores case and the first matching row wins"
+          '(caddr (g2m:rule "mtext" "a-anno-dims - dimensiones"))  "TEXT")
+    (list "rule is nil for a layer the map never names"
+          '(g2m:rule "LINE" "SOMETHING ELSE")  nil)
+    (list "bump counts a destination and keeps first-reached order"
+          '(g2m:bump "POOL" (g2m:bump "TEXT" (g2m:bump "POOL" nil)))
+          '(("POOL" . 2) ("TEXT" . 1)))
+    (list "tally-line writes the count arrows"
+          '(g2m:tally-line '(("POOL" . 32) ("TEXT" . 22)))  "32 -> POOL, 22 -> TEXT")
+    (list "add does not list one layer twice in another case"
+          '(g2m:add "pool" (g2m:add "TEXT" '("POOL")))  '("POOL" "TEXT"))
+    (list "sources names each source layer once"
+          '(length (g2m:sources))  4)
+    (list "color of a destination the table never names is the default"
+          '(g2m:color "NEW")  *g2mconv-default-color*)
+    (list "text-p takes MTEXT in any case, not a DIMENSION"
+          '(and (g2m:text-p "mtext") (not (g2m:text-p "DIMENSION")))  T)
+    (list "tail drops the first n"
+          '(g2m:tail '(1 2 3 4) 2)  '(3 4))
+    (list "set-anno-items rewrites the SECOND 1070 only"
+          '(mapcar 'cdr (g2m:set-anno-items
+                          '((1000 . "AnnotativeData") (1002 . "{")
+                            (1070 . 1) (1070 . 1) (1002 . "}")) 0))
+          '("AnnotativeData" "{" 1 0 "}"))))
+
+(foreach c '("G2MCONV" "G2MRECONV")
+  (setq *calofin-selftests*
+        (cons (cons c 'g2m:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -118611,7 +121748,7 @@
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
 
-(setq *wcalst-version* "v2.2")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v2.3")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 ;;; -------------------- tunables ----------------------------------------
@@ -120096,6 +123233,49 @@
   (princ (strcat "\nWCALST " *wcalst-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun wc:selftests ()
+  (list
+    (list "key: two ends a hair apart share one node"
+          '(= (wc:key '(1.0 2.0)) (wc:key '(1.00000001 2.0)))  T)
+    (list "turn: three quarters left reads as a quarter right"
+          '(wc:turn 0.0 (* 1.5 pi))  (* -0.5 pi))
+    (list "turn: a half turn is +pi, never -pi"
+          '(wc:turn 0.0 (- pi))  pi)
+    (list "other-end hands back the far end of a segment"
+          '(wc:other-end '((0 0) (5 5)) '(0 0))  '(5 5))
+    (list "dev-point unrolls a point beside the second leg of an L"
+          '(wc:dev-point '(11.0 5.0) '((0.0 0.0) (10.0 0.0) (10.0 10.0)) '(0.0 10.0 20.0))
+          '(15.0 -1.0 15.0 1.0 (11.0 5.0)))
+    (list "chain-at walks 15 along an L to the middle of its riser"
+          '(wc:chain-at 15.0 '((0 0) (10 0) (10 10)) '(0 10 20))  '(10.0 5.0))
+    (list "depth-at interpolates halfway down a slope"
+          '(wc:depth-at 5.0 '((0 0) (10 -4) (20 -4)))  -2.0)
+    (list "notch cuts the bottom line either side of a dart's mouth"
+          '(wc:notch '((0 0) (10 0) (20 0)) '((10 2)))
+          '(((0 0) (9.0 0.0)) ((11.0 0.0) (20 0))))
+    (list "mult finds a pair keyed the other way round"
+          '(wc:mult '((0 0) (1 0))
+                    (list (cons (strcat (wc:key '(1 0)) "|" (wc:key '(0 0))) 2)))  2)
+    (list "ftin writes 15.375 inches as feet, inches and eighths"
+          '(cal:ftin 15.375 4 3)  "1'-3 3/8\"")
+    (list "arch writes a half inch whatever the denominator"
+          '(wc:arch 15.5)  "1'-3 1/2\"")
+    (list "pctof: a zero bottom reports 0, not a crash"
+          '(wc:pctof 5.0 0.0)  0.0)))
+
+(foreach c '("WCALST")
+  (setq *calofin-selftests*
+        (cons (cons c 'wc:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -120181,7 +123361,7 @@
 
 
 
-(setq *xft-version* "v1.19") ; printed on load and at command start so a
+(setq *xft-version* "v1.20") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -121556,6 +124736,50 @@
   (princ (strcat "\nXFTCONV " *xft-version*))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun xft:selftests ()
+  (list
+    (list "plain strips the MTEXT codes off a point name"
+          '(xft:plain "\\A1;{\\fArial;P22}")  "P22")
+    (list "plain turns a paragraph break into a space"
+          '(xft:plain "P\\P22")  "P 22")
+    (list "number drops the letter prefix off a point name"
+          '(xft:number " P22 ")  "22")
+    (list "number leaves a name with no digits alone"
+          '(xft:number "STA")  "STA")
+    (list "trim strips spaces and tabs at both ends"
+          '(cal:trim " \tP22 \t")  "P22")
+    (list "esc and unesc round-trip a value full of delimiters"
+          '(xft:unesc (xft:esc "a|b=c,d;e\\f"))  "a|b=c,d;e\\f")
+    (list "split cuts on unescaped separators only"
+          '(xft:split "a|b\\|c|d" "|")  '("a" "b\\|c" "d"))
+    (list "group reads a point back through val2s"
+          '(xft:group 10 (xft:val2s '(1.5 2.25 0)))  '(10 1.5 2.25 0.0))
+    (list "group unescapes a string value"
+          '(xft:group 1 "P\\=22")  '(1 . "P=22"))
+    (list "deser rebuilds a three-group entity list"
+          '(xft:deser "0=TEXT|8=SURVEY|62=7")
+          '((0 . "TEXT") (8 . "SURVEY") (62 . 7)))
+    (list "join adds nothing for an empty spec or nil, a ; otherwise"
+          '(xft:join (xft:join (xft:join "" "a") nil) "b")  "a;b")
+    (list "chunks cuts 256 characters into 250 and 6"
+          '((lambda (s) (repeat 8 (setq s (strcat s s)))
+                        (mapcar 'strlen (xft:chunks s)))
+            "x")
+          '(250 6))))
+
+(foreach c '("XFTCONV" "XFTRECONV" "XFTCONV-SETUP")
+  (setq *calofin-selftests*
+        (cons (cons c 'xft:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -121634,7 +124858,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.11")
+(setq *xyplot-version* "v1.12")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -122639,6 +125863,51 @@
   (princ (strcat "\nXYPLOT " *xyplot-version* " (XYPLOT.lsp)"))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun xyp:selftests ()
+  (list
+    (list "scrub reads I0'_IO as 10'-10"
+          '(xyp:scrub "I0'_IO")  "10'-10")
+    (list "defrac rebuilds 314 as the 3/4 its slash was scanned from"
+          '(xyp:defrac "314")  "3/4")
+    (list "defrac leaves 100 alone: no inch fraction reads that way"
+          '(xyp:defrac "100")  nil)
+    (list "ftin->in reads 12'-3 1/2\" as 147.5 inches"
+          '(xyp:ftin->in "12'-3 1/2\"" nil)  147.5)
+    (list "ftin->in takes a dash for the foot mark: 28-7\" is 343"
+          '(xyp:ftin->in "28-7\"" nil)  343.0)
+    (list "ftin->in keeps 0 and a negative: coordinates, not tapes"
+          '(list (xyp:ftin->in "0" nil) (xyp:ftin->in "-6" nil))  '(0.0 -6.0))
+    (list "ftin->in leaves a lone dash blank"
+          '(xyp:ftin->in "-" nil)  nil)
+    (list "ftin->in rebuilds 39'-8 314\" as 39'-8 3/4\", 476.75"
+          '(xyp:ftin->in "39'-8 314\"" nil)  476.75)
+    (list "in->ftin writes 476.75 back as 39'-8 3/4\""
+          '(xyp:in->ftin 476.75)  "39'-8 3/4\"")
+    (list "parse-csv-line keeps a quoted comma and a doubled quote"
+          '(xyp:parse-csv-line "P1,\"3'-4 1/2\"\"\",7")
+          '("P1" "3'-4 1/2\"" "7"))
+    (list "col-of: X OFFSET is x, NORTHING is y, POINT NO is the name"
+          '(list (xyp:col-of "X OFFSET") (xyp:col-of "NORTHING")
+                 (xyp:col-of "POINT NO"))
+          '(x y name))
+    (list "chain-stops sorts the rungs and merges two offsets a hair apart"
+          '(xyp:chain-stops '(("P1" 10.0 5.0) ("P2" 4.0 8.0) ("P3" 10.001 2.0))
+                            'x '(0 0))
+          '((0.0 (0 0) "0") (4.0 (4.0 8.0) "P2") (10.0 (10.0 5.0) "P1,P3")))))
+
+(foreach c '("XYPLOT")
+  (setq *calofin-selftests*
+        (cons (cons c 'xyp:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -122750,7 +126019,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.9")
+(setq *constellation-version* "v1.10")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -124880,6 +128149,47 @@
                  " (CONSTELLATION.lsp)"))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cst:selftests ()
+  (list
+    (list "parse-len reads feet, a dash and a spaced fraction: 4'-4 1/2\" is 52.5 with feet"
+          '(cal:parse-len "4'-4 1/2\"")  '(52.5 T))
+    (list "parse-len reads a dashed fraction with no feet: 44-1/2 is 44.5"
+          '(cal:parse-len "44-1/2")  '(44.5 nil))
+    (list "parse-len refuses text that is not a length"
+          '(cal:parse-len "abc")  nil)
+    (list "spell-len writes 356 eighths in the feet family as 3'-8 1/2\""
+          '(cal:spell-len 356 T nil)  "3'-8 1/2\"")
+    (list "ladder-rows rungs the shipped 2' to 20' by-a-foot ladder 19 times"
+          '(length (cal:ladder-rows '(24.0 240.0 12.0)))  19)
+    (list "parserun fills D to B clockwise through A on a four-point job"
+          '(cst:parserun "DB" 4)  '(3 0 1))
+    (list "putdim keys C-A as A-C and replaces the older entry for the pair"
+          '(cst:putdim 0 2 170.0 (cst:putdim 2 0 168.0 nil))  '(("A-C" 0 2 170.0)))
+    (list "thin names the point fewer than two dims touch"
+          '(cst:thin 4 (cst:putdim 0 1 10.0 (cst:putdim 0 2 10.0 (cst:putdim 1 2 10.0 nil))))  '(3))
+    (list "cutoff names C and D when no dim links them to A"
+          '(cst:cutoff 4 (cst:adjacency 4 (cst:putdim 0 1 10.0 (cst:putdim 2 3 10.0 nil)) nil))  '(2 3))
+    (list "unmirror flips a counter-clockwise ring so it reads clockwise"
+          '(cst:area2 (cst:unmirror '((0 0) (1 0) (1 1) (0 1)) 4))  -2.0)
+    (list "linsolve solves 2x+y=5, x+3y=10"
+          '(cst:linsolve '((2.0 1.0 5.0) (1.0 3.0 10.0)))  '(1.0 3.0))
+    (list "bulge of a quarter turn about the centre is tan 22.5"
+          '(cst:bulge '(1 0) '(0 1) '(0 0))  0.4142136)
+  ))
+
+(foreach c '("CONSTELLATION")
+  (setq *calofin-selftests*
+        (cons (cons c 'cst:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -124983,7 +128293,7 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.9")
+(setq *lazspa-version* "v1.10")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -126386,6 +129696,76 @@
                  (itoa (length lzs:*charts*)) " chart(s)."))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lzs:selftests ()
+  (list
+    (list "bands: the octagon is cut at its two dimension rows"
+          '(lzs:bands (lzs:chart "OCtagon"))
+          '((0 . 130) (130 . 200) (200 . 1000)))
+    (list "wedge-keys: B, S and T are boxes wedged into the octagon drawing"
+          '(lzs:wedge-keys (lzs:chart "OCtagon"))  '("b" "ss" "tt"))
+    ;; the band is shadowed for the call, so the rule is read against a
+    ;; known cut and not against whatever band the failed repaint left
+    (list "clipseg keeps the half of a vertical segment inside the band, drops one below it"
+          '((lambda ( / lzs:*y0* lzs:*y1*)
+              (setq lzs:*y0* 0 lzs:*y1* 500)
+              (list (lzs:clipseg 0 0 100 1000) (lzs:clipseg 0 600 100 900))))
+          '((0.0 0.0 50.0 500.0) nil))
+    (list "keyanswer: NA in the required L box is an empty box, NA in W travels as nil"
+          '((lambda ( / lzs:*vals* c)
+              (setq c (lzs:chart "Rectangle")
+                    lzs:*vals* '(("w" . "NA") ("l" . "NA")))
+              (list (eq (lzs:keyanswer c "w") 'SKIP) (lzs:keyanswer c "l"))))
+          '(T nil))
+    (list "dead: a THERMOLIGHT cover greys the cover half and the second outline"
+          '((lambda ( / lzs:*picks*)
+              (setq lzs:*picks* '(("grade" . 2)))
+              (lzs:dead (lzs:chart "Rectangle"))))
+          '("mode" "second" "method" "gap" "taper" "w2" "l2"))
+    (list "dead: no second outline greys its method, the lap and its boxes"
+          '((lambda ( / lzs:*picks*)
+              (setq lzs:*picks* '(("second" . 2)))
+              (lzs:dead (lzs:chart "OCtagon"))))
+          '("method" "gap" "b2" "a2" "f2"))
+    (list "cornerpairs: a Diagonal carries its size, a 90 sends the treatment alone"
+          '((lambda ( / lzs:*picks* lzs:*vals*)
+              (setq lzs:*picks* '(("cornera" . 3) ("cornerb" . 1))
+                    lzs:*vals*  '(("cornera-sz" . "6") ("cornerb-sz" . "9")))
+              (lzs:cornerpairs (lzs:chart "Rectangle"))))
+          '((cornera-ty . "Diagonal") (cornera-sz . 6.0) (cornerb-ty . "90")))
+    (list "tagof names the lap box in words and S2 by its lead letter"
+          '(list (lzs:tagof (lzs:chart "OCtagon") "gap")
+                 (lzs:tagof (lzs:chart "OCtagon") "s2"))
+          '("the cover lap" "S2"))
+    (list "pick reads the taper word off its index, nil while on (ask)"
+          '((lambda ( / lzs:*picks*)
+              (setq lzs:*picks* '(("taper" . 7)))
+              (list (lzs:pick "taper") (lzs:pick "grade"))))
+          '("1-3/8" nil))
+    (list "answer reads feet and inches as inches"
+          '(cal:formanswer "6'10\"")  82.0)
+    (list "kvpack drops an empty box and a value carrying =; kvunpack reads the rest back"
+          '(cal:kvunpack (cal:kvpack '(("w" . "20") ("l" . "")
+                                       ("gap" . "3=4") ("b" . "40"))))
+          '(("w" . "20") ("b" . "40")))
+    (list "arcpts: the round spa's full circle is 61 points starting due east"
+          '((lambda ( / a)
+              (setq a (cal:imgarcpts '("A" 500 500 250 250 0 360)))
+              (list (length a) (car a) (cadr a))))
+          '(122 750 500))))
+
+(foreach c '("LAZSPA")
+  (setq *calofin-selftests*
+        (cons (cons c 'lzs:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -126503,7 +129883,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.22")
+(setq *lazform-version* "v2.23")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -129442,6 +132822,71 @@
                  (itoa n) " of them OASIS."))
   (princ))
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lzf:selftests ()
+  (list
+    (list "leadletter reads C2 off a column-only label"
+          '(lzf:leadletter "C2 - shallow floor at the break")  "C2")
+    (list "tagof names a drawn box by its letter, not its POOL key"
+          '(lzf:tagof (lzf:chart "Rectangle") "tp")  "B")
+    (list "hrows puts the rectangle's hopper chain left to right"
+          '(mapcar 'car (cadr (lzf:hrows (lzf:chart "Rectangle"))))
+          '("H" "G" "F" "E"))
+    (list "taglist names three boxes and counts the rest"
+          '(lzf:taglist (lzf:chart "Rectangle") '("tp" "h" "f" "e" "c2"))
+          "B, H, F and 2 more")
+    (list "btskip: a Sport bottom asks no hopper chain and no C2"
+          '(lzf:btskip "Sport")
+          '("h" "f" "e" "c2" "w" "r3" "l1" "x" "ttc"))
+    (list "dead: in square the cross dims and their mode are greyed, the overall is not"
+          '((lambda ( / d)
+              (setq d (lzf:dead (lzf:chart "Rectangle") t "Normal"))
+              (and (member "x0" d) (member "cmode" d) (member "bo" d)
+                   (not (member "tp" d)) t)))
+          T)
+    ;; the cover flag and the dropdown store are shadowed for the call:
+    ;; the rule is read as a fresh sheet would, whatever the failed run left
+    (list "dead: the Sport chain is dead on a Normal bottom, the hopper chain on a Sport"
+          '((lambda ( / lzf:*cover* lzf:*pvals* a b)
+              (setq a (lzf:dead (lzf:chart "Rectangle") nil "Normal")
+                    b (lzf:dead (lzf:chart "Rectangle") nil "Sport"))
+              (and (member "e2" a) (not (member "h" a))
+                   (member "h" b) (not (member "e2" b)) t)))
+          T)
+    (list "cornerpairs: a Grecian body row fans out to four corners out of square, one in"
+          '((lambda ( / lzf:*chart* lzf:*cvals* lzf:*vals*)
+              (setq lzf:*chart* (lzf:chart "Grecian")
+                    lzf:*cvals* '(("bodycorners" . 2))
+                    lzf:*vals*  '(("bodycorners-sz" . "2")))
+              (strcat (itoa (length (lzf:cornerpairs nil))) " out of square, "
+                      (itoa (length (lzf:cornerpairs t))) " in")))
+          "8 out of square, 2 in")
+    (list "answer reads feet and inches as inches"
+          '(cal:formanswer "12'6\"")  150.0)
+    (list "kvpack drops an empty box and a value carrying the separator; kvunpack reads the rest back"
+          '(cal:kvunpack (cal:kvpack '(("tp" . "20") ("le" . "")
+                                       ("h" . "3;4") ("k" . "40"))))
+          '(("tp" . "20") ("k" . "40")))
+    (list "textw: two glyphs are two advances less one gap"
+          '(cal:imgtextw "AB" 100)  96)
+    (list "arcpts: a quarter turn is 16 points and starts due east"
+          '((lambda ( / a)
+              (setq a (cal:imgarcpts '("A" 500 500 100 100 0 90)))
+              (list (length a) (car a) (cadr a))))
+          '(32 600 500))))
+
+(foreach c '("LAZASCII" "LAZTXT" "LAZFORM")
+  (setq *calofin-selftests*
+        (cons (cons c 'lzf:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -129602,7 +133047,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.64")
+(setq *lazpanel-version* "v3.65")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -137038,6 +140483,97 @@
 ;; a tool reloaded on its own since.
 (vl-catch-all-apply 'lzp:knobs-apply nil)
 
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lzp:selftests ()
+  (list
+    (list "caption: a name off the roster is \"\", every roster command has one"
+          '(and (= (lzp:caption "NOSUCHTOOL") "")
+                (not (vl-member-if '(lambda (n) (= (lzp:caption n) ""))
+                                   (lzp:commands))))
+          T)
+    (list "Find is a page the tab strip reaches but not a group with columns"
+          '(and (lzp:findpage lzp:*findname*)
+                (member lzp:*findname* (lzp:pages))
+                (not (lzp:group-columns lzp:*findname*)))
+          T)
+    (list "col-commands flattens a column's headed runs and plain names in order"
+          '(lzp:col-commands '("Converters" ("Convert" "A" "B") "C" ("Revert" "D")))
+          '("A" "B" "C" "D"))
+    (list "commands folds a tool listed on two pages to one name"
+          '((lambda (all)
+              (not (vl-member-if '(lambda (n) (member n (cdr (member n all))))
+                                 all)))
+            (lzp:commands))
+          T)
+    (list "Find splits the typed words and matches them as plain text (* is a letter)"
+          '(and (equal (lzp:split "cover  no bottom" " ") '("cover" "no" "bottom"))
+                (lzp:instr "ABHDCOVER" "COVER")
+                (lzp:instr "POOL" "")
+                (not (lzp:instr "POOL" "*"))
+                (not (lzp:instr "POOL" "POOLSIDE")))
+          T)
+    (list "wrap over the roster: no column past the budget, none more than one apart, nothing lost"
+          '((lambda (cols all)
+              (and (<= (apply 'max (mapcar 'length cols)) lzp:*colbudget*)
+                   (<= (- (apply 'max (mapcar 'length cols))
+                          (apply 'min (mapcar 'length cols)))
+                       1)
+                   (= (length (apply 'append cols)) (length all))))
+            (lzp:wrap (lzp:commands)) (lzp:commands))
+          T)
+    (list "alias-shape-p: letters and digits, a letter first, 1 to 12 of them"
+          '(and (lzp:alias-shape-p "pp2") (lzp:alias-shape-p "abcdefghijkl")
+                (not (lzp:alias-shape-p "2pp"))
+                (not (lzp:alias-shape-p "abcdefghijklm"))
+                (not (lzp:alias-shape-p "a-b"))
+                (not (lzp:alias-shape-p "")))
+          T)
+    (list "knobkey spells a knob's symbol as its profile key"
+          '(lzp:knobkey "pool:*typ-note*")  "CalofinKnob-pool.~typ-note~")
+    (list "knob-parse reads a number, a quoted list and nil as data, refuses a call and a blank"
+          '(list (lzp:knob-parse "12.5") (lzp:knob-parse "'(\"a\" \"b\")")
+                 (lzp:knob-parse "nil") (lzp:knob-parse "(setq x 1)")
+                 (lzp:knob-parse "  "))
+          '((T 12.5) (T ("a" "b")) (T nil) nil nil))
+    (list "knob-typewhy lets a whole number stand in for a real, not for a string"
+          '(and (null (lzp:knob-typewhy 2.0 3))
+                (null (lzp:knob-typewhy nil "x"))
+                (lzp:knob-typewhy nil '(1))
+                (= (lzp:knob-typewhy "TEXT" 3)
+                   "Alec's choice is a string, this is a whole number"))
+          T)
+    (list "the knob catalog is (TOOL PATH (NAME LITERAL MEANING) ...) rows, all text"
+          '(not (vl-member-if
+                  '(lambda (tl)
+                     (or (/= (type (car tl)) 'STR) (/= (type (cadr tl)) 'STR)
+                         (null (cddr tl))
+                         (vl-member-if
+                           '(lambda (e)
+                              (or (/= (length e) 3) (/= (type (car e)) 'STR)
+                                  (/= (type (cadr e)) 'STR)
+                                  (/= (type (caddr e)) 'STR)))
+                           (cddr tl))))
+                  lzp:*knobs*))
+          T)
+    (list "the catalog files a knob under its tool, knows no made-up one, and ties a member to its term"
+          '(and (= (lzp:knob-tool "ltc:*height*") "LINTXTCHK")
+                (null (lzp:knob-entry "no:*such*"))
+                (= (lzp:knob-termid "pool:*typ-note*") "typ-note")
+                (null (lzp:knob-termid "ltc:*height*")))
+          T)))
+
+(foreach c '("LAZPANEL" "LAZPIN" "LAZHIDE" "LAZBUTTON" "LAZICON" "CALHELP" "CALSET" "LAZSET" "LAZNAME" "LAZBACKUP" "LAZTUNE")
+  (setq *calofin-selftests*
+        (cons (cons c 'lzp:selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of
@@ -137124,19 +140660,21 @@
   cal:ask-len cal:ask-yn cal:ask-yn-nav cal:askdist cal:askkw
   cal:askpoint cal:askstr cal:asktreat cal:askyn cal:axis-pt
   cal:back-word-p cal:bbox-ent cal:bbox-ss cal:block-number cal:cand-matches
-  cal:cand-nearest cal:ceil cal:ceil-shown cal:circumcenter cal:cross
-  cal:d2 cal:datestr cal:dedupe cal:dimstyrestore cal:dimstysave
-  cal:dist cal:dot cal:dotn cal:ensure-layer cal:error-cancel-p
-  cal:floor-shown cal:formanswer cal:ftin cal:imgflatten cal:imgpline
-  cal:imgtext cal:imgtexth cal:imgtextw cal:in-loop-p cal:ink
-  cal:inward-sign cal:kvpack cal:kvunpack cal:layer-usable-p cal:len-digit-p
-  cal:loop-area cal:mid cal:midn cal:mtext cal:nthcdr
-  cal:osdown cal:osup cal:pad cal:perp cal:plural
-  cal:proj-param cal:pt-line-dist cal:ruler-new cal:ruler-off cal:ruler-show
-  cal:signed-dang cal:spikes cal:sublist cal:sysrestore cal:syssave
-  cal:tan cal:term cal:text cal:trim cal:ui
-  cal:undobegin cal:undoend cal:unit cal:unitn cal:v*
-  cal:v+ cal:v- cal:vlen cal:zeropad2
+  cal:cand-nearest cal:canon cal:ceil cal:ceil-shown cal:circumcenter
+  cal:cross cal:d2 cal:datestr cal:dedupe cal:dimstyrestore
+  cal:dimstysave cal:dist cal:dot cal:dotn cal:ensure-layer
+  cal:error-cancel-p cal:floor-shown cal:formanswer cal:ftin cal:imgarcpts
+  cal:imgflatten cal:imgpline cal:imgtext cal:imgtexth cal:imgtextw
+  cal:in-loop-p cal:ink cal:inward-sign cal:kvpack cal:kvunpack
+  cal:ladder-rows cal:layer-usable-p cal:len-digit-p cal:len-eighths cal:loop-area
+  cal:mid cal:midn cal:mtext cal:nthcdr cal:osdown
+  cal:osup cal:pad cal:parse-len cal:perp cal:plural
+  cal:proj-param cal:pt-line-dist cal:ruler-new cal:ruler-off cal:ruler-rows
+  cal:ruler-show cal:ruler-tier cal:signed-dang cal:spell-len cal:spikes
+  cal:sublist cal:sysrestore cal:syssave cal:tan cal:term
+  cal:text cal:trim cal:ui cal:undobegin cal:undoend
+  cal:unit cal:unitn cal:v* cal:v+ cal:v-
+  cal:vlen cal:zeropad2
 ))
 (setq lazpass:*nohelper* nil)
 (foreach n lazpass:*helpers*

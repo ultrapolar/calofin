@@ -996,6 +996,13 @@ def test_nothing_leaks_out_of_the_command():
     here is a value the NEXT run starts with."""
     src = open(LSP).read()
     body = src[src.index('(defun c:PERPMARK '):]
+    # the self-test table and its registration sit after the command by
+    # design (check_lazdiag --fix puts them just above the load banner):
+    # *calofin-selftests* is the one global a file writes on purpose,
+    # and it is not the command's, so the scan stops where the table starts
+    cut = re.search(r'\(defun\s+\S*selftests\s*\(', body)
+    if cut:
+        body = body[:cut.start()]
     decl = re.search(r'\(defun c:PERPMARK \(/(.*?)\)\n', body, re.S).group(1)
     known = set(decl.split()) | {'pm:*sysold*'}
     setqs = re.findall(r'\(setq\s+([^\s()]+)', body)

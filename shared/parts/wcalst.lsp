@@ -35,7 +35,7 @@
 ;;; Load with APPLOAD, then run WCALST.
 ;;; ===================================================================
 
-(setq *wcalst-version* "v2.2")   ; announced on load; release_lisp.py
+(setq *wcalst-version* "v2.3")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 ;;; -------------------- tunables ----------------------------------------
@@ -1520,7 +1520,7 @@
   (princ (strcat "\nWCALST " *wcalst-version*))
   (princ))
 
-;;; -------------------- self tests --------------------------------------
+;; -------------------- self tests ---------------------------------------
 ;; What LAZDIAG runs on the drafter's machine after this tool fails, and
 ;; writes into the report: the tool's own helpers on inputs whose answers
 ;; are KNOWN, so the report says whether the arithmetic was sound where
@@ -1531,9 +1531,33 @@
 ;; tests/test_selftests.py runs every entry in the VM at both tiers.
 (defun wc:selftests ()
   (list
-    ;; write at least 3:
-    ;;   (list "what it checks" '(wc:helper args) expected)
-  ))
+    (list "key: two ends a hair apart share one node"
+          '(= (wc:key '(1.0 2.0)) (wc:key '(1.00000001 2.0)))  T)
+    (list "turn: three quarters left reads as a quarter right"
+          '(wc:turn 0.0 (* 1.5 pi))  (* -0.5 pi))
+    (list "turn: a half turn is +pi, never -pi"
+          '(wc:turn 0.0 (- pi))  pi)
+    (list "other-end hands back the far end of a segment"
+          '(wc:other-end '((0 0) (5 5)) '(0 0))  '(5 5))
+    (list "dev-point unrolls a point beside the second leg of an L"
+          '(wc:dev-point '(11.0 5.0) '((0.0 0.0) (10.0 0.0) (10.0 10.0)) '(0.0 10.0 20.0))
+          '(15.0 -1.0 15.0 1.0 (11.0 5.0)))
+    (list "chain-at walks 15 along an L to the middle of its riser"
+          '(wc:chain-at 15.0 '((0 0) (10 0) (10 10)) '(0 10 20))  '(10.0 5.0))
+    (list "depth-at interpolates halfway down a slope"
+          '(wc:depth-at 5.0 '((0 0) (10 -4) (20 -4)))  -2.0)
+    (list "notch cuts the bottom line either side of a dart's mouth"
+          '(wc:notch '((0 0) (10 0) (20 0)) '((10 2)))
+          '(((0 0) (9.0 0.0)) ((11.0 0.0) (20 0))))
+    (list "mult finds a pair keyed the other way round"
+          '(wc:mult '((0 0) (1 0))
+                    (list (cons (strcat (wc:key '(1 0)) "|" (wc:key '(0 0))) 2)))  2)
+    (list "ftin writes 15.375 inches as feet, inches and eighths"
+          '(cal:ftin 15.375 4 3)  "1'-3 3/8\"")
+    (list "arch writes a half inch whatever the denominator"
+          '(wc:arch 15.5)  "1'-3 1/2\"")
+    (list "pctof: a zero bottom reports 0, not a crash"
+          '(wc:pctof 5.0 0.0)  0.0)))
 
 (foreach c '("WCALST")
   (setq *calofin-selftests*

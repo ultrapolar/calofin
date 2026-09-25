@@ -2216,7 +2216,7 @@
   (princ (strcat "\nCLEARDIM " *cleardim-version*))
   (princ))
 
-;;; -------------------- self tests --------------------------------------
+;; -------------------- self tests ---------------------------------------
 ;; What LAZDIAG runs on the drafter's machine after this tool fails, and
 ;; writes into the report: the tool's own helpers on inputs whose answers
 ;; are KNOWN, so the report says whether the arithmetic was sound where

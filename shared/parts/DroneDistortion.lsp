@@ -64,7 +64,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *dronedistortion-version* "v1.4")   ; announced on load; release_lisp.py
+(setq *dronedistortion-version* "v1.5")   ; announced on load; release_lisp.py
                                              ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -544,6 +544,34 @@
 (defun c:DDFIXVER ()
   (princ (strcat "\nDDFIX " *dronedistortion-version*))
   (princ))
+
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun dd-selftests ()
+  (list
+    (list "inchval reads a whole-and-fraction inch"   '(dd-inchval "6-1/2")  6.5)
+    (list "inchval reads a bare fraction"             '(dd-inchval "1/2")    0.5)
+    (list "inchval reads a plain decimal"             '(dd-inchval " 3.25 ") 3.25)
+    (list "inchval reads a blank as no inches"        '(dd-inchval "")       0.0)
+    (list "inchval refuses a zero denominator"        '(dd-inchval "1/0")    nil)
+    (list "inchval refuses text"                      '(dd-inchval "abc")    nil)
+    (list "back-word takes Back in any case"          '(cal:back-word-p "back"))
+    (list "back-word takes the short U for Undo"      '(cal:back-word-p "u"))
+    (list "back-word does not take an ordinary answer" '(cal:back-word-p "6")   nil)
+    (list "relalt->num drops DJI's leading plus"      '(dd-relalt->num "+18.90") 18.9)
+    (list "relalt->num keeps a minus"                 '(dd-relalt->num " -3.81 ") -3.81)
+    (list "num round-trips a real through atof"       '(atof (dd-num 2.125)) 2.125)))
+
+(foreach c '("DDFIX" "DDSET" "DDCAL" "DDINFO" "DDALT")
+  (setq *calofin-selftests*
+        (cons (cons c 'dd-selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

@@ -83,7 +83,7 @@
 
 (vl-load-com)
 
-(setq *lazspa-version* "v1.9")
+(setq *lazspa-version* "v1.10")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -1485,6 +1485,76 @@
   (princ (strcat "\nLAZSPA " *lazspa-version* " (LAZSPA.lsp) - "
                  (itoa (length lzs:*charts*)) " chart(s)."))
   (princ))
+
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lzs:selftests ()
+  (list
+    (list "bands: the octagon is cut at its two dimension rows"
+          '(lzs:bands (lzs:chart "OCtagon"))
+          '((0 . 130) (130 . 200) (200 . 1000)))
+    (list "wedge-keys: B, S and T are boxes wedged into the octagon drawing"
+          '(lzs:wedge-keys (lzs:chart "OCtagon"))  '("b" "ss" "tt"))
+    ;; the band is shadowed for the call, so the rule is read against a
+    ;; known cut and not against whatever band the failed repaint left
+    (list "clipseg keeps the half of a vertical segment inside the band, drops one below it"
+          '((lambda ( / lzs:*y0* lzs:*y1*)
+              (setq lzs:*y0* 0 lzs:*y1* 500)
+              (list (lzs:clipseg 0 0 100 1000) (lzs:clipseg 0 600 100 900))))
+          '((0.0 0.0 50.0 500.0) nil))
+    (list "keyanswer: NA in the required L box is an empty box, NA in W travels as nil"
+          '((lambda ( / lzs:*vals* c)
+              (setq c (lzs:chart "Rectangle")
+                    lzs:*vals* '(("w" . "NA") ("l" . "NA")))
+              (list (eq (lzs:keyanswer c "w") 'SKIP) (lzs:keyanswer c "l"))))
+          '(T nil))
+    (list "dead: a THERMOLIGHT cover greys the cover half and the second outline"
+          '((lambda ( / lzs:*picks*)
+              (setq lzs:*picks* '(("grade" . 2)))
+              (lzs:dead (lzs:chart "Rectangle"))))
+          '("mode" "second" "method" "gap" "taper" "w2" "l2"))
+    (list "dead: no second outline greys its method, the lap and its boxes"
+          '((lambda ( / lzs:*picks*)
+              (setq lzs:*picks* '(("second" . 2)))
+              (lzs:dead (lzs:chart "OCtagon"))))
+          '("method" "gap" "b2" "a2" "f2"))
+    (list "cornerpairs: a Diagonal carries its size, a 90 sends the treatment alone"
+          '((lambda ( / lzs:*picks* lzs:*vals*)
+              (setq lzs:*picks* '(("cornera" . 3) ("cornerb" . 1))
+                    lzs:*vals*  '(("cornera-sz" . "6") ("cornerb-sz" . "9")))
+              (lzs:cornerpairs (lzs:chart "Rectangle"))))
+          '((cornera-ty . "Diagonal") (cornera-sz . 6.0) (cornerb-ty . "90")))
+    (list "tagof names the lap box in words and S2 by its lead letter"
+          '(list (lzs:tagof (lzs:chart "OCtagon") "gap")
+                 (lzs:tagof (lzs:chart "OCtagon") "s2"))
+          '("the cover lap" "S2"))
+    (list "pick reads the taper word off its index, nil while on (ask)"
+          '((lambda ( / lzs:*picks*)
+              (setq lzs:*picks* '(("taper" . 7)))
+              (list (lzs:pick "taper") (lzs:pick "grade"))))
+          '("1-3/8" nil))
+    (list "answer reads feet and inches as inches"
+          '(cal:formanswer "6'10\"")  82.0)
+    (list "kvpack drops an empty box and a value carrying =; kvunpack reads the rest back"
+          '(cal:kvunpack (cal:kvpack '(("w" . "20") ("l" . "")
+                                       ("gap" . "3=4") ("b" . "40"))))
+          '(("w" . "20") ("b" . "40")))
+    (list "arcpts: the round spa's full circle is 61 points starting due east"
+          '((lambda ( / a)
+              (setq a (cal:imgarcpts '("A" 500 500 250 250 0 360)))
+              (list (length a) (car a) (cadr a))))
+          '(122 750 500))))
+
+(foreach c '("LAZSPA")
+  (setq *calofin-selftests*
+        (cons (cons c 'lzs:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

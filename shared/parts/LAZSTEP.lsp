@@ -135,7 +135,7 @@
 
 (vl-load-com)
 
-(setq *lazstep-version* "v2.1")
+(setq *lazstep-version* "v2.2")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -1763,6 +1763,64 @@
                  (itoa (length lzt:*types*)) " step routine(s), up to "
                  (itoa lzt:*max-steps*) " steps."))
   (princ))
+
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lzt:selftests ()
+  (list
+    (list "runx puts step boundary 2 of 4 half way along the run"
+          '(lzt:runx 2 4 860)  480)
+    (list "curveh: half way to the crown the hemi chord is 103 of 120"
+          '(lzt:curveh 520)  103)
+    (list "tready staggers the tread row past four steps: odd on the first row, even on the second"
+          '(list (lzt:tready 1 8) (lzt:tready 2 8) (lzt:tready 2 3))
+          '(385 445 385))
+    (list "wedge-keys: a five-step hemi wedges its treads odd row first"
+          '(lzt:wedge-keys (lzt:chart "HEMISTEP" 5))
+          '("tread1" "tread3" "tread5" "tread2" "tread4"))
+    (list "depthdims: N+1 drops, the last one after the last tread"
+          '(mapcar 'car (lzt:depthdims 2 nil))  '("D1" "D2" "DA"))
+    (list "profile: one step is a drop, a tread the whole run, and a drop after it"
+          '(lzt:profile 1)
+          '((860 540 860 765) (860 765 100 765) (100 765 100 990)))
+    (list "int takes a whole number, refuses a typo and a zero, trims a space"
+          '(list (lzt:int "12") (lzt:int "12x") (lzt:int "0") (lzt:int " 7 "))
+          '(12 nil nil 7))
+    (list "brace: a brace inside a quoted label is not structure"
+          '(lzt:brace ": button { label = \"{\"; }")  0)
+    ;; the page's stores are shadowed for the call, so the rule is read
+    ;; as a fresh sheet would, whatever the failed run left in them
+    (list "skip: an Outside corner asks no measure and no bench"
+          '((lambda ( / lzt:*type* lzt:*sel* lzt:*chart* lzt:*steps*)
+              (setq lzt:*type* "CORNERSTP" lzt:*sel* '(("direction" . 2)))
+              (lzt:skip)))
+          '("beadnums" "measure" "bench" "benchoffset" "benchstep"))
+    (list "form: NA at a tread is an empty box, NA at the width travels as nil"
+          '((lambda ( / lzt:*type* lzt:*sel* lzt:*chart* lzt:*steps* lzt:*vals*)
+              (setq lzt:*type*  "NORMIESTEP"
+                    lzt:*steps* 2
+                    lzt:*chart* (lzt:chart "NORMIESTEP" 2)
+                    lzt:*vals*  '(("tread1" . "24") ("tread2" . "NA")
+                                  ("width" . "NA") ("depth1" . "6")))
+              (lzt:form)))
+          '((steps . 2) (tread1 . 24.0) (width) (depth1 . 6.0)))
+    (list "answer reads the dashed feet-inches-fraction spelling"
+          '(cal:formanswer "2'-6-1/2\"")  30.5)
+    (list "kvpack drops an empty box; kvunpack reads the rest back"
+          '(cal:kvunpack (cal:kvpack '(("tread1" . "24") ("tread2" . "")
+                                       ("width" . "3'"))))
+          '(("tread1" . "24") ("width" . "3'")))))
+
+(foreach c '("LAZSTEP")
+  (setq *calofin-selftests*
+        (cons (cons c 'lzt:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

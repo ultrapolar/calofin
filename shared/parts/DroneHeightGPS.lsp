@@ -167,7 +167,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *droneheightgps-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *droneheightgps-version* "v1.4")   ; announced on load; release_lisp.py
                                             ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -1424,6 +1424,58 @@
 (defun c:DDGPSVER ()
   (princ (strcat "\nDDGPS " *droneheightgps-version*))
   (princ))
+
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun ddg-selftests ()
+  (list
+    (list "scan-to restarts after a false start"
+          '(ddg-scan-to '(3 3 4 9) '(3 4))  '(9))
+    (list "grab-text writes bytes as text, controls as spaces"
+          '(ddg-grab-text '(72 105 10 33) 10)  "Hi !")
+    (list "looks-jpeg reads signed bytes too"
+          '(ddg-looks-jpeg '(-1 -40 -1))  T)
+    (list "hexline drops the offset column and stops at the ASCII column"
+          '(ddg-hexline "0000  ff d8 ff e1 00 18   ......")  '(255 216 255 225 0 24))
+    (list "hexline keeps the first byte when there is no offset column"
+          '(ddg-hexline "ff d8")  '(255 216))
+    (list "xmp-attr reads DJI's attribute form"
+          '(ddg-xmp-attr "x drone-dji:RelativeAltitude=\"+18.90\" y" "RelativeAltitude")
+          "+18.90")
+    (list "xmp-num reads the element form as a number"
+          '(ddg-xmp-num "<drone-dji:RelativeAltitude>+18.90</drone-dji:RelativeAltitude>"
+                        "RelativeAltitude")  18.9)
+    (list "srat reads -1/1 as -1, not 4294967295"
+          '(ddg-srat '(255 255 255 255 1 0 0 0) 0 T)  -1.0)
+    (list "gps-coord turns 30 deg 30 min 0 sec into 30.5"
+          '(ddg-gps-coord '(0 0 0 0 0 0 0 0 12 0 0 0
+                            30 0 0 0 1 0 0 0  30 0 0 0 1 0 0 0  0 0 0 0 1 0 0 0) 0 T)  30.5)
+    (list "find-tiff skips a stray Exif with no header behind it"
+          '(ddg-find-tiff '(69 120 105 102 1 1 69 120 105 102 0 0 77 77 0 42))  '(77 77 0 42))
+    (list "exif-gps reads lat, lon, depth and hemispheres off a hand-made TIFF"
+          '(ddg-exif-gps
+            '(73 73 42 0 8 0 0 0 1 0 37 136 4 0 1 0 0 0 22
+              0 0 0 6 0 1 0 2 0 2 0 0 0 78 0 0 0 2 0
+              5 0 3 0 0 0 96 0 0 0 3 0 2 0 2 0 0 0 87
+              0 0 0 4 0 5 0 3 0 0 0 120 0 0 0 5 0 1 0
+              1 0 0 0 1 0 0 0 6 0 5 0 1 0 0 0 144 0 0
+              0 30 0 0 0 1 0 0 0 30 0 0 0 1 0 0 0 0 0
+              0 0 1 0 0 0 117 0 0 0 1 0 0 0 0 0 0 0 1
+              0 0 0 0 0 0 0 1 0 0 0 125 1 0 0 100 0 0 0))
+          '(30.5 -117.0 -3.81 T "N" "W"))
+    (list "json-num reads a quoted value"
+          '(ddg-json-num "{\"value\":\"296.61\"}" "value")  296.61)))
+
+(foreach c '("DDGPS" "DDELEV" "DDTEST")
+  (setq *calofin-selftests*
+        (cons (cons c 'ddg-selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

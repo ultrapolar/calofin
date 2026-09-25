@@ -66,7 +66,7 @@
 
 
 
-(setq *xft-version* "v1.19") ; printed on load and at command start so a
+(setq *xft-version* "v1.20") ; printed on load and at command start so a
                              ; support screenshot says which copy is loaded
 
 ;;; -------------------- tunables ----------------------------------------
@@ -1441,7 +1441,7 @@
   (princ (strcat "\nXFTCONV " *xft-version*))
   (princ))
 
-;;; -------------------- self tests --------------------------------------
+;; -------------------- self tests ---------------------------------------
 ;; What LAZDIAG runs on the drafter's machine after this tool fails, and
 ;; writes into the report: the tool's own helpers on inputs whose answers
 ;; are KNOWN, so the report says whether the arithmetic was sound where
@@ -1452,9 +1452,34 @@
 ;; tests/test_selftests.py runs every entry in the VM at both tiers.
 (defun xft:selftests ()
   (list
-    ;; write at least 3:
-    ;;   (list "what it checks" '(xft:helper args) expected)
-  ))
+    (list "plain strips the MTEXT codes off a point name"
+          '(xft:plain "\\A1;{\\fArial;P22}")  "P22")
+    (list "plain turns a paragraph break into a space"
+          '(xft:plain "P\\P22")  "P 22")
+    (list "number drops the letter prefix off a point name"
+          '(xft:number " P22 ")  "22")
+    (list "number leaves a name with no digits alone"
+          '(xft:number "STA")  "STA")
+    (list "trim strips spaces and tabs at both ends"
+          '(cal:trim " \tP22 \t")  "P22")
+    (list "esc and unesc round-trip a value full of delimiters"
+          '(xft:unesc (xft:esc "a|b=c,d;e\\f"))  "a|b=c,d;e\\f")
+    (list "split cuts on unescaped separators only"
+          '(xft:split "a|b\\|c|d" "|")  '("a" "b\\|c" "d"))
+    (list "group reads a point back through val2s"
+          '(xft:group 10 (xft:val2s '(1.5 2.25 0)))  '(10 1.5 2.25 0.0))
+    (list "group unescapes a string value"
+          '(xft:group 1 "P\\=22")  '(1 . "P=22"))
+    (list "deser rebuilds a three-group entity list"
+          '(xft:deser "0=TEXT|8=SURVEY|62=7")
+          '((0 . "TEXT") (8 . "SURVEY") (62 . 7)))
+    (list "join adds nothing for an empty spec or nil, a ; otherwise"
+          '(xft:join (xft:join (xft:join "" "a") nil) "b")  "a;b")
+    (list "chunks cuts 256 characters into 250 and 6"
+          '((lambda (s) (repeat 8 (setq s (strcat s s)))
+                        (mapcar 'strlen (xft:chunks s)))
+            "x")
+          '(250 6))))
 
 (foreach c '("XFTCONV" "XFTRECONV" "XFTCONV-SETUP")
   (setq *calofin-selftests*

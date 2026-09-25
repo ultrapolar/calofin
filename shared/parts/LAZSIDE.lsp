@@ -78,7 +78,7 @@
 
 (vl-load-com)
 
-(setq *lazside-version* "v1.2")
+(setq *lazside-version* "v1.3")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -1088,6 +1088,69 @@
   (princ (strcat "\nLAZSIDE " *lazside-version* " (LAZSIDE.lsp) - "
                  (itoa (length lzv:*types*)) " bottom type(s)."))
   (princ))
+
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lzv:selftests ()
+  (list
+    (list "key: the letter E2 is stored as e2, POOLSIDE's own spelling"
+          '(lzv:key "E2")  "e2")
+    (list "stations: a Wedge is three, the deep one 12% along the run"
+          '(lzv:stations "Wedge")  '((90 430) (188 660) (910 430)))
+    (list "outline: the Wedge section runs down the wall, along the floor, up and back"
+          '(car (lzv:outline "Wedge"))
+          '(90 230 90 430 188 660 910 430 910 230 90 230))
+    (list "stationof: only the SHallow has a C2 station"
+          '(list (lzv:stationof "SHallow" "c2") (lzv:stationof "Normal" "c2"))
+          '(3 nil))
+    (list "keys: the Sport sheet carries its own chain and no H"
+          '(lzv:keys (lzv:chart "Sport"))
+          '("b" "e2" "f2" "g" "f1" "e1" "c" "d"))
+    (list "dims: D stands at the Wedge's deep station, not beside it"
+          '(nth 2 (assoc "D" (lzv:c-dims (lzv:chart "Wedge"))))  188)
+    ;; the sheet's stores are shadowed for the call, so the rule is read
+    ;; against known boxes and not against what the failed run left
+    (list "depthbad: a deep end no deeper than the wall is refused"
+          '((lambda ( / lzv:*chart* lzv:*vals*)
+              (setq lzv:*chart* (lzv:chart "Normal")
+                    lzv:*vals*  '(("c" . "4") ("d" . "3")))
+              (lzv:depthbad)))
+          "D must be deeper than C - the deep end is not deeper than the wall.")
+    (list "depthbad ignores a C2 left behind from the SHallow tab on a Normal"
+          '((lambda ( / lzv:*chart* lzv:*vals*)
+              (setq lzv:*chart* (lzv:chart "Normal")
+                    lzv:*vals*  '(("c" . "3") ("d" . "8") ("c2" . "9")))
+              (lzv:depthbad)))
+          nil)
+    (list "form: NA at a run travels as nil, NA at a depth is an empty box"
+          '((lambda ( / lzv:*type* lzv:*sel* lzv:*chart* lzv:*vals*)
+              (setq lzv:*type*  "Wedge"
+                    lzv:*chart* (lzv:chart "Wedge")
+                    lzv:*vals*  '(("h" . "NA") ("c" . "NA")
+                                  ("d" . "8") ("f" . "10")))
+              (lzv:form)))
+          '((style . "Wedge") (h) (f . 10.0) (d . 8.0)))
+    (list "taglist names the drawing's letters, three and a count"
+          '((lambda ( / lzv:*chart*)
+              (setq lzv:*chart* (lzv:chart "Sport"))
+              (lzv:taglist '("b" "e2" "f2" "g"))))
+          "B, E2, F2 and 1 more")
+    (list "answer reads feet and inches as inches"
+          '(cal:formanswer "2'6\"")  30.0)
+    (list "kvpack drops an empty box; kvunpack reads the rest back"
+          '(cal:kvunpack (cal:kvpack '(("b" . "30'") ("h" . "") ("c" . "4"))))
+          '(("b" . "30'") ("c" . "4")))))
+
+(foreach c '("LAZSIDE")
+  (setq *calofin-selftests*
+        (cons (cons c 'lzv:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
