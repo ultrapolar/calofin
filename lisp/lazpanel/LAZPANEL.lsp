@@ -5854,6 +5854,7 @@
      ("pool:*steps-default*" "\"None\"" "what Enter answers at the steps question: \"None\", or \"Hemi\", \"Normie\", \"Corner\" to make a step the usual an...")
      ("pool:*steps-eoff*" "12.0" "after NORMIESTEP steps INTO the pool, the overall E dim moves down to this far in from the BOTTOM wall, in...")
      ("pool:*steps-fuzz*" "0.01" "how near a drawn wall's ends must sit to the shallow wall's line to be that wall, in inches pool, the overa...")
+     ("pool:*steps-place*" "\"Center\"" "what Enter answers at where a step sits on the wall: \"Center\" (on the wall's middle) or \"Offset\" (a given d...")
      ("pool:*extstep-default*" "\"4x6\"" "what Enter answers at the size of a step OUTSIDE the wall: \"4x6\" (4' out, 6' along the wall), \"4x8\", or \"Cu...")
      ("pool:*fg-block6*" "\"6' Straight FG Step\"" "4' x 6' block name FIBERGLASS (FG) STEPS, the fourth answer with a hopper: the shop's own blocks, placed wh...")
      ("pool:*fg-block8*" "\"8' Straight FG Step\"" "4' x 8' block name FIBERGLASS (FG) STEPS, the fourth answer with a hopper: the shop's own blocks, placed wh...")

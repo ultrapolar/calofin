@@ -3893,7 +3893,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092526 REV47")
+(setq pool:*version* "092526 REV48")
 
 ;;; -------------------- shop terms --------------------------------------
 ;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
@@ -4346,6 +4346,10 @@
 (setq pool:*steps-fuzz*    0.01)    ; how near a drawn wall's ends must
                                     ; sit to the shallow wall's line to
                                     ; be that wall, in inches
+(setq pool:*steps-place* "Center")  ; what Enter answers at where a step
+                                    ; sits on the wall: "Center" (on the
+                                    ; wall's middle) or "Offset" (a given
+                                    ; distance from a point picked on it)
 (setq pool:*extstep-default* "4x6") ; what Enter answers at the size of a
                                     ; step OUTSIDE the wall: "4x6" (4' out,
                                     ; 6' along the wall), "4x8", or
@@ -4430,6 +4434,9 @@
 ;; per run by pool:shallowset; nil means the shape offers no steps.
 (setq pool:*shallow*   nil)
 (setq pool:*runmark*   nil)             ; (entlast) when this run began
+(setq pool:*repfrom*   nil)             ; (entlast) just before the report,
+                                        ; so the steps can move it clear
+(setq pool:*stepmark*  nil)             ; (entlast) before the steps
 
 ;; A square-cornered quad, for the flows whose frame has no corner
 ;; treatments of its own to pass on (the oval and mutt hoppers).
@@ -8128,6 +8135,9 @@
 (defun pool:report (rows notes x y h lay / lh ytop y0 xr r tgt act c2 c3 n)
   ;; feet-inch strings run longer than decimal inches, so the TARGET/
   ;; ACTUAL/DELTA columns spread out when the report is in feet-inches
+  ;; the first table of the run marks where the report (and the
+  ;; mini-model after it) begins: steps drawn later move them clear
+  (if (not pool:*repfrom*) (setq pool:*repfrom* (entlast)))
   (setq lh (* pool:*rep-row* h)
         ytop (+ y lh)
         c2 (if pool:*ftin* pool:*rep-c2f* pool:*rep-c2*)
@@ -13057,6 +13067,7 @@
 ;; nil.  A form sheet that says nothing about steps draws without
 ;; stopping, as it does everywhere else in the run.
 (defun pool:steps ()
+  (setq pool:*stepmark* (entlast))
   (cond
     ((null pool:*shallow*) nil)
     ((pool:shget 'bottom)
@@ -13114,17 +13125,17 @@
 (defun pool:stepsout ( / stage go wall fr u n pe w1 w2 wlen w l m
                          s1 s2 o1 o2 doff odl sz)
   (setq stage 0)
-  (while (< stage 4)
+  (while (< stage 5)
     (cond
       ((= stage 0)
        (setq go (pool:askynf 'extstep "Add a step outside the shallow end"
                              "No" nil))
        (cond
-         ((not go) (setq stage 4))
+         ((not go) (setq stage 5))
          ((null (setq wall (pool:shwall)))
           (princ (strcat "\nThe shallow end is not one straight wall, so"
                          " there is nothing to set a step on - left off."))
-          (setq go nil stage 4))
+          (setq go nil stage 5))
          (t
           (setq fr   (pool:shframe)
                 u    (car fr)
@@ -13158,6 +13169,12 @@
             (princ (strcat "\nA " sz " step is wider than the straight wall it"
                            " sits on (" (rtos wlen 4 4) ") - pick another size."))
             (setq stage 4)))))
+      ((= stage 4)
+       (setq m (pool:alongwall w1 u wlen w))
+       (if (eq m 'CAL-BACK)
+         (progn (princ "\nStepping back one question.")
+                (setq stage (if (= sz "Custom") 3 1)))
+         (setq stage 5)))
       ((= stage 2)
        (setq w (pool:stepnum 'extwidth "Step width - along the shallow wall"))
        (cond
@@ -13173,11 +13190,11 @@
          (setq stage 4)))))
   (if go
     (progn
-      (setq m    (cal:mid w1 w2)
-            s1   (if (< (- wlen w) pool:*steps-fuzz*) w1
-                   (cal:v- m (cal:v* u (* 0.5 w))))
-            s2   (if (< (- wlen w) pool:*steps-fuzz*) w2
-                   (cal:v+ m (cal:v* u (* 0.5 w))))
+      ;; m is where the step starts along the wall (pool:alongwall);
+      ;; an end within the fuzz of the wall's own end IS that end
+      (setq s1   (if (< m pool:*steps-fuzz*) w1 (cal:v+ w1 (cal:v* u m)))
+            s2   (if (< (- wlen m w) pool:*steps-fuzz*) w2
+                   (cal:v+ w1 (cal:v* u (+ m w))))
             o1   (cal:v+ s1 (cal:v* n l))
             o2   (cal:v+ s2 (cal:v* n l))
             doff (pool:shget 'doff))
@@ -13203,6 +13220,51 @@
           (princ "\nThe shallow wall could not be changed (a locked layer?) - no step drawn.")
           nil)))))
 
+;; Where along the shallow wall a step WIDE across sits, from its W1
+;; end (the one toward b) -- asked, not assumed, since a step is not
+;; always in the middle:
+;;   Center  on the middle of the wall's straight span
+;;   Offset  a distance from a point picked on the wall (a corner, a
+;;           skimmer, a light) to the step's NEAR side; the step runs
+;;           from there toward the middle of the wall
+;; Returns that start distance, or CAL-BACK.
+(defun pool:alongwall (w1 u wlen wide / mode p tp d start done)
+  (while (not done)
+    ;; a sheet that says nothing about it is centered, unasked
+    (setq mode (if (and pool:*formrun* (not (pool:fhas 'steppos)))
+                 "Center"
+                 (pool:askkwf 'steppos "Where does the step sit on the wall"
+                            "Center Offset" "Center/Offset"
+                            (cond ((if (= (type pool:*steps-place*) 'STR)
+                                     (pool:fkword pool:*steps-place* "Center Offset")))
+                                  ("Center"))
+                            t))
+          start nil)
+    (cond
+      ((eq mode 'CAL-BACK) (setq done t start 'CAL-BACK))
+      ((= mode "Center") (setq start (* 0.5 (- wlen wide))))
+      (t
+       (cal:osup)
+       (initget "Back Undo")
+       (setq p (getpoint "\nPick the point on the wall to offset from [Back]: "))
+       (if lzd:ask (lzd:ask "Pick the point on the wall to offset from" p) p)
+       (cal:osdown)
+       (if (and p (listp p))
+         (progn
+           (setq tp (max 0.0 (min wlen (cal:dot (cal:v- (pool:ucsl p) w1) u)))
+                 d  (pool:asks 'ZER "Offset from that point to the near side of the step"
+                               nil nil t nil))
+           (if (numberp d)
+             (setq start (if (<= tp (* 0.5 wlen)) (+ tp d) (- tp d wide))))))))
+    (cond
+      (done)
+      ((null start))                    ; Back or Enter at the pick: ask again
+      ((or (< start (- pool:*steps-fuzz*))
+           (> (+ start wide) (+ wlen pool:*steps-fuzz*)))
+       (princ "\nThat puts the step past the end of the wall - place it again."))
+      (t (setq done t))))
+  (if (numberp start) (max 0.0 (min start (- wlen wide))) start))
+
 ;; ---- fiberglass steps
 ;;
 ;; The FG step block NAME, made here when the drawing has none by that
@@ -13212,6 +13274,7 @@
 (defun pool:fgblock (name wide / h d pr)
   (if (not (tblsearch "BLOCK" name))
     (progn
+      (pool:fglayer pool:*lay-fg*)      ; before the lines that go on it
       (setq h (* 0.5 wide) d pool:*fg-depth*)
       (entmake (list '(0 . "BLOCK") (cons 2 name) '(70 . 0)
                      '(10 0.0 0.0 0.0)))
@@ -13245,7 +13308,48 @@
 ;; it, with their own snaps live.  A block also takes the direction it
 ;; runs into the pool: Enter is square to the shallow wall, inward.
 ;; Returns the new entity, CAL-BACK, or nil when Enter left the point.
-(defun pool:fgplace (kind / p a fr lp ang name out)
+(defun pool:fgplace (kind / p a fr lp ang name out wall pe w1 wlen wide st)
+  (setq wide (if (= kind "4x8") 96.0 72.0))
+  ;; a block may go on the shallow wall by Center/Offset, as the step
+  ;; outside does, or anywhere by picking -- another wall, a corner
+  (if (and (/= kind "Text") (setq wall (pool:shwall)))
+    (progn
+      (setq fr (pool:shframe)
+            pe (pool:ends wall)
+            w1 (if (< (cal:dot (cal:v- (car pe) (cadr pe)) (car fr)) 0.0)
+                 (car pe) (cadr pe))
+            wlen (distance (car pe) (cadr pe))
+            st (cal:askkw "Place it on the shallow wall, or pick where"
+                           "Wall Pick" "Wall/Pick" "Wall" t))
+      (cond
+        ((eq st 'CAL-BACK) (setq out 'CAL-BACK))
+        ((= st "Wall")
+         (if (> wide (+ wlen pool:*steps-fuzz*))
+           (progn
+             (princ "\nThat step is wider than the shallow wall - pick where it goes.")
+             (setq st "Pick"))
+           (progn
+             (setq st (pool:alongwall w1 (car fr) wlen wide))
+             (if (eq st 'CAL-BACK)
+               (setq out 'CAL-BACK)
+               (progn
+                 (entmake (list '(0 . "INSERT") (cons 8 pool:*lay-pool*)
+                                (cons 2 (if (= kind "4x8")
+                                          (pool:fgblock pool:*fg-block8* 96.0)
+                                          (pool:fgblock pool:*fg-block6* 72.0)))
+                                (cons 10 (pool:ww (cal:v+ w1 (cal:v* (car fr)
+                                                                        (+ st (* 0.5 wide))))))
+                                '(41 . 1.0) '(42 . 1.0) '(43 . 1.0)
+                                (cons 50 (+ (angle '(0.0 0.0) (cal:v* (cadr fr) -1.0))
+                                            (pool:ucsang)))))
+                 (pool:fglayer pool:*lay-fg*)
+                 (setq out (entlast))))))))))
+  (if (or out (and st (/= st "Pick")))
+    out
+    (pool:fgpick kind)))
+
+;; ...and placed by picking: the point, then the direction
+(defun pool:fgpick (kind / p a fr lp ang name out)
   (cal:osup)
   (initget "Back Undo")
   (setq p (getpoint (strcat "\nPick where the " (if (= kind "Text") "label" "step")
@@ -13323,11 +13427,72 @@
   (foreach e (pool:runents "LINE,ARC,LWPOLYLINE") (ssadd e ss))
   ss)
 
+;; Every (x y) point an entity is placed by, in the UCS
+(defun pool:entpts (e / ed out g)
+  (setq ed (entget e))
+  (foreach g ed
+    (if (and (member (car g) '(10 11 13 14)) (listp (cdr g)) (cddr g))
+      (setq out (cons (trans (cdr g) 0 1) out))))
+  out)
+
+;; Steps drawn beside the pool -- a step outside the wall, its dims,
+;; PADDLE's pads, a routine's dims -- can land on the report and the
+;; mini-model the run hung off the pool's right.  When anything drawn
+;; since the steps began sits in the report's band, the report and the
+;; mini-model move right, clear of it by the usual gap.  Re-opened the
+;; way pool:stepdims is, under c:POOL's handler.
+(defun pool:repshift ( / e rep x0 x1 y0 y1 p hit gap ss)
+  (if (and pool:*repfrom* pool:*stepmark* pool:*shallow*)
+    (progn
+      ;; the report group: from the report's mark to the steps' mark
+      (setq e (entnext pool:*repfrom*))
+      (while (and e (not (eq e (entnext pool:*stepmark*))))
+        (if (entget e) (setq rep (cons e rep)))
+        (setq e (entnext e)))
+      (foreach e rep
+        (foreach p (pool:entpts e)
+          (setq x0 (if x0 (min x0 (car p)) (car p))
+                x1 (if x1 (max x1 (car p)) (car p))
+                y0 (if y0 (min y0 (cadr p)) (cadr p))
+                y1 (if y1 (max y1 (cadr p)) (cadr p)))))
+      (setq gap (* pool:*rep-gap* (pool:shget 'doff))
+            e   (entnext pool:*stepmark*))
+      ;; the right-most thing drawn since, in the report's band
+      (if x0
+        (while e
+          (if (entget e)
+            (foreach p (pool:entpts e)
+              (if (and (>= (cadr p) (- y0 gap)) (<= (cadr p) (+ y1 gap))
+                       (> (+ (car p) gap) x0) (< (car p) x1)
+                       (or (null hit) (> (car p) hit)))
+                (setq hit (car p)))))
+          (setq e (entnext e))))
+      (if hit
+        (progn
+          (setq ss (ssadd))
+          (foreach e rep (ssadd e ss))
+          (if *push-error-using-command* (*push-error-using-command*))
+          (setq pool:*undo-open* nil)
+          (cal:syssave '("OSMODE" "LUNITS" "CMDECHO" "CLAYER" "AUNITS" "ANGBASE" "ANGDIR"))
+          (setvar "CMDECHO" 0)
+          (setq pool:*undo-open* (cal:undobegin))
+          (setvar "OSMODE" 0)
+          (command "_.MOVE" ss "" '(0.0 0.0 0.0) (list (- (+ hit gap) x0) 0.0 0.0))
+          (if pool:*undo-open* (setq pool:*undo-open* (cal:undoend)))
+          (cal:sysrestore)
+          (if *pop-error-mode* (*pop-error-mode*))
+          (princ "\nThe report is moved right, clear of the steps."))))))
+
 ;; The hand-overs, once c:POOL has closed its undo group and put the
 ;; drafter's settings back.  Each routine is its own file and may not
 ;; be loaded: an unbound c: symbol is nil, which is the test here, and
 ;; the pool is already drawn either way.
-(defun pool:stepsafter (plan / name ss mark lay)
+(defun pool:stepsafter (plan)
+  (pool:stepsafter1 plan)
+  ;; last, after the routine and PADDLE: nothing may sit on the report
+  (pool:repshift))
+
+(defun pool:stepsafter1 (plan / name ss mark lay)
   (cond
     ((null plan) nil)
     ((eq (car plan) 'PADDLE)
@@ -13522,6 +13687,8 @@
            ;; and what this run draws is everything after this mark
            pool:*shallow* nil
            pool:*runmark* (entlast)
+           pool:*repfrom* nil
+           pool:*stepmark* nil
            pool:*sideon* nil
            pool:*flooron* nil
            pool:*dimstyle0* (getvar "DIMSTYLE")
@@ -135081,6 +135248,7 @@
      ("pool:*steps-default*" "\"None\"" "what Enter answers at the steps question: \"None\", or \"Hemi\", \"Normie\", \"Corner\" to make a step the usual an...")
      ("pool:*steps-eoff*" "12.0" "after NORMIESTEP steps INTO the pool, the overall E dim moves down to this far in from the BOTTOM wall, in...")
      ("pool:*steps-fuzz*" "0.01" "how near a drawn wall's ends must sit to the shallow wall's line to be that wall, in inches pool, the overa...")
+     ("pool:*steps-place*" "\"Center\"" "what Enter answers at where a step sits on the wall: \"Center\" (on the wall's middle) or \"Offset\" (a given d...")
      ("pool:*extstep-default*" "\"4x6\"" "what Enter answers at the size of a step OUTSIDE the wall: \"4x6\" (4' out, 6' along the wall), \"4x8\", or \"Cu...")
      ("pool:*fg-block6*" "\"6' Straight FG Step\"" "4' x 6' block name FIBERGLASS (FG) STEPS, the fourth answer with a hopper: the shop's own blocks, placed wh...")
      ("pool:*fg-block8*" "\"8' Straight FG Step\"" "4' x 8' block name FIBERGLASS (FG) STEPS, the fourth answer with a hopper: the shop's own blocks, placed wh...")

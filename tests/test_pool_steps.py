@@ -203,7 +203,8 @@ check("no steps, no hand-over", 'Handing' not in said(vm))
 
 print("== S7. no bottom: a box step outside the wall, PADDLE after ==")
 vm = fresh(PADDLE)
-vm.run('c:POOL', NOBOTTOM + ["Yes", "Custom", 300.0, 96.0, "Back", 96.0, 36.0])
+vm.run('c:POOL', NOBOTTOM + ["Yes", "Custom", 300.0, 96.0, "Back", 96.0, 36.0,
+                                None])       # Center
 check("a width wider than the wall is refused",
       'wider than the straight wall' in said(vm))
 check("Back from the length re-asks the width",
@@ -228,7 +229,7 @@ check("PADDLE padded the step's two inside corners",
 
 print("== S8. no bottom: a full-width step takes the whole wall ==")
 vm = fresh()
-vm.run('c:POOL', NOBOTTOM + ["Yes", "Custom", 240.0, 30.0])
+vm.run('c:POOL', NOBOTTOM + ["Yes", "Custom", 240.0, 30.0, None])
 check("the step's sides run on from the side walls",
       has_line(vm, (480.0, 0.0), (510.0, 0.0)) and
       has_line(vm, (510.0, 0.0), (510.0, 240.0)) and
@@ -240,7 +241,7 @@ check("PADDLE not loaded is said", 'PADDLE is not loaded' in said(vm))
 print("== S8b. no bottom: the 4x6 and 4x8 sizes, 4x6 on Enter ==")
 for answer, wide in ((None, 72.0), ("4x8", 96.0)):
     vm = fresh()
-    vm.run('c:POOL', NOBOTTOM + ["Yes", answer])
+    vm.run('c:POOL', NOBOTTOM + ["Yes", answer, None])
     lo, hi = 120.0 - wide / 2, 120.0 + wide / 2
     check("%s: a step 4' out by %d\" along the wall" % (answer or "Enter", wide),
           has_line(vm, (528.0, lo), (528.0, hi)) and
@@ -250,11 +251,11 @@ for answer, wide in ((None, 72.0), ("4x8", 96.0)):
           not asked(vm, 'Step width') and not asked(vm, 'Step length'))
 vm = fresh()
 vm.run('c:POOL', ["Insquare", "Rectangle", (0.0, 0.0, 0.0), 480.0, 84.0,
-                  "Square", "No", "Yes", "4x8", "4x6"])
+                  "Square", "No", "Yes", "4x8", "4x6", None])
 check("a size wider than the wall is refused and asked again",
       'A 4x8 step is wider' in said(vm) and len(asked(vm, 'Step size')) == 2)
 vm = fresh()
-vm.run('c:POOL', NOBOTTOM + ["Yes", "Back", "Yes", "Custom", "Back", "4x6"])
+vm.run('c:POOL', NOBOTTOM + ["Yes", "Back", "Yes", "Custom", "Back", "4x6", None])
 check("Back walks size -> the yes/no, and width -> size",
       len(asked(vm, 'Add a step outside')) == 2
       and len(asked(vm, 'Step size')) == 3)
@@ -278,10 +279,10 @@ print("== S11. FG steps: placed where picked, Back takes one back ==")
 vm = fresh()
 vm.run('c:POOL', HOPPER + [
     "FGstep",
-    "4x6", (480.0, 120.0, 0.0), None,                  # Enter: square, inward
-    "4x8", (480.0, 40.0, 0.0), (400.0, 40.0, 0.0),     # picked direction
+    "4x6", "Pick", (480.0, 120.0, 0.0), None,                  # Enter: square, inward
+    "4x8", "Pick", (480.0, 40.0, 0.0), (400.0, 40.0, 0.0),     # picked direction
     "Back",                                            # ...taken back up
-    "4x8", "Back",                                     # Back at the point
+    "4x8", "Pick", "Back",                                     # Back at the point
     "Text", (400.0, 120.0, 0.0),
     "Done"])
 ins = [e for e in live(vm, 'INSERT')]
@@ -312,6 +313,59 @@ vm = fresh()
 vm.run('c:POOL', HOPPER + ["FGstep", "Back", "None"])
 check("Back at the first FG question re-asks the steps question",
       len(asked(vm, 'Add steps at the shallow end')) == 2)
+
+print("== S12. Offset: a distance from a point picked on the wall ==")
+vm = fresh()
+# 4x6 (72 wide), 24" from the bottom corner (480, 0): the step runs
+# 24..96 up the wall
+vm.run('c:POOL', NOBOTTOM + ["Yes", None, "Offset", (480.0, 0.0, 0.0), 24.0])
+check("the near side is 24\" from the picked point",
+      has_line(vm, (480.0, 24.0), (528.0, 24.0))
+      and has_line(vm, (480.0, 96.0), (528.0, 96.0)))
+check("...and the wall runs on either side of it",
+      has_line(vm, (480.0, 0.0), (480.0, 24.0))
+      and has_line(vm, (480.0, 96.0), (480.0, 240.0)))
+vm = fresh()
+# from the TOP corner the step runs down, toward the middle
+vm.run('c:POOL', NOBOTTOM + ["Yes", None, "Offset", (480.0, 240.0, 0.0), 12.0])
+check("from the far end it runs back toward the middle",
+      has_line(vm, (480.0, 228.0), (528.0, 228.0))
+      and has_line(vm, (480.0, 156.0), (528.0, 156.0)))
+vm = fresh()
+vm.run('c:POOL', NOBOTTOM + ["Yes", None, "Offset", (480.0, 0.0, 0.0), 200.0,
+                            "Center"])
+check("an offset that runs it off the wall is refused",
+      'past the end of the wall' in said(vm)
+      and has_line(vm, (480.0, 84.0), (528.0, 84.0)))
+
+print("== S13. an FG block placed on the wall, centered or offset ==")
+vm = fresh()
+vm.run('c:POOL', HOPPER + ["FGstep", "4x8", None, None,
+                           "4x6", "Wall", "Offset", (480.0, 0.0, 0.0), 12.0,
+                           "Done"])
+ins = sorted((tuple(round(v, 6) for v in grp(vm.entdata[e], 10)[:2]),
+              grp(vm.entdata[e], 2)) for e in live(vm, 'INSERT'))
+check("Center puts the 4x8 on the wall's middle, the 4x6 12\" off the corner",
+      ins == [((480.0, 48.0), "6' Straight FG Step"),
+              ((480.0, 120.0), "8' Straight FG Step")], repr(ins))
+check("...both turned into the pool",
+      all(abs(grp(vm.entdata[e], 50) - math.pi) < 1e-9
+          for e in live(vm, 'INSERT')))
+
+print("== S14. the report moves right, clear of a step outside ==")
+vm = fresh()
+vm.run('c:POOL', NOBOTTOM + ["Yes", None, None])
+mv = [c for c in vm.commands if c and c[0] == '_.MOVE']
+check("the report and mini-model are moved", len(mv) == 1, repr(mv))
+if mv:
+    dx = mv[0][-1][0] - mv[0][-2][0]
+    rep = [e for e in live(vm, 'TEXT', 'POOL-NOTES')]
+    x0 = min(grp(vm.entdata[e], 10)[0] for e in rep)
+    check("...right, by enough to clear the step's width dim",
+          dx > 0 and x0 + dx > 528.0, repr((x0, dx)))
+vm = fresh()
+vm.run('c:POOL', NOBOTTOM + [None])
+check("no step, no move", not any(c and c[0] == '_.MOVE' for c in vm.commands))
 
 print("== S10. Esc inside the step routine: POOL has nothing open ==")
 

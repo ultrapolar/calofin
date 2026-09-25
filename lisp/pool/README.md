@@ -613,7 +613,11 @@ Pick where the step goes [Back]:
 Pick the direction it runs into the pool [Back] <square to the shallow wall>:
 ```
 
-`4x6` and `4x8` insert `6' Straight FG Step` / `8' Straight FG Step`
+`4x6` and `4x8` first ask `Place it on the shallow wall, or pick where
+[Wall/Pick/Back] <Wall>`: `Wall` asks the same Center/Offset question as
+the step outside and sets the block on the wall square into the pool;
+`Pick` asks for the point and the direction, for anywhere else.
+They insert `6' Straight FG Step` / `8' Straight FG Step`
 (4' out from the wall, 6' or 8' along it, open on the wall side, the
 insertion point in the middle of the opening) on the `POOL` layer.
 Snaps are live at the pick, so a midpoint snap on the wall centres it;
@@ -626,6 +630,12 @@ dashed (`DASHED2`, or POOL's own dash when the drawing lacks it). `Back`
 at the piece question takes the last piece placed back up; with none
 placed it returns to the steps question.
 
+**The report moves out of the way.** The report table and the
+mini-model hang off the pool's right side, where a step outside the
+shallow wall, its dims and PADDLE's pads land too. When anything the
+steps drew sits in the report's band, the report and mini-model move
+right, clear of it by the usual gap -- after PADDLE, so the pads count.
+
 **With no hopper** there are no treads to lay out:
 
 ```
@@ -633,7 +643,15 @@ Add a step outside the shallow end [Yes/No] <No>:
 Step size, 4' out by 6' or 8' along the wall [4x6/4x8/Custom/Back] <4x6>:
 Step width - along the shallow wall [Back]:      (Custom only)
 Step length - out from the wall [Back]:          (Custom only)
+Where does the step sit on the wall [Center/Offset/Back] <Center>:
 ```
+
+**Where on the wall** is asked, not assumed: `Center` puts it on the
+middle of the wall's straight span; `Offset` asks you to pick a point on
+the wall (a corner, a skimmer -- snaps are live) and the distance from
+it to the step's NEAR side, and the step runs from there toward the
+middle of the wall. One that would run past the end of the wall is
+refused and asked again.
 
 The step is a plain box OUTSIDE the wall, centered on it, no tread
 offsets. `4x6` and `4x8` are the fiberglass sizes, 48" out by 72" or
@@ -1210,7 +1228,7 @@ The keyword questions have named keys:
 | `hmode` | `SIX-sided corners measured by` (`Offsets`/`Letters`) |
 | `steps` | `Add steps at the shallow end` (`Hemi`/`Normie`/`Corner`/`None`) — with a hopper |
 | `stepcorner` | `Which shallow corner do the steps come out of` (`Bottom`/`Top`) |
-| `extstep` | `Add a step outside the shallow end` (`Yes`/`No`) — with no hopper; `extsize` is its size (`4x6`/`4x8`/`Custom`), and `extwidth` and `extlen` its two lengths (a sheet with `extwidth` and no `extsize` is Custom) |
+| `extstep` | `Add a step outside the shallow end` (`Yes`/`No`) — with no hopper; `steppos` is where it sits (`Center`/`Offset`; a sheet without it is centered); `extsize` is its size (`4x6`/`4x8`/`Custom`), and `extwidth` and `extlen` its two lengths (a sheet with `extwidth` and no `extsize` is Custom) |
 
 Keyword values are strings spelling one of the words the bracket
 shows (case-blind, but a word the question does not offer — or a
@@ -1638,6 +1656,7 @@ holds this table and the block together, so neither can drift from the other.
 | `pool:*steps-default*` | `"None"` | What Enter answers at `Add steps at the shallow end`: `"Hemi"`, `"Normie"` or `"Corner"` makes that routine the usual answer. A value that is none of the four reads as `"None"` |
 | `pool:*steps-eoff*` | `12.0` | After `NORMIESTEP` puts steps INTO the pool, how far in from the BOTTOM wall the overall `E` dim moves to, in inches |
 | `pool:*steps-fuzz*` | `0.01` | How near a drawn wall's ends must sit to the shallow wall's line (and a corner's pieces to each other) to be read as that wall, in inches |
+| `pool:*steps-place*` | `"Center"` | What Enter answers at where a step sits on the wall: `"Center"` or `"Offset"` (from a point picked on the wall) |
 | `pool:*extstep-default*` | `"4x6"` | What Enter answers at the size of a step OUTSIDE the wall: `"4x6"`, `"4x8"` or `"Custom"` |
 | `pool:*fg-block6*` | `"6' Straight FG Step"` | The 4x6 fiberglass step block's name. A drawing holding it uses its own; one that does not gets a plain U made |
 | `pool:*fg-block8*` | `"8' Straight FG Step"` | The 4x8 block's name, the same way |
