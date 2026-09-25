@@ -16,7 +16,8 @@ help:
 	@echo "                  counted done unread, no answer is handed back unasked"
 	@echo "                  that the prompt would refuse, a miss is told from Enter,"
 	@echo "                  drawing text is DIMZIN-proof, both builds read the same"
-	@echo "                  settings, the drafter gets their object snaps back, and"
+	@echo "                  settings, the drafter gets their object snaps back, every"
+	@echo "                  shop term is one knob per tool that writes it, and"
 	@echo "                  every generated dialog fits the screen)"
 	@echo "make verify       just the generated-file checks (mirror/releases/bundle/palette/ribbon icons)"
 	@echo "make lint         check_lisp + check_scope over every .lsp, check_vb over the palette"
@@ -42,6 +43,7 @@ check:
 	$(PY) tools/check_osnap.py
 	$(PY) tools/check_color.py
 	$(PY) tools/check_perf.py
+	$(PY) tools/check_terms.py
 	$(PY) tools/check_vb.py
 	$(PY) tools/check_dcl.py
 

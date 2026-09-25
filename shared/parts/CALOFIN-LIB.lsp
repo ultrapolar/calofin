@@ -25,7 +25,7 @@
 
 (vl-load-com)
 
-(setq cal:*version* "v2.8")
+(setq cal:*version* "v2.9")
 
 
 ;;  WHAT IS LOADED, AND AT WHICH VERSION.  Every tool reports its own
@@ -314,6 +314,21 @@
 (defun cal:setting (key dflt / v)
   (setq v (getenv key))
   (if (and v (/= v "")) v dflt))
+
+;; A SHOP TERM: wording a tool writes INTO THE DRAWING that the shop may
+;; spell its own way -- " Typ." after the one dimension that stands for
+;; a group, "Not Given" on a corner the order sheet never gave.  The
+;; profile value CalofinTerm-<ID> holds the shop's spelling, DFLT the
+;; shipped one.  Only drawing text is a term: a keyword or a prompt
+;; never is, because forms, the palette and LAZDIAG's replays answer
+;; them by their exact spelling.  Each tool reads its terms into a knob
+;; of its tunables block as it loads (tool:term in a lisp/ file, the
+;; same body under the tool's prefix); LAZTUNE's Terms page sets the
+;; profile value and every loaded member knob at once, and a per-tool
+;; LAZTUNE override still wins over it.  The table of terms is
+;; tools/terms.py; lzp:*terms* in LAZPANEL is generated from it.
+(defun cal:term (id dflt)
+  (cal:setting (strcat "CalofinTerm-" id) dflt))
 
 ;; What CalofinTheme has been set to: 'dark, 'light, or nil for "work
 ;; it out".  One override for both probes below, because a drafter who

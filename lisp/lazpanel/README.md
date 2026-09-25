@@ -542,6 +542,39 @@ same bargain every other editor here keeps. `LAZBACKUP` carries them
 under `[Knobs]`, one line each, through the same checks on the way
 back in.
 
+**Terms -- the shop's own wording in the drawing.** The last entry of
+`LAZTUNE`'s tool dropdown is not a tool: it is **Terms**, the text the
+tools write INTO the drawing that a shop may spell its own way.
+`typ-note` is the ` Typ.` after the one dimension that stands for a
+group of equal ones (POOL, SPA, NORMIESTEP, HONEFILLET, SMARTFILLET,
+AUTODIM); `ng-note` is the `Not Given` on a corner the order sheet
+never gave (POOL, SPA, NORMIESTEP). The list shows each quoted, so the
+leading space of ` Typ.` can be seen, and the box keeps what is typed
+exactly -- spaces included. `OK` writes `CalofinTerm-<id>` to the
+profile and moves every member knob loaded in the session at once; a
+standalone tool APPLOADed later reads the profile as it loads. An empty
+term is refused (a callout with its note gone), and so is one holding
+`<>`, a backslash or braces: every `typ-note` lands in dimension text,
+where `<>` is the measurement drawn a second time, and `ng-note` is
+written both as a leader's MTEXT and as a plain TEXT entity (POOL's
+report), where `\P`, `\L` and `{ }` are formatting in the one and printed
+as typed in the other. `Alec's choice` puts the shipped wording back.
+`Set everywhere` is greyed there, since a term is everywhere already. A
+value set on one tool's own knob (its `*typ-note*` under that tool)
+still wins over the term, and clearing it hands the knob back to the
+shop's term rather than past it -- so the Terms page's state line and
+the report after `OK` NAME any tool that keeps such a value
+("..., except POOL, which keeps a value set on its own knob") instead
+of claiming every tool follows. `Set everywhere` on one of those member
+knobs, on its tool's page, does not write six per-tool values the Terms
+page could then never move: it turns the page to Terms with the box's
+text as the term's new spelling and queues every member's own value
+back to follow it.
+`LAZBACKUP` carries the terms under `[Terms]`. The table is generated:
+`lzp:*terms*`, written by `tools/gen_knobs.py` from `tools/terms.py`.
+Keywords and prompt wording are never terms -- forms, the palette and
+LAZDIAG's replays answer them by their exact spelling.
+
 **The Pinned row.** Pins are the answer to "I run four of these
 eighty-one all day": ticked tools sit in a row at the top of *every*
 page, in the order you pinned them, so the ones you actually use stop

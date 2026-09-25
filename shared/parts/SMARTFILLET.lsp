@@ -144,10 +144,20 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.9")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.10")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
+;;; -------------------- shop terms --------------------------------------
+;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
+;;;  own way -- the knobs that read one say which.  The shop's spelling
+;;;  is the profile value CalofinTerm-<ID>, set from LAZTUNE's Terms
+;;;  page; with none, the shipped one.  Read as the file loads, so the
+;;;  reader sits here, ABOVE the knobs that call it (the grouped build
+;;;  takes it from CALOFIN-LIB.lsp as cal:term).  Only drawing text is
+;;;  ever a term: keywords and prompts are answered by forms, the
+;;;  palette and LAZDIAG's replays by their exact spelling.  The table
+;;;  of terms is tools/terms.py.
 ;;; -------------------- tunables ------------------------------------
 
 (setq sf:*first*      6.0)   ; the smallest radius offered, and the step
@@ -228,6 +238,16 @@
 (setq sf:*typ*        t)
 (setq sf:*minang*     0.02)  ; how far off straight (radians) two legs
                              ; must be before there is a corner at all
+
+;;;  ...and the SHOP TERMS it writes into the drawing -- wording, not a
+;;;  size.  Each reads the shop's CalofinTerm-<ID> through the term
+;;;  reader above, so LAZTUNE's Terms page moves it in every tool that writes
+;;;  it at once; the literal is the shipped spelling, and a LAZTUNE
+;;;  value set on the knob itself still wins over the shop's.
+
+;; The suffix after the one radius callout that stands for its
+;; repeats -- the callout reads "<>" and then this.
+(setq sf:*typ-note* (cal:term "typ-note" " Typ."))
 
 ;;; -------------------- run-time state -------------------------------
 ;;; Not knobs: what a run keeps while it runs, ruled off from the block
@@ -856,8 +876,8 @@
   (if (and dim (setq ed (entget dim)))
     (progn
       (setq ed (if (assoc 1 ed)
-                 (subst (cons 1 "<> Typ.") (assoc 1 ed) ed)
-                 (append ed (list (cons 1 "<> Typ.")))))
+                 (subst (cons 1 (strcat "<>" sf:*typ-note*)) (assoc 1 ed) ed)
+                 (append ed (list (cons 1 (strcat "<>" sf:*typ-note*))))))
       (entmod ed)
       (entupd dim))))
 
@@ -1056,7 +1076,10 @@
                        (if (= 1 made) "" "s") " filleted at "
                        (sf:rlabel r)
                        (if (and sf:*typ* (> made 1) dim1)
-                         " -- the one dimension now reads Typ."
+                         (strcat " -- the one dimension now reads "
+                                 ;; one space, whether or not the
+                                 ;; shop's term begins with one
+                                 (vl-string-trim " " sf:*typ-note*))
                          "")
                        "."))))
 

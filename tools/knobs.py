@@ -235,9 +235,42 @@ def why_of(lines, i):
     return ' '.join(p for p in parts if p).strip()
 
 
-def knobs_of(path):
-    """[(name, literal, meaning)] for one file, in block order."""
-    src = read(path)
+#: a knob whose value is a SHOP TERM read through the tool's term
+#: reader -- ``(pool:term "typ-note" " Typ.")``, ``(ns-term ...)``.  Its
+#: shipped value is the literal the call falls back to, and that literal
+#: is what the catalog carries: LAZTUNE shows it as Alec's choice and
+#: kind-checks a drafter's value against it.  tools/terms.py is the table
+#: of terms; tools/check_terms.py holds the members to it.
+TERMCALL = re.compile(r'^\(([a-z0-9]+[:-])term\s+"([a-z0-9-]+)"\s+'
+                      r'("(?:[^"\\]|\\.)*")\)$', re.I)
+
+
+def term_call(lit):
+    """(term id, shipped literal) when LIT is a term-reader call, else None."""
+    m = TERMCALL.match(lit.strip())
+    return (m.group(2), m.group(3)) if m else None
+
+
+def term_knobs(path):
+    """{knob name: (term id, shipped literal)} for one file's block: the
+    knobs that read a shop term."""
+    out = {}
+    for name, lit, _why in knobs_of(path, raw=True):
+        tc = term_call(lit)
+        if tc:
+            out[name] = tc
+    return out
+
+
+def knobs_of(path, raw=False):
+    """[(name, literal, meaning)] for one file, in block order.  A knob
+    read through the tool's term reader carries the literal the call
+    falls back to, unless RAW asks for the source text as written."""
+    return knobs_of_text(read(path), raw)
+
+
+def knobs_of_text(src, raw=False):
+    """knobs_of for a file's TEXT."""
     block, _ = block_of(src)
     if not block:
         return []
@@ -256,7 +289,8 @@ def knobs_of(path):
         for name, lit in pairs_of(block, off):
             if 'version' in name.lower():
                 continue                  # a banner, not a setting
-            out.append((name, lit, why))
+            tc = None if raw else term_call(lit)
+            out.append((name, tc[1] if tc else lit, why))
     return out
 
 

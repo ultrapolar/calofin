@@ -682,6 +682,8 @@ holds this table and the block together, so neither can drift from the other.
 | `spa:*mark-r*` | `0.18` | circle radius on the corner point |
 | `spa:*mark-lead*` | `1.2` | how far out the mark's own text sits |
 | `spa:*ng-lead*` | `1.5` | where the "Not Given" leader leaves the box |
+| `spa:*typ-note*` | `" Typ."` | The suffix after the one corner or cut callout that stands for a group of equal ones. A **shop term** (`typ-note`): read from the profile's `CalofinTerm-typ-note` as the file loads, so LAZTUNE's Terms page changes it here and in every other tool that writes it; a LAZTUNE value set on this knob itself still wins |
+| `spa:*ng-note*` | `"Not Given"` | The note on a corner the order sheet never gave, on the leader off its boxed `?`. A **shop term** (`ng-note`): read from the profile's `CalofinTerm-ng-note` as the file loads, so LAZTUNE's Terms page changes it here and in every other tool that writes it; a LAZTUNE value set on this knob itself still wins |
 | `spa:*ng-off*` | `2.05` | ... and how far out that note sits |
 | `spa:*rad-off*` | `0.9` | radius dim, dragged out past the arc |
 | `spa:*cut-off*` | `0.6` | cut-face dim, out past the face |

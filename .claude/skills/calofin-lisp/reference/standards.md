@@ -371,6 +371,34 @@ A knob defined after the code that reads it is nil while that code loads.
   is transcribed into `LAZTUNE`'s catalog by `tools/gen_knobs.py` — a
   knob is not on offer to a drafter until that is re-run.
 
+### Shop terms — drawing text a shop may spell its own way
+
+`" Typ."` (term `typ-note`) and `"Not Given"` (term `ng-note`) are
+**shop terms**: never spelled in code. A tool that writes one carries
+a knob for it, read through its own term reader — six lines, defined
+ABOVE the tunables block (the block calls it), swapped for `cal:term`
+by a `'tool:term': 'cal:term'` line in `tools/mirror_shared.py`:
+
+```lisp
+(defun tool:term (id dflt / v)
+  (setq v (getenv (strcat "CalofinTerm-" id)))
+  (if (and v (/= v "")) v dflt))
+...
+(setq tool:*typ-note* (tool:term "typ-note" " Typ."))   ; in the block
+(strcat "<>" tool:*typ-note*)                           ; at the site
+```
+
+and its name joins the term's `members` in `tools/terms.py`, then
+`python3 tools/gen_knobs.py`. Precedence: shipped < the shop's
+`CalofinTerm-<id>` (LAZTUNE's Terms page) < a LAZTUNE value on the one
+knob. Every site reads the KNOB, never a bare `(tool:term ...)` (that
+passes a per-tool value by). A term is plain text -- no `<>`, `\` or
+`{ }`, which dimension text and MTEXT read as codes. **Only drawing text is ever a term** — keywords and prompt
+wording are answered by forms, the palette and LAZDIAG by their exact
+spelling. `check_terms.py` enforces all of it; console or tutorial
+prose that merely names the wording goes in `tools/terms_baseline.txt`
+with a reason.
+
 ### Colour
 
 A colour that must work on any screen says `'auto` and is resolved at

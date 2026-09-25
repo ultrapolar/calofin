@@ -414,6 +414,50 @@ CONSTELLATION, LOBF, OASIS and the three review tools each had it the
 other way round, so a shop's own drawings carried whichever grey the
 drafter who first ran the tool happened to be looking at.
 
+### Shop terms: drawing text a shop may spell its own way
+
+**Only text written INTO THE DRAWING is editable, never a keyword or a
+prompt's wording.** LAZFORM, LAZSPA, LAZSTEP, the palette and
+LAZDIAG's replays answer prompts by their exact spelling, so a
+shop-spelt keyword would break every one of them; a callout's suffix
+breaks nothing. The first two terms are `typ-note` (`" Typ."`, the
+suffix on the one dimension that stands for a group of equal ones) and
+`ng-note` (`"Not Given"`, the note on a corner the order sheet never
+gave) -- chosen because no tool reads either back out of a drawing. A
+term that some tool DID read back (a review matching dimension text)
+would need that reader to read the term too.
+
+A term is a **named group of knobs**. `tools/terms.py` is the table
+(id, default, meaning, member knobs), hand-kept like `gen_knobs.SAME`.
+Each tool that writes the wording has a knob for it in its tunables
+block, read through its own six-line term reader -- defined ABOVE the
+block, since the block calls it:
+
+```lisp
+(setq pool:*typ-note* (pool:term "typ-note" " Typ."))   ; lisp/
+(setq pool:*typ-note* (cal:term "typ-note" " Typ."))    ; its twin
+```
+
+and every site that writes the text uses the knob. Precedence: the
+shipped literal < the shop's `CalofinTerm-<id>` profile value < a
+LAZTUNE value set on one member knob. LAZTUNE's **Terms** page (the
+last entry of its tool dropdown) sets the profile value and every
+member loaded in the session at once, and names any member a per-tool
+value still holds apart; `Set everywhere` on a member knob sets the
+term instead of writing a value per tool. A term is plain text: `<>`
+(the measurement, in dimension text), `\` and `{ }` (MTEXT codes, which
+a TEXT entity would print as typed) are refused. LAZBACKUP carries it
+under `[Terms]`. To add a term: a knob per writing tool through its reader
+(copy `pool:term`, add the `'x:term': 'cal:term'` swap to its
+`tools/mirror_shared.py` entry), a row in `tools/terms.py`, then
+`python3 tools/gen_knobs.py` (it writes `lzp:*terms*` and the term's
+Set-everywhere family) and `python3 tools/check_terms.py`, which fails
+a member off its term, a knob that ships a term's default without
+joining it, and the default spelled in code outside a knob form --
+a defun inside a long tunables block's span included, and a bare
+`(x:term ...)` standing in for the knob (prose that names it goes in
+`tools/terms_baseline.txt`, with a reason).
+
 ### The drafter's object snaps
 
 **A tool that mutes OSMODE gives it back on every path out.** Most of
@@ -688,6 +732,17 @@ python3 tools/check_perf.py      # an 'auto ink colour that costs a COM
                                  # fade colour on every reviewed entity
                                  # instead of reusing the caller's
                                  # already-hoisted value
+python3 tools/check_terms.py     # every SHOP TERM (tools/terms.py) is
+        [--list]                 # one knob per tool that writes it: a
+                                 # member reads its term through the
+                                 # tool's term reader (cal:term in the
+                                 # twin) and ships the term's default; a
+                                 # knob shipping a default joins its term;
+                                 # the default is never spelled in code
+                                 # outside a tunables block -- prose that
+                                 # names it is a reasoned line in
+                                 # tools/terms_baseline.txt, stale lines
+                                 # fail; every reader is one text
 python3 tools/probe_report.py    # not a check: replays a failure report in
                    REPORT.dxf    # the VM and varies its inputs one at a
                                  # time, to say which one the failure is

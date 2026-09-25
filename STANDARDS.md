@@ -145,6 +145,18 @@ callout. The `Typ.` logic applies to NotGiven the same way: if every
 corner is NotGiven, one boxed `?` with its `Not Given` note carries
 the `Typ.` suffix.
 
+**Both wordings are shop terms.** `Typ.` (term `typ-note`, shipped
+`" Typ."`) and `Not Given` (term `ng-note`) are the shipped spellings;
+a shop may spell either its own way from LAZTUNE's Terms page, and
+every tool that writes them follows (`tools/terms.py`). So a tool never
+spells either in its code: it writes its term knob --
+`(setq tool:*typ-note* (tool:term "typ-note" " Typ."))` in the tunables
+block, through the six-line term reader defined above it -- and
+`tools/check_terms.py` fails the literal anywhere else. The keywords
+(`NotGiven`, `Typ` at AUTODIM's question) are NOT terms and never will
+be: forms, the palette and LAZDIAG's replays answer them by their exact
+spelling.
+
 The three distances are the sample's, and each is read off the mark
 circle rather than set in drawing units, so the mark keeps its shape
 at any size: the mark's own text at 6.7 r, the note's leader leaving

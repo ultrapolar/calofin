@@ -214,7 +214,7 @@ crammed against the plan.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `ad:*typ-note*` | `" Typ."` | Suffix on the one dim that stands for its group |
+| `ad:*typ-note*` | `" Typ."` | Suffix on the one dim that stands for its group. A **shop term** (`typ-note`): read from the profile's `CalofinTerm-typ-note` as the file loads, so LAZTUNE's Terms page changes it here and in every other tool that writes it; a LAZTUNE value set on this knob itself still wins |
 | `ad:*typ-lines*` | `2` | Equal straight sides it takes before one is noted and the rest left to it |
 | `ad:*typ-curves*` | `4` | The same for equal radii -- higher on purpose: a pair or a trio of matching curves reads better dimensioned where each one is |
 | `ad:*typ-default*` | `"Typ"` | The Enter answer at step 2's question. `"All"` dimensions every repeat where it is and leaves the two counts above out of it; anything else spelled here reads as `"Typ"`, which is what the tool did before there was a question to ask |

@@ -2754,8 +2754,9 @@ run(vm, 'c:LAZTUNE', 'tune-open')
 assert str(vm.globals.get('stub:*dlgname*')) == 'lazpanel_tune', \
     "LAZTUNE opened %r" % vm.globals.get('stub:*dlgname*')
 vm.loads('(setq t:*tl* (cdr (assoc "tune_tool" stub:*lists*)))')
-assert [str(x) for x in vm.globals['t:*tl*']] == LABELS, \
-    "the tool dropdown is not the catalog's tools"
+# ...and, last, the Terms page: the shop's own wording for drawing text
+assert [str(x) for x in vm.globals['t:*tl*']] == LABELS + ['Terms (drawing wording)'], \
+    "the tool dropdown is not the catalog's tools, then Terms"
 vm.loads('(setq t:*kl* (cdr (assoc "tune_list" stub:*lists*)))')
 rows = [str(x) for x in vm.globals['t:*kl*']]
 assert len(rows) == N0 and rows[0].startswith(FIRSTKNOB + '  =  '), rows[:2]

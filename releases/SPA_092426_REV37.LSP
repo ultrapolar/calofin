@@ -235,7 +235,21 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092326 REV36")
+(setq spa:*version* "092426 REV37")
+
+;;; -------------------- shop terms --------------------------------------
+;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
+;;;  own way -- the knobs that read one say which.  The shop's spelling
+;;;  is the profile value CalofinTerm-<ID>, set from LAZTUNE's Terms
+;;;  page; with none, the shipped one.  Read as the file loads, so the
+;;;  reader sits here, ABOVE the knobs that call it (the grouped build
+;;;  takes it from CALOFIN-LIB.lsp as cal:term).  Only drawing text is
+;;;  ever a term: keywords and prompts are answered by forms, the
+;;;  palette and LAZDIAG's replays by their exact spelling.  The table
+;;;  of terms is tools/terms.py.
+(defun spa:term (id dflt / v)
+  (setq v (getenv (strcat "CalofinTerm-" id)))
+  (if (and v (/= v "")) v dflt))
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -650,6 +664,20 @@
 ;; and D with A's answer autofilling the rest.  A shop whose spas
 ;; differ corner to corner sets "No" and starts at corner A.
 (setq spa:*samecorners-default* "Yes")
+
+;;;  ...and the SHOP TERMS it writes into the drawing -- wording, not a
+;;;  size.  Each reads the shop's CalofinTerm-<ID> through the term
+;;;  reader above, so LAZTUNE's Terms page moves it in every tool that writes
+;;;  it at once; the literal is the shipped spelling, and a LAZTUNE
+;;;  value set on the knob itself still wins over the shop's.
+
+;; The suffix after the one corner or cut callout that stands for a
+;; group of equal ones.
+(setq spa:*typ-note* (spa:term "typ-note" " Typ."))
+
+;; The note on a corner the order sheet never gave, on the leader off
+;; its boxed "?".
+(setq spa:*ng-note* (spa:term "ng-note" "Not Given"))
 
 ;;; -------------------- run state (not tunables) ----------------------
 ;;;
@@ -3758,7 +3786,7 @@
   (command "_.LEADER"
            (spa:wp (spa:v+ p (spa:v* outd (* spa:*ng-lead* doff))))
            (spa:wp (spa:v+ p (spa:v* outd (* spa:*ng-off* doff))))
-           "" "Not Given" ""))
+           "" spa:*ng-note* ""))
 
 ;; One corner's callout, laid out the way POOL's rectangle does it
 ;; (pool:dimtreat1): the note sits OUTSIDE the corner, on the line out
@@ -3812,7 +3840,7 @@
 (defun spa:dimcornersat (quad corners cen doff ref inb / allsame i)
   (setq allsame (spa:samecorners corners))
   (foreach i (if allsame (list ref) (list 0 1 2 3))
-    (spa:dimcorner1 quad corners cen doff i (if allsame " Typ." "") inb))
+    (spa:dimcorner1 quad corners cen doff i (if allsame spa:*typ-note* "") inb))
   (princ))
 
 ;; The first outline's callouts: the Typ. one at the bottom-right (B),
@@ -4617,7 +4645,7 @@
   ;; the corner cut itself -- one callout on the bottom-right cut, Typ.
   ;; because all four cuts of an octagon are the same
   (setq p (nth 1 pts) q (nth 2 pts))
-  (spa:dimalg p q (spa:outoffp p q pts (* spa:*oct-off* doff)) " Typ.")
+  (spa:dimalg p q (spa:outoffp p q pts (* spa:*oct-off* doff)) spa:*typ-note*)
 
   ;; the second outline, in ITS dimension style, plus its cut face
   (if meth
@@ -4632,7 +4660,7 @@
             (spa:dimoveralls t (nth 7 pts2) (nth 2 pts2) (nth 0 pts2) (nth 5 pts2)
                              xlo yhi))
         (setq p (nth 5 pts2) q (nth 6 pts2))
-        (spa:dimalg p q (spa:outoffp p q pts2 (* spa:*oct-off* doff)) " Typ.")
+        (spa:dimalg p q (spa:outoffp p q pts2 (* spa:*oct-off* doff)) spa:*typ-note*)
         (spa:setmode mode1)
         ;; and how far the cover laps the water's edge, at the bottom
         (spa:dimstyle spa:*ds-cover* th 1.0)

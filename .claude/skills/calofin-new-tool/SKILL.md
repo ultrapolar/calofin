@@ -61,6 +61,15 @@ python3 .claude/skills/calofin-lisp/scripts/lspshow.py cal:askkw \
 In `lisp/` you embed it under your own prefix — a `lisp/` file may
 never call, define or set a `cal:` symbol. The mirror swaps them back.
 
+**Writing `" Typ."` or `"Not Given"` into the drawing?** Those are
+shop terms, never literals: copy POOL.LSP's six-line `pool:term` reader
+above your tunables block under your prefix, give the wording a knob
+(`(setq tool:*typ-note* (tool:term "typ-note" " Typ."))`), add
+`'tool:term': 'cal:term'` to your mirror entry's `swap`, add the knob
+to the term's `members` in `tools/terms.py`, and re-run
+`python3 tools/gen_knobs.py`. `check_terms.py` fails the bare literal.
+(`calofin-lisp`'s `reference/standards.md`, "Shop terms".)
+
 Secondary commands take fixed suffixes: `TOOLNAMEVER`,
 `TUTORIALTOOLNAME`, `TOOLNAMESCAN`, `TOOLNAMERESCUE`, `TOOLNAME-CFG`.
 

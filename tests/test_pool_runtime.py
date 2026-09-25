@@ -667,6 +667,59 @@ assert len([d for d in drawn(vm, 'DIMENSION', 'DIMENSION')
             if d.get(62) == 1]) == 3, "the three off-tape side dims go red"
 print("   deep end held exactly; wing off-tape sides flagged red")
 
+print("== R9c. in-square L / lazy L: NA sides read off a perfect shape ==")
+# A perfect L closes on itself -- two equations, X and Y -- so up to two
+# untaped sides come back off the other four, and the report shows N/A
+# for their target (they were never measured, so never "off the tape").
+vm = run(["Insquare", "L"] + BASE +
+         ["NA", 315.0, 135.0, 135.0, 225.0, "NA",   # A-B = C-D + E-F, F-A = B-C - D-E
+          "No", "No", "No"], "R9c")
+segs = [(d[10][:2], d[11][:2]) for d in drawn(vm, 'LINE', 'POOL')]
+assert _seg((0.0, 0.0), (360.0, 0.0)), "A-B read back as C-D + E-F"
+assert _seg((0.0, 180.0), (0.0, 0.0)), "F-A read back as B-C - D-E"
+_rep = [d.get(1) for d in drawn(vm, 'TEXT', 'POOL-NOTES')]
+assert _rep.count('N/A') == 2, _rep
+assert not [d for d in drawn(vm, 'TEXT', 'POOL-NOTES') if d.get(62) == 1]
+# lazy L: the far end and the upper bend untaped; the built shape is the
+# one the four taped sides make, deep end still exact
+_u = 0.7071067812
+_cd = (168.0 - 226.0 + 296.0) / (2 * _u)
+_bc = 99.0 + (226.0 - 296.0 + 168.0) / (2 * _u)
+vm = run(["Insquare", "LA"] + BASE +
+         [296.0, _bc, "NA", "NA", 226.0, 168.0, "No", "No", "No"], "R9c-lazy")
+segs = [(d[10][:2], d[11][:2]) for d in drawn(vm, 'LINE', 'POOL')]
+_C = (296.0 + _bc * _u, _bc * _u)
+_D = (_C[0] - _cd * _u, _C[1] + _cd * _u)
+assert _seg((296.0, 0.0), _C) and _seg(_C, _D) and _seg(_D, (226.0, 168.0)), segs[:6]
+assert _seg((226.0, 168.0), (0.0, 168.0)) and _seg((0.0, 168.0), (0.0, 0.0))
+# the two parallel bends cannot be told apart -- D-E is asked for
+vm = run(["Insquare", "LA"] + BASE +
+         [296.0, "NA", _cd, "NA", 226.0, 168.0,
+          99.0,                          # Upper bend side D-E, re-asked
+          "No", "No", "No"], "R9c-bends")
+assert any(p.startswith('\nUpper bend side D-E (45 deg): ')
+           for p, _ in vm.prompts), vm.prompts
+segs = [(d[10][:2], d[11][:2]) for d in drawn(vm, 'LINE', 'POOL')]
+assert _seg((296.0, 0.0), _C), "B-C read back once D-E was measured"
+# three gaps: the one asked for is one whose answer leaves the other two
+# readable -- A-B and C-D both sit in the X equation, so C-D (not F-A)
+vm = run(["Insquare", "L"] + BASE +
+         ["NA", 315.0, "NA", 135.0, 225.0, "NA",
+          135.0,                         # Side C-D, re-asked
+          "No", "No", "No"], "R9c-three")
+assert any(p.startswith('\nSide C-D (top of wing): ')
+           for p, _ in vm.prompts), vm.prompts
+segs = [(d[10][:2], d[11][:2]) for d in drawn(vm, 'LINE', 'POOL')]
+assert _seg((0.0, 0.0), (360.0, 0.0)) and _seg((0.0, 180.0), (0.0, 0.0))
+# a gap that would come out negative is asked for, not drawn inside out
+vm = run(["Insquare", "L"] + BASE +
+         [100.0, 315.0, 135.0, 135.0, "NA", 180.0,
+          90.0,                          # Side E-F, re-asked
+          "No", "No", "No"], "R9c-neg")
+assert any(p.startswith('\nSide E-F (top of main section): ')
+           for p, _ in vm.prompts), vm.prompts
+print("   NA sides closed off the shape; unreadable gaps re-asked")
+
 print("== R10. round, in-square (one prompt), oval hopper ==")
 vm = run(["Insquare", "ROU"] + BASE +
          [420.0,                  # single overall
