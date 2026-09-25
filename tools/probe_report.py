@@ -161,6 +161,17 @@ def report_lines(ents):
 HEADER_KEYS = ("tool", "build", "lazdiag", "message", "last step",
                "entities", "selected", "picked points", "run started",
                "failed at", "UCSORG", "UCSXDIR")
+#: THE MACHINE, and the drawing's own settings, that the replay puts
+#: on the VM before the run: what a tool's arithmetic and text read
+#: (units, precision, zero suppression, the angle frame) and what its
+#: selection reads (PICKFIRST).  A report from before they were
+#: written leaves the VM at AutoCAD's defaults, as before.
+MACHINE_KEYS = ("LUNITS", "LUPREC", "DIMZIN", "DIMLUNIT", "DIMDEC",
+                "DIMFRAC", "INSUNITS", "MEASUREMENT", "AUNITS", "ANGBASE",
+                "ANGDIR", "DIMSCALE", "DIMTXT", "DIMASZ", "DIMASSOC",
+                "TEXTSIZE", "LTSCALE", "PICKFIRST", "PICKADD", "OSMODE",
+                "CLAYER", "CECOLOR", "TEXTSTYLE", "DIMSTYLE")
+CHANGED_TITLE = "WHAT THIS MACHINE HAS CHANGED FROM SHIPPED"
 ASK = re.compile(r"^\s*\? (.*?)\s{2,}-> (.*)$")
 #: what the run was handed before its first prompt -- a form's store,
 #: a run flag -- as lzd:state writes it: "  = pool:*form*   -> (...)"
@@ -249,14 +260,34 @@ def parse_report(lines):
     answers = []
     state = []
     selftests = []
+    machine = {}
+    knobs = []
     in_run = False
     in_self = False
+    in_changed = False
     for l in lines:
         if not in_run:
             for k in HEADER_KEYS:
                 if l.startswith("  " + k + " ") and k not in head:
                     head[k] = l[2 + len(k):].strip()
                     break
+            for k in MACHINE_KEYS:
+                if l.startswith("  " + k + " ") and k not in machine:
+                    machine[k] = l[2 + len(k):].strip()
+                    break
+        # the LAZTUNE overrides, "  = name  -> text" as the drafter typed
+        # them: the replay sets each global to that text before the run,
+        # so a failure a knob caused comes back here too
+        if l.startswith(CHANGED_TITLE):
+            in_changed = True
+            continue
+        if in_changed:
+            if not l.startswith("  "):
+                in_changed = False
+            else:
+                m = STATE.match(l)
+                if m:
+                    knobs.append((m.group(1), m.group(2).strip()))
         # the tool's own self tests, run on the drafter's machine after
         # the failure: kept as written, since they are the one part of a
         # report a replay here cannot reproduce -- the VM is not that
@@ -297,7 +328,8 @@ def parse_report(lines):
             "state": [(n, decode(e, raw=True)) for n, e in state],
             "nsel": nsel, "nselp": nselp,
             "selected_known": "selected" in head,
-            "selftests": selftests}
+            "selftests": selftests,
+            "machine": machine, "knobs": knobs}
 
 
 # ------------------------------------------- the transcript's encoding
@@ -620,11 +652,42 @@ def ucs_of(head):
     return (list(org), ang), ""
 
 
+def apply_machine(vm, machine):
+    """The report's sysvars onto the VM: a number as a number, the rest
+    as text.  Returns the names it set."""
+    done = []
+    for k, text in (machine or {}).items():
+        if text in ("", "nil"):
+            continue
+        v = number(text)
+        vm.sysvars[k] = text if v is None else v
+        done.append(k)
+    return done
+
+
+def apply_knobs(vm, knobs):
+    """The LAZTUNE overrides onto the tool's globals, AFTER its load
+    set them to shipped -- the order the panel applies them in.  The
+    text is what the drafter typed and the profile holds: a literal,
+    read and set, never called.  Returns (applied, refused)."""
+    applied, refused = [], []
+    for name, text in knobs or ():
+        try:
+            vm.loads("(setq %s (quote %s))" % (name, text)
+                     if text.startswith("(") and not text.startswith("(list")
+                     else "(setq %s %s)" % (name, text))
+            applied.append(name)
+        except LispError as e:
+            refused.append("%s (%s)" % (name, str(e).splitlines()[0][:40]))
+    return applied, refused
+
+
 def build_vm(tool_path, layers, ents, nselp, with_output, ucs=None,
-             state=()):
+             state=(), machine=None, knobs=()):
     vm = ReplayVM()
     if ucs:
         vm.set_ucs(ucs[0], ucs[1])
+    apply_machine(vm, machine)
     vm.loads(STUBS)
     vm.load(str(tool_path))
     # what the run was handed, put back AFTER the load -- the file sets
@@ -632,6 +695,7 @@ def build_vm(tool_path, layers, ents, nselp, with_output, ucs=None,
     # X:run-with-answers leaves it before it calls the command
     for name, v in state:
         vm.globals[Sym(name)] = copy_value(v)
+    apply_knobs(vm, knobs)
     vm.tables["LAYER"].update(l for l in layers if l)
     vm.tables["LAYER"].update(e["layer"] for e in ents)
     n = 0
@@ -670,8 +734,9 @@ def copy_value(v):
 
 
 def run_once(tool_path, command, layers, ents, nselp, answers, with_output,
-             ucs=None, state=()):
-    vm = build_vm(tool_path, layers, ents, nselp, with_output, ucs, state)
+             ucs=None, state=(), machine=None, knobs=()):
+    vm = build_vm(tool_path, layers, ents, nselp, with_output, ucs, state,
+                  machine, knobs)
     script = [a.value for a in answers if not a.selection]
     try:
         vm.run("c:" + command, script)
@@ -908,8 +973,35 @@ def probe(report_path, tool_path=None, cap=DEFAULT_MAX, with_output=False,
             res.say("  AutoCAD version.")
     res.say()
 
+    # the drafter's machine, as far as the report carries it: the
+    # units family and the frame the tool's text and angles read, and
+    # every knob LAZTUNE moved there.  Applied to the control run and
+    # to every probe, so a failure those caused reproduces HERE --
+    # which the replay could not do while the VM stood at defaults
+    machine, knobs = rep["machine"], rep["knobs"]
+    res.data["machine"] = dict(machine)
+    res.data["knobs"] = [{"name": n, "text": t} for n, t in knobs]
+    res.say("THE MACHINE, PUT ON THE REPLAY")
+    if machine:
+        res.say("  " + ", ".join("%s %s" % (k, v) for k, v in machine.items()
+                                 if v not in ("", "nil")))
+    else:
+        res.say("  (the report carries no machine section: an older LAZDIAG; "
+                "the replay stands at AutoCAD's defaults)")
+    if knobs:
+        for n, t in knobs:
+            res.say("  knob %-30s = %s" % (n, t))
+        probe_vm = build_vm(path, layers, ents, nselp, with_output, ucs, state,
+                            machine, knobs)
+        _, refused = apply_knobs(probe_vm, knobs)
+        if refused:
+            res.say("  (not applied: %s)" % ", ".join(refused))
+    else:
+        res.say("  no LAZTUNE knob moved on that machine")
+    res.say()
+
     common = (path, command, layers, ents, nselp)
-    control = run_once(*common, answers, with_output, ucs, state)
+    control = run_once(*common, answers, with_output, ucs, state, machine, knobs)
     res.data["control"] = {"kind": control.kind, "message": control.message,
                            "asked": control.asked}
     res.say("THE CONTROL RUN (the answers exactly as recorded)")
@@ -967,7 +1059,7 @@ def probe(report_path, tool_path=None, cap=DEFAULT_MAX, with_output=False,
                     replay.append(varied[j])
                     j += 1
             st = state
-        out = run_once(*common, replay, with_output, ucs, st)
+        out = run_once(*common, replay, with_output, ucs, st, machine, knobs)
         rows.setdefault(i, []).append((w, out))
         probes.append({"answer": i + 1, "label": inputs[i].label,
                        "value": fmt(w), "kind": out.kind,

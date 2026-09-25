@@ -141,7 +141,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.65")
+(setq *lazpanel-version* "v3.66")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -397,6 +397,7 @@
     ("HONEFILLET"       "Corner radius, honed")
     ("LAZDIAG"          "Error report for the last failure")
     ("LAZFORM"          "Pool from a filled-in chart")
+    ("LAZLAST"          "Report the last run, even though it did not fail")
     ("LAZLOG"           "What every command has done lately")
     ("LAZSIDE"          "Side view from a filled-in section")
     ("LAZTXT"           "The same form, drawn in tiles")
@@ -519,6 +520,7 @@
     ("LAZDIAG" "Write the last failure out as a DXF to send in - and, with nothing to report, prove that path works")
     ("LAZFORM" "Fill the dimension chart in and draw the pool from it")
     ("LAZLOG" "Every calofin command that finished, was backed out of or FAILED - the log a report's history comes from")
+    ("LAZLAST" "Write the LAST RUN out as a report although it did not fail - for the run that finished and drew the wrong thing")
     ("LAZSIDE" "Read the section, type the letters beside it, and POOLSIDE draws the side view")
     ("LAZTXT" "LAZFORM's chart built from DCL tiles instead of vectors")
     ("LAZFORMCOVER" "LAZFORM for a cover sheet - the pool-bottom gate closed")
@@ -639,6 +641,7 @@
     ("LAZFORM" "Opens a DCL chart of the pool outline, hopper and dimension chain -- the same picture as the paper order sheet, each box labelled with the letter the sheet uses. Type a number against a letter to fill it in, leave what you do not know blank, and press Insert: POOL runs from the completed sheet, asking only for whatever letter is still empty.")
     ("LAZFORMCOVER" "The same chart as LAZFORM, for a cover sheet: fill in the labelled boxes and press Insert to run POOLCOVER from them.")
     ("LAZLOG" "No prompts. Type LAZLOG to reprint the last failure's report; with nothing to report, it writes a test report to the same folder a real one would land in, proving that path still works.")
+    ("LAZLAST" "No prompts. Type LAZLAST straight after a run that finished but drew the wrong thing: the last finished run is written out as a RUN report - every prompt and answer, what has been drawn since it began, the machine it ran on, the tool's own self tests - to the same folder an error report goes to. Send it in with a note saying what came out wrong.")
     ("LAZSIDE" "Opens the DCL side-view chart, one tab per bottom type (Normal, Sport, Wedge, SLope, MOdflat, SHallow). The longitudinal section stands on the left; fill in the labelled dimension boxes beside it and press Insert, and POOLSIDE draws it, asking for nothing but the base point.")
     ("LAZSPA" "The same lettered-chart pattern as LAZFORM, for SPA: fill in the spa order sheet's boxes (NA means \"not measured\"; blank means SPA should ask), press Insert, and SPA runs from the completed sheet, asking only for whatever is still blank.")
     ("LAZSTEP" "Pick which step routine this is -- CORNERSTP, HEMISTEP or NORMIESTEP -- and type the step count. The chart grows a labelled box for every dimension that count implies (five steps makes five tread boxes, five widths, six depths); fill them in and press Insert to run the step routine.")
@@ -767,6 +770,7 @@
     ("LAZDIAG" "error report failure diagnosis transcript log downloads crash")
     ("LAZFORM" "dimension chart form letters boxes corners draw pool")
     ("LAZLOG" "log monthly command quit fail rate file prompt")
+    ("LAZLAST" "wrong drew last run report request no error transcript send")
     ("LAZSIDE" "section letters tabs insert base point bottom type depth recall")
     ("LAZTXT" "tiles text chart form boxed cluster hopper rectangle")
     ("LAZFORMCOVER" "cover sheet bottom gate chart form shape closed")
@@ -1031,6 +1035,7 @@
       "SQUAREUP"
       "DRONOTE"
       "OSR"
+      "LAZLAST"
       )
     )
      ("Layout"
@@ -1146,6 +1151,7 @@
       "CCPRECHECK"
       "LAZDIAG"
       "LAZLOG"
+      "LAZLAST"
       )
     )))
 

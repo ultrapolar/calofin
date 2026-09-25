@@ -450,6 +450,9 @@ The same chart as LAZFORM, for a cover sheet: fill in the labelled boxes and pre
 == LAZLOG ==
 No prompts. Type LAZLOG to reprint the last failure's report; with nothing to report, it writes a test report to the same folder a real one would land in, proving that path still works.
 
+== LAZLAST ==
+No prompts. Type LAZLAST straight after a run that finished but drew the wrong thing: the last finished run is written out as a RUN report - every prompt and answer, what has been drawn since it began, the machine it ran on, the tool's own self tests - to the same folder an error report goes to. Send it in with a note saying what came out wrong.
+
 == LAZSIDE ==
 Opens the DCL side-view chart, one tab per bottom type (Normal, Sport, Wedge, SLope, MOdflat, SHallow). The longitudinal section stands on the left; fill in the labelled dimension boxes beside it and press Insert, and POOLSIDE draws it, asking for nothing but the base point.
 

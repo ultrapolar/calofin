@@ -977,8 +977,16 @@ What the lines do: `lzd:begin` marks where the drawing stood and starts
 a transcript; `lzd:report`, after the settings are back and the undo
 group is closed, writes the whole failure out as a DXF in the user's
 Downloads folder for them to send in -- the geometry, the clicks, the
-prompts, the sysvars, the error -- and tells them so.  A plain cancel
-writes nothing.  The `(if ...)` guard is what lets a standalone file
+prompts, the sysvars, the error, the tool's own self tests, and THE
+MACHINE: the version, the units family and the switches with the ones
+known to break an AutoLISP tool flagged (`lzd:*hazards*`), the layers
+the run touched and their state, every LAZTUNE override with the value
+the session holds now, and every calofin file loaded -- and tells them
+so.  `lzd:begin` also writes one line into a journal beside the log and
+`lzd:end` clears it, so a run AutoCAD crashed inside is logged LOST by
+the next begin; and `lzd:end` keeps the finished run's context, so
+`LAZLAST` can write the run that drew the wrong thing out as a RUN
+report.  A plain cancel writes nothing.  The `(if ...)` guard is what lets a standalone file
 still load alone: an unbound symbol evaluates to nil, so with no
 LAZDIAG loaded every one of these lines is a no-op and the file behaves
 exactly as it did before.

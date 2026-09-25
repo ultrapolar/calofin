@@ -196,6 +196,18 @@ sites (see standards.md). What it produces:
   `FAIL` record carries the count, and `LAZDIAG` with nothing failed
   runs every table loaded. This is what tells a wrong helper (a knob,
   a unit setting, the AutoCAD version) from a wrong answer.
+- **the machine**: THE MACHINE (version, platform, units, switches,
+  the ones known to break a tool flagged `!!` from `lzd:*hazards*`),
+  THE LAYERS THE RUN TOUCHED with their state, WHAT THIS MACHINE HAS
+  CHANGED FROM SHIPPED (LAZTUNE overrides as `= name -> text`, terms,
+  theme, folders) and CALOFIN FILES LOADED with versions. The probe
+  puts the units and the overrides on the VM before it replays.
+- **LOST runs**: a one-line journal beside the log, written at
+  `lzd:begin` and cleared at end, so a run AutoCAD crashed or was
+  killed inside is logged `LOST` by the next begin.
+- **LAZLAST**: the last finished run's context is kept at `lzd:end`,
+  and `LAZLAST` writes it as a RUN report (`-lastrun-`) for the run
+  that drew the wrong thing without failing.
 
 Because answers are recorded **typed** (`nil`, `12.5`, `"Yes"`,
 `(x y z)`), a transcript is **replayable**:

@@ -91,6 +91,10 @@ NO_PROMPT = {
     # either there or it is not, and either way it says so.  In QUIET
     # below, where that silence is asserted rather than assumed.
     'LAZLOG',
+    # LAZLAST writes the last finished run out as a report, or says no
+    # run has finished yet, and stops.  Nothing to ask either way; in
+    # QUIET below.  tests/test_lazdiag_machine.py drives both paths.
+    'LAZLAST',
     # an empty drawing carries none of the VS layers, so its layer check
     # runs before its first question: it says which layers it looked for
     # and stops.  tests/test_vsconv.py drives the prompt, and the Esc at
@@ -109,7 +113,8 @@ NEEDS_ACTIVEX = set()
 
 #: commands that ask nothing: they run to completion on an empty drawing
 QUIET = ['COVERCHECKRESCUE', 'DIMCHECKRESCUE', 'LINFINCHECKRESCUE',
-         'TUTORIALCOVERCHECKCLEAN', 'XFTCONV-SETUP', 'LAZDIAG', 'LAZLOG']
+         'TUTORIALCOVERCHECKCLEAN', 'XFTCONV-SETUP', 'LAZDIAG', 'LAZLOG',
+         'LAZLAST']
 
 #: commands whose first act is a file dialog, or a look for a folder no
 #: setting names: Cancel there, or nothing there, ends the run

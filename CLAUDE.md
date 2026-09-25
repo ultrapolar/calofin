@@ -357,6 +357,41 @@ loaded and says which tool's arithmetic is off BEFORE anything fails,
 and the log's `FAIL` record carries the count, so a month of runs says
 whether a tool's helpers were ever wrong on that machine.
 
+**A report writes the MACHINE down, because the classic field failure
+is a setting, not a line of code.** ANGDIR turned clockwise mirrors
+every angle; PICKFIRST off empties every implied selection; ATTDIA on
+opens a dialog inside a `(command ...)` insert and the run stalls;
+EXPERT up runs a command sequence an answer ahead; a LOCKED layer
+refuses every write without a word; a knob LAZTUNE moved on one
+machine and no other; an old copy of one tool APPLOADed over the
+build. None of that can be seen from a transcript. So every report
+carries THE MACHINE (version, platform, the units family, the
+switches, with the ones known to break a tool FLAGGED `!!` and the
+reason beside each -- `lzd:*hazards*` is the table), THE LAYERS THE
+RUN TOUCHED with their state, WHAT THIS MACHINE HAS CHANGED FROM
+SHIPPED (every LAZTUNE override as `= name -> text` with the value the
+session holds now, the shop terms, the theme, the folders) and CALOFIN
+FILES LOADED with their versions; THE INPUTS also flags a pick far
+from the geometry and one off the plane. `probe_report.py` reads the
+machine and the overrides back and puts them on the VM before it
+replays, so a failure a knob or a unit setting caused reproduces
+there. Every section is built under its own catch: one that fails on
+a strange machine is one line, not a lost report.
+
+**Two failures never reach `*error*`, and both are covered now.** A
+CRASH -- AutoCAD closed, killed or fallen over inside a run -- writes
+nothing; so `lzd:begin` writes one line into a journal beside the log
+and `lzd:end` clears it, and a line still there when the next run
+begins with no context standing is logged `LOST`, with the drawing it
+was in (one journal per machine, so two AutoCADs at once can cross;
+the record says so). And the run that FINISHED AND DREW THE WRONG
+THING: `lzd:end` keeps its context (`lzd:*lastrun*`, never this
+file's own commands), and `LAZLAST` writes it out as a RUN report --
+titled as such, `TOOL-ver-lastrun-date.dxf` -- with the transcript,
+everything drawn since the run began, the machine and the tool's self
+tests, for the drafter to send in with a note saying what came out
+wrong. It is on the Checking page beside LAZDIAG and LAZLOG.
+
 **The same four calls feed the run LOG.** A report is written when
 something breaks; the log gets a line from every run, and it answers
 what a report cannot -- how often a tool fails against how many clean
@@ -365,7 +400,8 @@ they quietly back out of over and over. `lzd:end` is why a clean run
 appears at all: a command has no early return, so every success falls
 through to its trailing `(princ)` and that is where the hook sits.
 Three outcomes, `ok` (one line), `quit` (and the prompt they stopped
-at) and `FAIL` (the error, the report, the last prompts). It rolls
+at) and `FAIL` (the error, the report, the last prompts) -- and `LOST`
+for a run that never ended, `NOTE` for one LAZLAST reported. It rolls
 monthly into `<profile>\calofin\calofin-YYYY-MM.log`, `LAZLOG` shows
 it, and every failure report carries the tail of it so the one file the
 drafter sends holds the history too.

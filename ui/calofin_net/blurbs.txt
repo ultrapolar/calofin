@@ -54,6 +54,7 @@ HEMISTEP          Hemi step layout
 HONEFILLET        Bracket two of SMARTFILLET's radii and hone between them at half inches
 LAZDIAG           Write the last failure out as a DXF to send in - and, with nothing to report, prove that path works
 LAZLOG            Every calofin command that finished, was backed out of or FAILED - the log a report's history comes from
+LAZLAST           Write the LAST RUN out as a report although it did not fail - for the run that finished and drew the wrong thing
 LAZFORM           Fill the dimension chart in and draw the pool from it
 LAZFORMCOVER      LAZFORM for a cover sheet - the pool-bottom gate closed
 LAZSIDE           Read the section, type the letters beside it, and POOLSIDE draws the side view

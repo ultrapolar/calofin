@@ -246,6 +246,7 @@ namespace Calofin.Ribbon
                 new Item(new Entry("CCPRECHECK", "Tech flow chart", "Walks the Tech Flow Chart decision tree"), new Entry[0], true, false),
                 new Item(new Entry("LAZDIAG", "Error report for the last failure", "Write the last failure out as a DXF to send in - and, with nothing to report, prove that path works"), new Entry[0], true, false),
                 new Item(new Entry("LAZLOG", "What every command has done lately", "Every calofin command that finished, was backed out of or FAILED - the log a report's history comes from"), new Entry[0], true, false),
+                new Item(new Entry("LAZLAST", "Report the last run, even though it did not fail", "Write the LAST RUN out as a report although it did not fail - for the run that finished and drew the wrong thing"), new Entry[0], false, false),
             } },
         };
     }

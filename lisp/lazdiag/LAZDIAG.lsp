@@ -8,6 +8,9 @@
 ;;;                        when nothing has failed, prove the whole path
 ;;;                        works by writing a test report to the same
 ;;;                        folder a real one would go to
+;;;            LAZLAST     write the LAST RUN out as a report although it
+;;;                        did not fail -- for the run that finished and
+;;;                        drew the wrong thing, which no *error* ever sees
 ;;;            LAZDIAGVER  print the loaded version
 ;;;
 ;;;  This file is not a drafting tool.  It is the thing every other tool
@@ -105,7 +108,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.8")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.9")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -158,6 +161,16 @@
 (setq lzd:*lastfile* nil)  ; where it went, nil if it could not be written
 (setq lzd:*selfres* nil)   ; ((TOOL passed total) ...) of the self tests the
                            ; last report ran, for the log's FAIL record
+(setq lzd:*geoext* nil)    ; (x0 y0 x1 y1) of the geometry a report copied,
+                           ; for the oddities pass to judge a far-off pick by
+(setq lzd:*kind* nil)      ; "error", "selftest" or "lastrun" while a report
+                           ; is being built: its title and its notes follow
+(setq lzd:*lastrun* nil)   ; the context of the last run that ENDED, kept
+                           ; for LAZLAST -- the run that drew the wrong thing
+;; NOT A KNOB: the commands of this file, whose own runs are never the
+;; "last run" LAZLAST reports -- a drafter who types LAZLOG and then
+;; LAZLAST wants the tool before both, not LAZLOG.
+(setq lzd:*machinery* '("LAZDIAG" "LAZLOG" "LAZLAST"))
 
 ;;; -------------------- small helpers -----------------------------------
 
@@ -285,17 +298,23 @@
   tool)
 
 ;; lzd:begin for a run that is not joining another.
-(defun lzd:begin-1 (tool ver)
+(defun lzd:begin-1 (tool ver / fresh)
   ;; A context still standing when a DIFFERENT tool begins belongs to a
   ;; run that finished without failing -- lzd:report and lzd:end both
   ;; clear it -- so this is where that run gets its "ok" line.  The
   ;; lazy half of the logging: lzd:end is the direct one, and this
   ;; catches the commands that do not end in a (princ) for it to sit
   ;; before, and the session where AutoCAD was closed on the last one.
+  (setq fresh (null lzd:*tool*))
   (if (and lzd:*tool* (not (lzd:mine-p tool)))
-    (lzd:log "ok" nil nil))
+    (progn (lzd:lastrun-keep) (lzd:log "ok" nil nil)))
   (if (not (lzd:mine-p tool))
     (progn
+      ;; the journal: a run that never ended is found here, by the next
+      ;; begin with no context standing, and logged LOST (see the run
+      ;; log); then this run's own line goes in.  Caught: a folder that
+      ;; will not take it costs nothing but the LOST record.
+      (vl-catch-all-apply 'lzd:journal-turn (list tool ver fresh))
       (setq lzd:*tool*    (lzd:str tool)
             lzd:*started* (lzd:datestr)
             lzd:*mark*    (entlast)
@@ -374,9 +393,33 @@
      (lzd:say (strcat "--- " (lzd:str tool) " finished")))
     (t
      (if (and lzd:*tool* (or (null tool) (lzd:mine-p tool)))
-       (lzd:log "ok" nil nil))
+       (progn (lzd:lastrun-keep) (lzd:log "ok" nil nil)))
      (if (or (null tool) (null lzd:*tool*) (lzd:mine-p tool))
-       (lzd:disown))))
+       (progn (lzd:disown) (lzd:journal-clear)))))
+  nil)
+
+;; The context of a run that has just ended, kept whole for LAZLAST:
+;; the run that finished and drew the wrong thing never reaches
+;; *error*, and this is the only copy of its transcript.  This file's
+;; own commands are never it.
+(defun lzd:lastrun-keep ()
+  (if (and lzd:*tool*
+           (not (member (strcase (lzd:str lzd:*tool*)) lzd:*machinery*)))
+    (setq lzd:*lastrun* (lzd:context)))
+  nil)
+
+;; The run context as one list, and put back from one -- LAZLAST swaps
+;; a finished run in for the length of its report and its own back.
+(defun lzd:context ()
+  (list lzd:*tool* lzd:*ver* lzd:*started* lzd:*mark* lzd:*log*
+        lzd:*answers* lzd:*step* lzd:*watch* lzd:*pts* lzd:*inner*))
+
+(defun lzd:install (c)
+  (setq lzd:*tool*    (nth 0 c) lzd:*ver*     (nth 1 c)
+        lzd:*started* (nth 2 c) lzd:*mark*    (nth 3 c)
+        lzd:*log*     (nth 4 c) lzd:*answers* (nth 5 c)
+        lzd:*step*    (nth 6 c) lzd:*watch*   (nth 7 c)
+        lzd:*pts*     (nth 8 c) lzd:*inner*   (nth 9 c))
   nil)
 
 ;; One line of transcript.  The list is NEWEST first, so capping it is
@@ -1091,14 +1134,39 @@
   (reverse out))
 
 ;; The flags for one picked point, against the other picks.
-(defun lzd:oddpt (prompt p others / out o)
+(defun lzd:oddpt (prompt p others / out o d)
   (foreach o others
     (if (and (/= (car o) prompt) (lzd:point-p (cdr o))
              (< (distance (list (car p) (cadr p))
                           (list (car (cdr o)) (cadr (cdr o))))
                 1e-6))
       (setq out (cons (strcat "same spot as " (car o)) out))))
+  ;; a Z on a pick in a 2-D drawing is a UCS or a snap to something in
+  ;; the air, and every helper that reads (car p) (cadr p) drops it
+  (if (and (caddr p) (numberp (caddr p)) (> (abs (caddr p)) 1e-6))
+    (setq out (cons (strcat "off the plane (z = " (lzd:num (caddr p)) ")")
+                    out)))
+  ;; a pick a long way from everything the run drew or was handed is a
+  ;; wrong UCS, a typo, or a click on the wrong viewport
+  (if (setq d (lzd:far-off p))
+    (setq out (cons (strcat "far from the geometry (" (lzd:num d)
+                            " units off)")
+                    out)))
   (reverse out))
+
+;; How far P is from the copied geometry when that is FAR: past ten
+;; times the geometry's own span and never under a thousand units, so
+;; a click just outside a pool is not one.  nil when it is not far, or
+;; when the report holds no geometry to judge by.
+(defun lzd:far-off (p / e cx cy diag d)
+  (if (and (setq e lzd:*geoext*) (numberp (car p)) (numberp (cadr p)))
+    (progn
+      (setq cx   (* 0.5 (+ (car e) (caddr e)))
+            cy   (* 0.5 (+ (cadr e) (cadddr e)))
+            diag (distance (list (car e) (cadr e))
+                           (list (caddr e) (cadddr e)))
+            d    (distance (list cx cy) (list (car p) (cadr p))))
+      (if (> d (max (* 10.0 diag) 1000.0)) d))))
 
 ;; The section's lines.  Counts first, then one line per answer that
 ;; drew a flag, then a word when nothing did -- because "nothing odd
@@ -1130,11 +1198,11 @@
                       "   look at the code before the inputs)"))
     out))
 
-(defun lzd:report-lines (tool ver msg nents nsel nselp / out tail)
+(defun lzd:report-lines (tool ver msg nents nsel nselp lays / out tail)
   (setq out
     (list
-      "CALOFIN ERROR REPORT"
-      "===================="
+      (lzd:title)
+      (lzd:title-rule)
       ""
       (lzd:pair "tool" (strcat (lzd:str tool) " "
                                (if ver (lzd:str ver) "(no version banner)")))
@@ -1178,8 +1246,19 @@
       (lzd:pair "AUNITS" (getvar "AUNITS"))
       (lzd:pair "ANGBASE" (getvar "ANGBASE"))
       (lzd:pair "ANGDIR" (getvar "ANGDIR"))
-      ""
+      ""))
+  ;; the machine the run was on, what this profile has changed from
+  ;; shipped, and what is loaded: the causes a self-test FAIL points
+  ;; at, by name, and the settings a transcript can never show
+  (setq out (append out
+                    (lzd:section 'lzd:machine-lines nil)
+                    (lzd:section 'lzd:layer-lines (list lays))
+                    (lzd:section 'lzd:changed-lines nil)
+                    (lzd:section 'lzd:loaded-lines nil)))
+  (setq out (append out
+    (list
       "GEOMETRY COPIED INTO THIS FILE"
+      (lzd:kindnote)
       (lzd:pair "entities" (strcat (itoa nents)
                                    (if (>= nents lzd:*max-ents*)
                                      (strcat " (TRUNCATED at lzd:*max-ents* = "
@@ -1202,7 +1281,7 @@
       "  transcript below says how it got there.  Between them they name"
       "  the prompt it died at, which is the question a line number"
       "  would have answered."
-      ""))
+      "")))
   ;; a failure in a command this run called: named, right under the
   ;; command it is filed as (lzd:report-1)
   (if lzd:*inner*
@@ -1251,6 +1330,227 @@
                 "Send this file to whoever maintains calofin.  It holds"
                 "the failure and no more of your drawing than the failure"
                 "needed; your own drawing was not changed.")))
+
+;;; -------------------- the machine, and what it has changed ------------
+;;;
+;;;  The classic AutoLISP failure in the field is not a wrong line of
+;;;  code: it is a setting.  ANGDIR turned clockwise, so every angle is
+;;;  mirrored; PICKFIRST off, so the selection a tool reads is empty;
+;;;  ATTDIA on, so a block insert opens a dialog inside (command ...)
+;;;  and the run stalls; EXPERT up, so a (command ...) written for the
+;;;  confirmations runs an answer ahead; a LOCKED layer, which refuses
+;;;  every write without a word; a knob LAZTUNE moved on this machine
+;;;  and no other; an old copy of one tool APPLOADed over the build.
+;;;  Every one of those looks, in the transcript, like a tool that
+;;;  simply got it wrong -- and none of them can be seen from the
+;;;  answers.  So a report writes the machine down: the version, the
+;;;  units family, the switches, with the ones known to break a tool
+;;;  FLAGGED and the reason beside each; the state of every layer the
+;;;  run touched; what this profile has changed from shipped (LAZTUNE
+;;;  knobs, shop terms, the theme, the folders); and every calofin file
+;;;  loaded, with its version.  Reading only; nothing here writes, and
+;;;  every section is built under its own catch, so one that fails on
+;;;  a strange machine is one line saying so and not a lost report.
+
+;; NOT A KNOB: the sysvars a report records beyond the drawing's own,
+;; in the order they are written.
+(setq lzd:*machine*
+  '("ACADVER" "PLATFORM" "LOCALE" "PRODUCT" "MEASUREMENT" "LUPREC"
+    "DIMZIN" "DIMLUNIT" "DIMDEC" "DIMFRAC" "DIMTXT" "DIMASZ" "DIMASSOC"
+    "CANNOSCALE" "TEXTSTYLE" "TEXTSIZE" "CELTYPE" "CECOLOR" "LTSCALE"
+    "PICKFIRST" "PICKADD" "PICKSTYLE" "HIGHLIGHT" "CMDDIA" "FILEDIA"
+    "ATTDIA" "ATTREQ" "EXPERT" "NOMUTT" "DELOBJ" "PEDITACCEPT"
+    "OFFSETGAPTYPE" "OSNAPCOORD" "ORTHOMODE" "SNAPMODE" "POLARMODE"
+    "AUTOSNAP" "DYNMODE" "BLOCKEDITOR" "REFEDITNAME" "CMDACTIVE"))
+
+;; NOT A KNOB: (NAME TEST VALUE WHY) -- the settings known to break an
+;; AutoLISP tool, flagged when the test holds against the machine's
+;; value: is, not, gt (a number above), set (a non-empty string).
+;; Not here: PEDITACCEPT and OFFSETGAPTYPE, which sit at the value a
+;; tool must guard against on EVERY machine -- AUTOBEAD sets and
+;; restores both -- so flagging them would flag every report.  They are
+;; recorded above all the same.
+(setq lzd:*hazards*
+  '(("ANGDIR" is 1
+     "angles run CLOCKWISE, so every angle a tool computes or writes is mirrored")
+    ("ANGBASE" not 0
+     "angle zero is not East, so a bearing, a rotation and every angtos text are turned")
+    ("AUNITS" not 0
+     "angles are not decimal degrees, so a typed rotation reads as something else")
+    ("PICKFIRST" is 0
+     "no implied selection: a tool that reads what was selected before it ran gets nothing")
+    ("ATTDIA" is 1
+     "a block insert with attributes opens a DIALOG inside (command ...): the run stalls, or its next answers land in the box")
+    ("ATTREQ" is 0
+     "attribute prompts are skipped, so the values a tool feeds an insert land on the next prompt")
+    ("EXPERT" gt 0
+     "confirmations are suppressed, so a (command ...) written for the questions runs an answer ahead")
+    ("NOMUTT" not 0
+     "prompts are muted: a run looks hung while it waits for an answer nobody was shown")
+    ("OSNAPCOORD" is 0
+     "a running object snap OVERRIDES a typed or computed coordinate, so a point a tool feeds in can land on nearby geometry")
+    ("FILEDIA" is 0
+     "file dialogs are command-line prompts: a tool that opens one meets a text prompt instead")
+    ("BLOCKEDITOR" is 1
+     "the Block Editor is open: the tool ran inside a block definition, not in the drawing")
+    ("REFEDITNAME" set ""
+     "a reference is being edited in place: the tool ran inside a REFEDIT session")))
+
+(defun lzd:hazard-p (test have want)
+  (cond ((null have) nil)
+        ((eq test 'is)  (equal have want))
+        ((eq test 'not) (not (equal have want)))
+        ((eq test 'gt)  (and (numberp have) (> have want)))
+        ((eq test 'set) (and (= (type have) 'STR) (/= have "")))
+        (t nil)))
+
+;; One section, built under its own catch: a builder that throws on a
+;; strange machine costs that section, not the report.
+(defun lzd:section (fn args / r)
+  (setq r (vl-catch-all-apply fn args))
+  (if (vl-catch-all-error-p r)
+    (list (strcat "  (this section could not be written: "
+                  (lzd:str (vl-catch-all-error-message r)) ")")
+          "")
+    r))
+
+(defun lzd:machine-lines ( / out n v h k)
+  (setq out (list "THE MACHINE") k 0)
+  (foreach n lzd:*machine*
+    (setq out (append out (list (lzd:pair n (getvar n))))))
+  (setq out (append out (list "  Settings known to break an AutoLISP tool, checked here:")))
+  (foreach h lzd:*hazards*
+    (setq v (getvar (car h)))
+    (if (lzd:hazard-p (cadr h) v (caddr h))
+      (setq out (append out (list (strcat "  !! " (car h) " = " (lzd:str v)
+                                          ": " (cadddr h))))
+            k   (1+ k))))
+  (if (= k 0)
+    (setq out (append out (list "  (none of them is set the way that breaks one)"))))
+  (append out (list "")))
+
+;; The layers a report's primitives lie on, once each, in order met.
+(defun lzd:prim-layers (prims / out l pr)
+  (foreach pr prims
+    (setq l (cadr pr))
+    (if (and l (= (type l) 'STR) (not (member l out)))
+      (setq out (cons l out))))
+  (reverse out))
+
+;; A layer's state as a phrase -- "LOCKED", "frozen", "off", joined --
+;; "" when it is plain, and a word when it is not there at all.
+(defun lzd:layer-state (name / rec f c out)
+  (cond
+    ((not (and name (= (type name) 'STR))) "")
+    ((null (setq rec (tblsearch "LAYER" name))) "(no such layer)")
+    (t
+     (setq f (cdr (assoc 70 rec)) c (cdr (assoc 62 rec)) out "")
+     (if (and f (/= 0 (logand f 4))) (setq out "LOCKED"))
+     (if (and f (/= 0 (logand f 1)))
+       (setq out (strcat out (if (= out "") "" ", ") "frozen")))
+     (if (and c (< c 0))
+       (setq out (strcat out (if (= out "") "" ", ") "off")))
+     out)))
+
+(defun lzd:layer-lines (lays / out l s cl n)
+  (setq out (list "THE LAYERS THE RUN TOUCHED") n 0)
+  (setq cl (getvar "CLAYER"))
+  (if (and cl (= (type cl) 'STR) (not (member cl lays)))
+    (setq lays (append lays (list cl))))
+  (foreach l lays
+    (setq s (lzd:layer-state l))
+    (setq out (append out (list (strcat "  " (lzd:pad l 20)
+                                        (if (= s "") "plain" s)
+                                        (if (equal l cl) "   (the current layer)" "")))))
+    ;; the warning is for a state that refuses or hides a write; a
+    ;; layer the table does not know is a report to read, not a hazard
+    (if (wcmatch s "*LOCKED*,*frozen*,*off*") (setq n (1+ n))))
+  (if (null lays)
+    (setq out (append out (list "  (the run touched no entity, and CLAYER could not be read)"))))
+  (if (> n 0)
+    (setq out (append out (list "  !! a LOCKED layer refuses every entmod, entdel and edit command"
+                                "     without a word; a frozen or off one hides what was drawn on it"))))
+  (append out (list "")))
+
+;; A global's value by its name, as the roster and the knobs read one.
+(defun lzd:global-of (name) (eval (read name)))
+
+;; LAZPANEL's lzp:knobkey, copied: a report reads the profile whether
+;; the panel is loaded or not, and the key spelling is the panel's.
+(defun lzd:knobkey (sym)
+  (strcat "CalofinKnob-" (vl-string-translate ":*" ".~" sym)))
+
+(defun lzd:split (s sep / out i)
+  (while (setq i (vl-string-search sep s))
+    (setq out (cons (substr s 1 i) out)
+          s   (substr s (+ i 1 (strlen sep)))))
+  (reverse (cons s out)))
+
+(defun lzd:changed-lines ( / idx k txt r out tm v)
+  (setq out (list "WHAT THIS MACHINE HAS CHANGED FROM SHIPPED"
+                  "  (LAZTUNE knobs as the drafter typed them, = name -> text, each"
+                  "   with the value the session holds NOW -- a knob a tool APPLOADed"
+                  "   later reset to shipped reads differently here; then the shop's"
+                  "   terms, the theme, the item colours and the folders)"))
+  (setq idx (lzd:envdir "CalofinKnobs"))
+  (if idx
+    (foreach k (lzd:split idx ";")
+      (if (/= k "")
+        (progn
+          (setq txt (getenv (lzd:knobkey k))
+                r   (vl-catch-all-apply 'lzd:global-of (list k)))
+          (setq out (append out
+                            (list (strcat "  = " k "  -> " (lzd:str txt))
+                                  (strcat "      now "
+                                          (if (vl-catch-all-error-p r)
+                                            "(unreadable)"
+                                            (lzd:short r)))))))))
+    (setq out (append out (list "  (no LAZTUNE knob is overridden in this profile)"))))
+  (if (and (boundp 'lzp:*terms*) (listp lzp:*terms*))
+    (foreach tm lzp:*terms*
+      (if (and (listp tm) (= (type (car tm)) 'STR)
+               (setq v (getenv (strcat "CalofinTerm-" (car tm)))))
+        (setq out (append out (list (strcat "  term " (lzd:pad (car tm) 14)
+                                            (lzd:enc v))))))))
+  (foreach k '("CalofinTheme" "CalofinErrorDir" "CalofinLogDir"
+               "CalofinOsnapPreset" "StockCover_Folder")
+    (if (setq v (lzd:envdir k))
+      (setq out (append out (list (strcat "  " (lzd:pad k 20) v))))))
+  (if (and (boundp 'lzp:*inkroles*) (listp lzp:*inkroles*))
+    (foreach tm lzp:*inkroles*
+      (if (and (listp tm) (= (type (cdr tm)) 'STR)
+               (setq v (getenv (strcat "CalofinInk-" (strcase (cdr tm))))))
+        (setq out (append out (list (strcat "  ink " (lzd:pad (strcase (cdr tm)) 15)
+                                            v)))))))
+  (append out (list "")))
+
+(defun lzd:ends-with (s tail / n m)
+  (setq n (strlen s) m (strlen tail))
+  (and (>= n m) (= (substr s (1+ (- n m))) tail)))
+
+;; Every calofin version banner bound in this session, (name . value),
+;; by name: the session is the only table of what is loaded, and a
+;; support call always asks.  Both banner spellings, *tool-version*
+;; and prefix:*version*.
+(defun lzd:loaded ( / out n r)
+  (foreach n (atoms-family 1)
+    (if (or (and (= (substr n 1 1) "*") (lzd:ends-with n "-VERSION*"))
+            (lzd:ends-with n ":*VERSION*"))
+      (progn
+        (setq r (vl-catch-all-apply 'lzd:global-of (list n)))
+        (if (and (not (vl-catch-all-error-p r)) (= (type r) 'STR))
+          (setq out (cons (cons n r) out))))))
+  (vl-sort out '(lambda (a b) (< (car a) (car b)))))
+
+(defun lzd:loaded-lines ( / out e all)
+  (setq all (lzd:loaded))
+  (setq out (list (strcat "CALOFIN FILES LOADED IN THIS SESSION (" (itoa (length all)) ")")
+                  "  (one version behind the rest is a file APPLOADed from an old"
+                  "   copy over the build; the tool line above says which made this)"))
+  (foreach e all
+    (setq out (append out (list (strcat "  " (lzd:pad (strcase (car e) T) 30)
+                                        (cdr e))))))
+  (append out (list "")))
 
 ;;; -------------------- the tool's own self tests -----------------------
 ;;;
@@ -1418,15 +1718,19 @@
     ((= np n)
      (list (strcat "  " (itoa np) " of " (itoa n) " passed: "
                    (lzd:str tool) "'s own arithmetic is sound on this")
-           "  machine, so the failure is in this run's answers and geometry"
-           "  (below), not in its helpers."))
+           (if (= lzd:*kind* "lastrun")
+             "  machine, so what came out wrong is in this run's answers and"
+             "  machine, so the failure is in this run's answers and geometry")
+           (if (= lzd:*kind* "lastrun")
+             "  geometry (below), not in its helpers."
+             "  (below), not in its helpers.")))
     (t
      (list (strcat "  " (itoa np) " of " (itoa n) " passed.  A FAIL is "
                    (lzd:str tool) "'s own code giving a")
-           "  different answer HERE than on the machine it was written on --"
-           "  a knob LAZTUNE moved, a shop term, LUNITS or DIMZIN, or the"
-           "  AutoCAD version -- before any answer of this run was read."
-           "  Look there first."))))
+           "  different answer HERE than on the machine it was written on,"
+           "  before any answer of this run was read.  THE MACHINE and WHAT"
+           "  THIS MACHINE HAS CHANGED, above, name the units, the switches,"
+           "  the knobs and the terms to look at first."))))
 
 ;; The section of a failure report: the failed tool's table, then the
 ;; table of every command it ran inside this run (lzd:*inner*), since a
@@ -1436,7 +1740,9 @@
   (foreach e (reverse lzd:*inner*)
     (if (not (member (car e) names))
       (setq names (append names (list (car e))))))
-  (setq out (list "THE TOOL'S OWN SELF TESTS, RUN HERE AFTER THE FAILURE"))
+  (setq out (list (if (= lzd:*kind* "lastrun")
+                    "THE TOOL'S OWN SELF TESTS, RUN HERE ON REQUEST"
+                    "THE TOOL'S OWN SELF TESTS, RUN HERE AFTER THE FAILURE")))
   (foreach nm names
     (setq r (lzd:selftest-run nm))
     (if (cdr names) (setq out (append out (list (strcat "  " nm ":")))))
@@ -1553,11 +1859,35 @@
         (foreach pr prims (if (lzd:written-p pr) (setq nselp (1+ nselp))))))
     (setq geo (append geo prims) nents (1+ nents) i (1+ i)))
   (setq pts (lzd:pickpts)
+        lzd:*geoext* (lzd:extent geo)
         ext (lzd:extent (append geo pts))
         h   (lzd:textheight ext))
   (append geo pts (lzd:picklabels h)
-          (lzd:textblock (lzd:report-lines tool ver msg nents nsel nselp)
+          (lzd:textblock (lzd:report-lines tool ver msg nents nsel nselp
+                                           (lzd:prim-layers geo))
                          ext h)))
+
+;; The report's first line, by what it is.  A run report written on
+;; request is not an error report, and a file that said ERROR at the
+;; top of a run that ended cleanly would send its reader looking for
+;; a failure that never happened.
+(defun lzd:title ()
+  (cond
+    ((= lzd:*kind* "lastrun")
+     "CALOFIN RUN REPORT -- no failure: written on request (LAZLAST)")
+    ((= lzd:*kind* "selftest")
+     "CALOFIN SELF TEST REPORT -- nothing has failed")
+    (t "CALOFIN ERROR REPORT")))
+
+(defun lzd:title-rule ( / s)
+  (setq s "")
+  (repeat (strlen (lzd:title)) (setq s (strcat s "=")))
+  s)
+
+(defun lzd:kindnote ()
+  (if (= lzd:*kind* "lastrun")
+    "  (everything drawn since the run began, later commands' work included)"
+    "  (what the run drew, and the selection it was handed)"))
 
 ;;; -------------------- the run log -------------------------------------
 ;;;
@@ -1715,6 +2045,82 @@
           (close fp)
           path)))))
 
+;; Lines of somebody else's making, appended as they are: the LOST
+;; record and LAZLAST's note, whose shape is not a run's.  Caught, and
+;; silent about its own failure, like lzd:log.
+(defun lzd:log-raw (lines / r)
+  (setq r (vl-catch-all-apply 'lzd:log-raw-1 (list lines)))
+  (if (vl-catch-all-error-p r) nil r))
+
+(defun lzd:log-raw-1 (lines / path fp l)
+  (setq path (lzd:logpath))
+  (if (and path (setq fp (open path "a")))
+    (progn
+      (foreach l lines (write-line l fp))
+      (close fp)
+      path)))
+
+;;; -------------------- the journal: the run that never ended ----------
+;;;
+;;;  A crash writes nothing.  AutoCAD closed by the task manager, a
+;;;  fatal error, a machine that lost power, a run that hung until it
+;;;  was killed -- every handler is gone before it can run, the log
+;;;  never gets its line, and the failure that ends the session is the
+;;;  one nobody ever reads about.  So every run writes ONE line into a
+;;;  journal file as it begins, and takes it out as it ends; a line
+;;;  still there when the next run begins with no context standing --
+;;;  the next morning's first command -- is a run that never ended, and
+;;;  goes into the log as LOST, with the drawing it was in.  One line
+;;;  and one file, so a clean run pays two small writes for it.
+;;;
+;;;  One journal per machine, not per AutoCAD: two AutoCADs running
+;;;  calofin at once share it, and a run alive in the other one can be
+;;;  logged LOST by this one's first command.  The record says so, and
+;;;  names the drawing, so it is easy to dismiss when that is what it
+;;;  was.  A journal folder that will not take the file costs nothing
+;;;  but the record.
+
+;; NOT A KNOB: the journal's file name, beside the log.
+(setq lzd:*journal* "calofin-run.journal")
+
+(defun lzd:journalpath ( / dir)
+  (if (setq dir (lzd:logfolder))
+    (progn (vl-mkdir dir) (lzd:join dir lzd:*journal*))))
+
+(defun lzd:journal-write (line / p fp)
+  (if (and (setq p (lzd:journalpath)) (setq fp (open p "w")))
+    (progn (write-line line fp) (close fp) p)))
+
+(defun lzd:journal-read ( / p fp l)
+  (if (and (setq p (lzd:journalpath)) (setq fp (open p "r")))
+    (progn
+      (setq l (read-line fp))
+      (close fp)
+      (if (and l (/= (vl-string-trim " \t" l) "")) l))))
+
+;; Caught: called from lzd:end, lzd:report and the cancel path, none
+;; of which may throw.
+(defun lzd:journal-clear ( / r)
+  (setq r (vl-catch-all-apply 'lzd:journal-write (list "")))
+  (if (vl-catch-all-error-p r) nil r))
+
+;; At a begin: with no context standing (FRESH), a line left in the
+;; journal is a run that never ended -- logged LOST; with one standing,
+;; the line is that run's and the lazy "ok" above has just closed it.
+;; Then this run's own line goes in.
+(defun lzd:journal-turn (tool ver fresh / old)
+  (if (and fresh (setq old (lzd:journal-read)))
+    (lzd:log-raw
+      (list (strcat (lzd:logtime) "  LOST   " old)
+            "    (this run never wrote its end: AutoCAD closed, crashed or was"
+            "     killed inside it, or another AutoCAD running calofin at the"
+            "     same time shared the journal; nothing else of it survived)")))
+  (lzd:journal-write (strcat (lzd:str tool)
+                             (if ver (strcat " " (lzd:str ver)) "")
+                             "  " (lzd:buildshort)
+                             "  " (lzd:str (getvar "DWGNAME"))
+                             "  begun " (lzd:datestr))))
+
 ;; The last N lines of this month's log, oldest first.  Read with a
 ;; rolling window rather than into a list and trimmed: a month of runs
 ;; is a file worth not holding twice.
@@ -1823,15 +2229,18 @@
   (if (lzd:inner-p tool)
     (setq tool lzd:*tool* ver lzd:*ver*))
   (if (not (lzd:mine-p tool)) (lzd:disown))
-  (setq prims (lzd:build-prims tool ver msg)
+  (setq lzd:*kind* "error"
+        prims (lzd:build-prims tool ver msg)
         name  (lzd:filename tool ver)
         path  (lzd:write name prims)
         lzd:*last* (list tool ver msg prims name)
-        lzd:*lastfile* path)
+        lzd:*lastfile* path
+        lzd:*kind* nil)
   (if path (lzd:announce tool ver path) (lzd:nofile tool ver msg nil))
   ;; logged BEFORE lzd:end, which clears the context this reads
   (lzd:log "FAIL" msg path)
   (lzd:disown)
+  (lzd:journal-clear)
   path)
 
 (defun lzd:report (tool ver msg / r)
@@ -1848,6 +2257,7 @@
      ;; the drafter backed out of would have gone into the log twice,
      ;; once as the quit it was and once as a clean run it was not
      (lzd:disown)
+     (lzd:journal-clear)
      nil)
     (lzd:*inside*
      (princ "\n[calofin] The error reporter failed while reporting an")
@@ -1979,11 +2389,13 @@
   ;; whose whole job is the log.  The context is LAZDIAG's already;
   ;; the self test just adds a line to it.
   (lzd:say "--- LAZDIAG self test: no failure, nothing wrong")
-  (setq prims (lzd:build-prims "LAZDIAG" *lazdiag-version*
+  (setq lzd:*kind* "selftest"
+        prims (lzd:build-prims "LAZDIAG" *lazdiag-version*
                                "(self test - no failure has occurred)")
         path  (lzd:write (lzd:filename-kind "LAZDIAG" *lazdiag-version*
                                             "selftest")
-                         prims))
+                         prims)
+        lzd:*kind* nil)
   (if path
     (progn
       (princ (strcat "\n[calofin] Written: " path))
@@ -2073,6 +2485,78 @@
   (if lzd:end (lzd:end "LAZLOG"))
   (princ))
 
+;;; -------------------- LAZLAST, the command ----------------------------
+;;;
+;;;  The commonest failure of all never reaches *error*: the run that
+;;;  finished, said nothing, and drew the wrong thing.  Its transcript
+;;;  was dropped at lzd:end, and until now the drafter's only report of
+;;;  it was "POOL drew it wrong".  lzd:end keeps the last finished run's
+;;;  context instead (lzd:*lastrun*), and LAZLAST writes it out as the
+;;;  same file a failure gets -- the geometry drawn since the run began,
+;;;  every prompt and answer, the machine, the tool's self tests --
+;;;  named lastrun rather than error, and says at the top that nothing
+;;;  failed.  The drafter sends it in with a note saying what came out
+;;;  wrong, and the maintainer replays it.
+
+(defun lzd:lastrun-report ( / keep r)
+  (setq keep (lzd:context))
+  (lzd:install lzd:*lastrun*)
+  (setq lzd:*kind* "lastrun"
+        r (vl-catch-all-apply 'lzd:lastrun-1 nil)
+        lzd:*kind* nil)
+  (lzd:install keep)
+  (if (vl-catch-all-error-p r)
+    (progn
+      (princ (strcat "\n[calofin] LAZLAST could not write the report: "
+                     (lzd:str (vl-catch-all-error-message r))))
+      nil)
+    r))
+
+(defun lzd:lastrun-1 ( / prims path who)
+  (setq who   (strcat (lzd:str lzd:*tool*)
+                      (if lzd:*ver* (strcat " " (lzd:str lzd:*ver*)) ""))
+        prims (lzd:build-prims lzd:*tool* lzd:*ver*
+                               "(no failure: the drafter asked for this run's report with LAZLAST)")
+        path  (lzd:write (lzd:filename-kind lzd:*tool* lzd:*ver* "lastrun")
+                         prims))
+  (cond
+    (path
+     (princ (strcat "\n[calofin] The last run, " who ", is written to"))
+     (princ (strcat "\n[calofin]     " path))
+     (princ "\n[calofin] Send that file in with a note saying what came out")
+     (princ "\n[calofin] wrong.  It holds the run's every prompt and answer, what")
+     (princ "\n[calofin] has been drawn since it began, the machine it ran on and")
+     (princ "\n[calofin] the tool's own self tests.  Your drawing has not been touched.")
+     (lzd:log-raw (list (strcat (lzd:logtime) "  NOTE   " who
+                                "  reported on request (LAZLAST)")
+                        (strcat "    file  " path))))
+    (t
+     (princ (strcat "\n[calofin] Could NOT write the report of " who ": no"))
+     (princ "\n[calofin] folder would take it.  Set the AutoCAD environment string")
+     (princ "\n[calofin] CalofinErrorDir to a folder you can write to:")
+     (princ "\n[calofin]   (setenv \"CalofinErrorDir\" \"C:\\\\temp\")")))
+  path)
+
+(defun c:LAZLAST ( / *error* oce)
+  (defun *error* (m)
+    (if oce (setvar "CMDECHO" oce))
+    (if (and m (not (lzd:cancel-p m)))
+      (princ (strcat "\nLAZLAST error: " m)))
+    (if lzd:report (lzd:report "LAZLAST" *lazdiag-version* m))
+    (princ))
+  (if lzd:begin (lzd:begin "LAZLAST" *lazdiag-version*))
+  (setq oce (getvar "CMDECHO"))
+  (setvar "CMDECHO" 0)
+  (if lzd:*lastrun*
+    (lzd:lastrun-report)
+    (progn
+      (princ "\n[calofin] No calofin command has finished in this session yet,")
+      (princ "\n[calofin] so there is no run to report.  Run the tool that drew")
+      (princ "\n[calofin] the wrong thing, then type LAZLAST straight after.")))
+  (setvar "CMDECHO" oce)
+  (if lzd:end (lzd:end "LAZLAST"))
+  (princ))
+
 (defun c:LAZDIAGVER ()
   (princ (strcat "\nLAZDIAG " *lazdiag-version*))
   (princ))
@@ -2106,7 +2590,7 @@
     (list "runtest passes an equal value"     '(car (lzd:runtest '("t" (+ 1 1) 2))))
     (list "runtest fails a raised error"      '(not (car (lzd:runtest '("t" (car 1) 2)))))))
 
-(foreach c '("LAZDIAG" "LAZLOG")
+(foreach c '("LAZDIAG" "LAZLOG" "LAZLAST")
   (setq *calofin-selftests*
         (cons (cons c 'lzd:selftests) *calofin-selftests*)))
 
@@ -2121,5 +2605,6 @@
   (princ (strcat "\nLAZDIAG " *lazdiag-version*
                  " loaded -- a failed calofin command now writes a DXF"
                  " error report to your Downloads folder; type LAZDIAG to"
-                 " prove that works before you ever need it.")))
+                 " prove that works before you ever need it, and LAZLAST"
+                 " to report a run that finished but drew the wrong thing.")))
 (princ)

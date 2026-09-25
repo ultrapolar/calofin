@@ -216,6 +216,7 @@ tests/test_back_nav.py
 | `test_versions.py` | version banners |
 | `test_lazdiag*.py` | the failure-report wiring, replay and sweep; `test_lazdiag_selftests.py` the self-test section of a report |
 | `test_selftests.py` | every tool's self-test table passes at this tier, and prompted, drew, commanded, wrote and moved nothing |
+| `test_lazdiag_machine.py` | THE MACHINE and its hazard flags, the layers touched, the LAZTUNE overrides, the loaded roster, the far/off-plane picks, LOST runs, LAZLAST, and the probe replaying under the report's machine |
 
 ## Adding a new test
 
