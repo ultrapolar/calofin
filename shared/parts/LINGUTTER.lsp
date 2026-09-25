@@ -231,7 +231,7 @@
 ;;;      restored afterwards, on a clean finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *lingutter-version* "v2.12")  ; announced on load; release_lisp.py
+(setq *lingutter-version* "v2.13")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -1856,6 +1856,54 @@
 (defun c:LINGUTTERVER ()
   (princ (strcat "\nLINGUTTER " *lingutter-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lg:selftests ()
+  (list
+    (list "area of two bulge-1 halves is a unit circle's"
+          '(lg:area '((0 0 1.0) (2 0 1.0)))  pi)
+    (list "perim-len once round the unit square is 4"
+          '(lg:perim-len '((0 0 0.0) (1 0 0.0) (1 1 0.0) (0 1 0.0)))  4.0)
+    (list "bulge-of a half turn is 1"  '(lg:bulge-of pi)  1.0)
+    (list "thin-offs sorts and drops an offset within tol of the last"
+          '(lg:thin-offs '(5.0 1.0 1.05 3.0) 0.1)  '(1.0 3.0 5.0))
+    (list "build-graph drops a segment shorter than the tolerance"
+          '(lg:build-graph '(((0 0) (0.01 0) 0.0)) 0.05)  '(((0 0)) nil))
+    (list "weld drops a vertex in the middle of a straight run"
+          '(lg:weld '((0 0 0.0) (1 0 0.0) (2 0 0.0) (2 2 0.0) (0 2 0.0)))
+          '((0 0 0.0) (2 0 0.0) (2 2 0.0) (0 2 0.0)))
+    (list "weld joins two quarter arcs into a half of bulge -1"
+          '(caddr (car (lg:weld '((0 0 -0.414213562373095)
+                                  (1 1 -0.414213562373095)
+                                  (2 0 0.0) (2 -1 0.0) (0 -1 0.0)))))  -1.0)
+    (list "exterior prunes a ledge spur and welds its T out: 4 corners, area 16"
+          '((lambda (v) (if (= 4 (length v)) (abs (lg:area v))))
+             (lg:exterior '(((0 0) (4 0) 0.0) ((4 0) (4 4) 0.0)
+                            ((4 4) (0 4) 0.0) ((0 4) (0 0) 0.0)
+                            ((2 0) (2 2) 0.0)) 0.05))  16.0)
+    (list "exterior heals a half-inch gap at a 1 rung, not at 0.05"
+          '((lambda (g) (if (null (lg:exterior g 0.05))
+                            (abs (lg:area (lg:exterior g 1.0)))))
+             '(((0 0) (4 0) 0.0) ((4 0) (4 4) 0.0)
+               ((4 4) (0 4) 0.0) ((0 4) (0 0.5) 0.0)))  16.0)
+    (list "pt-arc-dist reads off the radius inside the sweep"
+          '(lg:pt-arc-dist '(1 -3) '(0 0) '(2 0) 1.0)  2.0)
+    (list "pt-inside-p sees a point inside the square"
+          '(lg:pt-inside-p '(1 1) '((0 0 0.0) (2 0 0.0) (2 2 0.0) (0 2 0.0)))  T)
+    (list "stylep folds case and takes the wildcard"
+          '(lg:stylep "cross dimensions" '("CROSS DIM*"))  T)))
+
+(foreach c '("LINGUTTER" "LINGUTTERSCAN")
+  (setq *calofin-selftests*
+        (cons (cons c 'lg:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

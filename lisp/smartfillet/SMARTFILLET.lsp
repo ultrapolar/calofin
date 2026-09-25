@@ -141,7 +141,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *smartfillet-version* "v1.10")  ; announced on load; release_lisp.py
+(setq *smartfillet-version* "v1.11")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -1208,6 +1208,49 @@
 (defun c:SMARTFILLETVER ()
   (princ (strcat "\nSMARTFILLET " *smartfillet-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun sf:selftests ()
+  (list
+    (list "num letters a whole radius without decimals" '(sf:num 12.0)  "12")
+    (list "num keeps a half inch without a trailing zero" '(sf:num 13.5)  "13.5")
+    (list "rlist reads three radii out as a sentence"
+          '(sf:rlist '(3.0 9.0 15.0))  "R3, R9 and R15")
+    (list "shown-extras picks the dashed sizes out of a fan"
+          '(sf:shown-extras '(3.0 6.0 9.0 12.0))  '(3.0 9.0))
+    (list "mix rounds to a whole colour channel"       '(sf:mix 0.0 100.0 0.5)  50)
+    (list "shade: a lone preview takes the light end"
+          '(equal (sf:shade 0 1) sf:*shade-lo*)  T)
+    (list "tanlen: a 6in fillet on a right angle starts 6in back"
+          '(sf:tanlen (/ pi 4.0) 6.0)  6.0)
+    (list "rmax of a right angle is the short leg, times the fit"
+          '(/ (sf:rmax (list '(0.0 0.0) '(1.0 0.0) 100.0 '(0.0 1.0) 50.0
+                             (/ pi 4.0) 0.0 0.0))
+              sf:*fit*)
+          50.0)
+    (list "arcpts: R6 on a right angle at the origin centres at 6,6"
+          '(sf:arcpts (list '(0.0 0.0) '(1.0 0.0) 100.0 '(0.0 1.0) 50.0
+                            (/ pi 4.0) 0.0 0.0)
+                      6.0)
+          '((6.0 6.0) (6.0 0.0) (0.0 6.0)))
+    (list "fitting: the shipped fan under R20 is 3, 6, 9, 12, 18"
+          '(sf:fitting 20.0)  '(3.0 6.0 9.0 12.0 18.0))
+    (list "smallest is the 3 extra, not the first of the series"
+          '(sf:smallest)  3.0)
+    (list "candidates caps a long wall's 18 fitting radii at the 10 shown"
+          '(list (sf:howmany 100.0) (length (sf:candidates 100.0)))  '(18 10))))
+
+(foreach c '("SMARTFILLET")
+  (setq *calofin-selftests*
+        (cons (cons c 'sf:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

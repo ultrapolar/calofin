@@ -114,7 +114,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *dchk-version* "v1.29")        ; announced on load; release_lisp.py
+(setq *dchk-version* "v1.30")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -2849,6 +2849,51 @@
   (princ))
 
 (defun c:TUTORIALDIMSCAN () (c:TUTORIALDIMCHECK))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun dchk:selftests ()
+  (list
+    (list "overlap-info: two collinear lines sharing 6 of their run overlap by 6, union 0 to 14"
+          '(dchk:overlap-info '((0.0 0.0 0.0) (10.0 0.0 0.0) nil) '((4.0 0.0 0.0) (14.0 0.0 0.0) nil))
+          '((4.0 0.0 0.0) (10.0 0.0 0.0) 6.0 (0.0 0.0 0.0) (14.0 0.0 0.0)))
+    (list "overlap-info leaves lines that only touch end to end alone"
+          '(dchk:overlap-info '((0.0 0.0 0.0) (10.0 0.0 0.0) nil) '((10.0 0.0 0.0) (20.0 0.0 0.0) nil))
+          nil)
+    (list "overlap-info: a parallel line an inch to one side is not the same line"
+          '(dchk:overlap-info '((0.0 0.0 0.0) (10.0 0.0 0.0) nil) '((4.0 1.0 0.0) (14.0 1.0 0.0) nil))
+          nil)
+    (list "seg-dir-ang folds a westward segment onto 0"
+          '(dchk:seg-dir-ang '((0.0 0.0 0.0) (-1.0 0.0 0.0) nil))  0.0)
+    (list "ang-diff of the folded directions 0 and pi-0.5 is half a radian"
+          '(dchk:ang-diff 0.0 (- pi 0.5))  0.5)
+    (list "sort-recs keeps equal offsets in the order they came"
+          '(dchk:sort-recs '((2 "b") (1 "a") (2 "c") (1 "d")))
+          '((1 "a") (1 "d") (2 "b") (2 "c")))
+    (list "style-rank matches a style case-blind: the first style lower-cased ranks 0"
+          '(dchk:style-rank (strcase (car *dchk-style-order*) T))  0)
+    (list "style-rank puts a style not in the order after every listed one"
+          '(dchk:style-rank "no such style")  (length *dchk-style-order*))
+    (list "dim-order-p reviews the higher row first even when it sits to the right"
+          '(dchk:dim-order-p '(0 5.0 10.0 nil) '(0 1.0 0.0 nil) 2.0)  T)
+    (list "attn-p reddens a FLAGGED line and leaves an all-clear one alone"
+          '(and (dchk:attn-p "3 dimensions flagged") (not (dchk:attn-p "all clear"))))
+    (list "ftin spells a whole 15 feet as 15'-0\", whatever DIMZIN says"
+          '(dchk:ftin 180.0 4 8)  "15'-0\"")
+    (list "circumcenter of a right triangle is the midpoint of its hypotenuse"
+          '(dchk:circumcenter '(0.0 0.0 0.0) '(2.0 0.0 0.0) '(0.0 2.0 0.0))  '(1.0 1.0 0.0))
+  ))
+
+(foreach c '("DIMCHECKRESCUE" "DIMCHECK" "DIMSCAN" "TUTORIALDIMCHECK")
+  (setq *calofin-selftests*
+        (cons (cons c 'dchk:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

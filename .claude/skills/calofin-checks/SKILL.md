@@ -114,6 +114,11 @@ missing declaration.
 | `<CMD> <- <store> (form answers) does not report ...` | a command a form runs (its `X:run-with-answers` sets `<store>`) does not write that store into the transcript, so a form-driven report cannot be replayed | `--fix` adds `(if lzd:state (lzd:state '(<store>)))` after the `lzd:begin`; add any run flag the form also sets by hand |
 | `<CMD> has no *error* handler to report from` | **`--fix` will not write this** | write the handler yourself, then re-run `--fix` |
 | `the lzd:<kind> call <why>` | an injected call landed where it would change a meaning | move it so it is not the last form of a body, not a term of an `(and ...)`, and not a branch of an `(if ...)` |
+| `no self-test table: --fix writes the skeleton` | the file has no `X:selftests` — the table a failure report runs on the drafter's machine | `--fix`, then write the entries |
+| `X:selftests holds N entries: write at least 3` | **`--fix` will not write these** | write known-answer entries of the tool's own helpers; try them with `python3 tools/run_selftests.py FILE --tier both` |
+| `X:selftests calls <name>: a table runs from inside *error*` | an entry names a prompt, a draw, a command, `setvar`, a file write, `load` or a `vla-`/`vlax-` call | test a pure helper instead — the table must answer the same on an empty drawing, with nothing asked |
+| `X:selftests is not registered` / `registered as ... -- --fix rewrites` | the `(foreach c '(...) ...)` under the table is missing or does not name every command the file begins/reports as | `--fix` |
+| `its body is not one (list ...) form` / `two self-test tables` | the table is not the canonical shape | one defun, whose body is one `(list ...)` of entries |
 
 Write the handler on the STANDARDS section 5 skeleton — see
 `../calofin-lisp/reference/standards.md`. It is editorial on purpose:

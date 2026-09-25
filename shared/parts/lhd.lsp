@@ -70,7 +70,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *lh-version*      "v2.8")     ; announced on load; release_lisp.py
+(setq *lh-version*      "v2.9")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *LH-POOL-LAYER*   "POOL")     ; layer of the ordering sketch, and
@@ -3165,6 +3165,54 @@
 (defun c:LHDVER ()
   (princ (strcat "\nLHD " *lh-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lh:selftests ()
+  (list
+    (list "bulge-3pt: a half circle run counter-clockwise is bulge 1"
+          '(lh:bulge-3pt '(1.0 0.0) '(0.0 1.0) '(-1.0 0.0))  1.0)
+    (list "bulge-3pt: the same half circle run clockwise is bulge -1"
+          '(lh:bulge-3pt '(-1.0 0.0) '(0.0 1.0) '(1.0 0.0))  -1.0)
+    (list "bulge-radius of a 10 chord at bulge 0.5 is 6.25"
+          '(lh:bulge-radius '(0.0 0.0) '(10.0 0.0) 0.5)  6.25)
+    (list "radius-bulge reads a bulge-radius back, sign and all"
+          '(lh:radius-bulge '(0.0 0.0) '(10.0 0.0)
+                            (lh:bulge-radius '(0.0 0.0) '(10.0 0.0) -0.5) -0.5)
+          -0.5)
+    (list "arc-geom centres a bulge-1 arc on its chord's midpoint"
+          '(car (lh:arc-geom '(0.0 0.0) '(10.0 0.0) 1.0))  '(5.0 0.0))
+    (list "seg-dist to an arc is measured radially inside its sweep"
+          '(lh:seg-dist '(5.0 -3.0) '((0.0 0.0) (10.0 0.0) 1.0))  2.0)
+    (list "chain orders loose segments, flips one, and closes the square"
+          '((lambda (ch) (if (car ch) (mapcar 'car (cdr ch))))
+            (lh:chain '(((0.0 0.0) (10.0 0.0) 0.0) ((10.0 10.0) (0.0 10.0) 0.0)
+                        ((10.0 0.0) (10.0 10.0) 0.0) ((0.0 0.0) (0.0 10.0) 0.0))))
+          '((0.0 0.0) (10.0 0.0) (10.0 10.0) (0.0 10.0)))
+    (list "merge-windows splits the difference between disjoint windows"
+          '(lh:merge-windows '(0.0 . 1.0) '(2.0 . 3.0))  '(1.5 . 1.5))
+    (list "better: fewer points written off beats a closer fit"
+          '(lh:better '(0 5.0 0) '(1 0.1 0))  T)
+    (list "rotate-to-corner starts the tour at its sharpest turn"
+          '(car (lh:rotate-to-corner '((0.0 0.0) (10.0 0.0) (2.0 1.0))))  '(10.0 0.0))
+    (list "segs-cross: an X crosses, a shared end does not"
+          '(and (lh:segs-cross '(0.0 0.0) '(4.0 4.0) '(0.0 4.0) '(4.0 0.0))
+                (not (lh:segs-cross '(0.0 0.0) '(4.0 4.0) '(4.0 4.0) '(8.0 0.0))))
+          T)
+    (list "rotate-to-point turns a tour to start at the point named"
+          '(lh:rotate-to-point '((0.0 0.0) (1.0 0.0) (2.0 0.0)) '(2.0 0.0))
+          '((2.0 0.0) (0.0 0.0) (1.0 0.0)))))
+
+(foreach c '("LHD")
+  (setq *calofin-selftests*
+        (cons (cons c 'lh:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

@@ -161,7 +161,7 @@
 ;;;      behind it never reached.
 ;;; ======================================================================
 
-(setq *honefillet-version* "v1.8")  ; announced on load; release_lisp.py
+(setq *honefillet-version* "v1.9")  ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -1340,6 +1340,51 @@
 (defun c:HONEFILLETVER ()
   (princ (strcat "\nHONEFILLET " *honefillet-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun hn:selftests ()
+  (list
+    (list "num letters a whole radius without decimals" '(hn:num 12.0)  "12")
+    (list "num keeps the half inch, and only that"      '(hn:num 13.5)  "13.5")
+    (list "rlist reads three radii out as a sentence"
+          '(hn:rlist '(3.0 9.0 15.0))  "R3, R9 and R15")
+    (list "halfp: R13.5 is a decision, R13 a size"
+          '(list (hn:halfp 13.5) (hn:halfp 13.0))  '(T nil))
+    (list "mix rounds to a whole colour channel"       '(hn:mix 0.0 100.0 0.5)  50)
+    (list "tanlen: a 6in fillet on a right angle starts 6in back"
+          '(hn:tanlen (/ pi 4.0) 6.0)  6.0)
+    (list "rmax of a right angle is the short leg, times the fit"
+          '(/ (hn:rmax (list '(0.0 0.0) '(1.0 0.0) 100.0 '(0.0 1.0) 50.0
+                             (/ pi 4.0) 0.0 0.0))
+              hn:*fit*)
+          50.0)
+    (list "arcpts: R6 on a right angle at the origin centres at 6,6"
+          '(hn:arcpts (list '(0.0 0.0) '(1.0 0.0) 100.0 '(0.0 1.0) 50.0
+                            (/ pi 4.0) 0.0 0.0)
+                      6.0)
+          '((6.0 6.0) (6.0 0.0) (0.0 6.0)))
+    (list "fitting: the shipped fan under R20 is 3, 6, 9, 12, 18"
+          '(hn:fitting 20.0)  '(3.0 6.0 9.0 12.0 18.0))
+    (list "howfine: 12 to 18 is thirteen half-inch steps, not twelve"
+          '(hn:howfine 12.0 18.0)  13)
+    (list "finesteps counts up in halves and ends exactly on the top"
+          '(hn:finesteps 12.0 13.0)  '(12.0 12.5 13.0))
+    (list "gapof: a 10in run earns a guide, a 2in one is too short for a dash"
+          '(list (hn:gapof (list nil nil nil nil nil nil 10.0 2.0) 1)
+                 (hn:gapof (list nil nil nil nil nil nil 10.0 2.0) 2))
+          '(10.0 nil))))
+
+(foreach c '("HONEFILLET")
+  (setq *calofin-selftests*
+        (cons (cons c 'hn:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

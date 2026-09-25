@@ -141,7 +141,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.64")
+(setq *lazpanel-version* "v3.65")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -7576,6 +7576,97 @@
 ;; pass enough there; the panel re-applies on every open and launch for
 ;; a tool reloaded on its own since.
 (vl-catch-all-apply 'lzp:knobs-apply nil)
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lzp:selftests ()
+  (list
+    (list "caption: a name off the roster is \"\", every roster command has one"
+          '(and (= (lzp:caption "NOSUCHTOOL") "")
+                (not (vl-member-if '(lambda (n) (= (lzp:caption n) ""))
+                                   (lzp:commands))))
+          T)
+    (list "Find is a page the tab strip reaches but not a group with columns"
+          '(and (lzp:findpage lzp:*findname*)
+                (member lzp:*findname* (lzp:pages))
+                (not (lzp:group-columns lzp:*findname*)))
+          T)
+    (list "col-commands flattens a column's headed runs and plain names in order"
+          '(lzp:col-commands '("Converters" ("Convert" "A" "B") "C" ("Revert" "D")))
+          '("A" "B" "C" "D"))
+    (list "commands folds a tool listed on two pages to one name"
+          '((lambda (all)
+              (not (vl-member-if '(lambda (n) (member n (cdr (member n all))))
+                                 all)))
+            (lzp:commands))
+          T)
+    (list "Find splits the typed words and matches them as plain text (* is a letter)"
+          '(and (equal (lzp:split "cover  no bottom" " ") '("cover" "no" "bottom"))
+                (lzp:instr "ABHDCOVER" "COVER")
+                (lzp:instr "POOL" "")
+                (not (lzp:instr "POOL" "*"))
+                (not (lzp:instr "POOL" "POOLSIDE")))
+          T)
+    (list "wrap over the roster: no column past the budget, none more than one apart, nothing lost"
+          '((lambda (cols all)
+              (and (<= (apply 'max (mapcar 'length cols)) lzp:*colbudget*)
+                   (<= (- (apply 'max (mapcar 'length cols))
+                          (apply 'min (mapcar 'length cols)))
+                       1)
+                   (= (length (apply 'append cols)) (length all))))
+            (lzp:wrap (lzp:commands)) (lzp:commands))
+          T)
+    (list "alias-shape-p: letters and digits, a letter first, 1 to 12 of them"
+          '(and (lzp:alias-shape-p "pp2") (lzp:alias-shape-p "abcdefghijkl")
+                (not (lzp:alias-shape-p "2pp"))
+                (not (lzp:alias-shape-p "abcdefghijklm"))
+                (not (lzp:alias-shape-p "a-b"))
+                (not (lzp:alias-shape-p "")))
+          T)
+    (list "knobkey spells a knob's symbol as its profile key"
+          '(lzp:knobkey "pool:*typ-note*")  "CalofinKnob-pool.~typ-note~")
+    (list "knob-parse reads a number, a quoted list and nil as data, refuses a call and a blank"
+          '(list (lzp:knob-parse "12.5") (lzp:knob-parse "'(\"a\" \"b\")")
+                 (lzp:knob-parse "nil") (lzp:knob-parse "(setq x 1)")
+                 (lzp:knob-parse "  "))
+          '((T 12.5) (T ("a" "b")) (T nil) nil nil))
+    (list "knob-typewhy lets a whole number stand in for a real, not for a string"
+          '(and (null (lzp:knob-typewhy 2.0 3))
+                (null (lzp:knob-typewhy nil "x"))
+                (lzp:knob-typewhy nil '(1))
+                (= (lzp:knob-typewhy "TEXT" 3)
+                   "Alec's choice is a string, this is a whole number"))
+          T)
+    (list "the knob catalog is (TOOL PATH (NAME LITERAL MEANING) ...) rows, all text"
+          '(not (vl-member-if
+                  '(lambda (tl)
+                     (or (/= (type (car tl)) 'STR) (/= (type (cadr tl)) 'STR)
+                         (null (cddr tl))
+                         (vl-member-if
+                           '(lambda (e)
+                              (or (/= (length e) 3) (/= (type (car e)) 'STR)
+                                  (/= (type (cadr e)) 'STR)
+                                  (/= (type (caddr e)) 'STR)))
+                           (cddr tl))))
+                  lzp:*knobs*))
+          T)
+    (list "the catalog files a knob under its tool, knows no made-up one, and ties a member to its term"
+          '(and (= (lzp:knob-tool "ltc:*height*") "LINTXTCHK")
+                (null (lzp:knob-entry "no:*such*"))
+                (= (lzp:knob-termid "pool:*typ-note*") "typ-note")
+                (null (lzp:knob-termid "ltc:*height*")))
+          T)))
+
+(foreach c '("LAZPANEL" "LAZPIN" "LAZHIDE" "LAZBUTTON" "LAZICON" "CALHELP" "CALSET" "LAZSET" "LAZNAME" "LAZBACKUP" "LAZTUNE")
+  (setq *calofin-selftests*
+        (cons (cons c 'lzp:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

@@ -80,7 +80,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacovcreate-version* "v1.4")
+(setq *spacovcreate-version* "v1.5")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value SPACOVCREATE reads that somebody might want
@@ -1525,6 +1525,60 @@
 (defun c:SPACOVCREATEVER ()
   (princ (strcat "\nSPACOVCREATE " *spacovcreate-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun scv:selftests ()
+  (list
+    (list "sweep: a bulge of 1 is a half turn"
+          '(scv:sweep 1.0)  pi)
+    (list "arcinfo: a quarter arc on a 10 chord has its centre 5 to the left"
+          '(car (scv:arcinfo '(0.0 0.0) '(10.0 0.0) (scv:bulge (* 0.5 pi))))
+          '(5.0 5.0))
+    (list "tan-out leaves a quarter arc 45 degrees off its chord"
+          '(scv:tan-out '(0.0 0.0) '(10.0 0.0) (scv:bulge (* 0.5 pi)))
+          '(0.70710678 -0.70710678))
+    (list "area2 is twice the area, positive counter-clockwise"
+          '(scv:area2 '((0.0 0.0) (10.0 0.0) (10.0 10.0) (0.0 10.0)))  200.0)
+    (list "revclosed walks the loop backwards with every bulge flipped and shifted"
+          '(scv:revclosed (list (scv:vx '(0.0 0.0) 0.5)
+                                (scv:vx '(10.0 0.0) 0.25)
+                                (scv:vx '(10.0 10.0) 0.0)))
+          '(((10.0 10.0) . -0.25) ((10.0 0.0) . -0.5) ((0.0 0.0) . 0.0)))
+    (list "offset: a 10 square by 1 is a 12 square"
+          '(mapcar 'scv:vpt
+                   (scv:offset (list (scv:vx '(0.0 0.0) 0.0)
+                                     (scv:vx '(10.0 0.0) 0.0)
+                                     (scv:vx '(10.0 10.0) 0.0)
+                                     (scv:vx '(0.0 10.0) 0.0))
+                               1.0))
+          '((-1.0 -1.0) (11.0 -1.0) (11.0 11.0) (-1.0 11.0)))
+    (list "circlep reads two half-turn vertices as a circle"
+          '(scv:circlep (list (scv:vx '(0.0 0.0) 1.0) (scv:vx '(10.0 0.0) 1.0)))
+          '((5.0 0.0) 5.0))
+    (list "hmaxpiece is the widest piece, the last one included"
+          '(scv:hmaxpiece 0.0 100.0 '(30.0 60.0))  40.0)
+    (list "hbest: a 100 wide cover on 48 foam is 3 pieces"
+          '(car (scv:hbest '((0.0 0.0) (100.0 0.0) (100.0 80.0) (0.0 80.0))
+                           0.0 100.0 (list (cons 48.0 96.0)) '(2 3 4)))
+          3)
+    (list "hingetypes: 7 pieces read H V H V V H off the chart"
+          '(scv:hingetypes 7 nil)  '("H" "V" "H" "V" "V" "H"))
+    (list "tapernorm reads a labelled taper"
+          '(scv:tapernorm "Taper: 4-2 Flat")  "4-2")
+    (list "plural keeps the singular for one"
+          '(scv:plural 1 "piece" "pieces")  "1 piece")))
+
+(foreach c '("SPACOVCREATE")
+  (setq *calofin-selftests*
+        (cons (cons c 'scv:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

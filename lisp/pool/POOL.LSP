@@ -130,7 +130,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092526 REV49")
+(setq pool:*version* "092526 REV50")
 
 ;;; -------------------- shop terms --------------------------------------
 ;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
@@ -10869,6 +10869,52 @@
   (princ (strcat "\nTutorial: "
                  (if tutorial:*version* tutorial:*version* "not loaded")))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun pool:selftests ()
+  (list
+    (list "cornerk: a 60-degree Radius corner sets back root 3 per unit of radius"
+          '(pool:cornerk "Radius" (pool:d2r 60.0))  (sqrt 3.0))
+    (list "cornerends: a Cut face of root 2 on a square corner ends 1 along each wall"
+          '(pool:cornerends '(0.0 0.0) '(10.0 0.0) '(0.0 10.0) "Cut" (sqrt 2.0) nil)
+          '((1.0 0.0) (0.0 1.0) nil))
+    (list "hookspan: a 2 in radius at a square corner spans 0 to 2 along its wall"
+          '(pool:hookspan '(0.0 0.0) '(10.0 0.0) '(0.0 10.0) "Radius" 2.0 '(1.0 0.0))
+          '(0.0 2.0))
+    (list "treat-canon spells a typed cut Cut and refuses a word off the list"
+          '(list (pool:treat-canon "cut") (pool:treat-canon "Rounded"))  '("Cut" nil))
+    (list "fkeyof reads C2 off a depth prompt and no key off a plain one"
+          '(list (pool:fkeyof "C2 - depth where the shallow floor meets the break")
+                 (pool:fkeyof "Total pool length (arc tip to arc tip)"))
+          '(c2 nil))
+    (list "chainfix: two NA letters share what the total has left"
+          '(pool:chainfix '(10.0 nil nil) 30.0 1)  '(10.0 10.0 10.0))
+    (list "chainval lifts a negative letter to a share of the total, paid by the largest"
+          '(pool:chainval '(30.0 -2.0 20.0) 48.0)  '((24.0 4.0 20.0) (1 0)))
+    (list "greccut fills the blank leg from a taped face by Pythagoras"
+          '(pool:greccut 10.0 nil 6.0)  '(8.0 . 6.0))
+    (list "4bar closes a 3 by 4 box at 90 degrees"
+          '(pool:4bar 3.0 3.0 4.0 4.0 (* 0.5 pi))
+          '((0.0 0.0) (3.0 0.0) (3.0 4.0) (0.0 4.0)))
+    (list "sag and sagr: a 5 radius bulges 1 past a 6 chord, and back"
+          '(list (pool:sag 5.0 6.0) (pool:sagr 1.0 6.0))  '(1.0 5.0))
+    (list "btmties: a Wedge bottom asks H F M L K and skips G and E"
+          '(mapcar 'car (pool:btmties "Wedge"))  '("H" "F" "M" "L" "K"))
+    (list "ftin writes 15 ft as 15'-0\" whatever DIMZIN says, and reads to a sixteenth"
+          '(list (pool:ftin 180.0 4 4) (pool:ftin 20.0625 4 4))
+          '("15'-0\"" "1'-8 1/16\""))))
+
+(foreach c '("POOL")
+  (setq *calofin-selftests*
+        (cons (cons c 'pool:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

@@ -50,7 +50,12 @@
 ;;;    * the tool, its version, and whether it came from a standalone
 ;;;      file or from LAZPASS;
 ;;;    * the error text, the last step the tool got to, AutoCAD's own
-;;;      ERRNO / CMDNAMES / LASTPROMPT, and the sysvars that matter.
+;;;      ERRNO / CMDNAMES / LASTPROMPT, and the sysvars that matter;
+;;;    * the tool's OWN SELF TESTS -- its helpers on inputs whose answers
+;;;      are known -- run on that machine after the failure, so the
+;;;      report says whether the arithmetic was sound where it ran or
+;;;      whether a knob, a unit setting or the AutoCAD version had
+;;;      already changed an answer before the drafter typed one.
 ;;;
 ;;;  WHY A SEPARATE FILE AND NOT THE USER'S DRAWING.  The first design
 ;;;  put the report into the open drawing and asked the user to click
@@ -103,7 +108,7 @@
 ;;;  so a reader can see something was there rather than silently not.
 ;;; ======================================================================
 
-(setq *lazdiag-version* "v1.7")  ; announced on load; release_lisp.py
+(setq *lazdiag-version* "v1.8")  ; announced on load; release_lisp.py
                                  ; stamps releases/ from this line
 
 ;; lzd:bbox reaches ActiveX for the bounding box of an entity with no R12
@@ -154,6 +159,8 @@
 (setq lzd:*inside* nil)    ; the reporter is running -- refuse re-entry
 (setq lzd:*last* nil)      ; the last report, for LAZDIAG to write again
 (setq lzd:*lastfile* nil)  ; where it went, nil if it could not be written
+(setq lzd:*selfres* nil)   ; ((TOOL passed total) ...) of the self tests the
+                           ; last report ran, for the log's FAIL record
 
 ;;; -------------------- small helpers -----------------------------------
 
@@ -1197,6 +1204,13 @@
                                               ", which " (lzd:str tool)
                                               " ran")))
                       (cdr (cdr (cdr (cdr out)))))))
+  ;; the tool's own helpers, run here and now: a report about LAZDIAG
+  ;; itself (the self test, or a failure of the reporter) runs every
+  ;; table loaded, since nothing else is there to blame
+  (setq lzd:*selfres* nil)
+  (setq out (append out (if (= (strcase (lzd:str tool)) "LAZDIAG")
+                          (lzd:selftest-sweep)
+                          (lzd:selftest-lines tool))))
   (setq out (append out (lzd:oddities)))
   (setq out (append out (list "" "THE RUN, PROMPT BY PROMPT")))
   (setq out (append out
@@ -1226,6 +1240,221 @@
                 "Send this file to whoever maintains calofin.  It holds"
                 "the failure and no more of your drawing than the failure"
                 "needed; your own drawing was not changed.")))
+
+;;; -------------------- the tool's own self tests -----------------------
+;;;
+;;;  Everything above says what the RUN did.  None of it says whether
+;;;  the tool's own arithmetic was sound on the machine it ran on, and
+;;;  a helper giving a wrong answer there looks exactly like a wrong
+;;;  answer typed at a prompt.  What differs between two machines is
+;;;  what no transcript carries: the drafter's LUNITS and DIMZIN, a
+;;;  knob LAZTUNE moved, a shop term, an AutoCAD whose rtos rounds the
+;;;  other way.
+;;;
+;;;  So every tool carries a short TABLE of self tests -- its own
+;;;  helpers on inputs whose answers are known -- and a report runs the
+;;;  failed tool's table after the failure, on that machine, in that
+;;;  session, and writes the results in.  An entry is one of
+;;;
+;;;    (label expression expected)   passes when the expression's value
+;;;                                  is EQUAL to expected, to 1e-6
+;;;    (label expression)            passes when the value is not nil;
+;;;                                  the value is written down either
+;;;                                  way, so an expression that hands
+;;;                                  back the thing it checked puts
+;;;                                  that thing in the report
+;;;
+;;;  and the tool registers the table under every command that reports:
+;;;
+;;;    (defun pool:selftests ()
+;;;      (list (list "ftin of 12.5" '(pool:ftin 12.5) "1'-0 1/2\"") ...))
+;;;    (foreach c '("POOL" "POOLCOVER")
+;;;      (setq *calofin-selftests*
+;;;            (cons (cons c 'pool:selftests) *calofin-selftests*)))
+;;;
+;;;  The registry is a plain global rather than a call into this file,
+;;;  so a tool registers whether LAZDIAG loads before it, after it, or
+;;;  never: an unbound list is nil and consing onto nil is a list.  The
+;;;  newest registration is found first, so a file APPLOADed again
+;;;  after an edit runs its new table.  tools/check_lazdiag.py fails a
+;;;  tool with no table, or one of fewer than three entries, and
+;;;  tests/test_selftests.py runs every table in the VM at both tiers,
+;;;  so what a report says a test EXPECTS is what the tree's own suite
+;;;  has already confirmed -- a FAIL in a report is this machine
+;;;  disagreeing with the developer's, not a stale expectation.
+;;;
+;;;  Nothing in a table may prompt, draw, or run a command: it is
+;;;  evaluated from inside *error*.  Each entry runs under a catch of
+;;;  its own, so one that throws is one FAIL line naming the error and
+;;;  not the end of the report; the table is capped at lzd:*selfmax*,
+;;;  because it is a handful of known answers, not a suite.
+
+;; NOT A KNOB: how many entries of one tool's table are run.  A table
+;; is a handful of known answers evaluated from inside *error*; past
+;; this it is a suite, and a suite belongs in tests/.  A cap a drafter
+;; could retune would be a report that runs fewer tests on the machine
+;; that needs them most.
+(setq lzd:*selfmax* 40)
+
+;; The table registered for TOOL -- the symbol of the function that
+;; builds it -- or nil.  Case-insensitive, like every other tool-name
+;; comparison here.
+(defun lzd:tests-of (tool / want out e)
+  (setq want (strcase (lzd:str tool)))
+  (foreach e *calofin-selftests*
+    (if (and (null out) (listp e) (cdr e)
+             (= (strcase (lzd:str (car e))) want))
+      (setq out (cdr e))))
+  out)
+
+;; A value for a report line.  lzd:enc writes any list that starts
+;; with two numbers as a POINT, which is right for a transcript -- a
+;; pick is one -- and wrong for a table's value: (52.5 T) is not a
+;; point, and a list of twelve numbers is not one either, and both came
+;; out as three coordinates.  So only a list of exactly two or three
+;; numbers is a point here; any other list is written element by
+;; element.  Cut so one long list cannot make a line wider than the
+;; report's text block.
+(defun lzd:short (v / s x n allnum)
+  (cond
+    ((and (listp v) v (listp (cdr v)))
+     (setq n 0 allnum T)
+     (foreach x v
+       (setq n (1+ n))
+       (if (not (numberp x)) (setq allnum nil)))
+     (if (and allnum (member n '(2 3)))
+       (setq s (lzd:enc v))
+       (progn
+         (setq s "(")
+         (foreach x v
+           (setq s (strcat s (if (= s "(") "" " ") (lzd:short x))))
+         (setq s (strcat s ")")))))
+    (t (setq s (lzd:enc v))))
+  (if (> (strlen s) 100) (strcat (substr s 1 97) "...") s))
+
+;; One entry, run: (ok . line).  Under its own catch, and every branch
+;; is a line -- an entry that is not even a list gets one too, because
+;; the table is the tool's, and a malformed one is the tool's fault to
+;; read about, not the reporter's to die on.
+(defun lzd:runtest (tst / label r ok line)
+  (cond
+    ((not (and (listp tst) (cdr tst) (listp (cdr tst))))
+     (setq ok nil
+           line (strcat "  FAIL  (not an entry: " (lzd:short tst) ")")))
+    (t
+     (setq label (lzd:str (car tst))
+           r     (vl-catch-all-apply 'eval (list (cadr tst))))
+     (cond
+       ((vl-catch-all-error-p r)
+        (setq ok nil
+              line (strcat "  FAIL  " label ": raised "
+                           (lzd:str (vl-catch-all-error-message r)))))
+       ((cddr tst)
+        (setq ok (if (equal r (caddr tst) 1e-6) T nil)
+              line (if ok
+                     (strcat "  ok    " label " = " (lzd:short r))
+                     (strcat "  FAIL  " label ": expected "
+                             (lzd:short (caddr tst)) ", got "
+                             (lzd:short r)))))
+       (t
+        (setq ok (if r T nil)
+              line (if ok
+                     (strcat "  ok    " label " = " (lzd:short r))
+                     (strcat "  FAIL  " label ": nil")))))))
+  (cons ok line))
+
+;; TOOL's table, run: (passed total lines).  The counts go into
+;; lzd:*selfres* for the log's FAIL record.  The function that BUILDS
+;; the table is the tool's too, so it runs under a catch as well.
+(defun lzd:selftest-run (tool / fn r tests tst res n np out)
+  (setq fn (lzd:tests-of tool) n 0 np 0)
+  (cond
+    ((null fn)
+     (setq out (list (strcat "  (none registered for " (lzd:str tool)
+                             " -- the tool predates self tests)"))))
+    (t
+     (setq r (vl-catch-all-apply fn nil))
+     (cond
+       ((vl-catch-all-error-p r)
+        (setq n 1
+              out (list (strcat "  FAIL  the table itself raised "
+                                (lzd:str (vl-catch-all-error-message r))))))
+       ((not (listp r))
+        (setq n 1
+              out (list (strcat "  FAIL  the table is not a list: "
+                                (lzd:short r)))))
+       ((null r)
+        (setq out (list "  (the table is empty)")))
+       (t
+        (setq tests (lzd:firstn r lzd:*selfmax*))
+        (foreach tst tests
+          (setq res (lzd:runtest tst) n (1+ n))
+          (if (car res) (setq np (1+ np)))
+          (setq out (append out (list (cdr res)))))
+        (if (> (length r) lzd:*selfmax*)
+          (setq out (append out
+                            (list (strcat "  (" (itoa (- (length r) lzd:*selfmax*))
+                                          " more not run: lzd:*selfmax* is "
+                                          (itoa lzd:*selfmax*) ")")))))))))
+  (setq lzd:*selfres* (cons (list (strcase (lzd:str tool)) np n)
+                            lzd:*selfres*))
+  (list np n out))
+
+;; The verdict under a table, which is the line somebody reads first.
+(defun lzd:selftest-verdict (tool np n)
+  (cond
+    ((= n 0) nil)
+    ((= np n)
+     (list (strcat "  " (itoa np) " of " (itoa n) " passed: "
+                   (lzd:str tool) "'s own arithmetic is sound on this")
+           "  machine, so the failure is in this run's answers and geometry"
+           "  (below), not in its helpers."))
+    (t
+     (list (strcat "  " (itoa np) " of " (itoa n) " passed.  A FAIL is "
+                   (lzd:str tool) "'s own code giving a")
+           "  different answer HERE than on the machine it was written on --"
+           "  a knob LAZTUNE moved, a shop term, LUNITS or DIMZIN, or the"
+           "  AutoCAD version -- before any answer of this run was read."
+           "  Look there first."))))
+
+;; The section of a failure report: the failed tool's table, then the
+;; table of every command it ran inside this run (lzd:*inner*), since a
+;; failure filed under XYPLOT may be ABHD's arithmetic.
+(defun lzd:selftest-lines (tool / names e nm r out)
+  (setq names (list (strcase (lzd:str tool))))
+  (foreach e (reverse lzd:*inner*)
+    (if (not (member (car e) names))
+      (setq names (append names (list (car e))))))
+  (setq out (list "THE TOOL'S OWN SELF TESTS, RUN HERE AFTER THE FAILURE"))
+  (foreach nm names
+    (setq r (lzd:selftest-run nm))
+    (if (cdr names) (setq out (append out (list (strcat "  " nm ":")))))
+    (setq out (append out (caddr r)
+                      (lzd:selftest-verdict nm (car r) (cadr r)))))
+  (append out (list "")))
+
+;; Every table loaded, for a report about LAZDIAG itself -- the self
+;; test above all: one line per tool and its FAIL lines under it.
+;; Grouped by table, since a file registers one table under each of
+;; its commands, and named by the first command it registered.
+(defun lzd:selftest-sweep ( / e seen tools tl r l out)
+  (foreach e (reverse *calofin-selftests*)
+    (if (and (listp e) (cdr e) (not (member (cdr e) seen)))
+      (setq seen  (cons (cdr e) seen)
+            tools (append tools (list (strcase (lzd:str (car e))))))))
+  (setq out (list "SELF TESTS OF EVERY TOOL LOADED IN THIS SESSION"
+                  "  (each tool's own helpers on inputs whose answers are known;"
+                  "   a FAIL is a helper answering differently on this machine)"))
+  (if (null tools)
+    (setq out (append out (list "  (no tool has registered a table)"))))
+  (foreach tl tools
+    (setq r (lzd:selftest-run tl))
+    (setq out (append out (list (strcat "  " (lzd:pad tl 20) (itoa (car r))
+                                        " of " (itoa (cadr r)) " passed"))))
+    (foreach l (caddr r)
+      (if (wcmatch l "  FAIL*")
+        (setq out (append out (list (strcat "  " l)))))))
+  (append out (list "")))
 
 ;;; -------------------- building the whole report -----------------------
 
@@ -1432,6 +1661,16 @@
     (setq out (append out (list (strcat "    err   " (lzd:str msg))))))
   (if file
     (setq out (append out (list (strcat "    file  " (lzd:str file))))))
+  ;; the self tests the report ran: how many of the tool's own helpers
+  ;; still answered right on this machine, against a month of runs
+  (if (and (= outcome "FAIL") lzd:*selfres*)
+    (foreach n (reverse lzd:*selfres*)
+      (setq out (append out
+                        (list (strcat "    self  " (car n) " "
+                                      (if (= (caddr n) 0)
+                                        "no self tests registered"
+                                        (strcat (itoa (cadr n)) "/"
+                                                (itoa (caddr n)) " passed"))))))))
   ;; the prompts, newest last, only where somebody will read them
   (if (= outcome "FAIL")
     (progn
@@ -1690,7 +1929,7 @@
 ;; anyway: it proves the whole path -- folder, permissions, DXF -- works
 ;; on THIS machine, which is the question somebody asks precisely when
 ;; they are about to need it and cannot afford to find out then.
-(defun lzd:selftest ( / prims path d)
+(defun lzd:selftest ( / prims path d np n nt s)
   (princ "\n[calofin] Nothing has failed in this session, so this is a")
   (princ "\n[calofin] self test: a report written exactly where a real")
   (princ "\n[calofin] one would go.")
@@ -1716,6 +1955,17 @@
       (princ "\n[calofin] Set the AutoCAD environment string")
       (princ "\n[calofin] CalofinErrorDir to a folder you can write to:")
       (princ "\n[calofin]   (setenv \"CalofinErrorDir\" \"C:\\\\temp\")")))
+  ;; the sweep the report ran, summed: every loaded tool's own helpers,
+  ;; on this machine, with nothing having failed -- the one time a
+  ;; drafter can be told their build is sound BEFORE they need it
+  (if lzd:*selfres*
+    (progn
+      (setq np 0 n 0 nt 0)
+      (foreach s lzd:*selfres*
+        (setq np (+ np (cadr s)) n (+ n (caddr s)) nt (1+ nt)))
+      (princ (strcat "\n[calofin] Self tests of " (itoa nt) " loaded tool(s): "
+                     (itoa np) " of " (itoa n) " passed"
+                     (if (= np n) "." " -- the file names each FAIL.")))))
   (princ))
 
 (defun c:LAZDIAG ( / *error* oce undo-open)
@@ -1786,6 +2036,39 @@
 (defun c:LAZDIAGVER ()
   (princ (strcat "\nLAZDIAG " *lazdiag-version*))
   (princ))
+
+;;; -------------------- LAZDIAG's own self tests ------------------------
+;; What a report about LAZDIAG itself runs, beside every other loaded
+;; table: the reporter's helpers on known inputs.  Nothing here reads
+;; the drawing or the clock, and nothing goes through rtos -- lzd:num's
+;; output follows DIMZIN, so it is read back with atof rather than
+;; compared as text.
+(defun lzd:selftests ()
+  (list
+    (list "num round-trips a real"            '(atof (lzd:num 2.5))        2.5)
+    (list "num writes a non-number as 0.0"    '(lzd:num "x")               "0.0")
+    (list "pad pads to the width"             '(lzd:pad "ab" 5)            "ab   ")
+    (list "pad2 zero-fills one digit"         '(cal:zeropad2 7)                "07")
+    (list "enc quotes a string"               '(lzd:enc "a\"b")            "\"a\\\"b\"")
+    (list "enc writes nil as nil"             '(lzd:enc nil)               "nil")
+    (list "enc writes a dotted pair"          '(lzd:enc '("SHAPE" . "L"))  "(\"SHAPE\" . \"L\")")
+    (list "safe strips a file name"           '(lzd:safe "a b/c")          "a-b-c")
+    (list "join adds one backslash"           '(lzd:join "C:\\x" "y.dxf")  "C:\\x\\y.dxf")
+    (list "firstn takes the head"             '(lzd:firstn '(1 2 3) 2)     '(1 2))
+    (list "cancel-p knows an Esc"             '(lzd:cancel-p "Function cancelled"))
+    (list "cancel-p passes a real failure"    '(not (lzd:cancel-p "bad argument type")))
+    (list "oddnum flags a zero"               '(lzd:oddnum "p" 0 nil)      '("zero"))
+    (list "oddnum flags two equal answers"
+          '(lzd:oddnum "a" 12.0 '(("a" . 12.0) ("b" . 12)))  '("equals b"))
+    (list "oddpt flags two picks on one spot"
+          '(lzd:oddpt "a" '(1 2 0) '(("a" 1 2 0) ("b" 1.0 2.0 0.0)))  '("same spot as b"))
+    (list "short writes a non-point list as is" '(lzd:short '(1 T 2 3))       "(1 T 2 3)")
+    (list "runtest passes an equal value"     '(car (lzd:runtest '("t" (+ 1 1) 2))))
+    (list "runtest fails a raised error"      '(not (car (lzd:runtest '("t" (car 1) 2)))))))
+
+(foreach c '("LAZDIAG" "LAZLOG")
+  (setq *calofin-selftests*
+        (cons (cons c 'lzd:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

@@ -27,8 +27,18 @@ on which tier it is.
     python3 tools/check_lazdiag.py         # report unwired commands
     python3 tools/check_lazdiag.py --fix   # wire them
 
-Exit 0 when every command in lisp/ is wired, 1 otherwise.  `make check`
-runs it, so a new tool cannot ship unwired.
+And a third thing, per FILE rather than per command: a table of SELF
+TESTS, which LAZDIAG runs on the drafter's machine after a failure and
+writes into the report -- the tool's own helpers on inputs whose
+answers are known, so the report says whether the arithmetic was sound
+where it ran (LAZDIAG.lsp, "the tool's own self tests").  --fix writes
+the table's skeleton and its registration under every command the file
+reports as; the entries themselves are editorial and the check names
+the file until at least MIN_TESTS of them are written.
+
+Exit 0 when every command in lisp/ is wired and every file carries its
+table, 1 otherwise.  `make check` runs it, so a new tool cannot ship
+unwired, or without the tests a report of its failure would run.
 """
 
 import os
@@ -921,6 +931,205 @@ def wire(path, src, do_fix):
     return missing, src
 
 
+# ------------------------------------------------------------ self tests
+#
+# The calls above make a report say what a RUN did.  They cannot make it
+# say whether the tool's own helpers were sound on the machine it ran on
+# -- that takes a table of self tests, which every tool carries and
+# registers, and which LAZDIAG runs after a failure.  The table is
+# editorial: only the tool's author knows which helpers matter and what
+# they answer.  So --fix writes the skeleton and the registration -- the
+# mechanical half -- and the check names the file until the entries are
+# written, the way it names a command with no handler.
+
+SELFTEST_DEFUN = re.compile(
+    r"^\(defun\s+([^\s()'\"]*selftests)\s*\(\s*\)", re.M)
+REGISTER = re.compile(
+    r"^\(foreach\s+c\s+'\(((?:\s*\"[^\"]+\")*)\s*\)\s*"
+    r"\(setq\s+\*calofin-selftests\*\s*"
+    r"\(cons\s+\(cons\s+c\s+'([^\s()'\"]+)\)\s+\*calofin-selftests\*\)\)\)",
+    re.M)
+#: the names a file begins and reports its runs under -- the literals,
+#: which is what LAZDIAG looks a table up by.  (AUTOBEAD reports under a
+#: variable, but begins under a literal, so the union still names it.)
+RUN_NAME = re.compile(r"\(lzd:(?:begin|report)\s+\"([^\"]+)\"")
+MIN_TESTS = 3
+#: what an entry may not name.  A table is evaluated from inside
+#: *error*, where a prompt, a (command) or a write is a second failure
+#: with nowhere to go, and a drawing edit breaks the one promise a
+#: report makes -- that the drawing was not touched.
+UNSAFE = {
+    "getpoint", "getcorner", "getdist", "getangle", "getorient", "getint",
+    "getreal", "getstring", "getkword", "getfiled", "entsel", "nentsel",
+    "nentselp", "ssget", "grread", "initget", "alert",
+    "command", "command-s", "vl-cmdf", "entmake", "entmakex", "entmod",
+    "entdel", "entupd", "setvar", "redraw", "grdraw", "grtext", "grvecs",
+    "open", "write-line", "write-char", "vl-mkdir", "vl-file-delete",
+    "vl-file-copy", "vl-file-rename", "load", "vl-load-all",
+}
+UNSAFE_PREFIX = ("vla-", "vlax-", "acet-")
+BANNER = re.compile(r"^\(if \(not \*calofin-quiet\*\)", re.M)
+
+
+def run_names(src, mask):
+    """The command names the file's runs are filed under, in file
+    order, once each."""
+    out = []
+    for m in RUN_NAME.finditer(src):
+        if mask[m.start()] and m.group(1).upper() not in out:
+            out.append(m.group(1).upper())
+    return out
+
+
+def helper_prefix(src, mask, path):
+    """The file's prevailing helper prefix, separator included --
+    'pool:', 'cs-', 'paddle--' -- for naming its table.  The most common
+    one among its defuns, c: and *error* aside; a file with no prefixed
+    helper at all is named after itself."""
+    counts = {}
+    for name, lo, hi in _defuns(src, mask):
+        low = name.lower()
+        if low.startswith("c:") or low == "*error*":
+            continue
+        if ":" in low:
+            pre = low[:low.index(":") + 1]
+        elif "--" in low:
+            pre = low[:low.index("--") + 2]
+        elif "-" in low[1:]:
+            pre = low[:low.index("-", 1) + 1]
+        else:
+            continue
+        counts[pre] = counts.get(pre, 0) + 1
+    if not counts:
+        return pathlib.Path(path).stem.lower() + ":"
+    return max(counts, key=lambda k: (counts[k], -len(k)))
+
+
+def table_entries(src, mask, lo, hi):
+    """(count, why) for the table defun at LO..HI: how many entries its
+    (list ...) holds, or why that could not be read."""
+    inner = children(src, mask, lo + 1, hi - 1)
+    # the arglist is the first child form; the body follows
+    body = inner[1:]
+    if len(body) != 1 or not src[body[0][0]:].startswith("(list"):
+        return -1, "its body is not one (list ...) form"
+    blo, bhi = body[0]
+    return len(children(src, mask, blo + 1, bhi - 1)), ""
+
+
+def unsafe_calls(src, mask, lo, hi):
+    """The names an entry may not call, found in the table's code."""
+    code = code_only(src, mask, lo, hi)
+    hits = set()
+    for m in re.finditer(r"\(\s*([^\s()']+)", code):
+        name = m.group(1).lower()
+        if name in UNSAFE or name.startswith(UNSAFE_PREFIX):
+            hits.add(name)
+    return sorted(hits)
+
+
+def skeleton(prefix, names):
+    return (
+        # a TWO-semicolon rule on purpose: tools/knobs.py reads a tunables
+        # block as running to the next ";;; ---" rule, and a file whose
+        # own sections are ";; ---" (PADDLE, CABHD, ABLOBF) had none after
+        # its header, so a three-semicolon rule here stretched its block
+        # over the whole file and into LAZTUNE's catalog
+        ";; -------------------- self tests ---------------------------------------\n"
+        ";; What LAZDIAG runs on the drafter's machine after this tool fails, and\n"
+        ";; writes into the report: the tool's own helpers on inputs whose answers\n"
+        ";; are KNOWN, so the report says whether the arithmetic was sound where\n"
+        ";; it ran.  (label expression expected) passes when the value is equal\n"
+        ";; to expected (to 1e-6); (label expression) passes when it is not nil,\n"
+        ";; and the value is written down either way.  Nothing here may prompt,\n"
+        ";; draw or (command): it is evaluated from inside *error*.\n"
+        ";; tests/test_selftests.py runs every entry in the VM at both tiers.\n"
+        "(defun %sselftests ()\n"
+        "  (list\n"
+        "    ;; write at least %d:\n"
+        "    ;;   (list \"what it checks\" '(%shelper args) expected)\n"
+        "  ))\n\n" % (prefix, MIN_TESTS, prefix)
+        + registration(prefix, names) + "\n")
+
+
+def registration(prefix, names):
+    return ("(foreach c '(%s)\n"
+            "  (setq *calofin-selftests*\n"
+            "        (cons (cons c '%sselftests) *calofin-selftests*)))\n"
+            % (" ".join('"%s"' % n for n in names), prefix))
+
+
+def skeleton_slot(src, mask):
+    """Where a new table goes: ahead of the load banner and the comment
+    block sitting on it, so the banner stays the file's last word."""
+    hits = [m for m in BANNER.finditer(src) if mask[m.start()]]
+    if not hits:
+        return len(src)
+    at = hits[-1].start()
+    # back over the comment lines directly above the banner
+    lines = src[:at].split("\n")
+    k = len(lines) - 1          # lines[-1] is "" (the banner starts a line)
+    while k > 0 and lines[k - 1].startswith(";"):
+        k -= 1
+    return len("\n".join(lines[:k])) + (1 if k > 0 else 0)
+
+
+def selftests(path, src, mask, do_fix):
+    """(findings, edits) for the file's self-test table.  A finding is
+    a string naming what is missing; an edit is what --fix writes for
+    it, when the missing thing is mechanical."""
+    names = run_names(src, mask)
+    if not names:
+        return [], []           # nothing reports, so nothing would run it
+    findings, edits = [], []
+    defs = [m for m in SELFTEST_DEFUN.finditer(src) if mask[m.start()]]
+    regs = [m for m in REGISTER.finditer(src) if mask[m.start()]]
+    if not defs:
+        findings.append("no self-test table: --fix writes the skeleton, "
+                        "then write at least %d entries" % MIN_TESTS)
+        if do_fix:
+            edits.append((skeleton_slot(src, mask),
+                          skeleton(helper_prefix(src, mask, path), names)))
+        return findings, edits
+    if len(defs) > 1:
+        findings.append("two self-test tables (%s): keep one"
+                        % ", ".join(m.group(1) for m in defs))
+        return findings, edits
+    d = defs[0]
+    lo, hi = d.start(), form_end(src, mask, d.start())
+    n, why = table_entries(src, mask, lo, hi)
+    if why:
+        findings.append("%s: %s" % (d.group(1), why))
+    elif n < MIN_TESTS:
+        findings.append("%s holds %d entr%s: write at least %d known-answer "
+                        "tests of the tool's own helpers"
+                        % (d.group(1), n, "y" if n == 1 else "ies", MIN_TESTS))
+    bad = unsafe_calls(src, mask, lo, hi)
+    if bad:
+        findings.append("%s calls %s: a table runs from inside *error* and "
+                        "may not prompt, draw, write or run a command"
+                        % (d.group(1), ", ".join(bad)))
+    want = registration(d.group(1)[:-len("selftests")], names)
+    if not regs:
+        findings.append("%s is not registered: --fix writes the "
+                        "(foreach ...) under every command that reports"
+                        % d.group(1))
+        if do_fix:
+            edits.append((hi, "\n\n" + want.rstrip("\n")))
+    else:
+        r = regs[-1]
+        have = re.findall(r'"([^"]+)"', r.group(1))
+        if len(regs) > 1:
+            findings.append("registered twice: keep one (foreach ...)")
+        elif have != names or r.group(2) != d.group(1):
+            findings.append("registered as %s under %s; the file reports as "
+                            "%s -- --fix rewrites the (foreach ...)"
+                            % (r.group(2), " ".join(have), " ".join(names)))
+            if do_fix:
+                edits.append((r.start(), want.rstrip("\n"), r.end()))
+    return findings, edits
+
+
 def lisp_files():
     """Every hand-edited .lsp: the standalone tree, plus the library.
 
@@ -944,6 +1153,7 @@ def main(argv):
     fixed = 0
     naked = []
     wrong = []
+    untested = []
     for p in lisp_files():
         src = p.read_text()
         missing, new = wire(p, src, do_fix)
@@ -961,6 +1171,20 @@ def main(argv):
             naked.append((cmd, p.relative_to(REPO)))
         for ln, kind, why in misplaced(src, mask, p):
             wrong.append((p.relative_to(REPO), ln, kind, why))
+        if p.name == "CALOFIN-LIB.lsp":
+            continue            # a library, not a tool: no run is filed under it
+        findings, edits = selftests(p, src, mask, do_fix)
+        if do_fix and edits:
+            for e in sorted(edits, key=lambda e: -e[0]):
+                end = e[2] if len(e) > 2 else e[0]
+                src = src[:e[0]] + e[1] + src[end:]
+            p.write_text(src)
+            fixed += len(edits)
+            print("table  %s: %s" % (p.relative_to(REPO), "; ".join(findings)))
+            # what --fix wrote may still leave the editorial half undone
+            findings, _ = selftests(p, src, code_mask(src), False)
+        for f in findings:
+            untested.append((p.relative_to(REPO), f))
 
     for rel, ln, kind, why in wrong:
         print("%s:%d: the lzd:%s call %s" % (rel, ln, kind, why))
@@ -983,19 +1207,35 @@ def main(argv):
               "the two LAZDIAG lines in it;")
         print("--fix will not guess what a handler has to put back.")
 
+    for rel, f in untested:
+        print("%s: %s" % (rel, f))
+    if untested:
+        print("\nA report of a failure runs the tool's own self tests on the "
+              "drafter's machine and")
+        print("writes the answers in; a tool without a table reports a "
+              "failure and nothing about")
+        print("whether its helpers were sound where it ran.  --fix writes "
+              "the skeleton; the")
+        print("entries are yours (LAZDIAG.lsp, \"the tool's own self "
+              "tests\").\n")
+
     if do_fix:
-        print("check_lazdiag: wired %d command(s) - now mirror, regenerate "
+        print("check_lazdiag: wired %d thing(s) - now mirror, regenerate "
               "and test:" % fixed)
         print("    python3 tools/mirror_shared.py")
         print("    python3 tools/release_lisp.py")
         print("    python3 tools/build_shared_bundle.py")
-        return 1 if (naked or wrong) else 0
-    if bad or naked or wrong:
+        return 1 if (naked or wrong or untested) else 0
+    if bad or naked or wrong or untested:
         if bad:
             print("check_lazdiag: %d command(s) unwired - repair with "
                   "--fix" % bad)
+        if untested:
+            print("check_lazdiag: %d file(s) without a full self-test table"
+                  % len({rel for rel, _ in untested}))
         return 1
-    print("check_lazdiag: every command reports its failures")
+    print("check_lazdiag: every command reports its failures, and every "
+          "tool carries its self tests")
     return 0
 
 

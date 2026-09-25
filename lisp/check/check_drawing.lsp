@@ -39,7 +39,7 @@
 ;;;  below.
 ;;; ------------------------------------------------------------------
 
-(setq *checkdrawing-version* "v1.11")  ; announced on load; release_lisp.py
+(setq *checkdrawing-version* "v1.12")  ; announced on load; release_lisp.py
                                           ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -611,6 +611,42 @@
 (defun c:CHECKVER ()
   (princ (strcat "\nCHECK " *checkdrawing-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cfchk:selftests ()
+  (list
+    (list "angnorm folds -90 into [0, 2pi)"
+          '(cfchk:angnorm (- (* 0.5 pi)))                       (* 1.5 pi))
+    (list "angnorm brings a full turn to 0"
+          '(cfchk:angnorm (* 2.0 pi))                           0.0)
+    (list "circumcenter of a right angle is the hypotenuse's midpoint"
+          '(cfchk:circumcenter '(0 0 0) '(4 0 0) '(0 4 0))      '(2.0 2.0 0))
+    (list "circumcenter takes z from the first point"
+          '(caddr (cfchk:circumcenter '(0 0 5) '(4 0 0) '(0 4 0)))  5)
+    (list "circumcenter refuses three collinear points"
+          '(cfchk:circumcenter '(0 0 0) '(1 1 0) '(2 2 0))      nil)
+    (list "color-name has a word for red"
+          '(cfchk:color-name 1)                                 "red")
+    (list "color-name spells an ACI it has no word for"
+          '(cfchk:color-name 141)                               "colour 141")
+    (list "planar-arc-p takes an arc with no normal as world XY"
+          '(cfchk:planar-arc-p '((0 . "ARC")))                  T)
+    (list "planar-arc-p refuses a mirrored (0 0 -1) arc"
+          '(cfchk:planar-arc-p '((0 . "ARC") (210 0.0 0.0 -1.0)))  nil)
+    (list "closest-of picks the nearest of a list"
+          '(cfchk:closest-of '(0 0) '((3 0) (1 1) (5 5)))       '(1 1))))
+
+(foreach c '("CHECK")
+  (setq *calofin-selftests*
+        (cons (cons c 'cfchk:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

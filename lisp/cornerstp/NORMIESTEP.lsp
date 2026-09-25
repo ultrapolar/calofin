@@ -391,7 +391,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *ns-version* "v3.23") ; printed on load and at command start so a
+(setq *ns-version* "v3.24") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- shop terms, re-read ------------------------
@@ -3186,6 +3186,58 @@
 (defun c:NORMIESTEPVER ()
   (princ (strcat "\nNORMIESTEP " *ns-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun ns-selftests ()
+  (list
+    (list "ptseg: 3 above the middle of a 10 long tread is 3 off it"
+          '(ns-ptseg '(5.0 3.0 0.0) '(0.0 0.0 0.0) '(10.0 0.0 0.0))  3.0)
+    (list "inspan: a span from 225 to 45 degrees wraps through zero and holds 270"
+          '(ns-inspan (* 1.5 pi) (* 1.25 pi) (* 0.25 pi))  T)
+    (list "linecirc: a line through the centre cuts an r=2 circle at -2 and 2"
+          '(ns-linecirc '(0.0 0.0 0.0) '(1.0 0.0 0.0) '(0.0 0.0 0.0) 2.0)
+          '((-2.0 0.0 0.0) (2.0 0.0 0.0)))
+    (list "bulgepc: a bulge of 1 is a half circle, radius half the chord"
+          '(nth 4 (ns-bulgepc '(0.0 0.0 0.0) '(2.0 0.0 0.0) 1.0))  1.0)
+    (list "ucorner Cut takes 2 in along the base and 2 out along the arm"
+          '(ns-ucorner '((0.0 0.0 0.0) (10.0 0.0 0.0))
+                       '((0.0 0.0 0.0) (0.0 8.0 0.0)) "Cut" 2.0)
+          '("S" (2.0 0.0 0.0) (0.0 2.0 0.0)))
+    (list "ucorner Radius centres the fillet one radius off each leg"
+          '(nth 3 (ns-ucorner '((0.0 0.0 0.0) (10.0 0.0 0.0))
+                              '((0.0 0.0 0.0) (0.0 8.0 0.0)) "Radius" 2.0))
+          '(2.0 2.0 0.0))
+    (list "ucorner refuses an offset longer than the base"
+          '(ns-ucorner '((0.0 0.0 0.0) (10.0 0.0 0.0))
+                       '((0.0 0.0 0.0) (0.0 8.0 0.0)) "Radius" 20.0)  nil)
+    (list "sq90p: a tread across the wall is square, one along it is not"
+          '(and (ns-sq90p '(1.0 0.0 0.0) '(0.0 1.0 0.0))
+                (not (ns-sq90p '(1.0 0.0 0.0) '(1.0 0.0 0.0)))))
+    (list "markpts LINE puts the last tread's corner half a width across and the run along"
+          '(car (car (ns-markpts "LINE" '(0.0 0.0 0.0) '(1.0 0.0 0.0) '(0.0 1.0 0.0)
+                                 10.0 5.0 nil nil nil nil nil)))
+          '(5.0 5.0 0.0))
+    (list "markpts CORNER puts the one back corner a width along the wall"
+          '(car (car (ns-markpts "CORNER" nil '(1.0 0.0 0.0) nil 4.0 nil
+                                 '(0.0 0.0 0.0) '(0.0 10.0 0.0) nil nil nil)))
+          '(4.0 0.0 0.0))
+    (list "numlist reads commas, 'and' and a range"
+          '(ns-numlist "1, 3 and 5-7")  '(1 3 5 6 7))
+    (list "parse-len and spell-len round-trip 4'-4 1/2"
+          '(ns-spell-len (ns-len-eighths (car (ns-parse-len "4'-4 1/2\""))) T nil)
+          "4'-4 1/2\"")))
+
+(foreach c '("NORMIESTEP" "TUTORIALNORMIESTEP")
+  (setq *calofin-selftests*
+        (cons (cons c 'ns-selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

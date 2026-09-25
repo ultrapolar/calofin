@@ -94,6 +94,14 @@ Each is enforced by a checker; `calofin-checks` decodes the failures.
   Write the `*error*` handler yourself (it is editorial — what this
   command changed), then `python3 tools/check_lazdiag.py --fix` wires
   the rest. Never hand-write the `lzd:` lines.
+- **Every file carries a self-test table** — `(defun X:selftests ()
+  (list ...))` of its own helpers on known inputs, which a failure
+  report runs on the drafter's machine and writes in. `--fix` writes
+  the skeleton and the registration; you write at least three entries,
+  `(list "label" '(expr) expected)` or `(list "label" '(expr))`. Nothing
+  in one may prompt, draw, `(command)`, `setvar`, write, reach COM or
+  read the drawing. A helper you change is a helper whose entry you
+  re-check: `python3 tools/run_selftests.py FILE --tier both`.
 - **OSMODE, CECOLOR and CLAYER are borrowed, not taken.** Restored on
   the clean exit *and* from `*error*`, and in the handler they go
   **first**, ahead of anything that can throw. Only list a sysvar in a

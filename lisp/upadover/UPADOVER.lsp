@@ -116,7 +116,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *upadover-version* "v1.4")
+(setq *upadover-version* "v1.5")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -1346,6 +1346,60 @@
   (upad:sysrestore)
   (if lzd:end (lzd:end "UPADOVER"))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun upad:selftests ()
+  (list
+    (list "in writes a whole size without decimals"    '(upad:in 36.0)  "36\"")
+    (list "mkseg: a quarter-circle bulge from 0,0 to 1,1 centres on 0,1"
+          '(cadr (upad:mkseg '(0.0 0.0) '(1.0 1.0) (- (sqrt 2.0) 1.0)))  '(0.0 1.0))
+    (list "seg-len of an arc is its radius times its sweep"
+          '(upad:seg-len (list 'A '(0.0 0.0) 2.0 0.0 (/ pi 2.0)))  pi)
+    (list "seg-at: pi along a radius-2 quarter arc is its far end"
+          '(upad:seg-at (list 'A '(0.0 0.0) 2.0 0.0 (/ pi 2.0)) pi)  '(0.0 2.0))
+    (list "seg-closest: a pick past an arc's sweep takes the nearer end"
+          '(upad:seg-closest (list 'A '(0.0 0.0) 2.0 0.0 (/ pi 2.0)) '(0.0 -3.0))
+          '(2.0 0.0))
+    (list "project: a pick outside a 10in square lands on its wall at station 15"
+          '(upad:project '((S (0.0 0.0) (10.0 0.0)) (S (10.0 0.0) (10.0 10.0))
+                           (S (10.0 10.0) (0.0 10.0)) (S (0.0 10.0) (0.0 0.0)))
+                         '(12.0 5.0))
+          '((10.0 5.0) 15.0))
+    (list "at: station 25 of that square is half way along its top"
+          '(upad:at '((S (0.0 0.0) (10.0 0.0)) (S (10.0 0.0) (10.0 10.0))
+                      (S (10.0 10.0) (0.0 10.0)) (S (0.0 10.0) (0.0 0.0)))
+                    25.0)
+          '(5.0 10.0))
+    (list "closed-p: four sides close, three do not"
+          '(list (upad:closed-p '((S (0.0 0.0) (10.0 0.0)) (S (10.0 0.0) (10.0 10.0))
+                                  (S (10.0 10.0) (0.0 10.0)) (S (0.0 10.0) (0.0 0.0))))
+                 (upad:closed-p '((S (10.0 0.0) (10.0 10.0)) (S (10.0 10.0) (0.0 10.0))
+                                  (S (0.0 10.0) (0.0 0.0)))))
+          '(T nil))
+    (list "canon: #035 and Pt. 35 are the same point"
+          '(= (upad:canon "#035") (upad:canon "Pt. 35"))  T)
+    (list "wrap: a station past either end of a closed wall comes round"
+          '(list (upad:wrap -5.0 100.0) (upad:wrap 105.0 100.0))  '(95.0 5.0))
+    (list "far-side-p: station 90 is on the far stretch from 10 to 50"
+          '(list (upad:far-side-p 90.0 10.0 50.0 100.0)
+                 (upad:far-side-p 30.0 10.0 50.0 100.0))
+          '(T nil))
+    (list "endname names a numbered point and falls back for an unknown one"
+          '(list (upad:endname '((0.0 0.0) "17") "the start")
+                 (upad:endname '((0.0 0.0) "?") "the start"))
+          '("Pt.17" "the start"))))
+
+(foreach c '("UPADOVER")
+  (setq *calofin-selftests*
+        (cons (cons c 'upad:selftests) *calofin-selftests*)))
 
 (if (not *calofin-quiet*)
   (princ (strcat "\nUPADOVER " *upadover-version*

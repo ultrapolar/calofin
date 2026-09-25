@@ -66,7 +66,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *abpcheck-version* "v1.10")
+(setq *abpcheck-version* "v1.11")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value ABPCHECK reads that someone might want to
@@ -913,6 +913,54 @@
 (defun c:ABPCHECKVER ()
   (princ (strcat "\nABPCHECK " *abpcheck-version* " loaded."))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun abp:selftests ()
+  (list
+    (list "seg-dist drops a foot onto a straight run"
+          '(abp:seg-dist '(1.0 1.0) '((0.0 0.0) (3.0 0.0) 0.0))  1.0)
+    (list "seg-dist clamps a point past the end to that end"
+          '(abp:seg-dist '(6 4) '((0 0) (3 0) 0.0))  5.0)
+    (list "seg-dist under a bulged run is the radial distance"
+          '(abp:seg-dist '(1 -2) '((0 0) (2 0) 1.0))  1.0)
+    (list "seg-dist beyond an arc's sweep takes the nearer end"
+          '(abp:seg-dist '(1 2) '((0 0) (2 0) 1.0))  (sqrt 5.0))
+    (list "dedupe keeps one of a double shot, in order"
+          '(mapcar 'abp:pt-name
+                   (cal:dedupe '((0 0 "A") (0.0000001 0 "B") (5 0 "C")) 1.0e-6))
+          '("A" "C"))
+    (list "measure keys each point by its nearest run, nearest first"
+          '(mapcar 'abp:pt-name
+                   (mapcar 'cdr (abp:measure '((5 5 "B") (1 1 "A"))
+                                             '(((0 0) (3 0) 0.0)))))
+          '("A" "B"))
+    (list "bbox is (minx miny maxx maxy)"
+          '(abp:bbox '((0 0) (4 -1) (2 3)))  '(0 -1 4 3))
+    (list "ftin spells a sixteenth-rounded inch fraction"
+          '(cal:ftin 1.875 4 4)  "0'-1 7/8\"")
+    (list "ftin writes whole feet with their zero inches, whatever DIMZIN"
+          '(cal:ftin 180.0 4 4)  "15'-0\"")
+    (list "finding is the one report line, name padded to six"
+          '(abp:finding '(1.875 3 4 "17"))
+          "Pt. 17    closest line is 0'-1 7/8\" away")
+    (list "rows: too-far heading and row, clear heading and row, not-measured advice"
+          '(mapcar 'abp:row-lvl
+                   (abp:rows '((0.5 1 1 "A") (2.0 5 5 "B")) 1.0 1 0))
+          '(3 1 3 nil 3 2))
+    (list "color-name falls back to the ACI number"
+          '(abp:color-name 9)  "colour 9")))
+
+(foreach c '("ABPCHECK" "ABPCHECKRESCUE")
+  (setq *calofin-selftests*
+        (cons (cons c 'abp:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

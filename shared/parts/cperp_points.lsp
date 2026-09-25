@@ -249,7 +249,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *cperp-version* "v0.25")
+(setq *cperp-version* "v0.26")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -1532,6 +1532,46 @@
                  (itoa total) " dimensions on layer \"" cperp:*dimlayer* "\"."))
   (if lzd:end (lzd:end "CPERPPTS"))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cperp:selftests ()
+  (list
+    (list "kw-canon spells side as the style table wants"
+          '(cperp:kw-canon "side" '("STandard" "SIde"))  "SIde")
+    (list "kw-canon refuses a word the question never offers"
+          '(cperp:kw-canon "Maybe" '("Yes" "No"))  nil)
+    (list "dimstyle-dflt is always one of the two keywords"
+          '(member (cperp:dimstyle-dflt) '("STandard" "SIde")))
+    (list "back-kw knows Undo as well as Back"  '(cperp:back-kw "Undo"))
+    (list "bulge of a 45 degree turn is tan(pi/8)"
+          '(cperp:bulge '(1 0) '(0 0) '(1 1))  (/ (sin (/ pi 8.0)) (cos (/ pi 8.0))))
+    (list "bulge of a chord along the tangent is 0"
+          '(cperp:bulge '(1 0) '(0 0) '(5 0))  0.0)
+    (list "scale-pt doubles about the centre, z untouched"
+          '(cperp:scale-pt '(3 4 7) '(1 2 0) 2.0)  '(5.0 6.0 7))
+    (list "scale-ctr lands a quarter of the way from START"
+          '(cperp:scale-ctr '(0 0 5) '(10 20 9) 0.25)  '(2.5 5.0 5))
+    (list "parse-len reads feet, dash and a dashed fraction"
+          '(cal:parse-len "4'-4-1/2\"")  '(52.5 T))
+    (list "parse-len reads a spaced fraction as inches"
+          '(cal:parse-len "44 1/2")  '(44.5 nil))
+    (list "spell-len writes 356 eighths in feet"
+          '(cal:spell-len 356 T nil)  "3'-8 1/2\"")
+    (list "ladder-rows grades 3 to 12 by 3 off the value"
+          '(cal:ladder-rows '(3 12 3))
+          '((96 jump) (72 quarter) (48 half) (24 quarter)))))
+
+(foreach c '("CPERPPTS")
+  (setq *calofin-selftests*
+        (cons (cons c 'cperp:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

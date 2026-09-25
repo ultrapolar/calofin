@@ -44,7 +44,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dronote-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *dronote-version* "v1.4")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -259,6 +259,66 @@
 (defun c:DRONOTEVER ()
   (princ (strcat "\nDRONOTE " *dronote-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun dn:selftests ()
+  (list
+    (list "written ends on the note itself"
+          '(= (substr (dn:written "hello") (- (strlen (dn:written "hello")) 4))
+              "hello")
+          T)
+    (list "written puts the bullet right before the note"
+          '(= (substr (dn:written "x")
+                      (- (strlen (dn:written "x")) (strlen dn:*bullet*))
+                      (strlen dn:*bullet*))
+              dn:*bullet*)
+          T)
+    (list "with a header, written opens on it and breaks the line once (\\P)"
+          '(if (> (strlen dn:*header*) 0)
+             (= (vl-string-search "\\P" (dn:written "x")) (strlen dn:*header*))
+             (not (vl-string-search "\\P" (dn:written "x"))))
+          T)
+    (list "every note's keyword is in the bracket list"
+          '(not (vl-member-if '(lambda (n) (not (vl-string-search (car n) dn:*kws*)))
+                              dn:*notes*))
+          T)
+    (list "the bracket list names exactly as many keywords as there are notes"
+          '(= (1+ (length (vl-remove-if-not '(lambda (c) (= c 32))
+                                            (vl-string->list dn:*kws*))))
+              (length dn:*notes*))
+          T)
+    (list "the Anchors keyword finds its note"
+          '(cdr (assoc "Anchors" dn:*notes*)))
+    (list "ucsang answers an angle in whatever UCS is current"
+          '(numberp (dn:ucsang))  T)
+    (list "text height knob is a positive number"
+          '(if (and (numberp dn:*text-hgt*) (> dn:*text-hgt* 0)) dn:*text-hgt*))
+    (list "wrap width knob is a positive number"
+          '(if (and (numberp dn:*text-width*) (> dn:*text-width* 0))
+             dn:*text-width*))
+    (list "line space knob is inside MTEXT's 0.25 to 4 range"
+          '(if (and (numberp dn:*line-space*)
+                    (>= dn:*line-space* 0.25) (<= dn:*line-space* 4.0))
+             dn:*line-space*))
+    (list "layer knob is a layer name"
+          '(if (and (= (type dn:*layer*) 'STR) (> (strlen dn:*layer*) 0))
+             dn:*layer*))
+    (list "layer colour knob is an ACI number, 1 to 255"
+          '(if (and (= (type dn:*layer-color*) 'INT)
+                    (> dn:*layer-color* 0) (< dn:*layer-color* 256))
+             dn:*layer-color*))))
+
+(foreach c '("DRONOTE")
+  (setq *calofin-selftests*
+        (cons (cons c 'dn:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

@@ -89,7 +89,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *constellation-version* "v1.9")
+(setq *constellation-version* "v1.10")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -2964,6 +2964,47 @@
   (princ (strcat "\nCONSTELLATION " *constellation-version*
                  " (CONSTELLATION.lsp)"))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cst:selftests ()
+  (list
+    (list "parse-len reads feet, a dash and a spaced fraction: 4'-4 1/2\" is 52.5 with feet"
+          '(cst:parse-len "4'-4 1/2\"")  '(52.5 T))
+    (list "parse-len reads a dashed fraction with no feet: 44-1/2 is 44.5"
+          '(cst:parse-len "44-1/2")  '(44.5 nil))
+    (list "parse-len refuses text that is not a length"
+          '(cst:parse-len "abc")  nil)
+    (list "spell-len writes 356 eighths in the feet family as 3'-8 1/2\""
+          '(cst:spell-len 356 T nil)  "3'-8 1/2\"")
+    (list "ladder-rows rungs the shipped 2' to 20' by-a-foot ladder 19 times"
+          '(length (cst:ladder-rows '(24.0 240.0 12.0)))  19)
+    (list "parserun fills D to B clockwise through A on a four-point job"
+          '(cst:parserun "DB" 4)  '(3 0 1))
+    (list "putdim keys C-A as A-C and replaces the older entry for the pair"
+          '(cst:putdim 0 2 170.0 (cst:putdim 2 0 168.0 nil))  '(("A-C" 0 2 170.0)))
+    (list "thin names the point fewer than two dims touch"
+          '(cst:thin 4 (cst:putdim 0 1 10.0 (cst:putdim 0 2 10.0 (cst:putdim 1 2 10.0 nil))))  '(3))
+    (list "cutoff names C and D when no dim links them to A"
+          '(cst:cutoff 4 (cst:adjacency 4 (cst:putdim 0 1 10.0 (cst:putdim 2 3 10.0 nil)) nil))  '(2 3))
+    (list "unmirror flips a counter-clockwise ring so it reads clockwise"
+          '(cst:area2 (cst:unmirror '((0 0) (1 0) (1 1) (0 1)) 4))  -2.0)
+    (list "linsolve solves 2x+y=5, x+3y=10"
+          '(cst:linsolve '((2.0 1.0 5.0) (1.0 3.0 10.0)))  '(1.0 3.0))
+    (list "bulge of a quarter turn about the centre is tan 22.5"
+          '(cst:bulge '(1 0) '(0 1) '(0 0))  0.4142136)
+  ))
+
+(foreach c '("CONSTELLATION")
+  (setq *calofin-selftests*
+        (cons (cons c 'cst:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

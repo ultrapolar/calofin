@@ -95,7 +95,7 @@
 
 (vl-load-com)
 
-(setq *lazform-version* "v2.22")
+(setq *lazform-version* "v2.23")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -3311,6 +3311,71 @@
                  (itoa (length lzf:*charts*)) " chart(s), "
                  (itoa n) " of them OASIS."))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lzf:selftests ()
+  (list
+    (list "leadletter reads C2 off a column-only label"
+          '(lzf:leadletter "C2 - shallow floor at the break")  "C2")
+    (list "tagof names a drawn box by its letter, not its POOL key"
+          '(lzf:tagof (lzf:chart "Rectangle") "tp")  "B")
+    (list "hrows puts the rectangle's hopper chain left to right"
+          '(mapcar 'car (cadr (lzf:hrows (lzf:chart "Rectangle"))))
+          '("H" "G" "F" "E"))
+    (list "taglist names three boxes and counts the rest"
+          '(lzf:taglist (lzf:chart "Rectangle") '("tp" "h" "f" "e" "c2"))
+          "B, H, F and 2 more")
+    (list "btskip: a Sport bottom asks no hopper chain and no C2"
+          '(lzf:btskip "Sport")
+          '("h" "f" "e" "c2" "w" "r3" "l1" "x" "ttc"))
+    (list "dead: in square the cross dims and their mode are greyed, the overall is not"
+          '((lambda ( / d)
+              (setq d (lzf:dead (lzf:chart "Rectangle") t "Normal"))
+              (and (member "x0" d) (member "cmode" d) (member "bo" d)
+                   (not (member "tp" d)) t)))
+          T)
+    ;; the cover flag and the dropdown store are shadowed for the call:
+    ;; the rule is read as a fresh sheet would, whatever the failed run left
+    (list "dead: the Sport chain is dead on a Normal bottom, the hopper chain on a Sport"
+          '((lambda ( / lzf:*cover* lzf:*pvals* a b)
+              (setq a (lzf:dead (lzf:chart "Rectangle") nil "Normal")
+                    b (lzf:dead (lzf:chart "Rectangle") nil "Sport"))
+              (and (member "e2" a) (not (member "h" a))
+                   (member "h" b) (not (member "e2" b)) t)))
+          T)
+    (list "cornerpairs: a Grecian body row fans out to four corners out of square, one in"
+          '((lambda ( / lzf:*chart* lzf:*cvals* lzf:*vals*)
+              (setq lzf:*chart* (lzf:chart "Grecian")
+                    lzf:*cvals* '(("bodycorners" . 2))
+                    lzf:*vals*  '(("bodycorners-sz" . "2")))
+              (list (length (lzf:cornerpairs nil))
+                    (length (lzf:cornerpairs t)))))
+          '(8 2))
+    (list "answer reads feet and inches as inches"
+          '(lzf:answer "12'6\"")  150.0)
+    (list "kvpack drops an empty box and a value carrying the separator; kvunpack reads the rest back"
+          '(lzf:kvunpack (lzf:kvpack '(("tp" . "20") ("le" . "")
+                                       ("h" . "3;4") ("k" . "40"))))
+          '(("tp" . "20") ("k" . "40")))
+    (list "textw: two glyphs are two advances less one gap"
+          '(lzf:textw "AB" 100)  96)
+    (list "arcpts: a quarter turn is 16 points and starts due east"
+          '((lambda ( / a)
+              (setq a (lzf:arcpts '("A" 500 500 100 100 0 90)))
+              (list (length a) (car a) (cadr a))))
+          '(32 600 500))))
+
+(foreach c '("LAZASCII" "LAZTXT" "LAZFORM")
+  (setq *calofin-selftests*
+        (cons (cons c 'lzf:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

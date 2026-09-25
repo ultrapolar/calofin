@@ -30,7 +30,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *ccprecheck-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *ccprecheck-version* "v1.6")   ; announced on load; release_lisp.py
                                         ; stamps the dated twin in releases/
 
 ;;; ======================================================================
@@ -663,6 +663,45 @@
 (defun c:CCPRECHECKVER ()
   (princ (strcat "\nCCPRECHECK " *ccprecheck-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun chk:selftests ()
+  (list
+    (list "back-word takes undo in any case"
+          '(chk:back-word "undo"))
+    (list "back-word passes an ordinary answer"
+          '(not (chk:back-word "Yes"))  T)
+    (list "every back word is a string"
+          '(and chk:*back-words*
+                (not (vl-member-if '(lambda (w) (/= (type w) 'STR))
+                                   chk:*back-words*))
+                chk:*back-words*))
+    (list "trim keeps the first n summary lines, on a log bound for the test"
+          '((lambda (*chk:log*) (chk:trim 2)) '("a" "b" "c"))
+          '("a" "b"))
+    (list "seq walks a stage list to its end"
+          '(chk:seq (list (cons nil '(lambda () "x"))) nil)  nil)
+    (list "seq hands Back up from the first question of a branch"
+          '(chk:seq (list (cons nil '(lambda () 'CHK-BACK))) T)  'CHK-BACK)
+    (list "seq skips a stage whose test is false"
+          '(chk:seq (list (cons '(= 1 2) '(lambda () 'CHK-BACK))) T)  nil)
+    (list "the summary marks are text"
+          '(and (= (type chk:*note-mark*) 'STR)
+                (= (type chk:*confirm-mark*) 'STR)
+                (= (type chk:*ans-sep*) 'STR)
+                chk:*note-mark*))))
+
+(foreach c '("CCPRECHECK")
+  (setq *calofin-selftests*
+        (cons (cons c 'chk:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

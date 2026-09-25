@@ -88,7 +88,7 @@
 ;;; layer everything landed on.
 ;;; ======================================================================
 
-(setq *olauto-version* "v1.4")       ; announced on load; release_lisp.py
+(setq *olauto-version* "v1.5")       ; announced on load; release_lisp.py
                                      ; reads this banner and stamps the
                                      ; dated twin in releases/ from it
 
@@ -1586,6 +1586,50 @@
 (defun c:OLAUTOVER ()
   (princ (strcat "\nOLAUTO " *olauto-version* " loaded."))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun ola:selftests ()
+  (list
+    (list "sweep of bulge 1 is a half turn"        '(ola:sweep 1.0)              pi)
+    (list "bulge-radius: a semicircle on a 10 chord has radius 5"
+          '(ola:bulge-radius '(0 0) '(10 0) 1.0)  5.0)
+    (list "seg-len measures the arc, not its chord"
+          '(ola:seg-len '((0 0) (10 0) 1.0))      (* 5.0 pi))
+    (list "arc-geom centres a semicircle on its chord"
+          '(car (ola:arc-geom '((0 0) (10 0) 1.0)))  '(5.0 0.0))
+    (list "seg-pt halfway round a CCW arc lies right of the chord"
+          '(ola:seg-pt '((0 0) (10 0) 1.0) 0.5)   '(5.0 -5.0))
+    (list "pclose lands on the arc itself, not on its chord"
+          '(ola:pclose (car (ola:prep '(((0 0) (10 0) 1.0)))) '(5 -20))  '(5.0 -5.0))
+    (list "chain turns a segment drawn the other way round"
+          '(cadr (ola:chain '(((0 0) (10 0) 0.0) ((10 10) (10 0) 0.5))))
+          '((10 0) (10 10) -0.5))
+    (list "closed-p: a square that meets itself reads closed"
+          '(ola:closed-p '(((0 0) (10 0) 0.0) ((10 0) (10 10) 0.0)
+                          ((10 10) (0 10) 0.0) ((0 10) (0 0) 0.0)))  T)
+    (list "walk spaces a closed square at its corners"
+          '(nth 2 (ola:walk '(((0 0) (10 0) 0.0) ((10 0) (10 10) 0.0)
+                              ((10 10) (0 10) 0.0) ((0 10) (0 0) 0.0)) 4 T))
+          '(10.0 10.0))
+    (list "kabsch recovers a quarter turn and a shift"
+          '(ola:xapply (ola:kabsch '((0 0) (1 0) (0 1)) '((5 5) (5 6) (4 5))) '(1 0))
+          '(5.0 6.0))
+    (list "chain-pieces counts a far jump as a second piece"
+          '(car (ola:chain-pieces '(((0 0) (10 0) 0.0) ((50 50) (60 50) 0.0))))  2)
+    (list "names joins three layers in prose"
+          '(ola:names '("A" "B" "C"))  "\"A\", \"B\" and \"C\"")))
+
+(foreach c '("OLAUTO")
+  (setq *calofin-selftests*
+        (cons (cons c 'ola:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

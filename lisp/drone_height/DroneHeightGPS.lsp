@@ -1421,6 +1421,25 @@
   (princ (strcat "\nDDGPS " *droneheightgps-version*))
   (princ))
 
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun ddg-selftests ()
+  (list
+    ;; write at least 3:
+    ;;   (list "what it checks" '(ddg-helper args) expected)
+  ))
+
+(foreach c '("DDGPS" "DDELEV" "DDTEST")
+  (setq *calofin-selftests*
+        (cons (cons c 'ddg-selftests) *calofin-selftests*)))
+
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
 ;; because one file's greeting is a greeting and sixty-three of

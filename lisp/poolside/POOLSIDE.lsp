@@ -61,7 +61,7 @@
 ;;;  A self-contained file: it carries its own helpers.
 ;;; ======================================================================
 
-(setq *poolside-version* "v1.15")
+(setq *poolside-version* "v1.16")
 
 ;;; -------------------- adjustable constants ---------------------------
 
@@ -1836,6 +1836,51 @@
 (defun c:POOLSIDEVER ()
   (princ (strcat "\nPOOLSIDE " *poolside-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun psd:selftests ()
+  (list
+    (list "chain of a Normal bottom runs H G F E"
+          '(mapcar 'car (psd:chain "Normal"))  '("H" "G" "F" "E"))
+    (list "depths has one station more than the chain has runs, every style"
+          '(mapcar '(lambda (s) (- (length (psd:depths s)) (length (psd:chain s))))
+                   '("Normal" "Sport" "Wedge" "SLope" "MOdflat" "SHallow"))
+          '(1 1 1 1 1 1))
+    (list "nominal proportions of a Sport bottom sum to 1"
+          '(apply '+ (psd:nominal "Sport"))  1.0)
+    (list "slack of a Sport chain is its pad G, at index 2"
+          '(psd:slack (psd:chain "Sport"))  2)
+    (list "chainfix splits the remainder over the NA runs"
+          '(psd:chainfix '(10.0 nil nil) 40.0 0)  '(10.0 15.0 15.0))
+    (list "chainfix hands a miss of B to the slack member"
+          '(psd:chainfix '(10.0 10.0 10.0) 40.0 1)  '(10.0 20.0 10.0))
+    (list "chainval lifts a negative run to the floor out of the largest"
+          '(psd:chainval '(-4.0 30.0 10.0) 36.0)  '((3.0 23.0 10.0) (0 1)))
+    (list "stations of a Wedge run C, D, C along the chain"
+          '(psd:stations "Wedge" '(10.0 30.0) 42.0 84.0 nil)
+          '((0.0 . 42.0) (10.0 . 84.0) (40.0 . 42.0)))
+    (list "xcode finds the break by code, mirrored, with C2 equal to C"
+          '(psd:xcode "SHallow"
+                      (psd:stations "SHallow" '(10.0 20.0 30.0 40.0) 42.0 84.0 42.0)
+                      "c2" T)  10.0)
+    (list "kwknob spells a knob's sport as the prompt does"
+          '(psd:kwknob "sport" psd:*btypes*)  "Sport")
+    (list "fok: REQ refuses 0, ZER takes it, NAX takes NA"
+          '(and (not (psd:fok 'REQ 0.0)) (psd:fok 'ZER 0.0) (psd:fok 'NAX nil)))
+    (list "parse-len reads a bare 7' as 84 inches in feet"
+          '(psd:parse-len "7'")  '(84.0 T))))
+
+(foreach c '("POOLSIDE")
+  (setq *calofin-selftests*
+        (cons (cons c 'psd:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

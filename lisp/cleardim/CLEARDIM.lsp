@@ -181,7 +181,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cleardim-version* "v3.3")   ; announced on load; release_lisp.py
+(setq *cleardim-version* "v3.4")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -2255,6 +2255,46 @@
 (defun c:CLEARDIMVER ()
   (princ (strcat "\nCLEARDIM " *cleardim-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cd:selftests ()
+  (list
+    (list "glyphs counts 2 3/4 written in MTEXT markup -- an A code, braces, an H code, a stacked S fraction -- as 2 glyphs, not 25 characters"
+          '(cd:glyphs (strcat "\\A1" (chr 59) "2{\\H1.000000x" (chr 59)
+                              "\\S3/4" (chr 59) "}"))
+          2)
+    (list "glyphs: %%u draws nothing and %%d is one glyph, so %%u45%%d is 3"
+          '(cd:glyphs "%%u45%%d")  3)
+    (list "stack-width: 11/16 is as wide as its longer half"
+          '(cd:stack-width "11/16")  2)
+    (list "text-size: two lines at height 2 stand 5 tall, a line and a half for the second"
+          '(cadr (cd:text-size "A\\PB" 2.0 1.0))  5.0)
+    (list "hit-p: two boxes flush against each other do not overlap"
+          '(cd:hit-p (cd:box '(0 0) 0.0 2.0 2.0) (cd:box '(2 0) 0.0 2.0 2.0))  nil)
+    (list "hit-p: a segment through a box is a hit"
+          '(cd:hit-p '((-5 0) (5 0)) (cd:box '(0 0) 0.0 2.0 2.0))  T)
+    (list "signed-dang from 0.1 to -0.1 is -0.2, the short way round"
+          '(cd:signed-dang 0.1 -0.1)  -0.2)
+    (list "trk-s on an arc is arc length: a quarter turn at radius 2 is pi"
+          '(cd:trk-s (cd:trk-arc '(0 0) 2.0 nil) '(0 2))  pi)
+    (list "trk-near carries a spot just past an arc's seam the short way round"
+          '(cd:trk-near (cd:trk-arc '(0 0) 1.0 nil) 0.1 (- (* 2.0 pi) 0.1))
+          (+ (* 2.0 pi) 0.1))
+    (list "skip-text counts the skipped by reason"
+          '(cd:skip-text '(track track locked))
+          "3 skipped: 2 whose tracks could not be read, 1 on a locked layer.")))
+
+(foreach c '("CLEARDIM" "CLEARDIMSCAN")
+  (setq *calofin-selftests*
+        (cons (cons c 'cd:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and CALOFIN-LOADER.lsp set
 ;; the flag while they load their members.  APPLOADed alone the flag is

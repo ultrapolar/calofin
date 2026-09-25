@@ -240,7 +240,7 @@
 ;;; ===================================================================
 
 ;; ---- configuration -------------------------------------------------
-(setq *cabhd-version* "v2.8")       ; announced on load; release_lisp.py
+(setq *cabhd-version* "v2.9")       ; announced on load; release_lisp.py
                                     ; stamps the dated twin in releases/
                                     ; from it (vN.N -> CABHD_MMDDYY_
                                     ; REVNN), so the filename and the
@@ -4009,6 +4009,58 @@
   (setq *error* cab-old-err)   ; restore the previous error handler
   (if lzd:end (lzd:end "CABHD"))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cab:selftests ()
+  (list
+    (list "radius-bulge: a 2.5 radius over a 4 chord is the minor-arc bulge 0.5"
+          '(cab:radius-bulge '(0 0) '(4 0) 2.5 0.3)  0.5)
+    (list "radius-bulge refuses a radius shorter than half its chord"
+          '(cab:radius-bulge '(0 0) '(4 0) 1.0 0.3)  nil)
+    (list "tangent-bulge: leaving straight up for a point to the right turns clockwise"
+          '(cab:tangent-bulge '(0 0) (/ pi 2.0) '(4 0))  -1.0)
+    (list "seg-param puts the apex of a semicircle halfway along it"
+          '(cab:seg-param '(2 -2) '((0 0) (4 0) 1.0))  0.5)
+    (list "chain closes a square handed out of order, turning its reversed side round"
+          '(last (cab:chain (list (list '(0 0) '(4 0) 0.0)
+                                  (list '(4 4) '(0 4) 0.0)
+                                  (list '(4 0) '(4 4) 0.0)
+                                  (list '(0 0) '(0 4) 0.0))))
+          '((0 4) (0 0) 0.0))
+    (list "rotate-to-corner starts the walk at the sharpest turn"
+          '(car (cab:rotate-to-corner '((0 0) (4 0) (8 3) (4 6) (0 6))))
+          '(8 3))
+    (list "merge-windows splits the kink evenly when two joints disagree"
+          '(cab:merge-windows '(0.0 . 1.0) '(2.0 . 3.0))  '(1.5 . 1.5))
+    (list "self-crosses sees a bow-tie loop"
+          '(cab:self-crosses (list (list '(0 0) '(4 4) 0.0)
+                                   (list '(4 4) '(4 0) 0.0)
+                                   (list '(4 0) '(0 4) 0.0)
+                                   (list '(0 4) '(0 0) 0.0)))
+          T)
+    (list "num-in reads the first run of digits and stops there"
+          '(cab:num-in "Pt.12-15")  12)
+    (list "seam-kink: two semicircles close with no kink"
+          '(cab:seam-kink (list (list '(0 0) '(4 0) 1.0)
+                                (list '(4 0) '(0 0) 1.0)))
+          0.0)
+    (list "ftin writes 52.5 inches as feet and eighths"
+          '(cal:ftin 52.5 4 3)  "4'-4 1/2\"")
+    (list "bad-phrase lists three points with commas and an and"
+          '(vl-string-search "Pt.3, Pt.7 and Pt.9"
+                             (cab:bad-phrase '("3" "7" "9"))))))
+
+(foreach c '("CABHD")
+  (setq *calofin-selftests*
+        (cons (cons c 'cab:selftests) *calofin-selftests*)))
 
 ;; ----------------------------------------------------------------------
 ;; Quiet inside the whole build: LAZPASS.lsp and

@@ -278,7 +278,7 @@
 (vl-load-com)
 
 ;; ---- configuration -------------------------------------------------
-(setq *lfc-version* "v2.26")        ; announced on load; release_lisp.py
+(setq *lfc-version* "v2.27")        ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -4945,6 +4945,48 @@
   (princ))
 
 (defun c:TUTORIALLINFINSCAN () (c:TUTORIALLINFINCHECK))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lfc:selftests ()
+  (list
+    (list "feet-open-p flags 5' with no inches"     '(lfc:feet-open-p "5'")           T)
+    (list "feet-open-p: a doubled apostrophe closes 5'-0''"
+          '(lfc:feet-open-p "5'-0''")  nil)
+    (list "feet-open-p leaves a possessive alone"   '(lfc:feet-open-p "Water's Edge") nil)
+    (list "len-values reads a labelled 3' 4 1/2\" as one 40.5 inch value"
+          '(lfc:len-values "Finished Wall Ht = 3' 4 1/2\"")  '(40.5))
+    (list "len-values keeps an inch list as several values"
+          '(lfc:len-values "0'', 40'', 45''")  '(0.0 40.0 45.0))
+    (list "strip-badwords takes Not Supplied out and keeps the label"
+          '(lfc:strip-badwords "Pattern: Not Supplied" '("NOT" "ERROR"))  "Pattern:")
+    (list "strip-badwords drops the comma left dangling with the phrase"
+          '(lfc:strip-badwords "Blue Marble, Not Supplied" '("NOT" "ERROR"))
+          "Blue Marble")
+    (list "date-verdict knows 1900 was not a leap year"
+          '(lfc:date-verdict "02/29/1900")
+          "'02/29/1900' - 29 is not a valid day for that month - expected MM/DD/YYYY")
+    (list "border-verdict calls half the nominal sheet SCALED DOWN"
+          '(wcmatch (lfc:border-verdict '((0 0) (352 271.8125))) "*SCALED DOWN*"))
+    (list "overlap-info measures the 5 that 0-10 and 5-15 share"
+          '(caddr (lfc:overlap-info '((0 0 0) (10 0 0) nil) '((5 0 0) (15 0 0) nil)))
+          5.0)
+    (list "sort-recs keeps equal offsets in input order"
+          '(lfc:sort-recs '((2 "a") (1 "b") (2 "c") (1 "d")))
+          '((1 "b") (1 "d") (2 "a") (2 "c")))
+    (list "ftin spells 40.5 as 3'-4 1/2\" whatever DIMZIN says"
+          '(cal:ftin 40.5 4 4)  "3'-4 1/2\"")))
+
+(foreach c '("LINFINCHECKRESCUE" "LINFINCHECK" "TUTORIALLINFINCHECK")
+  (setq *calofin-selftests*
+        (cons (cons c 'lfc:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

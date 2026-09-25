@@ -58,7 +58,7 @@
 (vl-load-com)
 
 ;; Version banner, shown on load and at the top of every run's report.
-(setq *xyplot-version* "v1.11")
+(setq *xyplot-version* "v1.12")
 
 ;;; --------------------------------------------------------------------------
 ;;;  Tunables
@@ -1062,6 +1062,51 @@
 (defun c:XYPLOTVER ()
   (princ (strcat "\nXYPLOT " *xyplot-version* " (XYPLOT.lsp)"))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun xyp:selftests ()
+  (list
+    (list "scrub reads I0'_IO as 10'-10"
+          '(xyp:scrub "I0'_IO")  "10'-10")
+    (list "defrac rebuilds 314 as the 3/4 its slash was scanned from"
+          '(xyp:defrac "314")  "3/4")
+    (list "defrac leaves 100 alone: no inch fraction reads that way"
+          '(xyp:defrac "100")  nil)
+    (list "ftin->in reads 12'-3 1/2\" as 147.5 inches"
+          '(xyp:ftin->in "12'-3 1/2\"" nil)  147.5)
+    (list "ftin->in takes a dash for the foot mark: 28-7\" is 343"
+          '(xyp:ftin->in "28-7\"" nil)  343.0)
+    (list "ftin->in keeps 0 and a negative: coordinates, not tapes"
+          '(list (xyp:ftin->in "0" nil) (xyp:ftin->in "-6" nil))  '(0.0 -6.0))
+    (list "ftin->in leaves a lone dash blank"
+          '(xyp:ftin->in "-" nil)  nil)
+    (list "ftin->in rebuilds 39'-8 314\" as 39'-8 3/4\", 476.75"
+          '(xyp:ftin->in "39'-8 314\"" nil)  476.75)
+    (list "in->ftin writes 476.75 back as 39'-8 3/4\""
+          '(xyp:in->ftin 476.75)  "39'-8 3/4\"")
+    (list "parse-csv-line keeps a quoted comma and a doubled quote"
+          '(xyp:parse-csv-line "P1,\"3'-4 1/2\"\"\",7")
+          '("P1" "3'-4 1/2\"" "7"))
+    (list "col-of: X OFFSET is x, NORTHING is y, POINT NO is the name"
+          '(list (xyp:col-of "X OFFSET") (xyp:col-of "NORTHING")
+                 (xyp:col-of "POINT NO"))
+          '(x y name))
+    (list "chain-stops sorts the rungs and merges two offsets a hair apart"
+          '(xyp:chain-stops '(("P1" 10.0 5.0) ("P2" 4.0 8.0) ("P3" 10.001 2.0))
+                            'x '(0 0))
+          '((0.0 (0 0) "0") (4.0 (4.0 8.0) "P2") (10.0 (10.0 5.0) "P1,P3")))))
+
+(foreach c '("XYPLOT")
+  (setq *calofin-selftests*
+        (cons (cons c 'xyp:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

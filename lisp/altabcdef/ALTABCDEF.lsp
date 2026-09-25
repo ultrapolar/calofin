@@ -40,7 +40,7 @@
 ;;;  All geometry is created in inches (1 drawing unit = 1 inch).
 ;;; ==========================================================================
 
-(setq *altabcdef-version* "v1.10")   ; announced on load; release_lisp.py
+(setq *altabcdef-version* "v1.11")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -1258,6 +1258,51 @@
 (defun c:ALTABCDEFVER ()
   (princ (strcat "\nALTABCDEF " *altabcdef-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun altabcdef:selftests ()
+  (list
+    (list "ftin->in reads a full feet-inch-fraction cell"
+          '(altabcdef:ftin->in "12'-3 1/2\"" nil)  147.5)
+    (list "ftin->in takes a bare fraction of an inch"
+          '(altabcdef:ftin->in "3 1/2\"" nil)  3.5)
+    (list "ftin->in: a dash with no foot mark still separates feet"
+          '(altabcdef:ftin->in "28-7\"" nil)  343.0)
+    (list "in->ftin writes 476.75 as 39'-8 3/4\", reduced"
+          '(altabcdef:in->ftin 476.75)  "39'-8 3/4\"")
+    (list "defrac rebuilds 314 as 3/4 and 15116 as 15/16"
+          '(list (altabcdef:defrac "314") (altabcdef:defrac "15116"))
+          '("3/4" "15/16"))
+    (list "scrub turns O, I and _ into 0, 1 and -"
+          '(altabcdef:scrub "2O'_1I4\"")  "20'-114\"")
+    (list "cc-int: two 5in circles 8in apart cross at 4,3 and 4,-3"
+          '(altabcdef:cc-int '(0.0 0.0) 5.0 '(8.0 0.0) 5.0)  '((4.0 3.0) (4.0 -3.0)))
+    (list "cc-int: circles that fall short share the gap and touch once"
+          '(altabcdef:cc-int '(0.0 0.0) 3.0 '(10.0 0.0) 5.0)  '((4.0 0.0)))
+    (list "mirror-amb-p: opposite corners leave the mirror inside the frame, adjacent ones do not"
+          '(list (altabcdef:mirror-amb-p '((0.0 0.0) (10.0 -10.0)) 7.0 -3.0 0.0 0.0 10.0 10.0)
+                 (altabcdef:mirror-amb-p '((0.0 0.0) (10.0 0.0)) 5.0 -3.0 0.0 0.0 10.0 10.0))
+          '(T nil))
+    (list "corner-ang of a square corner is 90 degrees"
+          '(altabcdef:corner-ang 0.0 0.0 10.0 0.0 0.0 10.0)  90.0)
+    (list "wholes-apart-p: 20 6 is two numbers apart, 20'-6\" is not"
+          '(list (altabcdef:wholes-apart-p "20 6") (altabcdef:wholes-apart-p "20'-6\""))
+          '(T nil))
+    (list "col-of reads the distance and name headers"
+          '(list (altabcdef:col-of "DIST FROM B") (altabcdef:col-of "POINT NAME"))
+          '(b name))))
+
+(foreach c '("ALTABCDEF")
+  (setq *calofin-selftests*
+        (cons (cons c 'altabcdef:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

@@ -242,7 +242,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *autodim-version* "v2.5")   ; announced on load; release_lisp.py
+(setq *autodim-version* "v2.6")   ; announced on load; release_lisp.py
                                      ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -2216,6 +2216,43 @@
 (defun c:AUTODIMVER ()
   (princ (strcat "\nAUTODIM " *autodim-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun ad:selftests ()
+  (list
+    (list "mid of (0 0) and (4 2)"                  '(cal:midn '(0 0) '(4 2))   '(2.0 1.0))
+    (list "dot of (1 2) and (3 4) is 11"            '(cal:dotn '(1 2) '(3 4))   11)
+    (list "segang folds a downward segment into [0, pi)"
+          '(ad:segang '((0 0) (0 -1)))  (* 0.5 pi))
+    (list "angdiff of 0.1 and pi-0.1 wraps round to 0.2"
+          '(ad:angdiff 0.1 (- pi 0.1))  0.2)
+    (list "numstr writes a whole number without a point"
+          '(ad:numstr 2.0)  "2")
+    (list "lineoff is signed: 3 one side of the span, -3 the other"
+          '(list (ad:lineoff '(0 0) '(10 0) '(5 3))
+                 (ad:lineoff '(0 0) '(10 0) '(5 -3)))
+          '(3.0 -3.0))
+    (list "groupsame joins 10 and 10.02 within a sixteenth, keeps 12 apart, in the order found"
+          '(ad:groupsame '((10.0) (12.0) (10.02)) 0.0625)
+          '(((10.0) (10.02)) ((12.0))))
+    (list "bulgearc: a bulge of 1 across a chord of 2 is a semicircle of radius 1"
+          '(cadr (ad:bulgearc '(0 0) '(2 0) 1.0))  1.0)
+    (list "boxlap: two boxes that do not touch do not overlap"
+          '(ad:boxlap '((0 0) (2 2)) '((3 3) (4 4)))  nil)
+    (list "stairlike-p refuses a riser that starts half a unit above the last one's foot"
+          '(ad:stairlike-p '(((1 3) (1 2)) ((2 2.5) (2 1))) 0.01)  nil)))
+
+(foreach c '("AUTODIM" "STAIRDIM" "FLOORDIM" "AUTODIMSIDEPOV")
+  (setq *calofin-selftests*
+        (cons (cons c 'ad:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

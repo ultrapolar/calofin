@@ -196,7 +196,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.11")
+(setq *perpmark-version* "v1.12")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -1563,6 +1563,46 @@
   (cal:sysrestore)
   (if lzd:end (lzd:end "PERPMARK"))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun pm:selftests ()
+  (list
+    (list "parse-len reads 4'-4-1/2'' as 52.5 inches with feet spelled"
+          '(cal:parse-len "4'-4-1/2''")  '(52.5 T))
+    (list "parse-len refuses 4'x, which is not a length"
+          '(cal:parse-len "4'x")  nil)
+    (list "spell-len writes 420 eighths in the feet family as 4'-4 1/2, inch mark trimmed"
+          '(vl-string-trim (chr 34) (cal:spell-len 420 T nil))  "4'-4 1/2")
+    (list "ruler-tier grades 8, 4, 2 and 1 eighths off as jump, half, quarter, eighth"
+          '(list (cal:ruler-tier 8) (cal:ruler-tier 4) (cal:ruler-tier 2) (cal:ruler-tier 1))
+          '(jump half quarter eighth))
+    (list "ruler-rows at 4 eighths offers 11 rows, the ones at or below zero dropped"
+          '(length (cal:ruler-rows 4 nil))  11)
+    (list "canon reads Pt.35 and #035 as the same point number"
+          '(= (pm:canon "Pt.35") (pm:canon "#035"))  T)
+    (list "mkseg: a bulge of 1 across a chord of 2 is a half circle pi long"
+          '(pm:seg-len (pm:mkseg '(0 0) '(2 0) 1.0))  pi)
+    (list "project: a point beside the second of two 10-unit walls is 14 along from the start"
+          '(caddr (pm:project (list '(S (0.0 0.0) (10.0 0.0)) '(S (10.0 0.0) (10.0 10.0)))
+                              '(12.0 4.0)))
+          14.0)
+    (list "spikes names the 30 between 10 and 12 and says 11 was expected"
+          '(cal:spikes '((0.0 . 10.0) (5.0 . 30.0) (10.0 . 12.0)) 2.0)
+          '((1 . 11.0)))
+    (list "andjoin writes three names with commas and an and"
+          '(pm:andjoin '("Pt.7" "Pt.9" "Pt.12") T)  "Pt.7, Pt.9 and Pt.12")))
+
+(foreach c '("PERPMARK")
+  (setq *calofin-selftests*
+        (cons (cons c 'pm:selftests) *calofin-selftests*)))
 
 (if (not *calofin-quiet*)
   (princ (strcat "\nPERPMARK " *perpmark-version*

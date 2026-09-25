@@ -85,7 +85,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *mohamaddle-version* "v1.4")
+(setq *mohamaddle-version* "v1.5")
 
 ;; --- the pad itself ---
 ;; Pad sizes MOHAMADDLE offers, in the order shown at the prompt.  Each
@@ -1365,6 +1365,61 @@
 (defun c:MOHAMADDLEVER ()
   (princ (strcat "\nMOHAMADDLE " *mohamaddle-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun mohamaddle--selftests ()
+  (list
+    (list "in writes a whole size without decimals"
+          '(mohamaddle--in 36.0)  "36\"")
+    (list "the default size is one the table offers"
+          '(assoc *mohamaddle-defaultkw* *mohamaddle-sizes*))
+    (list "unit of a zero vector is nil, not a divide"
+          '(mohamaddle--unit '(0.0 0.0))  nil)
+    (list "arcdata: a bulge of 1 is a semicircle, centre on the chord"
+          '(caddr (mohamaddle--arcdata '(0.0 0.0) '(2.0 0.0) 1.0))  '(1.0 0.0))
+    (list "area: two semicircle bulges of radius 1 make pi"
+          '(mohamaddle--area '((0.0 0.0 1.0) (2.0 0.0 1.0)))  pi)
+    (list "segpt: half way along a bulge-1 arc is the bottom of the circle"
+          '(mohamaddle--segpt '((0.0 0.0) (2.0 0.0) 1.0) 0.5)  '(1.0 -1.0))
+    (list "xsect: the diagonals of a square cross at its middle"
+          '(mohamaddle--xsect '((0.0 0.0) (2.0 2.0)) '((0.0 2.0) (2.0 0.0)))  '(1.0 1.0))
+    (list "chain: four loose sides, shuffled and one reversed, are one loop"
+          '(mapcar 'length
+                   (mohamaddle--chain '(((0.0 0.0) (10.0 0.0) 0.0 nil)
+                                        ((10.0 10.0) (0.0 10.0) 0.0 nil)
+                                        ((10.0 10.0) (10.0 0.0) 0.0 nil)
+                                        ((0.0 10.0) (0.0 0.0) 0.0 nil))))
+          '(1 0))
+    (list "chain: three sides are one open chain and no loop"
+          '(mapcar 'length
+                   (mohamaddle--chain '(((0.0 0.0) (10.0 0.0) 0.0 nil)
+                                        ((10.0 10.0) (0.0 10.0) 0.0 nil)
+                                        ((10.0 10.0) (10.0 0.0) 0.0 nil))))
+          '(0 1))
+    (list "features: an L finds its one inside corner, at 5,5"
+          '(mapcar 'car (mohamaddle--features '((0.0 0.0 0.0) (10.0 0.0 0.0)
+                                                 (10.0 10.0 0.0) (5.0 10.0 0.0)
+                                                 (5.0 5.0 0.0) (0.0 5.0 0.0)) 24.0))
+          '((5.0 5.0)))
+    (list "arc-pads: a 30in semicircle takes three 24in pads, edge to edge"
+          '(mohamaddle--arc-pads '(0.0 0.0) 30.0 pi 1.0 pi 24.0)
+          '((-24.0 -18.0) (0.0 -30.0) (24.0 -18.0)))
+    (list "dodge: an arc pad over a corner pad slides flush beside it"
+          '(mapcar 'car (mohamaddle--dodge '(((0.0 0.0) 0.0 "corner")
+                                              ((15.0 0.0) 0.0 "arc")) 24.0))
+          '((0.0 0.0) (24.0 0.0)))))
+
+(foreach c '("MOHAMADDLE")
+  (setq *calofin-selftests*
+        (cons (cons c 'mohamaddle--selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and CALOFIN-LOADER.lsp set
 ;; the flag while they load their members, because one file's greeting

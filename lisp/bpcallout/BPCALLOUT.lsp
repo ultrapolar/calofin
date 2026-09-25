@@ -42,7 +42,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *bpcallout-version* "v1.11")   ; announced on load; release_lisp.py
+(setq *bpcallout-version* "v1.12")   ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -389,6 +389,45 @@
 (defun c:BPCALLOUTVER ()
   (princ (strcat "\nBPCALLOUT " *bpcallout-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun bp:selftests ()
+  (list
+    (list "dist measures flat: an elevation is dropped"
+          '(bp:dist '(0 0 0) '(3 4 100))                          5.0)
+    (list "nearest-point takes the closer of two within snap"
+          '(cadr (bp:nearest-point '(0 0) '(((10 0) "12") ((3 0) "15"))))  "15")
+    (list "nearest-point passes over a point beyond snap"
+          '(bp:nearest-point '(0 0) '(((100 0) "12")))            nil)
+    (list "ringed-at finds a ring centred on the same spot"
+          '(cadr (bp:ringed-at '(0 0) '(5 5) '(((5.0 5.0) "12" nil)) T))  "12")
+    (list "ringed-at: a pick that snapped to a point is that point, not a neighbour's ring"
+          '(bp:ringed-at '(2 0) '(8 0) '(((0 0) "12" nil)) T)     nil)
+    (list "ringed-at: an unsnapped pick inside a ring names that ring"
+          '(cadr (bp:ringed-at '(2 0) '(2 0) '(((0 0) "12" nil)) nil))  "12")
+    (list "drop-entry removes the ring's entry and keeps the order"
+          '(bp:drop-entry 'r2 '(((0 0) "1" r1) ((1 1) "2" r2) ((2 2) "3" r3)))
+          '(((0 0) "1" r1) ((2 2) "3" r3)))
+    (list "phrase: one point is bad"
+          '(bp:phrase '("12"))                                    "Pt.12 is bad")
+    (list "phrase: two points are bad, joined by and"
+          '(bp:phrase '("12" "15"))                               "Pt.12 and Pt.15 are bad")
+    (list "phrase: three points, commas then and"
+          '(bp:phrase '("12" "15" "20"))                          "Pt.12, Pt.15 and Pt.20 are bad")
+    (list "the ring radius knob is a positive distance"
+          '(if (and (numberp bp:*radius*) (> bp:*radius* 0)) bp:*radius*))))
+
+(foreach c '("BPCALLOUT")
+  (setq *calofin-selftests*
+        (cons (cons c 'bp:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

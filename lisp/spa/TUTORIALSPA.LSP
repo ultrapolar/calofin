@@ -24,7 +24,7 @@
 ;;;      TUTORIALSPA_MMDDYY_REV##.LSP    named for its revision
 ;;; ====================================================================
 
-(setq tut:*version* "092326 REV18")
+(setq tut:*version* "092526 REV19")
 
 ;;; -------------------- the worked example -----------------------------
 ;;;  140 x 110 cover, one diagonal corner, water's edge 3" inside it,
@@ -523,6 +523,48 @@
      (if *pop-error-mode* (*pop-error-mode*))))
   (if lzd:end (lzd:end "TUTORIALSPA"))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun tut:selftests ()
+  (list
+    ;; The tutorial has no arithmetic of its own -- it drives SPA's --
+    ;; so these pin the worked example's knobs to what its script
+    ;; promises, and the checklist tables to the shape tut:sheet reads.
+    (list "the demo cover is wider than it is tall, so it lies long-ways"
+          '(if (and (numberp tut:*w*) (numberp tut:*l*) (> tut:*w* tut:*l*))
+             tut:*w*))
+    (list "the water's edge sits a positive lap inside the cover"
+          '(if (and (numberp tut:*gap*) (> tut:*gap* 0.0)) tut:*gap*))
+    (list "corner C's cut face sets back under half the shorter wall, so SPA takes it"
+          '(if (< (* tut:*cut* 0.70711) (* 0.5 (min tut:*w* tut:*l*))) tut:*cut*))
+    (list "the foam sheet is a width and a longer length"
+          '(if (and (numberp tut:*fw*) (numberp tut:*fl*)
+                    (> tut:*fw* 0.0) (> tut:*fl* tut:*fw*))
+             tut:*fl*))
+    (list "the cover needs three pieces of that foam, so both hinge kinds get drawn"
+          '(fix (+ 0.999999 (/ tut:*w* tut:*fw*)))  3)
+    (list "the hinge run is past Standard's 108 double-C line, as the script says"
+          '(if (> tut:*l* 108.0) tut:*l*))
+    (list "the asks table numbers SPA's eight questions"
+          '(length (vl-remove-if-not '(lambda (s) (wcmatch s "#.*")) tut:*asks*))  8)
+    (list "the four checklist tables are non-empty lists of text"
+          '(if (and tut:*asks* tut:*decides* tut:*checks* tut:*draws*
+                    (not (vl-member-if '(lambda (s) (/= (type s) 'STR))
+                                       (append tut:*asks* tut:*decides*
+                                               tut:*checks* tut:*draws*))))
+             (length (append tut:*asks* tut:*decides* tut:*checks* tut:*draws*))))))
+
+(foreach c '("TUTORIALSPA")
+  (setq *calofin-selftests*
+        (cons (cons c 'tut:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

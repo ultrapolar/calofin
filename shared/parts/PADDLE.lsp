@@ -81,7 +81,7 @@
 ;; printed on load and at command start, and tools/release_lisp.py
 ;; reads it to stamp the dated twin in releases/, so a loaded routine
 ;; and its release can never disagree.
-(setq *paddle-version* "v1.21")
+(setq *paddle-version* "v1.22")
 
 ;; --- the pad itself ---
 ;; Name of the block inserted at every pad spot.  *paddle-blkfile*
@@ -1730,6 +1730,58 @@
 (defun c:PADDLEVER ()
   (princ (strcat "\nPADDLE " *paddle-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun paddle--selftests ()
+  (list
+    (list "in writes a quarter inch with its inch mark"  '(paddle--in 4.25)  "4.25\"")
+    (list "area of two bulge-1 halves is a unit circle's"
+          '(paddle--area '((0 0 1.0) (2 0 1.0)))  pi)
+    (list "tan-start of a CCW half circle (0 0)->(2 0) heads straight down"
+          '(paddle--tan-start '(0 0) '(2 0) 1.0)  '(0.0 -1.0))
+    (list "revseg swaps the ends, negates the bulge, keeps the entity"
+          '(paddle--revseg '((0 0) (1 0) 0.5 E))  '((1 0) (0 0) -0.5 E))
+    (list "chain closes four sides given out of order into one loop"
+          '(paddle--chain '(((0 0) (4 0) 0.0) ((4 4) (0 4) 0.0)
+                            ((4 0) (4 4) 0.0) ((0 4) (0 0) 0.0)))
+          '((((0 0 0.0) (4 0 0.0) (4 4 0.0) (0 4 0.0))) nil))
+    (list "chain grows an open run both ways into ONE chain, in walk order"
+          '(mapcar 'car (car (cadr (paddle--chain
+                                     '(((4 0) (4 4) 0.0) ((0 0) (4 0) 0.0)
+                                       ((4 4) (0 4) 0.0))))))
+          '((0 0) (4 0) (4 4)))
+    (list "features pads the one inside corner of an L, facing its way in"
+          '(paddle--features '((0 0 0.0) (4 0 0.0) (4 2 0.0)
+                               (2 2 0.0) (2 4 0.0) (0 4 0.0)) 36.0)
+          (list (list '(2 2) pi "corner")))
+    (list "features finds nothing to pad on a convex square"
+          '(paddle--features '((0 0 0.0) (4 0 0.0) (4 4 0.0) (0 4 0.0)) 36.0)  nil)
+    (list "dodge slides an arc pad flush beside a corner pad, 36 on centre"
+          '(paddle--dodge '(((0 0) 0.0 "corner") ((20 5) 0.0 "arc")) 36.0)
+          '(((0 0) 0.0 "corner") ((36.0 5) 0.0 "arc")))
+    (list "pairs takes the two gaps closest first, 1 then 4"
+          '(mapcar 'caddr (paddle--pairs (paddle--endlist
+                                           '((((0 0) (4 0) 0.0 nil))
+                                             (((4 1) (4 4) 0.0 nil)
+                                              ((4 4) (0 4) 0.0 nil))))))
+          '(1.0 4.0))
+    (list "segpt halfway round a CCW half circle is its bottom"
+          '(paddle--segpt '((0 0) (2 0) 1.0) 0.5)  '(1.0 -1.0))
+    (list "xsect of the two diagonals of a square is its middle"
+          '(paddle--xsect '((0.0 0.0) (4.0 4.0) 0.0) '((0.0 4.0) (4.0 0.0) 0.0))
+          '(2.0 2.0))))
+
+(foreach c '("PADDLE" "TUTORIALPADDLE")
+  (setq *calofin-selftests*
+        (cons (cons c 'paddle--selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

@@ -151,6 +151,15 @@ the handler, and will not guess one — what belongs in it is editorial:
 which sysvars *this* command changed, whether an undo group is open,
 what it drew that has to be swept.
 
+It also writes the **self-test table's skeleton** — `X:selftests`, just
+above the load banner, registered under every command the file reports
+as — and then names the file until you write at least three entries:
+the tool's own helpers on known inputs, `(list "label" '(expr) expected)`
+or `(list "label" '(expr))`. A failure report runs them on the drafter's
+machine. Nothing in one may prompt, draw, `(command)`, `setvar`, write,
+reach COM or read the drawing. Try them with
+`python3 tools/run_selftests.py lisp/<tool>/<TOOL>.lsp --tier both`.
+
 ## 4. Register it
 
 ```bash

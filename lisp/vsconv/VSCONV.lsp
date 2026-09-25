@@ -79,7 +79,7 @@
 ;;; so; nothing else about the round trip is approximate.
 ;;; ======================================================================
 
-(setq *vsconv-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *vsconv-version* "v1.6")   ; announced on load; release_lisp.py
                                  ; reads this banner and stamps the
                                  ; dated twin in releases/ from it
 
@@ -772,6 +772,40 @@
 (defun c:VSCONVVER ()
   (princ (strcat "\nVSCONV " *vsconv-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun vsconv:selftests ()
+  (list
+    (list "dest sends a source layer on, whatever its case"
+          '(vsconv:dest "2 coping")  "POOL")
+    (list "dest is nil for a layer the map never names"
+          '(vsconv:dest "Layer0")  nil)
+    (list "color of a destination the table never names is the default"
+          '(vsconv:color "NEW")  *vsconv-default-color*)
+    (list "csv joins names the way an ssget filter wants them"
+          '(vsconv:csv '("1 Perimeter" "2 Coping"))  "1 Perimeter,2 Coping")
+    (list "namelist joins names the way the report reads them"
+          '(vsconv:namelist '("POOL" "POINTS"))  "POOL, POINTS")
+    (list "bump counts a key up and appends a new one"
+          '(vsconv:bump "DIMENSION" (vsconv:bump "POOL" (vsconv:bump "POOL" nil)))
+          '(("POOL" . 2) ("DIMENSION" . 1)))
+    (list "add does not list one layer twice in another case"
+          '(vsconv:add "pool" (vsconv:add "POINTS" '("POOL")))  '("POOL" "POINTS"))
+    (list "color-for reads a source layer's colour off its record"
+          '(vsconv:color-for "1 perimeter" '(("e1" "1 Perimeter" 3) ("e2" "2 Coping" 4)))
+          3)))
+
+(foreach c '("VSCONV" "VSRECONV")
+  (setq *calofin-selftests*
+        (cons (cons c 'vsconv:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

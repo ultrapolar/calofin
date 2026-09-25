@@ -69,7 +69,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cdcreate-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *cdcreate-version* "v1.7")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -531,6 +531,47 @@
 (defun c:CDCREATEVER ()
   (princ (strcat "\nCDCREATE " *cdcreate-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cdc:selftests ()
+  (list
+    (list "loc halfway along a line is its midpoint"
+          '(cdc:loc '(0 0 0) '(4 0 0) 0.5 0.0)               '(2.0 0.0 0.0))
+    (list "loc pushes a positive offset to the LEFT of start->end"
+          '(cdc:loc '(0 0 0) '(4 0 0) 0.5 1.0)               '(2.0 1.0 0.0))
+    (list "top2 puts the text at the right end of a line drawn left to right"
+          '(cdc:top2 '(0 0 0) '(4 0 0))                      T)
+    (list "top2 puts the text at the BOTTOM of a line drawn upward"
+          '(cdc:top2 '(0 0 0) '(0 4 0))                      nil)
+    (list "textfrac read either way round adds up to one"
+          '(+ (cdc:textfrac '(0 0 0) '(4 0 0))
+              (cdc:textfrac '(4 0 0) '(0 0 0)))              1.0)
+    (list "strip drops every entry for a group code"
+          '(cdc:strip 62 '((0 . "LINE") (62 . 1) (8 . "X") (62 . 256)))
+          '((0 . "LINE") (8 . "X")))
+    (list "samept compares flat: an elevation is not a different place"
+          '(cdc:samept '(0 0 0) '(0.01 0 5) 0.05)            T)
+    (list "dimmed-p finds the tie dimensioned the other way round"
+          '(cdc:dimmed-p '(0 0) '(4 0) '(((4 0) (0 0))))     T)
+    (list "dimmed-p passes over a pair that is not this tie"
+          '(cdc:dimmed-p '(0 0) '(4 0) '(((0 0) (5 0))))     nil)
+    (list "names joins layer names with a comma"
+          '(cdc:names '("POOL" "POINTS"))                    "POOL, POINTS")
+    (list "the text position knob is a fraction of the line"
+          '(if (and (numberp cdc:*textpos*) (<= 0.0 cdc:*textpos* 1.0))
+             cdc:*textpos*))))
+
+(foreach c '("CDCREATE")
+  (setq *calofin-selftests*
+        (cons (cons c 'cdc:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

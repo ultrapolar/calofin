@@ -36,7 +36,7 @@
 ;;;  move OSMODE and not give it back.
 ;;; ======================================================================
 
-(setq *osr-version* "v1.0")
+(setq *osr-version* "v1.1")
 
 (vl-load-com)
 
@@ -157,6 +157,36 @@
   (princ))
 
 ;;; -------------------- load banner ---------------------------------------
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun osr:selftests ()
+  (list
+    (list "valid-p takes a plain OSMODE"        '(osr:valid-p "191")    T)
+    (list "valid-p refuses a typo atoi would read" '(osr:valid-p "12x") nil)
+    (list "valid-p refuses an empty string"     '(osr:valid-p "")       nil)
+    (list "valid-p refuses one past the top"    '(osr:valid-p "32768")  nil)
+    (list "the shipped default is an OSMODE"    '(osr:valid-p (itoa osr:*default*)) T)
+    (list "describe names the modes ticked"     '(osr:describe 3)
+          "Endpoint, Midpoint -- Object Snap on")
+    (list "describe says when none are"         '(osr:describe 0)
+          "no modes ticked -- Object Snap on")
+    (list "describe sees the OFF bit"           '(osr:describe 16385)
+          "Endpoint -- Object Snap OFF")
+    (list "every mode is a single bit"
+          '(not (vl-member-if '(lambda (p) (/= (cdr p) (logand (cdr p) (- (cdr p)))))
+                              osr:*modes*)))))
+
+(foreach c '("OSR")
+  (setq *calofin-selftests*
+        (cons (cons c 'osr:selftests) *calofin-selftests*)))
 
 (if (not *calofin-quiet*)
   (princ (strcat "\nOSR " *osr-version*

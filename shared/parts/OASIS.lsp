@@ -229,7 +229,7 @@
 ;;; it can be seen and one U takes it away.
 ;;; ======================================================================
 
-(setq *oasis-version* "v9.6")   ; announced on load; release_lisp.py
+(setq *oasis-version* "v9.7")   ; announced on load; release_lisp.py
                                 ; reads this banner and stamps the
                                 ; dated twin in releases/ from it
 
@@ -3760,6 +3760,49 @@
 (defun c:OASISVER ()
   (princ (strcat "\nOASIS " *oasis-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun oasis:selftests ()
+  (list
+    (list "variant: a Cloud answered Rounded is the rounded-bottom ring"
+          '(oasis:variant '("Cloud" nil nil nil nil nil nil nil nil nil "Rounded"))
+          "RoundedBottom")
+    (list "leftrad: a cloud pins the left bulge at half the Y bound, whatever was typed"
+          '(oasis:leftrad "StraightBottom" 200.0 99.0)  100.0)
+    (list "topcen: a TopRight corner bulge sits its radius in from both bounds"
+          '(oasis:topcen 400.0 200.0 50.0 "TopRight" nil)  '(350.0 150.0))
+    (list "tieoff reads back the shift tiedist was printed from"
+          '(oasis:tieoff 400.0 200.0 40.0 60.0 (oasis:tiedist 400.0 200.0 40.0 60.0 -30.0))
+          -30.0)
+    (list "tieoff refuses a tie shorter than the two centres' Y gap"
+          '(oasis:tieoff 400.0 200.0 40.0 60.0 50.0)  nil)
+    (list "steps: a complex TopRight asks the placement after the right bulge"
+          '(oasis:steps '("TopRight" nil nil nil nil nil nil nil nil nil nil "Complex"))
+          '(0 11 1 2 3 4 5 6 12 7 8 9))
+    (list "fkw spells a form's keyword the way the prompt does"
+          '(oasis:fkw "rounded" "Straight Rounded")  "Rounded")
+    (list "ktrue-side: a 32 x 20 kidney with an 18 top derives 8 sides"
+          '(oasis:ktrue-side 32.0 20.0 18.0)  8.0)
+    (list "extnorm: two bulges on one bound share a normal square to it"
+          '(oasis:extnorm '(0.0 5.0) 5.0 '(20.0 3.0) 3.0)  '(0.0 -1.0))
+    (list "fillet centre lies outside the ring, right of c1->c2"
+          '(oasis:fillet '(0.0 0.0) 1.0 '(6.0 0.0) 1.0 4.0)  '(3.0 -4.0))
+    (list "pinched names the bulge the ring left out"
+          '(oasis:pinched '(("left")) "StraightBottom")  '("right"))
+    (list "parse-len reads a dashed feet-and-inches spelling"
+          '(cal:parse-len "4'-4-1/2\"")  '(52.5 T))))
+
+(foreach c '("OASIS")
+  (setq *calofin-selftests*
+        (cons (cons c 'oasis:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

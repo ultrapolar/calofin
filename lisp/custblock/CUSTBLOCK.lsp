@@ -76,7 +76,7 @@
 ;;;      finish, an error, or Esc.
 ;;; ======================================================================
 
-(setq *custblock-version* "v1.4")  ; announced on load; release_lisp.py
+(setq *custblock-version* "v1.5")  ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -468,6 +468,42 @@
 (defun c:CUSTBLOCKVER ()
   (princ (strcat "\nCUSTBLOCK " *custblock-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cbk:selftests ()
+  (list
+    (list "pt adds x across and y up from the base point"
+          '(cbk:pt '(10 20 5) 4 3)                          '(14 23 5))
+    (list "pt keeps the base point's elevation"
+          '(caddr (cbk:pt '(0 0 2.5) 1 1))                  2.5)
+    (list "pt at 0 0 is the base point itself"
+          '(cbk:pt '(3 4 0) 0 0)                            '(3 4 0))
+    (list "strip drops every entry for a group code"
+          '(cbk:strip 62 '((0 . "LINE") (62 . 1) (8 . "X") (62 . 256)))
+          '((0 . "LINE") (8 . "X")))
+    (list "strip leaves a list without that code alone"
+          '(cbk:strip 62 '((0 . "LINE") (8 . "X")))         '((0 . "LINE") (8 . "X")))
+    (list "num hands the closing report text"
+          '(= (type (cbk:num 48.0)) 'STR)                   T)
+    (list "the dim stand-off knob is a positive distance"
+          '(if (and (numberp cbk:*dimoff*) (> cbk:*dimoff* 0)) cbk:*dimoff*))
+    (list "the block and dimension layer knobs are named"
+          '(and (= (type cbk:*layer*) 'STR) (> (strlen cbk:*layer*) 0)
+                (= (type cbk:*dimlayer*) 'STR) (> (strlen cbk:*dimlayer*) 0))  T)
+    (list "the session memory of the last length is empty or a number"
+          '(or (null cbk:*last-len*) (numberp cbk:*last-len*))  T)))
+
+(foreach c '("CUSTBLOCK")
+  (setq *calofin-selftests*
+        (cons (cons c 'cbk:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

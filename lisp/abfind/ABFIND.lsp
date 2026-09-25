@@ -392,7 +392,7 @@
 
 ;;; ---------------------- configuration ---------------------------------
 
-(setq *abfind-version* "v1.22")      ; announced on load; release_lisp.py
+(setq *abfind-version* "v1.23")      ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -3532,6 +3532,54 @@
   (princ (strcat "\nABFIND " *abfind-version*
                  "  (commands: ABFIND, ABMOVE, ABPCREATE)"))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun abf:selftests ()
+  (list
+    (list "as-number strips the Pt. prefix, a space and a hash"
+          '(abf:as-number "Pt. #35")  "35")
+    (list "canon meets Pt.35 and 035 in the middle"
+          '(= (abf:canon "Pt.35") (abf:canon "035"))  T)
+    (list "circint takes the crossing on NEAR's side of the stakes"
+          '(abf:circint '(0.0 0.0 0.0) 5.0 '(6.0 0.0 0.0) 5.0 '(0.0 -1.0 0.0))
+          '(3.0 -4.0 0.0))
+    (list "reach says how far short two tapes fall"
+          '(abf:reach '(0.0 0.0 0.0) '(120.0 0.0 0.0) 48.0 60.0)
+          "the two arcs fall 1'-0\" short of each other")
+    (list "reach is nil when the two arcs cross"
+          '(abf:reach '(0.0 0.0 0.0) '(100.0 0.0 0.0) 60.0 60.0)  nil)
+    (list "click-side: a click on the A-B line names no side"
+          '(abf:click-side '(0.0 0.0 0.0) '(10.0 0.0 0.0) '(5.0 0.0 0.0))  nil)
+    (list "seg-dist measures to the nearer end past it"
+          '(abf:seg-dist '(13.0 4.0) '(0.0 0.0) '(10.0 0.0))  5.0)
+    (list "lines: the nearer A claims the only B, whichever A came first"
+          '(abf:ln-a (car (abf:lines (list (list '(0.0 0.0 0.0) abf:*a-name* nil)
+                                           (list '(50.0 0.0 0.0) abf:*a-name* nil)
+                                           (list '(100.0 0.0 0.0) abf:*b-name* nil)))))
+          '(50.0 0.0 0.0))
+    (list "dupe-tags letters a second point on the same line"
+          '(mapcar 'car (abf:dupe-tags '(((10.0 5.0 0.0) "3" nil) ((20.0 5.0 0.0) "3" nil))
+                                       '((1 (0.0 0.0 0.0) (100.0 0.0 0.0) "L1"))))
+          '("L1" "L1b"))
+    (list "reading rounds to the sixteenth before it counts inches"
+          '(abf:reading 35.99)  '(3 0))
+    (list "ins-delta keeps a tie up before down"
+          '(abf:ins-delta -12.0 (abf:ins-delta 12.0 (abf:ins-delta 24.0 nil)))
+          '(12.0 -12.0 24.0))
+    (list "ftin spells 30.5 as feet, inches and a reduced fraction"
+          '(abf:ftin 30.5 4 4)  "2'-6 1/2\"")))
+
+(foreach c '("ABFIND")
+  (setq *calofin-selftests*
+        (cons (cons c 'abf:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

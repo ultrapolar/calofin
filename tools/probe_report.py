@@ -169,6 +169,9 @@ SELECTED = re.compile(r"(\d+) entities handed to the run = the first (\d+) ")
 #: "POOL v2.7", "POOL 082726 REV17" (the older dated banner) or
 #: "POOL (no version banner)"
 TOOL = re.compile(r"^(\S+)\s+(v[\d.]+|\d{6} REV\d+|\(no version banner\))")
+#: the self-test section's titles: a tool's own after its failure, and
+#: every loaded tool's in a report about LAZDIAG itself
+SELF_TITLES = ("THE TOOL'S OWN SELF TESTS", "SELF TESTS OF EVERY TOOL")
 BANNER = re.compile(r'-version\*\s+"(v[\d.]+)"|\*version\*\s+"(\d{6} REV\d+)"')
 
 
@@ -245,13 +248,27 @@ def parse_report(lines):
     head = {}
     answers = []
     state = []
+    selftests = []
     in_run = False
+    in_self = False
     for l in lines:
         if not in_run:
             for k in HEADER_KEYS:
                 if l.startswith("  " + k + " ") and k not in head:
                     head[k] = l[2 + len(k):].strip()
                     break
+        # the tool's own self tests, run on the drafter's machine after
+        # the failure: kept as written, since they are the one part of a
+        # report a replay here cannot reproduce -- the VM is not that
+        # machine
+        if l.startswith(SELF_TITLES):
+            in_self = True
+            continue
+        if in_self:
+            if l.strip() == "" or re.match(r"^[A-Z][A-Z ,'-]+$", l):
+                in_self = False
+            else:
+                selftests.append(l.strip())
         if l.startswith("THE RUN, PROMPT BY PROMPT"):
             in_run = True
             continue
@@ -279,7 +296,8 @@ def parse_report(lines):
             "message": head.get("message", ""), "answers": answers,
             "state": [(n, decode(e, raw=True)) for n, e in state],
             "nsel": nsel, "nselp": nselp,
-            "selected_known": "selected" in head}
+            "selected_known": "selected" in head,
+            "selftests": selftests}
 
 
 # ------------------------------------------- the transcript's encoding
@@ -862,6 +880,32 @@ def probe(report_path, tool_path=None, cap=DEFAULT_MAX, with_output=False,
             continue
         k += 1
         res.say("  %3d  %-40s %s" % (k, a.label[:40], fmt(a.value)))
+    res.say()
+
+    # What the replay below can never see: the tool's helpers on THAT
+    # machine.  A FAIL here says the arithmetic was already wrong before
+    # the drafter answered anything, and the probes that follow -- run on
+    # this machine, where the helpers are sound -- would then vary the
+    # answers of a failure that is not about the answers at all.
+    selftests = rep["selftests"]
+    fails = [l for l in selftests if l.startswith("FAIL")]
+    res.data["selftests"] = {"lines": selftests, "failed": len(fails)}
+    res.say("THE TOOL'S SELF TESTS, RUN ON THE DRAFTER'S MACHINE")
+    if not selftests:
+        res.say("  (none in the report: it predates self tests, or the tool "
+                "carried no table)")
+    else:
+        for l in selftests:
+            if l.startswith("FAIL") or l.startswith("(") or "passed" in l:
+                res.say("  " + l)
+        if fails:
+            res.say("  %d FAIL(S): the tool's own helpers answered differently "
+                    "there than here, so the" % len(fails))
+            res.say("  probes below vary the answers of a failure that may "
+                    "not be about the answers.")
+            res.say("  Look at the FAILs first: a knob LAZTUNE moved, a shop "
+                    "term, LUNITS/DIMZIN, the")
+            res.say("  AutoCAD version.")
     res.say()
 
     common = (path, command, layers, ents, nselp)

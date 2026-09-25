@@ -76,7 +76,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *soconv-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *soconv-version* "v1.6")   ; announced on load; release_lisp.py
                                  ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -621,6 +621,44 @@
 (defun c:SOCONVVER ()
   (princ (strcat "\nSOCONV " *soconv-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun soconv:selftests ()
+  (list
+    (list "dest sends a Pool Perimeter line to POOL"
+          '(soconv:dest "LINE" "Pool Perimeter")          "POOL")
+    (list "dest splits Dimensions: a note goes to TEXT"
+          '(soconv:dest "MTEXT" "Dimensions")             "TEXT")
+    (list "dest splits Dimensions: the rest to DIMENSION, the row below"
+          '(soconv:dest "DIMENSION" "Dimensions")         "DIMENSION")
+    (list "dest reads layer and type case-blind"
+          '(soconv:dest "point" "existing anchorss")      "POINTS")
+    (list "dest leaves a line on the anchors layer alone"
+          '(soconv:dest "LINE" "Existing Anchors")        nil)
+    (list "add skips a spelling already in the list"
+          '(soconv:add "pool" '("POOL"))                  '("POOL"))
+    (list "bump counts one more in place"
+          '(soconv:bump "POOL" '(("POOL" . 2) ("TEXT" . 1)))
+          '(("POOL" . 3) ("TEXT" . 1)))
+    (list "color creates POOL cyan, as POOL.LSP does"
+          '(soconv:color "pool")                          4)
+    (list "tally-line writes count -> layer, comma-joined"
+          '(soconv:tally-line '(("POOL" . 69) ("POINTS" . 232)))
+          "69 -> POOL, 232 -> POINTS")
+    (list "color-for reads the colour a record kept for its source layer"
+          '(soconv:color-for "obstacles" '(("SOCONV" "Obstacles" 3)))  3)))
+
+(foreach c '("SOCONV" "SORECONV")
+  (setq *calofin-selftests*
+        (cons (cons c 'soconv:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

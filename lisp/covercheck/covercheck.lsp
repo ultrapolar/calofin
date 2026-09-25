@@ -237,7 +237,7 @@
 ;; --- version ---------------------------------------------------------
 ;; bump this on every change that reaches covercheck.lsp; see the
 ;; VERSIONING note above the file header for the two-file convention
-(setq *cchk-version* "v1.29")
+(setq *cchk-version* "v1.30")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value COVERCHECK reads that someone might want
@@ -4898,6 +4898,59 @@
 ;; the pre-standard name, kept as an alias - STANDARDS section 5 names
 ;; the version reporter TOOLNAMEVER, and muscle memory keeps the old one
 (defun c:COVERCHECKVERSION () (c:COVERCHECKVER))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cchk:selftests ()
+  (list
+    (list "parse-nxn reads 5 X 5 out of a spacing note"
+          '(cchk:parse-nxn "Spacing: 5 X 5")  '(5 5))
+    (list "parse-nxn finds no NxN in 5 by 5"      '(cchk:parse-nxn "5 by 5")  nil)
+    (list "na-p reads N/A as not applicable"       '(cchk:na-p "N/A")          T)
+    (list "borrow-str names a borrowed layer and its count"
+          '(cchk:borrow-str '(("CABLE" . 3)))  "3 segment(s) off layer 'CABLE'")
+    (list "date-verdict knows 1900 was not a leap year"
+          '(cchk:date-verdict "02/29/1900")
+          "'02/29/1900' - 29 is not a valid day for that month - expected MM/DD/YYYY")
+    (list "pv-area adds the bulge: a bulge-1 arc on a 10 chord is 12.5 pi"
+          '(cchk:pv-area '((0 0 1.0) (10 0 0)))  39.26990817)
+    (list "pv-chain: one gap in a square is ONE open chain, grown both ways"
+          '(mapcar 'length
+                   (cchk:pv-chain '(((10 10) (0 10) 0.0) ((0 0) (10 0) 0.0)
+                                    ((10 10) (10 0) 0.0))))
+          '(0 1))
+    (list "pv-prune-spurs cuts a borrowed run hanging off a corner, link by link"
+          '(length (cchk:pv-prune-spurs
+                     '(((0 0) (10 0) 0.0 nil) ((10 0) (10 10) 0.0 nil)
+                       ((10 10) (0 10) 0.0 nil) ((0 10) (0 0) 0.0 nil)
+                       ((10 10) (20 20) 0.0 "CABLE") ((20 20) (30 30) 0.0 "CABLE"))))
+          4)
+    (list "pv-features: the inside corner of an L gets a corner pad"
+          '(mapcar 'caddr
+                   (cchk:pv-features '((0 0 0) (10 0 0) (10 10 0) (5 10 0) (5 5 0) (0 5 0))
+                                     36.0))
+          '("corner"))
+    (list "pv-features: an inward quarter arc under 4' radius gets an arc pad"
+          '(mapcar 'caddr
+                   (cchk:pv-features '((0 0 0) (40 0 0) (40 40 0) (0 40 -0.41421356))
+                                     36.0))
+          '("arc"))
+    (list "pv-dodge slides an arc pad flush beside a corner pad"
+          '(car (cadr (cchk:pv-dodge '(((0 0) 0.0 "corner") ((20 0) 0.0 "arc")) 36.0)))
+          '(36.0 0.0))
+    (list "ftin spells 40.5 as 3'-4 1/2\" whatever DIMZIN says"
+          '(cchk:ftin 40.5 4 4)  "3'-4 1/2\"")))
+
+(foreach c '("COVERCHECKRESCUE" "COVERCHECK" "TUTORIALCOVERCHECK" "TUTORIALCOVERCHECKCLEAN")
+  (setq *calofin-selftests*
+        (cons (cons c 'cchk:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

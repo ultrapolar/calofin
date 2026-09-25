@@ -125,7 +125,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *spacheck-version* "v1.24")
+(setq *spacheck-version* "v1.25")
 
 ;; vlax-* is used for bounding boxes, so load Visual LISP once here
 ;; rather than inside a command body.
@@ -3239,6 +3239,53 @@
   (setvar "CMDECHO" oldecho)
   (if lzd:end (lzd:end "TUTORIALSPACHECK"))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun spachk:selftests ()
+  (list
+    (list "has finds a substring and reads a nil text as no match"
+          '(if (spachk:has nil "Size") nil (spachk:has "Cover Size" "Size"))  T)
+    (list "tapernorm reads a labelled taper by its vocabulary"
+          '(spachk:tapernorm "Taper: 4-2 Flat")  "4-2")
+    (list "gradenorm reads FRP as Ultra"
+          '(spachk:gradenorm "Ultra FRP")  "ULTRA")
+    (list "fr-fold lifts -80 degrees to 10"
+          '(spachk:fr-fold (/ (* -80.0 pi) 180.0))  (/ pi 18.0))
+    (list "fr-adiff: 10 and 80 degrees are 20 apart, a quarter turn being none"
+          '(spachk:fr-adiff (/ pi 18.0) (/ (* 4.0 pi) 9.0))  (/ pi 9.0))
+    (list "fr-mode: a quarter turn is the same direction"
+          '(spachk:fr-mode (list (cons 0.0 10.0) (cons (* 0.5 pi) 5.0)))  0.0)
+    (list "hardverdict with no hinge length says so instead of guessing"
+          '(cdr (spachk:hardverdict '(OVER 120.0) nil))
+          "no hinge length to check - verify by hand")
+    (list "foampick takes the first sheet both the width and the run fit"
+          '(spachk:foampick (list (cons 48.0 96.0) (cons 49.5 102.0)) 48.0 90.0)
+          '(48.0 . 96.0))
+    (list "clusters: two boxes a hair apart are one sheet, a far one is another"
+          '(length (spachk:clusters '(((0.0 0.0) (10.0 10.0))
+                                      ((10.001 0.0) (20.0 10.0))
+                                      ((100.0 100.0) (110.0 110.0)))
+                                    0.5))
+          2)
+    (list "date-verdict refuses a day the month does not have"
+          '(spachk:date-verdict "02/30/2024")
+          "'02/30/2024' - 30 is not a valid day for that month - expected MM/DD/YYYY")
+    (list "feet-open-p: 5'-6\" is closed, 15' 6 is not"
+          '(if (spachk:feet-open-p "5'-6\"") nil (spachk:feet-open-p "15' 6"))  T)
+    (list "ftin spells 66.5 as 5'-6 1/2\" at sixteenths"
+          '(spachk:ftin 66.5 4 4)  "5'-6 1/2\"")))
+
+(foreach c '("SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK")
+  (setq *calofin-selftests*
+        (cons (cons c 'spachk:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

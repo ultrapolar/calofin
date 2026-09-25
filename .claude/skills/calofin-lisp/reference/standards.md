@@ -344,6 +344,33 @@ restore and **before** the trailing `(princ)` (which is the return
 value). The `(if ...)` guards are what let a standalone file load alone —
 an unbound symbol is nil, so with no LAZDIAG every line is a no-op.
 
+**And one table per file: the self tests a report runs on the drafter's
+machine.** Just above the load banner, `--fix` writes the skeleton and
+its registration; the entries are yours, at least three:
+
+```lisp
+(defun sq:selftests ()
+  (list
+    (list "dirfold makes 190 read as 10 degrees"            ; (label expr expected)
+          '(sq:deg (sq:dirfold (sq:rad 190.0)))  10.0)      ;   equal to 1e-6
+    (list "tan stays finite at a half turn"                  ; (label expr)
+          '(numberp (sq:tan (* 0.5 pi))))))                  ;   not nil; value written
+(foreach c '("SQUAREUP")                                     ; every name the file
+  (setq *calofin-selftests*                                  ;   begins/reports as --
+        (cons (cons c 'sq:selftests) *calofin-selftests*)))  ;   computed by --fix
+```
+
+The tool's OWN helpers on inputs whose answers are known, derived from
+the code, not pinned from a run. An entry may not prompt, draw,
+`(command)`, `setvar`, write, `load` or reach COM (`vla-`/`vlax-`, the
+`ink` resolution of an `'auto` colour included) — it runs inside
+`*error*` — nor read the drawing, the clock or the profile, nor depend
+on DIMZIN/LUNITS (`(rtos x 2 2)` is `"4.00"` on one machine and `"4"`
+on another: pick `"4.25"`, or read it back with `atof`; the tool's
+`ftin` copy is DIMZIN-proof and may be pinned). Try it with
+`python3 tools/run_selftests.py FILE --tier both`; `tests/test_selftests.py`
+runs every table at both tiers.
+
 **Write the handler yourself; `--fix` will not.** What belongs in one is
 editorial: which sysvars this command changed, whether an undo group is
 open, what it drew that has to be swept. Both spellings are recognised —

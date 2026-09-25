@@ -354,7 +354,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *cs-version* "v4.17") ; printed on load and at command start so a
+(setq *cs-version* "v4.18") ; printed on load and at command start so a
                             ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers ----------------------------
@@ -2447,6 +2447,53 @@
 (defun c:CORNERSTPVER ()
   (princ (strcat "\nCORNERSTP " *cs-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cs-selftests ()
+  (list
+    (list "ptline: 3 off the line through a wall, past the wall's end"
+          '(cs-ptline '(15.0 3.0 0.0) '(0.0 0.0 0.0) '(10.0 0.0 0.0))  3.0)
+    (list "ptseg: a point 3 past and 4 off the wall's end is 5 from it"
+          '(cs-ptseg '(13.0 4.0 0.0) '(0.0 0.0 0.0) '(10.0 0.0 0.0))  5.0)
+    (list "beyond: 3 past the end of a 10 long wall"
+          '(cs-beyond '(13.0 1.0 0.0) '(0.0 0.0 0.0) '(10.0 0.0 0.0))  3.0)
+    (list "inspan: a span from 225 to 45 degrees wraps through zero and holds 270"
+          '(cs-inspan (* 1.5 pi) (* 1.25 pi) (* 0.25 pi))  T)
+    (list "bulgearc: a bulge of 1 is a half circle, radius half the chord"
+          '(cadr (cs-bulgearc '(0.0 0.0 0.0) '(2.0 0.0 0.0) 1.0))  1.0)
+    (list "bulgearc: a quarter-turn bulge from (0,0) to (1,1) centres on (0,1), its left"
+          '(car (cs-bulgearc '(0.0 0.0 0.0) '(1.0 1.0 0.0) (- (sqrt 2.0) 1.0)))
+          '(0.0 1.0 0.0))
+    (list "nearseg picks the wall nearest the pick"
+          '(cs-nearseg '(((0.0 0.0 0.0) (10.0 0.0 0.0))
+                         ((0.0 10.0 0.0) (10.0 10.0 0.0)))
+                       '(5.0 8.0 0.0))
+          '((0.0 10.0 0.0) (10.0 10.0 0.0)))
+    (list "resolve centres a held 4 on a 10 wall opening, 3 in from each wall"
+          '(cs-resolve 4.0 10.0 '(0.0 0.0 0.0) '(10.0 0.0 0.0) nil nil 1 0.125)
+          '((3.0 0.0 0.0) (7.0 0.0 0.0)))
+    (list "nestoff nests a 10 wide step 5 further out than a 0 wide one"
+          '(- (cs-nestoff 10.0 1.0) (cs-nestoff 0.0 1.0))  5.0)
+    (list "numlist reads commas, 'and' and a range"
+          '(cs-numlist "1, 3 and 5-7")  '(1 3 5 6 7))
+    (list "kwcanon spells a setting the way the prompt does, and refuses a near miss"
+          '(and (= "Outside" (cs-kwcanon "outside" '("Inside" "Outside")))
+                (null (cs-kwcanon "out" '("Inside" "Outside")))))
+    (list "parse-len and spell-len round-trip 4'-4 1/2"
+          '(cal:spell-len (cal:len-eighths (car (cal:parse-len "4'-4 1/2\""))) T nil)
+          "4'-4 1/2\"")))
+
+(foreach c '("CORNERSTP" "TUTORIALCORNERSTP")
+  (setq *calofin-selftests*
+        (cons (cons c 'cs-selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

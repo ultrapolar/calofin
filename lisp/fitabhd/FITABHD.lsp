@@ -135,7 +135,7 @@
 ;; FITABHDCOVER, cleared on both exits from c:FITABHD.
 (setq fit:*nobottom* nil)
 
-(setq *fitabhd-version* "v3.8")    ; announced on load; release_lisp.py
+(setq *fitabhd-version* "v3.9")    ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -6131,6 +6131,55 @@
   (princ "\nFITABHDCOVER: cover sheet - the pool bottom will be skipped.")
   (c:FITABHD)
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun fit:selftests ()
+  (list
+    (list "poly-corners walks a 10 by 6 box CCW from its origin"
+          '(fit:poly-corners fit:*rect-dirs* '(0.0 10.0 6.0 0.0))
+          '((0.0 0.0) (10.0 0.0) (10.0 6.0) (0.0 6.0)))
+    (list "poly-valid refuses a box whose top wall lies below its bottom"
+          '(fit:poly-valid fit:*rect-dirs* '(0.0 10.0 -6.0 0.0))  nil)
+    (list "frame-angle reads a square turned 10 degrees as 10 degrees"
+          '(/ (* 180.0 (fit:frame-angle
+                         (fit:to-frame '((0 0) (10 0) (10 10) (0 10))
+                                       (- (/ pi 18.0)) nil)
+                         4))
+              pi)
+          10.0)
+    (list "corner-verts: a 2 radius at a right angle springs 2 back, bulge tan 22.5"
+          '(car (fit:corner-verts '(0 0) '(10 0) '(10 10) (/ pi 2.0) "Radius" 2.0))
+          '((8.0 0.0) 0.4142136))
+    (list "corner-verts: a Cut of 2 at a right angle leaves a face 2 long"
+          '((lambda (cv) (distance (car (car cv)) (car (cadr cv))))
+             (fit:corner-verts '(0 0) '(10 0) '(10 10) (/ pi 2.0) "Cut" 2.0))
+          2.0)
+    (list "bow-bulge: a 1 inch bow over a 4 inch chord is bulge 0.5"
+          '(fit:bow-bulge 1.0 4.0 '(0 0) '(4 0))  0.5)
+    (list "bulge-3pt: (0 0) through (2 -2) to (4 0) is a CCW semicircle"
+          '(fit:bulge-3pt '(0 0) '(2 -2) '(4 0))  1.0)
+    (list "solve-lin solves 2x + y = 5, x + 3y = 10"
+          '(fit:solve-lin '((2.0 1.0) (1.0 3.0)) '(5.0 10.0) 2)  '(1.0 3.0))
+    (list "held-worst sets the one worst point aside"
+          '(fit:held-worst '(1.0 5.0 3.0) 1)  3.0)
+    (list "snap-ok: a design snap may spend the one point it is allowed"
+          '(fit:snap-ok '(1.0 1.0) '(1.0 3.0) 4.0 1 nil)  T)
+    (list "oas-circint: two 5-radius circles 6 apart meet at (3 4)"
+          '(fit:oas-circint '(0 0) 5.0 '(6 0) 5.0 1.0)  '(3.0 4.0))
+    (list "fit-round finds the radius-2 circle through four of its points"
+          '(cdr (assoc 'r (fit:fit-round '((0 0) (4 0) (2 2) (2 -2)))))  2.0)))
+
+(foreach c '("FITABHD")
+  (setq *calofin-selftests*
+        (cons (cons c 'fit:selftests) *calofin-selftests*)))
 
 ;; ----------------------------------------------------------------------
 ;; Quiet inside the whole build: LAZPASS.lsp and

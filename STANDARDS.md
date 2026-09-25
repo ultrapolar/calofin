@@ -947,6 +947,32 @@ handler at all fails the check by name -- including one that only
 prompts and saves a setting, because a failure there is still a failure
 somebody has to be told about.
 
+**The other thing `--fix` will not write is the self-test table's
+entries.**  Every file carries one -- `(defun X:selftests () (list ...))`
+just above the load banner, registered in `*calofin-selftests*` under
+every command the file begins or reports as -- and a failure report runs
+it on the drafter's machine, from inside `*error*`, and writes one line
+per entry and a verdict.  The report's other sections say what the RUN
+did; this one says whether the tool's own helpers were sound where it
+ran, which is the one question a transcript cannot answer: a knob
+LAZTUNE moved, a shop term, LUNITS or DIMZIN, an AutoCAD whose `rtos`
+rounds the other way all show here as a FAIL before any answer of the
+run was typed.  An entry is `(list "label" '(expr) expected)`, passing
+when the value is equal to `expected` to 1e-6, or `(list "label" '(expr))`,
+passing when the value is not nil and writing the value down either
+way.  The tool's OWN helpers, on inputs whose answers are derived from
+the code; at least three, and `--fix` writes the skeleton and the
+registration and names the file until they are there.  An entry may
+not prompt, draw, `(command)`, `setvar`, write a file, `load` or reach
+COM (`vla-`/`vlax-`, the `ink` resolution of an `'auto` colour
+included) -- the check refuses those names -- nor read the drawing, the
+clock or the profile, nor depend on DIMZIN or LUNITS: it must answer
+the same on an empty drawing on any machine where nothing is wrong.
+`python3 tools/run_selftests.py FILE --tier both` runs a table exactly
+as a report would; `tests/test_selftests.py` runs every table at both
+tiers, so what a report says a test expects is what the tree has
+confirmed.  `LAZDIAG` typed with nothing failed runs every table loaded.
+
 What the lines do: `lzd:begin` marks where the drawing stood and starts
 a transcript; `lzd:report`, after the settings are back and the undo
 group is closed, writes the whole failure out as a DXF in the user's

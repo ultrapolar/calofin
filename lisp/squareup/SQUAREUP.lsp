@@ -71,7 +71,7 @@
 ;;; the same one.
 ;;; ======================================================================
 
-(setq *squareup-version* "v1.2")   ; announced on load; release_lisp.py
+(setq *squareup-version* "v1.3")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/
 
@@ -906,6 +906,47 @@
 (defun c:SQUAREUPVER ()
   (princ (strcat "\nSQUAREUP " *squareup-version* " loaded."))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun sq:selftests ()
+  (list
+    (list "angnorm folds -90 into [0, 2pi)"     '(sq:angnorm (- (* 0.5 pi)))  (* 1.5 pi))
+    (list "angnorm brings a full turn to 0"     '(sq:angnorm (* 2.0 pi))      0.0)
+    (list "dirfold makes 190 read as 10 degrees"
+          '(sq:deg (sq:dirfold (sq:rad 190.0)))  10.0)
+    (list "ang-diff of 10 and 170 is 20, not 160"
+          '(sq:deg (sq:ang-diff (sq:rad 10.0) (sq:rad 170.0)))  20.0)
+    (list "turn squares 176 degrees by turning 4"
+          '(sq:deg (sq:turn (sq:rad 176.0)))  4.0)
+    (list "turn squares 30 degrees by turning -30"
+          '(sq:deg (sq:turn (sq:rad 30.0)))  -30.0)
+    (list "deg and rad are inverses"            '(sq:deg (sq:rad 37.5))       37.5)
+    (list "tan stays finite at a half turn"     '(numberp (sq:tan (* 0.5 pi))))
+    (list "cross3 is positive for a left turn"
+          '(> (sq:cross3 '(0 0) '(1 0) '(1 1)) 0.0))
+    (list "hull drops an inside point"
+          '(not (member '(2.0 2.0) (sq:hull '((0 0) (4 0) (4 4) (0 4) (2 2))))))
+    (list "span of a 3 by 4 box is its diagonal"
+          '(car (sq:span '((0 0) (3 0) (3 4) (0 4))))  5.0)
+    (list "middle of a box's extents"           '(sq:middle '((0 0) (4 2)))   '(2.0 1.0))
+    (list "ang writes a signed angle"           '(sq:ang (sq:rad -4.25))      "-4.25")
+    (list "way names a negative turn"           '(sq:way -0.1)                "clockwise")
+    (list "tie: two equal walls one way are not a tie"
+          '(sq:tie (list (list 10.0 0.0) (list 10.0 0.0)))  nil)
+    (list "tie: an equal wall across is one"
+          '(cadr (sq:tie (list (list 10.0 0.0) (list 10.0 (* 0.5 pi)))))  (* 0.5 pi))))
+
+(foreach c '("SQUAREUP")
+  (setq *calofin-selftests*
+        (cons (cons c 'sq:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and CALOFIN-LOADER.lsp set
 ;; the flag while they load their members, because one file's greeting

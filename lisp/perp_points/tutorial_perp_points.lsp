@@ -25,7 +25,7 @@
 ;; arc-length helpers (they match perp_points.lsp)
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutperp-version* "v0.11")
+(setq *tutperp-version* "v0.12")
 
 (defun tutp:lerp (a b tt)
   (list (+ (car a)   (* tt (- (car b)   (car a))))
@@ -437,6 +437,40 @@
               "Tutorial finished.  Type PERPPTS to try it for real."))
   (if lzd:end (lzd:end "TUTORIALPERPPTS"))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun tutp:selftests ()
+  (list
+    (list "lerp halfway between two points"
+          '(tutp:lerp '(0 0 0) '(4 2 6) 0.5)  '(2.0 1.0 3.0))
+    (list "lerp at 0 is the first point"
+          '(tutp:lerp '(1 2 3) '(9 9 9) 0.0)  '(1.0 2.0 3.0))
+    (list "pathlen of a 3-4 elbow is 7"
+          '(tutp:pathlen '((0 0 0) (3 0 0) (3 4 0)))  7.0)
+    (list "pathlen of a single point is 0"
+          '(tutp:pathlen '((5 5 0)))  0.0)
+    (list "pt-at walks 5 along the elbow into its second leg"
+          '(tutp:pt-at '((0 0 0) (3 0 0) (3 4 0)) 5.0)  '(3.0 2.0 0.0))
+    (list "pt-at past the end lands on the last point"
+          '(tutp:pt-at '((0 0 0) (3 0 0)) 10.0)  '(3 0 0))
+    (list "pt-at at or below 0 is the first point"
+          '(tutp:pt-at '((1 1 0) (2 2 0)) -1.0)  '(1 1 0))
+    (list "sample spaces 3 points evenly, ends included"
+          '(tutp:sample '((0 0 0) (4 0 0)) 3)  '((0 0 0) (2.0 0.0 0.0) (4.0 0.0 0.0)))
+    (list "sample of one point is the start"
+          '(tutp:sample '((0 0 0) (4 0 0)) 1)  '((0 0 0)))))
+
+(foreach c '("TUTORIALPERPPTS")
+  (setq *calofin-selftests*
+        (cons (cons c 'tutp:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

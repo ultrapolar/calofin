@@ -93,7 +93,7 @@
 ;;; ===================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *cdcallout-version* "v1.12")  ; announced on load; release_lisp.py
+(setq *cdcallout-version* "v1.13")  ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 
@@ -650,6 +650,40 @@
 (defun c:CDCALLOUTVER ()
   (princ (strcat "\nCDCALLOUT " *cdcallout-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun cdo:selftests ()
+  (list
+    (list "canon reads PT.7 as the number 7"
+          '(atof (cdo:canon "PT.7"))  7.0)
+    (list "canon makes pt #12 and 12.0 the same point"
+          '(= (cdo:canon "pt #12") (cdo:canon "12.0"))  T)
+    (list "canon keeps a name that is not a number, upper-cased"
+          '(cdo:canon "sw corner")  "SWCORNER")
+    (list "backp takes UNDO in any case"
+          '(cal:back-word-p "undo"))
+    (list "matches lists every point a number names, in drawing order"
+          '(mapcar 'car (cdo:matches "12" '((1 . "PT12") (2 . "13") (3 . "12.0"))))
+          '(1 3))
+    (list "trim takes the blanks off both ends"
+          '(cdo:trim "  4 1/2  ")  "4 1/2")
+    (list "loc pushes the dimension line to the left of FROM->TO"
+          '(cdo:loc '(0.0 0.0 0.0) '(4.0 0.0 0.0) 1.0)  '(2.0 1.0 0.0))
+    (list "strip drops every group of one code"
+          '(cdo:strip 62 '((0 . "DIMENSION") (62 . 1) (8 . "X") (62 . 2)))
+          '((0 . "DIMENSION") (8 . "X")))))
+
+(foreach c '("CDCALLOUT")
+  (setq *calofin-selftests*
+        (cons (cons c 'cdo:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

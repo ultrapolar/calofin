@@ -24,7 +24,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lincheck-version* "v1.5")   ; announced on load; release_lisp.py
+(setq *lincheck-version* "v1.6")   ; announced on load; release_lisp.py
                                       ; stamps the dated twin in releases/
 
 ;;; ======================================================================
@@ -462,6 +462,44 @@
 (defun c:LINCHECKVER ()
   (princ (strcat "\nLINCHECK " *lincheck-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lin:selftests ()
+  (list
+    (list "back-word takes a lower-case b"
+          '(if (lin:back-word "b") T)                       T)
+    (list "back-word takes the whole word Undo, case-blind"
+          '(if (lin:back-word "Undo") T)                    T)
+    (list "back-word refuses a note that only starts with one"
+          '(lin:back-word "backfill")                       nil)
+    (list "back-word refuses an empty answer (Enter)"
+          '(lin:back-word "")                               nil)
+    (list "every piece a report line is built from is text"
+          '(= (type (strcat lin:*tick* lin:*note-sep* lin:*ans-sep* lin:*indent*
+                            lin:*head-in* lin:*head-out*
+                            lin:*head-echo-in* lin:*head-echo-out*))
+              'STR)                                          T)
+    (list "the previous-answer memory is empty or a list"
+          '(or (null *lin:prev*) (listp *lin:prev*))        T)
+    (list "the report box lines up: rule and title are the same width"
+          '(= (strlen lin:*rule*) (strlen lin:*title*))    T)
+    (list "the Back words are a list of strings; value is how many"
+          '(if (and lin:*back-words*
+                    (not (member nil (mapcar '(lambda (w) (= (type w) 'STR))
+                                             lin:*back-words*))))
+             (length lin:*back-words*)))))
+
+(foreach c '("LINCHECK")
+  (setq *calofin-selftests*
+        (cons (cons c 'lin:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

@@ -214,7 +214,8 @@ tests/test_back_nav.py
 | `test_back_nav.py` | Undo beside every Back, the typed predicate, threaded chains walked backwards |
 | `test_lazpanel.py` | the panel roster against `headline_commands()` |
 | `test_versions.py` | version banners |
-| `test_lazdiag*.py` | the failure-report wiring, replay and sweep |
+| `test_lazdiag*.py` | the failure-report wiring, replay and sweep; `test_lazdiag_selftests.py` the self-test section of a report |
+| `test_selftests.py` | every tool's self-test table passes at this tier, and prompted, drew, commanded, wrote and moved nothing |
 
 ## Adding a new test
 

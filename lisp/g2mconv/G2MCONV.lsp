@@ -131,7 +131,7 @@
 ;;; approximate.
 ;;; ======================================================================
 
-(setq *g2mconv-version* "v1.3")   ; announced on load; release_lisp.py
+(setq *g2mconv-version* "v1.4")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -952,6 +952,48 @@
 (defun c:G2MCONVVER ()
   (princ (strcat "\nG2MCONV " *g2mconv-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun g2m:selftests ()
+  (list
+    (list "rule sends a DIMENSION on the dims layer to DIMENSION"
+          '(caddr (g2m:rule "DIMENSION" "A-ANNO-DIMS - DIMENSIONES"))  "DIMENSION")
+    (list "rule ignores case and the first matching row wins"
+          '(caddr (g2m:rule "mtext" "a-anno-dims - dimensiones"))  "TEXT")
+    (list "rule is nil for a layer the map never names"
+          '(g2m:rule "LINE" "SOMETHING ELSE")  nil)
+    (list "bump counts a destination and keeps first-reached order"
+          '(g2m:bump "POOL" (g2m:bump "TEXT" (g2m:bump "POOL" nil)))
+          '(("POOL" . 2) ("TEXT" . 1)))
+    (list "tally-line writes the count arrows"
+          '(g2m:tally-line '(("POOL" . 32) ("TEXT" . 22)))  "32 -> POOL, 22 -> TEXT")
+    (list "add does not list one layer twice in another case"
+          '(g2m:add "pool" (g2m:add "TEXT" '("POOL")))  '("POOL" "TEXT"))
+    (list "sources names each source layer once"
+          '(length (g2m:sources))  4)
+    (list "color of a destination the table never names is the default"
+          '(g2m:color "NEW")  *g2mconv-default-color*)
+    (list "text-p takes MTEXT in any case, not a DIMENSION"
+          '(and (g2m:text-p "mtext") (not (g2m:text-p "DIMENSION")))  T)
+    (list "tail drops the first n"
+          '(g2m:tail '(1 2 3 4) 2)  '(3 4))
+    (list "set-anno-items rewrites the SECOND 1070 only"
+          '(mapcar 'cdr (g2m:set-anno-items
+                          '((1000 . "AnnotativeData") (1002 . "{")
+                            (1070 . 1) (1070 . 1) (1002 . "}")) 0))
+          '("AnnotativeData" "{" 1 0 "}"))))
+
+(foreach c '("G2MCONV" "G2MRECONV")
+  (setq *calofin-selftests*
+        (cons (cons c 'g2m:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

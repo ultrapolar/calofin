@@ -38,7 +38,7 @@
 ;;; a single undo group.
 ;;; ===================================================================
 
-(setq *tydrn-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *tydrn-version* "v1.10")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -596,6 +596,44 @@
 (defun c:TYDRNVER ()
   (princ (strcat "\nTYDRN " *tydrn-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun tydrn:selftests ()
+  (list
+    (list "namelist joins two names with an and"
+          '(tydrn:namelist '("PADDLE" "CDIM"))            "PADDLE and CDIM")
+    (list "namelist puts the serial comma on three"
+          '(tydrn:namelist '("TYDRN" "PADDLE" "CDIM"))    "TYDRN, PADDLE, and CDIM")
+    (list "namelist of none is the empty string"
+          '(tydrn:namelist nil)                           "")
+    (list "stages names TYDRN and ends on the finisher; value is the 'of N' count"
+          '(if (and (member "TYDRN" (tydrn:stages))
+                    (equal (last (tydrn:stages))
+                           (if *tydrn-finish-cmd* *tydrn-finish-cmd* (last *tydrn-suite*))))
+             (length (tydrn:stages))))
+    (list "has sees this file's own command"
+          '(tydrn:has "TYDRN")                            T)
+    (list "has says no for a command nobody loaded"
+          '(tydrn:has "NOSUCHCOMMANDXYZ")                 nil)
+    (list "live-ss of nothing is nil, not an empty set"
+          '(tydrn:live-ss nil)                            nil)
+    (list "the text height knob is a positive number"
+          '(if (and (numberp *tydrn-text-height*) (> *tydrn-text-height* 0))
+             *tydrn-text-height*))
+    (list "the orient knob is nil (flip only) or an angle"
+          '(or (null *tydrn-orient-angle*) (numberp *tydrn-orient-angle*))  T)))
+
+(foreach c '("TYDRN" "TYLERDRONESUITE")
+  (setq *calofin-selftests*
+        (cons (cons c 'tydrn:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

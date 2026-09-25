@@ -63,7 +63,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *lobf-version* "v1.4")
+(setq *lobf-version* "v1.5")
 
 ;;; ======================================================================
 ;;;  TUNABLES -- every value LOBF reads that someone might want to
@@ -1178,6 +1178,56 @@
 (defun c:LOBFVER ()
   (princ (strcat "\nLOBF " *lobf-version* " loaded."))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lobf:selftests ()
+  (list
+    (list "dedupe: a double shot gets one vote, not two"
+          '(length (lobf:dedupe '((0.0 0.0 "a") (0.0 0.0 "b") (5.0 0.0 "c")) 1e-6))  2)
+    (list "pt-name reads the number and says ? for none"
+          '(list (lobf:pt-name '(0.0 0.0 "17")) (lobf:pt-name '(0.0 0.0 nil)))
+          '("17" "?"))
+    (list "tls: three points on y=x fit a line through 1,1"
+          '(car (lobf:tls '((0.0 0.0) (1.0 1.0) (2.0 2.0))))  '(1.0 1.0))
+    (list "tls: a north-south wall fits as readily as an east-west one"
+          '(cadr (lobf:tls '((0.0 0.0) (0.0 1.0) (0.0 2.0))))  '(0.0 1.0))
+    (list "tls: every point on one spot is no line at all"
+          '(lobf:tls '((1.0 1.0) (1.0 1.0) (1.0 1.0)))  nil)
+    (list "spread: the worst and the mean distance off a line"
+          '(lobf:spread '((0.0 0.0) (1.0 1.0) (2.0 -1.0)) '(0.0 0.0) '(1.0 0.0))
+          (list 1.0 (/ 2.0 3.0)))
+    (list "drop1 sets aside the one point off the line the other three sit on"
+          '(caddr (lobf:drop1 '((0.0 0.0) (1.0 0.0) (2.0 0.0) (1.0 5.0))))  3)
+    (list "hull keeps the four corners and drops a point inside and one on an edge"
+          '(length (lobf:hull '((0.0 0.0) (4.0 0.0) (4.0 4.0) (0.0 4.0) (2.0 2.0) (2.0 0.0))))
+          4)
+    (list "minimax runs the line down the middle of the narrowest band"
+          '(car (lobf:minimax '((0.0 0.0) (4.0 0.0) (2.0 1.0))))  '(0.0 0.5))
+    (list "candidates: fit 2 names the point it set aside"
+          '(lobf:cand-aim (cadr (lobf:candidates '((0.0 0.0 "1") (1.0 0.0 "2")
+                                                   (2.0 0.0 "3") (1.0 5.0 "4")))))
+          "Pt. 4 set aside")
+    (list "outlier-p: five inches off three on the line is one, a tenth is not"
+          '(list (lobf:outlier-p (cadr (lobf:candidates '((0.0 0.0 "1") (1.0 0.0 "2")
+                                                          (2.0 0.0 "3") (1.0 5.0 "4")))))
+                 (lobf:outlier-p (cadr (lobf:candidates '((0.0 0.0 "1") (1.0 0.1 "2")
+                                                          (2.0 0.0 "3") (3.0 0.12 "4"))))))
+          '(T nil))
+    (list "bearing folds a line's two directions into one number"
+          '(list (lobf:bearing '(2.0 1.0)) (lobf:bearing '(-2.0 -1.0)))
+          '("26.57 deg" "26.57 deg"))))
+
+(foreach c '("LOBF")
+  (setq *calofin-selftests*
+        (cons (cons c 'lobf:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

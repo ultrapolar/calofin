@@ -189,6 +189,13 @@ sites (see standards.md). What it produces:
 - **a log line from every run** — `ok` / `quit` / `FAIL` — rolling
   monthly into `<profile>\calofin\calofin-YYYY-MM.log`. `LAZLOG` shows
   it. This is what turns a failure from an event into a rate.
+- **the failed tool's own self tests, run there and then**: every file
+  carries `X:selftests`, a table of its helpers on known inputs,
+  registered in `*calofin-selftests*`; the report runs it from inside
+  `*error*` and writes one line per entry and a verdict, the log's
+  `FAIL` record carries the count, and `LAZDIAG` with nothing failed
+  runs every table loaded. This is what tells a wrong helper (a knob,
+  a unit setting, the AutoCAD version) from a wrong answer.
 
 Because answers are recorded **typed** (`nil`, `12.5`, `"Yes"`,
 `(x y z)`), a transcript is **replayable**:

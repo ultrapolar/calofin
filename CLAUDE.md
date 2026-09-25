@@ -319,6 +319,44 @@ ABHD, ADAB, TUTORIALABHD, CABHD and LHD -- three of the largest tools
 here -- sat reporting nothing while every other command reported
 everything.
 
+**A report also runs the tool's OWN SELF TESTS, on the drafter's
+machine, after the failure.** Everything else in a report says what the
+run did; none of it says whether the tool's helpers were sound where it
+ran, and a helper answering wrong there -- a knob LAZTUNE moved, a shop
+term, LUNITS or DIMZIN, an AutoCAD whose `rtos` rounds the other way --
+looks exactly like a wrong answer typed at a prompt. So every `.lsp`
+carries a TABLE: `(defun X:selftests () (list ...))` of its own helpers
+on inputs whose answers are KNOWN, registered under every command the
+file reports as, and LAZDIAG runs it from inside `*error*` and writes
+one line per entry into the report, then a verdict:
+
+```lisp
+(list "dirfold makes 190 read as 10 degrees"           ; (label expr expected)
+      '(sq:deg (sq:dirfold (sq:rad 190.0)))  10.0)     ;   equal to 1e-6
+(list "tan stays finite at a half turn"                 ; (label expr)
+      '(numberp (sq:tan (* 0.5 pi))))                   ;   not nil; the value is written
+```
+
+The entries are editorial -- only the tool's author knows which helpers
+matter and what they answer -- so `check_lazdiag.py --fix` writes the
+skeleton and the registration and then NAMES the file until at least
+three entries are written, the way it names a command with no handler.
+An entry may not prompt, draw, `(command)`, `setvar`, write a file or
+reach COM (a `vla-`/`vlax-` call, the `ink` resolution of an `'auto`
+colour included): it runs inside `*error*`, where any of those is a
+second failure with nowhere to go, and the check refuses those names.
+Nor may it read the drawing, the clock or the profile, or depend on
+DIMZIN/LUNITS: it must give the same answer on an empty drawing on any
+machine where nothing is wrong. `python3 tools/run_selftests.py FILE
+[--tier both]` runs a table exactly as a report would, and
+`tests/test_selftests.py` runs every table at both tiers, so what a
+report says a test EXPECTS is what the tree's own suite has confirmed,
+and a FAIL in a report is that machine disagreeing with this one. The
+LAZDIAG self test (type `LAZDIAG` with nothing failed) runs every table
+loaded and says which tool's arithmetic is off BEFORE anything fails,
+and the log's `FAIL` record carries the count, so a month of runs says
+whether a tool's helpers were ever wrong on that machine.
+
 **The same four calls feed the run LOG.** A report is written when
 something breaks; the log gets a line from every run, and it answers
 what a report cannot -- how often a tool fails against how many clean
@@ -626,7 +664,14 @@ python3 tools/check_lazdiag.py   # every command REPORTS its failures: the
                                  # and lzd:ask at EVERY input -- after a
                                  # setq that is a statement, wrapped where
                                  # the answer is read in place; --fix
-                                 # wires what is missing
+                                 # wires what is missing.  AND every file
+                                 # carries a SELF-TEST table -- X:selftests,
+                                 # registered under every command it
+                                 # reports as, at least three entries, none
+                                 # naming a prompt, a draw, a command or a
+                                 # COM call -- which a report runs on the
+                                 # drafter's machine; --fix writes the
+                                 # skeleton, never the entries
 python3 tools/check_handlers.py  # every *error* handler reaches its END --
        [--tier T] [--all]        # undo close, pop, lzd:report -- in the
                                  # error mode its command set: under
@@ -746,7 +791,17 @@ python3 tools/check_terms.py     # every SHOP TERM (tools/terms.py) is
 python3 tools/probe_report.py    # not a check: replays a failure report in
                    REPORT.dxf    # the VM and varies its inputs one at a
                                  # time, to say which one the failure is
-                                 # tied to (see "When a tool fails")
+                                 # tied to (see "When a tool fails"); it
+                                 # prints the report's own self-test FAILs
+                                 # first, since those are the one thing
+                                 # the replay cannot see
+python3 tools/run_selftests.py   # not a check: runs a tool's self-test
+       [FILE...] [--tier T|both] # table in the VM exactly as a failure
+                                 # report would, one line an entry, and
+                                 # fails on a FAIL, a prompt, a draw, a
+                                 # command, a file written or a sysvar
+                                 # moved -- the one-file loop while a
+                                 # table is being written
 python3 tools/check_vb.py [f]    # the palette as CODE, for a tree with no
                                  # VB compiler: blocks closed by the right
                                  # closer, quotes and parens balanced, every

@@ -48,7 +48,7 @@
 ;;;  remembered in the AutoCAD profile and wins over the value here.
 ;;; -------------------------------------------------------------------
 
-(setq *stockcover-version* "v1.10") ; printed on load and at command
+(setq *stockcover-version* "v1.11") ; printed on load and at command
                                    ; start, so a loaded routine and its
                                    ; releases/ twin can never disagree
 
@@ -628,6 +628,40 @@
 (defun c:STOCKCOVERVER ()
   (princ (strcat "\nSTOCKCOVER " *stockcover-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun stock:selftests ()
+  (list
+    (list "fwd turns backslashes into forward slashes"
+          '(stock:fwd "F:\\Tech\\x.dwg")  "F:/Tech/x.dwg")
+    (list "trim drops one trailing separator of either kind"
+          '(list (stock:trim "F:\\Tech\\") (stock:trim "F:/Tech/") (stock:trim "F:\\Tech"))
+          '("F:\\Tech" "F:/Tech" "F:\\Tech"))
+    (list "match takes the exact stem and is not dragged off by 5MB"
+          '(stock:match "5m" '("5MB_Tech.dwg" "5M.dwg" "5M_Tech.dwg"))  '("5M.dwg"))
+    (list "match falls back to the _Tech suffix"
+          '(stock:match "5M" '("5MB_Tech.dwg" "5M_Tech.dwg"))  '("5M_Tech.dwg"))
+    (list "match sweeps leading substrings last, in folder order"
+          '(stock:match "5M" '("5MB_Tech.dwg" "5MC.dwg" "6M.dwg"))
+          '("5MB_Tech.dwg" "5MC.dwg"))
+    (list "span is the anchors' width and height"
+          '(stock:span '((1.0 1.0 0.0) (13.0 6.0 0.0)))  '(12.0 5.0))
+    (list "shifted-p sees a box moved by exactly d"
+          '(stock:shifted-p '((0 0) (10 5)) '((3 4) (13 9)) '(3 4))  T)
+    (list "shifted-p refuses a box that moved somewhere else"
+          '(stock:shifted-p '((0 0) (10 5)) '((3 5) (13 10)) '(3 4))  nil)))
+
+(foreach c '("STOCKCOVER-CFG" "STOCKCOVER")
+  (setq *calofin-selftests*
+        (cons (cons c 'stock:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

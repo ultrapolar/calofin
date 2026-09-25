@@ -15,7 +15,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq *lintxtchk-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *lintxtchk-version* "v1.8")   ; announced on load; release_lisp.py
                                        ; stamps the dated twin in releases/
 
 ;;; ======================================================================
@@ -168,6 +168,48 @@
 (defun c:LINTXTCHKVER ()
   (princ (strcat "\nLINTXTCHK " *lintxtchk-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lintxtchk:selftests ()
+  (list
+    (list "height knob is a positive number of drawing units"
+          '(if (and (numberp ltc:*height*) (> ltc:*height* 0)) ltc:*height*))
+    (list "spacing knob is a positive multiple of the height"
+          '(if (and (numberp ltc:*spacing*) (> ltc:*spacing* 0)) ltc:*spacing*))
+    (list "spacing keeps one line clear of the next (1 is touching)"
+          '(>= ltc:*spacing* 1.0)  T)
+    (list "indent knob is a positive multiple of the height"
+          '(if (and (numberp ltc:*indent*) (> ltc:*indent* 0)) ltc:*indent*))
+    (list "bullet knob is text (\"\" gives a plain column)"
+          '(= (type ltc:*bullet*) 'STR)  T)
+    (list "checklist is a non-empty list"
+          '(if (and (listp ltc:*items*) (> (length ltc:*items*) 0))
+             (length ltc:*items*)))
+    (list "every checklist line is (level . text), level 0 or deeper"
+          '(not (vl-member-if
+                  '(lambda (i) (not (and (= (type (car i)) 'INT) (>= (car i) 0)
+                                         (= (type (cdr i)) 'STR)
+                                         (> (strlen (cdr i)) 0))))
+                  ltc:*items*))
+          T)
+    (list "the checklist opens on a main item, not a sub-item"
+          '(car (car ltc:*items*))  0)
+    (list "a sub-item sits at most one level under the line above it"
+          '(not (member nil (mapcar '(lambda (a b) (<= (car b) (1+ (car a))))
+                                    ltc:*items* (cdr ltc:*items*))))
+          T)))
+
+(foreach c '("LINTXTCHK")
+  (setq *calofin-selftests*
+        (cons (cons c 'lintxtchk:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

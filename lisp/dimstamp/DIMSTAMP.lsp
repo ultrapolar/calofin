@@ -165,7 +165,7 @@
 ;;; ======================================================================
 
 ;;; -------------------- version ---------------------------------------
-(setq *dimstamp-version* "v3.9")   ; announced on load; release_lisp.py
+(setq *dimstamp-version* "v3.10")   ; announced on load; release_lisp.py
                                    ; reads this banner and stamps the
                                    ; dated twin in releases/ from it
 
@@ -1084,6 +1084,46 @@
 (defun c:DIMSTAMPVER ()
   (princ (strcat "\nDIMSTAMP " *dimstamp-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun ds:selftests ()
+  (list
+    (list "read turns 4'4.5 into the canonical spelling"
+          '(ds:read "4'4.5")  "4'-4 1/2\"")
+    (list "read spells bare feet as feet and no inches"
+          '(ds:read "4'")  "4'-0\"")
+    (list "read stamps a typed b as B"
+          '(ds:read "b")  "B")
+    (list "read refuses a word longer than a label"
+          '(ds:read "nope")  nil)
+    (list "parse refuses a measurement of nothing"
+          '(ds:parse "0")  nil)
+    (list "inches refuses a fraction over zero"
+          '(ds:inches "1/0")  nil)
+    (list "letter-index counts like spreadsheet columns"
+          '(ds:letter-index "AA")  27)
+    (list "letter-name spells the last two-letter label"
+          '(ds:letter-name 702)  "ZZ")
+    (list "tier reads a half inch past a whole one as a half"
+          '(ds:tier 12)  'half)
+    (list "rejoin puts back the fraction the spacebar cut off"
+          '(ds:rejoin "4'-6" "1/2\"")  "4'-6 1/2\"")
+    (list "rejoin leaves a change of mind alone"
+          '(ds:rejoin "34" "36")  nil)
+    (list "measure-suggestions drops rows at or below zero"
+          '(length (ds:measure-suggestions 4 nil))  11)))
+
+(foreach c '("DIMSTAMP")
+  (setq *calofin-selftests*
+        (cons (cons c 'ds:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and CALOFIN-LOADER.lsp set
 ;; the flag while they load their members.  APPLOADed alone the flag

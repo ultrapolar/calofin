@@ -316,7 +316,7 @@
 
 (vl-load-com) ; ActiveX is used to set styles (handles names with spaces)
 
-(setq *hs-version* "v3.27") ; printed on load and at command start so a
+(setq *hs-version* "v3.28") ; printed on load and at command start so a
                            ; stale APPLOADed copy is easy to spot
 
 ;;; ------------------------- vector helpers -----------------------------
@@ -2706,6 +2706,53 @@
 (defun c:HEMISTEPVER ()
   (princ (strcat "\nHEMISTEP " *hs-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun hs-selftests ()
+  (list
+    (list "cross is positive for a left turn"
+          '(hs-cross '(1.0 0.0 0.0) '(0.0 1.0 0.0))  1.0)
+    (list "circum: the circle through (5,1) (2,4) (-1,1) is centred on (2,1)"
+          '(hs-circum '(5.0 1.0 0.0) '(2.0 4.0 0.0) '(-1.0 1.0 0.0))  '(2.0 1.0 0.0))
+    (list "circum: three points on a line have no circle"
+          '(hs-circum '(0.0 0.0 0.0) '(1.0 1.0 0.0) '(2.0 2.0 0.0))  nil)
+    (list "segb: a quarter turn counterclockwise is bulge tan 22.5"
+          '(hs-segb '(1.0 0.0 0.0) '(0.0 1.0 0.0) '(0.0 0.0 0.0) T)  0.4142136)
+    (list "segb: the same ends clockwise go the long way round, bulge -tan 67.5"
+          '(hs-segb '(1.0 0.0 0.0) '(0.0 1.0 0.0) '(0.0 0.0 0.0) nil)  -2.4142136)
+    (list "bulgemid: a bulge of 1 peaks half a chord to the right of A->B"
+          '(hs-bulgemid '(0.0 0.0 0.0) '(2.0 0.0 0.0) 1.0)  '(1.0 -1.0 0.0))
+    (list "fit3: three points on the unit circle, counterclockwise"
+          '(hs-fit3 '((1.0 0.0 0.0) (0.0 1.0 0.0) (-1.0 0.0 0.0)) 0)
+          '((0.0 0.0 0.0) . T))
+    (list "blgs: a half circle in three points is two quarter-turn bulges"
+          '(hs-blgs '((1.0 0.0 0.0) (0.0 1.0 0.0) (-1.0 0.0 0.0)) nil nil)
+          '(0.4142136 0.4142136))
+    (list "safeb straightens a bulge past a half circle, and a missing one"
+          '(list (hs-safeb 1.5) (hs-safeb -0.5) (hs-safeb nil))  '(0.0 -0.5 0.0))
+    (list "open: an r=5 circle opens 10 across its centre"
+          '(caddr (hs-open '(0.0 0.0 0.0) '(1.0 0.0 0.0)
+                           (list (list "A" '(0.0 0.0 0.0) 5.0 0.0 (* 2.0 pi)))))
+          10.0)
+    (list "firstspan follows the original arc across the first step"
+          '(hs-firstspan '(1.0 0.0 0.0) '(0.0 1.0 0.0)
+                         (list "A" '(0.0 0.0 0.0) 1.0 0.0 (* 2.0 pi))
+                         '(0.7071 0.7071 0.0))
+          0.4142136)
+    (list "numlist reads commas, 'and' and a range"
+          '(hs-numlist "1, 3 and 5-7")  '(1 3 5 6 7))))
+
+(foreach c '("HEMISTEP" "TUTORIALHEMISTEP")
+  (setq *calofin-selftests*
+        (cons (cons c 'hs-selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

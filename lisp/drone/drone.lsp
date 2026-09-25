@@ -45,7 +45,7 @@
 ;;; is wrapped in a single undo group.
 ;;; ===================================================================
 
-(setq *drone-version* "v1.7")   ; announced on load; release_lisp.py
+(setq *drone-version* "v1.8")   ; announced on load; release_lisp.py
                                    ; stamps the dated twin in releases/
 
 (vl-load-com)
@@ -327,6 +327,54 @@
 (defun c:DRONEVER ()
   (princ (strcat "\nDRONE " *drone-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun drone:selftests ()
+  (list
+    (list "csv joins two layer names the way an ssget filter wants"
+          '(drone:csv '("POOL" "SPA"))  "POOL,SPA")
+    (list "csv of one name is that name alone"
+          '(drone:csv '("SPA"))  "SPA")
+    (list "csv of no names is nil"
+          '(drone:csv nil)  nil)
+    (list "csv of the point layers is a filter wcmatch reads back"
+          '(wcmatch (car *drone-pt-layers*) (drone:csv *drone-pt-layers*))  T)
+    (list "the outline filter takes a LINE"
+          '(wcmatch "LINE" *drone-perim-types*)  T)
+    (list "the outline filter leaves TEXT and POINT to steps 1 and 2"
+          '(or (wcmatch "TEXT" *drone-perim-types*)
+               (wcmatch "POINT" *drone-perim-types*))
+          nil)
+    (list "point layers knob is a non-empty list of layer names"
+          '(and *drone-pt-layers* (listp *drone-pt-layers*)
+                (not (vl-member-if '(lambda (l) (/= (type l) 'STR))
+                                   *drone-pt-layers*)))
+          T)
+    (list "points move OFF the source layers, never onto one of them"
+          '(member *drone-dest-layer* *drone-pt-layers*)  nil)
+    (list "the spa outline moves to a layer that is not its source"
+          '(member *drone-perim-layer* *drone-perim-src*)  nil)
+    (list "text height knob is a positive number"
+          '(if (and (numberp *drone-text-height*) (> *drone-text-height* 0))
+             *drone-text-height*))
+    (list "pink is an ACI number, 1 to 255"
+          '(if (and (= (type *drone-pink*) 'INT)
+                    (> *drone-pink* 0) (< *drone-pink* 256))
+             *drone-pink*))
+    (list "orient angle knob is nil (flip only) or a number of degrees"
+          '(or (null *drone-orient-angle*) (numberp *drone-orient-angle*))  T)))
+
+(foreach c '("DRONE")
+  (setq *calofin-selftests*
+        (cons (cons c 'drone:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

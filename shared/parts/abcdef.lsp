@@ -90,7 +90,7 @@
 ;; points look wrong, FIRST check the drawing/command line shows the version
 ;; you think you loaded - two separate field failures turned out to be a
 ;; stale or hand-edited copy of this file still loaded in AutoCAD.
-(setq *abcdef-version* "v5.10")
+(setq *abcdef-version* "v5.11")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;
@@ -2066,6 +2066,49 @@
   (setq s (rtos v 2 3))
   (while (< (strlen s) width) (setq s (strcat " " s)))
   s)
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun abcdef:selftests ()
+  (list
+    (list "solve: four 5\" tapes on an 8 by 6 frame meet at its middle, no residual"
+          '(abcdef:solve '((0 0) (8 0) (0 6) (8 6)) '(5.0 5.0 5.0 5.0) 1.0 1.0)
+          '(4.0 3.0 0.0 0.0 0.0 0.0 0.0))
+    (list "cc-int crosses two tapes twice, one root each side of the corner line"
+          '(abcdef:cc-int '(0 0) 5.0 '(8 0) 5.0)  '((4.0 3.0) (4.0 -3.0)))
+    (list "cc-int shares a shortfall so two tapes that miss still meet once"
+          '(abcdef:cc-int '(0 0) 3.0 '(8 0) 4.0)  '((3.5 0.0)))
+    (list "mirror-pt reflects the answer through the line of its two corners"
+          '(abcdef:mirror-pt 4.0 3.0 '(0 0) '(8 0))  '(4.0 -3.0))
+    (list "best-cut folds a 180-degree cut to 0: tapes in a line cross nowhere"
+          '(abcdef:best-cut 4.0 0.0 '((0 (0 0) 4.0) (1 (8 0) 4.0)))  0.0)
+    (list "clamp-in pulls a point back onto the frame and says how far"
+          '(abcdef:clamp-in 9.0 3.0 '(0 0 8 6))  '(8.0 3.0 1.0))
+    (list "letters names the corners a subset used, in sheet order"
+          '(abcdef:letters '((3 (8 6) 5.0) (0 (0 0) 5.0) (1 (8 0) 5.0)))  "ABD")
+    (list "confidence: four clean tapes crossing well is 99"
+          '(abcdef:confidence 4 0.0 0.0 90.0 nil nil)  99.0)
+    (list "frame-check passes a true 8 by 6 frame and names a short A-B"
+          '(and (null (abcdef:frame-check 0 0 8 0 0 6 8 6 8 6))
+                (wcmatch (abcdef:frame-check 0 0 7 0 0 6 8 6 8 6)
+                         "A-B measures*")))
+    (list "corner-ang measures a square corner from the coordinates"
+          '(abcdef:corner-ang 0 0 8 0 0 6)  90.0)
+    (list "ftin->in repairs 101-10\" on a 10-foot diagonal as 10'-10\", 130"
+          '(abcdef:ftin->in "101-10\"" 120.0)  130.0)
+    (list "in->ftin writes 476.75 as 39'-8 3/4\""
+          '(abcdef:in->ftin 476.75)  "39'-8 3/4\"")))
+
+(foreach c '("ABCDEF")
+  (setq *calofin-selftests*
+        (cons (cons c 'abcdef:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

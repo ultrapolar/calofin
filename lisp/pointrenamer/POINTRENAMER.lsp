@@ -58,7 +58,7 @@
 ;;;  The banner form tools/release_lisp.py reads (lowercase name, "v",
 ;;;  one dot).  Bump it with every change and regenerate releases/.
 
-(setq *pointrenamer-version* "v1.7")
+(setq *pointrenamer-version* "v1.8")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob the tool has, all of them here.
@@ -1097,6 +1097,51 @@
 (defun c:POINTRENAMERVER ()
   (princ (strcat "\nPOINTRENAMER " *pointrenamer-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun ptr:selftests ()
+  (list
+    (list "dircanon reads ccw as the counter-clockwise keyword"
+          '(ptr:dircanon "ccw")  "COunterclockwise")
+    (list "dircanon refuses a word that names neither way"
+          '(ptr:dircanon "sideways")  nil)
+    (list "dirkey keeps a point dead on the start first"
+          '(ptr:dirkey 2.0 2.0 10.0 T)  1.0e-4)
+    (list "dirkey against the drawn order walks the long way round"
+          '(ptr:dirkey 3.0 2.0 10.0 nil)  9.0001)
+    (list "circumcenter of three points on a unit circle"
+          '(ptr:circumcenter '(0 0) '(1 -1) '(2 0))  '(1.0 0.0))
+    (list "seg-len of a semicircle of radius 1 is pi"
+          '(ptr:seg-len '((0 0) (2 0) 1.0))  pi)
+    (list "seg-near clamps a point past the end to that end"
+          '(ptr:seg-near '(6 4) '((0 0) (3 0) 0.0) 3.0)  '(5.0 . 3.0))
+    (list "loop-area of a CCW unit square is +1"
+          '(ptr:loop-area '(((0 0) (1 0) 0.0) ((1 0) (1 1) 0.0)
+                            ((1 1) (0 1) 0.0) ((0 1) (0 0) 0.0)))  1.0)
+    (list "loop-area closes an open run by its chord, negative when CW"
+          '(ptr:loop-area '(((0 0) (0 1) 0.0) ((0 1) (1 1) 0.0)
+                            ((1 1) (1 0) 0.0)))  -1.0)
+    (list "loop-area of a circle drawn as two bulges is pi r squared"
+          '(ptr:loop-area '(((0 0) (2 0) 1.0) ((2 0) (0 0) 1.0)))  pi)
+    (list "measure gives the nearest spot's station along the perimeter"
+          '(ptr:measure '(1.3 0.5)
+                        (ptr:seg-tab '(((0 0) (1 0) 0.0) ((1 0) (1 1) 0.0))))
+          '(0.3 . 1.5))
+    (list "sort-rows keeps two shots on one station in read order"
+          '(mapcar 'caddr (ptr:sort-rows '((2.0 0.0 1) (1.0 0.0 2) (1.0 0.0 0))))
+          '(0 2 1))))
+
+(foreach c '("POINTRENAMER")
+  (setq *calofin-selftests*
+        (cons (cons c 'ptr:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

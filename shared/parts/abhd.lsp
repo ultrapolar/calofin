@@ -773,7 +773,7 @@
 ;; tune.  The two remembered answers are seeded only when unset, so
 ;; re-loading the file mid-session does not forget what the last run
 ;; was asked.
-(setq pf:*version*      "092326 REV28") ; announced on load.  The
+(setq pf:*version*      "092526 REV29") ; announced on load.  The
                                     ; versioned twin of this file is
                                     ; named abhd_<MMDDYY>_REV<##>.lsp
                                     ; so anyone can see which iteration
@@ -6030,6 +6030,52 @@
 (defun c:ABHDVER ()
   (princ (strcat "\nABHD " pf:*version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun pf:selftests ()
+  (list
+    (list "circumcenter of a right triangle is its hypotenuse's middle"
+          '(pf:circumcenter '(0 0) '(4 0) '(0 4))  '(2.0 2.0))
+    (list "circumcenter refuses three collinear points"
+          '(pf:circumcenter '(0 0) '(1 1) '(2 2))  nil)
+    (list "bulge-3pt: a half circle over the top is clockwise, bulge -1"
+          '(pf:bulge-3pt '(0 0) '(1 1) '(2 0))  -1.0)
+    (list "seg-dist is radial inside an arc's sweep"
+          '(pf:seg-dist '(1 -3) '((0 0) (2 0) 1.0))  2.0)
+    (list "tangent-bulge: leaving upward for a point to the right bends clockwise"
+          '(pf:tangent-bulge '(0 0) (* 0.5 pi) '(2 0))  -1.0)
+    (list "end-tangent of a bulge-1 arc turns the chord a quarter"
+          '(pf:end-tangent '(0 0) '(2 0) 1.0)  (* 0.5 pi))
+    (list "bulge-radius: a third of a bulge over a 6 chord is a 5 radius"
+          '(pf:bulge-radius '(0 0) '(6 0) (/ 1.0 3.0))  5.0)
+    (list "radius-bulge: 5 over a 6 chord is a third, on the reference's side"
+          '(pf:radius-bulge '(0 0) '(6 0) 5.0 -0.5)  (/ -1.0 3.0))
+    (list "div-arcs rounds 10 points over 3 to 3 curves"
+          '(pf:div-arcs 10 3)  3)
+    (list "div-arcs never caps below one curve"
+          '(pf:div-arcs 1 3)  1)
+    (list "chain closes four exploded sides, turning the one drawn backwards"
+          '(pf:chain '(((0 0) (4 0) 0.0) ((4 0) (4 4) 0.0)
+                       ((0 4) (4 4) 0.0) ((0 4) (0 0) 0.0)))
+          '(((0 0) (4 0) 0.0) ((4 0) (4 4) 0.0)
+            ((4 4) (0 4) 0.0) ((0 4) (0 0) 0.0)))
+    (list "self-crosses catches a bow tie and passes a square"
+          '(and (pf:self-crosses '(((0 0) (2 2) 0.0) ((2 2) (2 0) 0.0)
+                                   ((2 0) (0 2) 0.0) ((0 2) (0 0) 0.0)))
+                (not (pf:self-crosses '(((0 0) (2 0) 0.0) ((2 0) (2 2) 0.0)
+                                        ((2 2) (0 2) 0.0) ((0 2) (0 0) 0.0))))))))
+
+(foreach c '("ABHD" "SIMPABHD" "ADAB" "TUTORIALABHD")
+  (setq *calofin-selftests*
+        (cons (cons c 'pf:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

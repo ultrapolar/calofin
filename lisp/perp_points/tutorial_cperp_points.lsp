@@ -24,7 +24,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *tutcperp-version* "v0.12")
+(setq *tutcperp-version* "v0.13")
 
 ;; curve helpers (they match cperp_points.lsp)
 
@@ -446,6 +446,36 @@
               "Tutorial finished.  Type CPERPPTS to try it for real."))
   (if lzd:end (lzd:end "TUTORIALCPERPPTS"))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun tutc:selftests ()
+  (list
+    (list "bulge of a 45 degree left turn is tan(pi/8)"
+          '(tutc:bulge '(1 0) '(0 0) '(1 1))  (/ (sin (/ pi 8.0)) (cos (/ pi 8.0))))
+    (list "bulge of the same turn to the right is negative"
+          '(tutc:bulge '(1 0) '(0 0) '(1 -1))  (- (/ (sin (/ pi 8.0)) (cos (/ pi 8.0)))))
+    (list "bulge of a clockwise half circle is -1"
+          '(tutc:bulge '(0 1) '(0 0) '(2 0))  -1.0)
+    (list "bulge of a chord along the tangent is 0"
+          '(tutc:bulge '(1 0) '(0 0) '(5 0))  0.0)
+    (list "bulge with no tangent falls back to straight"
+          '(tutc:bulge nil '(0 0) '(5 0))  0.0)
+    (list "bulge of a zero-length chord is 0"
+          '(tutc:bulge '(1 0) '(2 2) '(2 2))  0.0)
+    (list "bulge caps a chord folding back at 2.98 rad"
+          '(tutc:bulge '(1 0) '(0 0) '(-1 0.001))  (/ (sin 1.49) (cos 1.49)))))
+
+(foreach c '("TUTORIALCPERPPTS")
+  (setq *calofin-selftests*
+        (cons (cons c 'tutc:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

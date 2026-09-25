@@ -238,7 +238,7 @@
 ;; reads it to name the dated twin in releases/ and SPAVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq spa:*version* "092426 REV37")
+(setq spa:*version* "092526 REV38")
 
 ;;; -------------------- shop terms --------------------------------------
 ;;;  Wording this tool writes INTO THE DRAWING that a shop may spell its
@@ -4460,6 +4460,54 @@
   (princ (strcat "\nTutorial: "
                  (if tut:*version* tut:*version* "not loaded")))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun spa:selftests ()
+  (list
+    (list "cornsb: a 10 cut face sets back face over root 2"
+          '(spa:cornsb '("Cut" 10.0))  7.0711)
+    (list "cornerends: a 6 radius on a square corner ends 6 up the wall"
+          '(car (spa:cornerends '(0.0 0.0) '(0.0 10.0) '(10.0 0.0) "Radius" 6.0))
+          '(0.0 6.0))
+    (list "offcorners: a radius the lap erases collapses to Square"
+          '(spa:offcorners '(("Radius" 6.0)) -6.0)  '(("Square" 0.0)))
+    (list "chordrect: a square-cornered 100 by 80 box is 80 tall mid-wall"
+          '(spa:chordrect (spa:quadat '(0.0 0.0) 100.0 80.0)
+                          '(("Square" 0.0) ("Square" 0.0)
+                            ("Square" 0.0) ("Square" 0.0))
+                          50.0)
+          '(0.0 80.0))
+    (list "octov: a measured T derives S, and S1 matches it at 45"
+          '(spa:octov 80.0 100.0 nil 70.0 nil nil nil)  '(15.0 70.0 15.0 50.0))
+    (list "hingetypes: 5 pieces read H V V H off the chart"
+          '(spa:hingetypes 5 nil)  '("H" "V" "V" "H"))
+    (list "hplace moves a hinge off a zone to its near edge"
+          '(spa:hplace 0.0 100.0 2 60.0 '((40.0 60.0)))  '(60.0))
+    (list "spillzones: a side-wall spillway blocks nothing until the turn puts it on top"
+          '(if (spa:spillzones '(("Wall" "Left" 20.0)) 0.0 100.0 nil)
+             nil
+             (spa:spillzones '(("Wall" "Left" 20.0)) 0.0 100.0 T))
+          '((40.0 60.0)))
+    (list "hardverdict says by how much the hinge is over"
+          '(cdr (spa:hardverdict '(OVER 120.0) 130.5))  "hinge 130.5 over 120")
+    (list "tapernorm puts the dash back in a bare 42"
+          '(spa:tapernorm "42")  "4-2")
+    (list "foamopts: an Economy taper only Standard carries takes its sheet"
+          '(car (spa:foamopts "ECONOMY" "4-3"))  '((48.0 . 144.0)))
+    (list "parse-len reads 4'-4 1/2\" as 52.5 inches with feet"
+          '(cal:parse-len "4'-4 1/2\"")  '(52.5 T))))
+
+(foreach c '("SPA")
+  (setq *calofin-selftests*
+        (cons (cons c 'spa:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

@@ -98,7 +98,7 @@
 ;;  this block, and nowhere else in the file.  Edit one and APPLOAD the
 ;;  file again; to try a value for one session, type the setq at the
 ;;  command line, because every knob is read when the command runs.
-(setq *ablobf-version*   "v1.7")     ; announced on load; release_lisp.py
+(setq *ablobf-version*   "v1.8")     ; announced on load; release_lisp.py
                                     ; reads this banner and stamps the
                                     ; dated twin in releases/ from it
 (setq *ABL-POOL-LAYER*   "POOL")     ; layer the kept run ends up on -
@@ -2780,6 +2780,48 @@
 (defun c:ABLOBFVER ()
   (princ (strcat "\nABLOBF " *ablobf-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun abl:selftests ()
+  (list
+    (list "bulge-3pt: an arc over the top of its chord is clockwise, bulge -1"
+          '(abl:bulge-3pt '(0 0) '(1 1) '(2 0))  -1.0)
+    (list "bulge-3pt: three collinear points are a straight 0"
+          '(abl:bulge-3pt '(0 0) '(1 0) '(2 0))  0.0)
+    (list "bulge-radius: a 6 chord with bulge 1 is a radius-3 semicircle"
+          '(abl:bulge-radius '(0 0) '(6 0) 1.0)  3.0)
+    (list "radius-bulge: radius 5 over a 6 chord, minor arc, is 1/3"
+          '(abl:radius-bulge '(0 0) '(6 0) 5.0 0.5)  (/ 1.0 3.0))
+    (list "radius-bulge: the same radius keeps a major-arc reference major"
+          '(abl:radius-bulge '(0 0) '(6 0) 5.0 2.0)  3.0)
+    (list "seg-dist measures an arc radially, not to its chord"
+          '(abl:seg-dist '(1 -3) '((0 0) (2 0) 1.0))  2.0)
+    (list "snap-arc pulls a radius of 3.02 onto the whole inch, holding its point"
+          '(abl:snap-arc '(0 0) '(6 0) 0.9 '((3 -3)) 0.1 0 nil)  '(1.0 . 0))
+    (list "max-bulge grants a neighbour span the shipped 60 degrees of slack alone: tan 15"
+          '(abl:max-bulge '(0 0) '(10 0) nil)  0.2679492)
+    (list "nice-radius-p takes 18 (a half foot) and refuses 7.5"
+          '(and (abl:nice-radius-p 18.0) (not (abl:nice-radius-p 7.5))))
+    (list "num-in reads the first run of digits out of a point label"
+          '(abl:num-in "Pt.17a")  17)
+    (list "bad-phrase lists three points with a comma and an and"
+          '(abl:bad-phrase '("12" "15" "20"))
+          (strcat *ABL-BAD-PREFIX* "Pt.12, Pt.15 and Pt.20" *ABL-BAD-MANY*))
+    (list "cand-matches finds both points a sheet numbered 17 and 017"
+          '(length (cal:cand-matches "pt 17" '(((0 0) "17") ((5 5) "18") ((9 9) "017"))))  2)
+  ))
+
+(foreach c '("ABLOBF")
+  (setq *calofin-selftests*
+        (cons (cons c 'abl:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

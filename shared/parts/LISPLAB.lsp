@@ -37,7 +37,7 @@
 ;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 
-(setq *lisplab-version* "v1.9")   ; announced on load; release_lisp.py
+(setq *lisplab-version* "v1.10")   ; announced on load; release_lisp.py
                                   ; reads this banner and stamps the
                                   ; dated twin in releases/ from it
 
@@ -980,6 +980,41 @@
 (defun c:LISPLABVER ()
   (princ (strcat "\nLISPLAB " *lisplab-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun lab:selftests ()
+  (list
+    (list "nthcdr drops the first k"        '(cal:nthcdr 2 '(1 2 3 4))          '(3 4))
+    (list "pad pads to the width"           '(cal:pad "ab" 4)                    "ab  ")
+    (list "num drops the trailing zeros"    '(lab:num 12.0)                      "12")
+    (list "num keeps the places it needs"   '(lab:num 2.25)                      "2.25")
+    (list "fmt writes a list on one line"   '(lab:fmt '(6 3 9))                  "(6 3 9)")
+    (list "bubble sorts"                    '(lab:bubble '(3 1 2) '<)            '(1 2 3))
+    (list "selection keeps a duplicate"     '(lab:selection '(2 1 2) '<)         '(1 2 2))
+    (list "insertion sorts"                 '(lab:insertion '(3 1 2) '<)         '(1 2 3))
+    (list "msort sorts the lesson's numbers"
+          '(lab:msort '(5 3 9 3 12 5 8) '<)  '(3 3 5 5 8 9 12))
+    (list "qsort sorts the lesson's numbers"
+          '(lab:qsort '(5 3 9 3 12 5 8) '<)  '(3 3 5 5 8 9 12))
+    (list "halve splits front and back"     '(lab:halve '(1 2 3 4 5))            '((1 2) (3 4 5)))
+    (list "merge keeps A's head on a tie"   '(lab:merge '(1 3) '(2 3) '<)        '(1 2 3 3))
+    (list "remove1 takes one match only"    '(lab:remove1 2 '(2 1 2))            '(1 2))
+    (list "sort-by orders records by their key"
+          '(mapcar 'lab:rad (lab:sort-by '((9 "A") (3 "B")) 'lab:rad '<))  '(3 9))
+    (list "by-layer-then-radius puts the layer first"
+          '(lab:by-layer-then-radius '(9 "A") '(3 "B")))))
+
+(foreach c '("LISPLAB")
+  (setq *calofin-selftests*
+        (cons (cons c 'lab:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

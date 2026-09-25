@@ -225,6 +225,11 @@ RULES = """
 4. **Every command reports its failures.**  Five `lzd:` call sites,
    maintained by `python3 tools/check_lazdiag.py --fix`.  Write the
    `*error*` handler yourself; never hand-write the `lzd:` lines.
+   And every file carries a SELF-TEST table -- `X:selftests`, its own
+   helpers on known inputs, which a failure report runs on the
+   drafter's machine: `--fix` writes the skeleton, you write at least
+   three entries, and `python3 tools/run_selftests.py FILE --tier both`
+   runs them as a report would.
 5. **OSMODE, CECOLOR and CLAYER are borrowed, not taken.**  Restored on
    the clean exit AND from `*error*`, and in the handler they go first,
    ahead of anything that can throw.  Only list a sysvar in a restore

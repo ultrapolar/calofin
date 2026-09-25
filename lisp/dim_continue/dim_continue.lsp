@@ -31,7 +31,7 @@
 ;;; ==================================================================
 
 ;; --- measurement-axis angle (radians) of a linear/aligned dimension
-(setq *dimcontinue-version* "v1.6")   ; announced on load; release_lisp.py
+(setq *dimcontinue-version* "v1.7")   ; announced on load; release_lisp.py
                                          ; stamps the dated twin in releases/
 
 (defun dce:axis (ed)
@@ -219,6 +219,45 @@
 (defun c:DIMCONTENDVER ()
   (princ (strcat "\nDIMCONTEND " *dimcontinue-version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun dce:selftests ()
+  (list
+    (list "axis of a rotated dim is its own group-50 angle"
+          '(dce:axis '((100 . "AcDbRotatedDimension") (50 . 1.5)
+                       (13 0.0 0.0 0.0) (14 10.0 0.0 0.0)))  1.5)
+    (list "axis of an aligned dim runs from its 1st to its 2nd ext line"
+          '(dce:axis '((100 . "AcDbAlignedDimension")
+                       (13 0.0 0.0 0.0) (14 0.0 5.0 0.0)))  (* 0.5 pi))
+    (list "a rotated dim with no group 50 falls back to the ext-line angle"
+          '(dce:axis '((100 . "AcDbRotatedDimension")
+                       (13 0.0 0.0 0.0) (14 3.0 3.0 0.0)))  (* 0.25 pi))
+    (list "proj along X reads the X offset"
+          '(dce:proj '(3.0 4.0 0.0) '(0.0 0.0 0.0) 0.0)  3.0)
+    (list "proj along Y reads the Y offset"
+          '(dce:proj '(3.0 4.0 0.0) '(0.0 0.0 0.0) (* 0.5 pi))  4.0)
+    (list "proj is signed: a point behind the origin is negative"
+          '(dce:proj '(-2.0 7.0 0.0) '(0.0 0.0 0.0) 0.0)  -2.0)
+    (list "proj of the origin itself is 0 (where the seed's far line sits)"
+          '(dce:proj '(7.0 -3.0 0.0) '(7.0 -3.0 0.0) 1.1)  0.0)
+    (list "proj along a 45 degree axis is the diagonal"
+          '(dce:proj '(1.0 1.0 0.0) '(0.0 0.0 0.0) (* 0.25 pi))  (sqrt 2.0))
+    (list "a half-turn axis flips the sign"
+          '(dce:proj '(3.0 0.0 0.0) '(0.0 0.0 0.0) pi)  -3.0)
+    (list "proj is a projection: offset across the axis does not count"
+          '(dce:proj '(5.0 100.0 0.0) '(0.0 0.0 0.0) 0.0)  5.0)))
+
+(foreach c '("DIMCONTEND")
+  (setq *calofin-selftests*
+        (cons (cons c 'dce:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
