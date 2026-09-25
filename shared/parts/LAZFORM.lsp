@@ -3081,9 +3081,9 @@
               (setq lzf:*chart* (lzf:chart "Grecian")
                     lzf:*cvals* '(("bodycorners" . 2))
                     lzf:*vals*  '(("bodycorners-sz" . "2")))
-              (list (length (lzf:cornerpairs nil))
-                    (length (lzf:cornerpairs t)))))
-          '(8 2))
+              (strcat (itoa (length (lzf:cornerpairs nil))) " out of square, "
+                      (itoa (length (lzf:cornerpairs t))) " in")))
+          "8 out of square, 2 in")
     (list "answer reads feet and inches as inches"
           '(cal:formanswer "12'6\"")  150.0)
     (list "kvpack drops an empty box and a value carrying the separator; kvunpack reads the rest back"

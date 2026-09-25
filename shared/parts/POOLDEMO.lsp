@@ -31,7 +31,7 @@
 ;;; Generic helpers live there under cal: - see STANDARDS.md.
 ;;;
 
-(setq pooldemo:*version* "092326 REV11")
+(setq pooldemo:*version* "092526 REV12")
 
 (setq pooldemo:*colw* 760.0)            ; grid cell width
 (setq pooldemo:*rowh* 900.0)            ; grid cell height
@@ -440,6 +440,44 @@
 (defun c:POOLDEMOVER ()
   (princ (strcat "\nPOOLDEMO " pooldemo:*version*))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun pooldemo:selftests ()
+  (list
+    ;; every cell draws through POOL's helpers, so this file has no
+    ;; arithmetic of its own to run: what it pins is the grid the
+    ;; cells are laid on and the state a report should find
+    (list "the grid's cell width is a positive number"
+          '(if (and (numberp pooldemo:*colw*) (> pooldemo:*colw* 0.0))
+             pooldemo:*colw*))
+    (list "the grid's cell height is a positive number"
+          '(if (and (numberp pooldemo:*rowh*) (> pooldemo:*rowh* 0.0))
+             pooldemo:*rowh*))
+    (list "a cell is wider than the 480 in pool every cell draws, so cells cannot overlap"
+          '(> pooldemo:*colw* 480.0)  T)
+    (list "a cell is taller than the 470 in its caption sits above the pool"
+          '(> pooldemo:*rowh* 470.0)  T)
+    (list "the twelve cells the run walks are all defined"
+          '(and pooldemo:c1 pooldemo:c2 pooldemo:c3 pooldemo:c4
+                pooldemo:c5 pooldemo:c6 pooldemo:c7 pooldemo:c8
+                pooldemo:c9 pooldemo:c10 pooldemo:c11 pooldemo:c12)
+          T)
+    (list "the undo group a run opens is closed by the time its report is written"
+          '(null pooldemo:*undo-open*)  T)
+    (list "the version banner reads MMDDYY REVnn"
+          '(wcmatch pooldemo:*version* "###### REV##")  T)))
+
+(foreach c '("POOLDEMO")
+  (setq *calofin-selftests*
+        (cons (cons c 'pooldemo:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

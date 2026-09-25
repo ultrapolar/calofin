@@ -170,7 +170,16 @@ def check_no_global_leaks(path, cmd, prefix):
     match = re.search(r"\(defun\s+%s\s*\(([^)]*)\)" % re.escape(cmd), code)
     assert match, "%s not found" % cmd
     declared = set(match.group(1).split("/")[1].split())
-    body = strip_strings(code[match.start():])
+    body = code[match.start():]
+    # The self-test table and its registration sit after the command by
+    # design (check_lazdiag --fix puts them just above the load banner):
+    # the table is data the report evaluates, and *calofin-selftests* is
+    # the one global a file writes on purpose.  Neither is a leak of the
+    # command's, so the scan stops where that block starts.
+    cut = re.search(r"\(defun\s+\S*selftests\s*\(", body)
+    if cut:
+        body = body[:cut.start()]
+    body = strip_strings(body)
     called = set(re.findall(r"\(\s*([A-Za-z*][A-Za-z0-9:*_\-]*)", body))
     used = set(re.findall(r"(?<![0-9.])[A-Za-z*][A-Za-z0-9:*_\-]*", body))
     leaked = sorted(

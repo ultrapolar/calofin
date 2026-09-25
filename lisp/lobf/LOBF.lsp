@@ -1209,8 +1209,11 @@
     (list "hull keeps the four corners and drops a point inside and one on an edge"
           '(length (lobf:hull '((0.0 0.0) (4.0 0.0) (4.0 4.0) (0.0 4.0) (2.0 2.0) (2.0 0.0))))
           4)
-    (list "minimax runs the line down the middle of the narrowest band"
-          '(car (lobf:minimax '((0.0 0.0) (4.0 0.0) (2.0 1.0))))  '(0.0 0.5))
+    (list "minimax runs the line down the middle of the band: every point equally off it"
+          '((lambda (m) (mapcar '(lambda (p) (lobf:resid p (car m) (cadr m)))
+                                '((0.0 0.0) (4.0 0.0) (2.0 1.0))))
+            (lobf:minimax '((0.0 0.0) (4.0 0.0) (2.0 1.0))))
+          '(0.5 0.5 0.5))
     (list "candidates: fit 2 names the point it set aside"
           '(lobf:cand-aim (cadr (lobf:candidates '((0.0 0.0 "1") (1.0 0.0 "2")
                                                    (2.0 0.0 "3") (1.0 5.0 "4")))))

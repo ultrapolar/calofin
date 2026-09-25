@@ -27,7 +27,7 @@
 ;;;      TUTORIALPOOL_MMDDYY_REV##.LSP    named for its revision
 ;;; ===================================================================
 
-(setq tutorial:*version* "092326 REV11")
+(setq tutorial:*version* "092526 REV12")
 
 (setq tutorial:*colw* 620.0)            ; horizontal spacing between topics
 
@@ -444,6 +444,39 @@
   (if *pop-error-mode* (*pop-error-mode*))
   (if lzd:end (lzd:end "TUTORIALPOOL"))
   (princ))
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun tutorial:selftests ()
+  (list
+    ;; every topic draws through POOL's helpers or only prints, so
+    ;; this file has no arithmetic of its own to run: what it pins is
+    ;; the spacing the topics are laid on and the state a report
+    ;; should find
+    (list "the spacing between topics is a positive number"
+          '(if (and (numberp tutorial:*colw*) (> tutorial:*colw* 0.0))
+             tutorial:*colw*))
+    (list "a topic column clears the 600 in frame topic 3 draws, so topic 4 lands past it"
+          '(> tutorial:*colw* 600.0)  T)
+    (list "the nine topics the run walks are all defined"
+          '(and tutorial:c1 tutorial:c2 tutorial:c3 tutorial:c4 tutorial:c5
+                tutorial:c6 tutorial:c7 tutorial:c8 tutorial:c9)
+          T)
+    (list "the undo group a run opens is closed by the time its report is written"
+          '(null tutorial:*undo-open*)  T)
+    (list "the version banner reads MMDDYY REVnn"
+          '(wcmatch tutorial:*version* "###### REV##")  T)))
+
+(foreach c '("TUTORIALPOOL")
+  (setq *calofin-selftests*
+        (cons (cons c 'tutorial:selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,

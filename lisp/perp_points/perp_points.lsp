@@ -253,7 +253,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perp-version* "v0.25")
+(setq *perp-version* "v0.26")
 
 ;;; -------------------- tunables --------------------------------------
 ;; The LENGTH RULER.  Once a length has been given, every later length
@@ -2320,9 +2320,28 @@
 ;; tests/test_selftests.py runs every entry in the VM at both tiers.
 (defun perp:selftests ()
   (list
-    ;; write at least 3:
-    ;;   (list "what it checks" '(perp:helper args) expected)
-  ))
+    (list "parse-segs reads 1 3-5, 8 as segments 1 3 4 5 8"
+          '(vl-sort (perp:parse-segs "1 3-5, 8" 10) '<)  '(1 3 4 5 8))
+    (list "parse-segs refuses 3-5 when there are only 4 segments"
+          '(perp:parse-segs "3-5" 4)  nil)
+    (list "pathlen of a 3 by 4 elbow is 7"
+          '(perp:pathlen '((0 0 0) (3 0 0) (3 4 0)))  7.0)
+    (list "pt-at 5 along that elbow sits 2 up the second leg"
+          '(perp:pt-at '((0 0 0) (3 0 0) (3 4 0)) 5.0)  '(3.0 2.0 0.0))
+    (list "circumcenter of the right triangle 0,0 2,0 0,2 is 1,1"
+          '(perp:circumcenter '(0.0 0.0 0.0) '(2.0 0.0 0.0) '(0.0 2.0 0.0))
+          '(1.0 1.0 0.0))
+    (list "circumcenter of three points in a line is nil"
+          '(perp:circumcenter '(0.0 0.0 0.0) '(1.0 0.0 0.0) '(2.0 0.0 0.0))  nil)
+    (list "vang from +x to +y is a positive quarter turn"
+          '(perp:vang '(1.0 0.0) '(0.0 1.0))  (* 0.5 pi))
+    (list "bulge of a quarter circle from its two tangents is root 2 minus 1"
+          '(perp:bulge '(0.0 1.0) '(-1.0 0.0) '(1.0 0.0) '(0.0 1.0))
+          (- (sqrt 2.0) 1.0))
+    (list "bulge with no tangent at either end is straight"
+          '(perp:bulge nil nil '(0.0 0.0) '(5.0 0.0))  0.0)
+    (list "scale-ctr at a quarter share sits a quarter of the way from START"
+          '(perp:scale-ctr '(0.0 0.0 0.0) '(10.0 0.0 0.0) 0.25)  '(2.5 0.0 0.0))))
 
 (foreach c '("PERPPTS")
   (setq *calofin-selftests*

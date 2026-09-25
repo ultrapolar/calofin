@@ -56,7 +56,7 @@
 
 ;; ---- AUTOBEAD SETTINGS ----------------------------------------------------
 
-(setq *autobead-version* "v1.14"     ; revision stamp; the dated twin is
+(setq *autobead-version* "v1.15"     ; revision stamp; the dated twin is
                                      ; named for it (v0.4 -> REV04)
       *autobead-offset* 2.0          ; bead offset, drawing units (2 = 2")
       *autobead-layer*  "Bead Track" ; output layer
@@ -1156,6 +1156,58 @@
   (princ))
 
 ;; ---------------------------------------------------------------------------
+
+;;; -------------------- self tests --------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun autobead-selftests ()
+  (list
+    (list "dot of a vector with itself is its length squared"
+          '(cal:dot '(3.0 4.0) '(3.0 4.0))  25.0)
+    (list "side: above a left-to-right line is 1, below it -1"
+          '(list (autobead-side '(5.0 1.0) '(0.0 0.0) '(10.0 0.0))
+                 (autobead-side '(5.0 -1.0) '(0.0 0.0) '(10.0 0.0)))
+          '(1 -1))
+    (list "side: a point on the line is called 1, never nil"
+          '(autobead-side '(5.0 0.0) '(0.0 0.0) '(10.0 0.0))  1)
+    (list "breakline takes the nearest step line ahead of the click, not the first listed"
+          '(autobead-breakline '(0.0 0.0 0.0) '(10.0 0.0 0.0)
+                               '(((20.0 -10.0 0.0) (20.0 10.0 0.0))
+                                 ((-5.0 -10.0 0.0) (-5.0 10.0 0.0))
+                                 ((5.0 -10.0 0.0) (5.0 10.0 0.0))))
+          2)
+    (list "breakline ignores a step line behind the click"
+          '(autobead-breakline '(0.0 0.0 0.0) '(10.0 0.0 0.0)
+                               '(((-5.0 -10.0 0.0) (-5.0 10.0 0.0))))
+          nil)
+    (list "breakline gives a step line 6in of slop past its drawn end, not 8"
+          '(list (autobead-breakline '(0.0 0.0 0.0) '(10.0 0.0 0.0)
+                                     '(((5.0 4.0 0.0) (5.0 10.0 0.0))))
+                 (autobead-breakline '(0.0 0.0 0.0) '(10.0 0.0 0.0)
+                                     '(((5.0 8.0 0.0) (5.0 10.0 0.0)))))
+          '(0 nil))
+    (list "breakline: a direction click on the step click is no direction"
+          '(autobead-breakline '(0.0 0.0 0.0) '(0.0 0.0 0.0)
+                               '(((5.0 -10.0 0.0) (5.0 10.0 0.0))))
+          nil)
+    (list "the bead offset is a positive length"
+          '(if (and (numberp *autobead-offset*) (> *autobead-offset* 0.0)) *autobead-offset*))
+    (list "the join tolerance is a small positive distance"
+          '(if (and (numberp *autobead-fuzz*) (> *autobead-fuzz* 0.0) (< *autobead-fuzz* 1.0))
+             *autobead-fuzz*))
+    (list "the output layer is a named layer"
+          '(if (and (= (type *autobead-layer*) 'STR) (> (strlen *autobead-layer*) 0))
+             *autobead-layer*))))
+
+(foreach c '("AUTOBEAD" "TUTORIALAUTOBEAD")
+  (setq *calofin-selftests*
+        (cons (cons c 'autobead-selftests) *calofin-selftests*)))
 
 ;; Quiet inside the whole build: LAZPASS.lsp and
 ;; CALOFIN-LOADER.lsp set the flag while they load their members,
