@@ -124,7 +124,7 @@
 ;; reads it to name the dated twin in releases/ and POOLVER prints it,
 ;; so editing it here renames a release rather than changing anything
 ;; the routine does.  Bump it when the file changes, per CLAUDE.md.
-(setq pool:*version* "092426 REV44")
+(setq pool:*version* "092526 REV45")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;
@@ -554,6 +554,29 @@
 (setq pool:*steps-fuzz*    0.01)    ; how near a drawn wall's ends must
                                     ; sit to the shallow wall's line to
                                     ; be that wall, in inches
+(setq pool:*extstep-default* "4x6") ; what Enter answers at the size of a
+                                    ; step OUTSIDE the wall: "4x6" (4' out,
+                                    ; 6' along the wall), "4x8", or
+                                    ; "Custom" to be asked both lengths
+
+;;;  FIBERGLASS (FG) STEPS, the fourth answer with a hopper: the shop's
+;;;  own blocks, placed where the drafter picks -- a U 4' deep, open on
+;;;  the wall side, its insertion point in the middle of that opening --
+;;;  and the "Fiberglass Step" label.  A drawing that already holds a
+;;;  block by these names uses its own; one that does not gets the
+;;;  plain U drawn here.
+(setq pool:*fg-block6*  "6' Straight FG Step")   ; 4' x 6' block name
+(setq pool:*fg-block8*  "8' Straight FG Step")   ; 4' x 8' block name
+(setq pool:*fg-depth*   48.0)       ; how far a made block runs out, in
+(setq pool:*lay-fg*     "FGStep")   ; layer a made block's lines are on
+(setq pool:*lay-fgtext* "FiberglassStep")   ; the label's layer
+(setq pool:*col-fg*     2)          ; both layers' colour when made (ACI)
+(setq pool:*fg-lt*      "DASHED2")  ; ...and their linetype, when the
+                                    ; drawing has it; else POOL's dash
+(setq pool:*fg-text*    "Fiberglass Step")   ; what the label says
+(setq pool:*fg-texth*   10.0)       ; its height, in inches
+(setq pool:*fg-style*   "TITLE")    ; its text style, when the drawing
+                                    ; has it; else the current one
 
 ;;; -------------------- run state (not tunables) ----------------------
 ;;;
@@ -9825,16 +9848,22 @@
 (defun pool:stepsin ( / kind which done wall ss)
   (while (not done)
     (setq kind (pool:askkwf 'steps "Add steps at the shallow end"
-                            "Hemi Normie Corner None"
-                            "Hemi/Normie/Corner/None"
+                            "Hemi Normie Corner FGstep None"
+                            "Hemi/Normie/Corner/FGstep/None"
                             ;; a knob spelt some other way is not a
                             ;; keyword this prompt offers
                             (cond ((if (= (type pool:*steps-default*) 'STR)
                                         (pool:fkword pool:*steps-default*
-                                                     "Hemi Normie Corner None")))
+                                                     "Hemi Normie Corner FGstep None")))
                                   ("None"))
                             nil)
           done t)
+    ;; fiberglass steps are POOL's own blocks, placed here and now;
+    ;; Back at the first of them re-asks this question
+    (if (= kind "FGstep")
+      (if (eq (pool:fgsteps) 'POOL-BACK)
+        (progn (princ "\nStepping back one question.") (setq done nil))
+        (setq kind "None")))
     (if (= kind "Corner")
       (progn
         (setq which (pool:askkwf 'stepcorner
@@ -9864,19 +9893,19 @@
 ;; else.  Drawn, dimensioned and let into the perimeter here, while the
 ;; run is open; PADDLE comes after (pool:stepsafter).
 (defun pool:stepsout ( / stage go wall fr u n pe w1 w2 wlen w l m
-                         s1 s2 o1 o2 doff odl)
+                         s1 s2 o1 o2 doff odl sz)
   (setq stage 0)
-  (while (< stage 3)
+  (while (< stage 4)
     (cond
       ((= stage 0)
        (setq go (pool:askynf 'extstep "Add a step outside the shallow end"
                              "No" nil))
        (cond
-         ((not go) (setq stage 3))
+         ((not go) (setq stage 4))
          ((null (setq wall (pool:shwall)))
           (princ (strcat "\nThe shallow end is not one straight wall, so"
                          " there is nothing to set a step on - left off."))
-          (setq go nil stage 3))
+          (setq go nil stage 4))
          (t
           (setq fr   (pool:shframe)
                 u    (car fr)
@@ -9888,19 +9917,41 @@
                 w2   (if (eq w1 (car pe)) (cadr pe) (car pe))
                 wlen (distance w1 w2)
                 stage 1))))
+      ;; the two sizes a step comes in, or its own two lengths.  A
+      ;; sheet that gives the lengths has said Custom already
       ((= stage 1)
+       (setq sz (if (and (pool:fhas 'extwidth) (not (pool:fhas 'extsize)))
+                  "Custom"
+                  (pool:askkwf 'extsize "Step size, 4' out by 6' or 8' along the wall"
+                               "4x6 4x8 Custom" "4x6/4x8/Custom"
+                               (cond ((if (= (type pool:*extstep-default*) 'STR)
+                                        (pool:fkword pool:*extstep-default*
+                                                     "4x6 4x8 Custom")))
+                                     ("4x6"))
+                               t)))
+       (cond
+         ((eq sz 'POOL-BACK) (princ "\nStepping back one question.") (setq stage 0))
+         ((= sz "Custom") (setq stage 2))
+         (t
+          (setq l 48.0
+                w (if (= sz "4x8") 96.0 72.0))
+          (if (> w (+ wlen pool:*steps-fuzz*))
+            (princ (strcat "\nA " sz " step is wider than the straight wall it"
+                           " sits on (" (rtos wlen 4 4) ") - pick another size."))
+            (setq stage 4)))))
+      ((= stage 2)
        (setq w (pool:stepnum 'extwidth "Step width - along the shallow wall"))
        (cond
-         ((eq w 'POOL-BACK) (princ "\nStepping back one question.") (setq stage 0))
+         ((eq w 'POOL-BACK) (princ "\nStepping back one question.") (setq stage 1))
          ((> w (+ wlen pool:*steps-fuzz*))
           (princ (strcat "\nThat is wider than the straight wall it sits on ("
                          (rtos wlen 4 4) ") - give a width up to that.")))
-         (t (setq stage 2))))
+         (t (setq stage 3))))
       (t
        (setq l (pool:stepnum 'extlen "Step length - out from the wall"))
        (if (eq l 'POOL-BACK)
-         (progn (princ "\nStepping back one question.") (setq stage 1))
-         (setq stage 3)))))
+         (progn (princ "\nStepping back one question.") (setq stage 2))
+         (setq stage 4)))))
   (if go
     (progn
       (setq m    (pool:mid w1 w2)
@@ -9932,6 +9983,119 @@
         (progn
           (princ "\nThe shallow wall could not be changed (a locked layer?) - no step drawn.")
           nil)))))
+
+;; ---- fiberglass steps
+;;
+;; The FG step block NAME, made here when the drawing has none by that
+;; name: a U open on the wall side, POOL's 4' deep and WIDE across, its
+;; insertion point in the middle of the opening -- the shop's own block
+;; drawn plain, lines on the FG layer.
+(defun pool:fgblock (name wide / h d pr)
+  (if (not (tblsearch "BLOCK" name))
+    (progn
+      (setq h (* 0.5 wide) d pool:*fg-depth*)
+      (entmake (list '(0 . "BLOCK") (cons 2 name) '(70 . 0)
+                     '(10 0.0 0.0 0.0)))
+      (foreach pr (list (list (list 0.0 h) (list d h))
+                        (list (list d h) (list d (- h)))
+                        (list (list d (- h)) (list 0.0 (- h))))
+        (entmake (list '(0 . "LINE") (cons 8 pool:*lay-fg*)
+                       (cons 10 (list (car (car pr)) (cadr (car pr)) 0.0))
+                       (cons 11 (list (car (cadr pr)) (cadr (cadr pr)) 0.0)))))
+      (entmake '((0 . "ENDBLK")))))
+  name)
+
+;; An FG layer: made yellow and dashed like the shop's, or -- when it is
+;; already in the drawing -- put back on, thawed and unlocked
+;; (pool:layer, which makes a missing one Continuous: a NEW one then
+;; takes the dash, a drawing's own keeps its own)
+(defun pool:fglayer (name / new ed)
+  (setq new (not (tblsearch "LAYER" name)))
+  (pool:layer name pool:*col-fg*)
+  (if (and new (setq ed (entget (tblobjname "LAYER" name))))
+    (entmod (subst (cons 6 (if (tblsearch "LTYPE" pool:*fg-lt*)
+                             pool:*fg-lt* pool:*dashlt*))
+                   (assoc 6 ed) ed)))
+  name)
+
+;; A picked UCS point in the flows' local frame
+(defun pool:ucsl (p)
+  (list (- (car p) (car pool:*base*)) (- (cadr p) (cadr pool:*base*))))
+
+;; Place ONE piece -- "4x6", "4x8" or "Text" -- where the drafter picks
+;; it, with their own snaps live.  A block also takes the direction it
+;; runs into the pool: Enter is square to the shallow wall, inward.
+;; Returns the new entity, POOL-BACK, or nil when Enter left the point.
+(defun pool:fgplace (kind / p a fr lp ang name out)
+  (pool:osup)
+  (initget "Back Undo")
+  (setq p (getpoint (strcat "\nPick where the " (if (= kind "Text") "label" "step")
+                            " goes [Back]: ")))
+  (if lzd:ask (lzd:ask "Pick where the FG piece goes" p) p)
+  (cond
+    ((member p '("Back" "Undo")) (setq out 'POOL-BACK))
+    ((null p) (setq out nil))
+    ((= kind "Text")
+     (pool:osdown)
+     (pool:fglayer pool:*lay-fgtext*)
+     (entmake (append
+                (list '(0 . "MTEXT") '(100 . "AcDbEntity")
+                      (cons 8 pool:*lay-fgtext*) '(100 . "AcDbMText")
+                      (cons 10 (pool:ww (pool:ucsl p)))
+                      (cons 40 pool:*fg-texth*) '(71 . 5)
+                      (cons 1 (strcat "{\\fArial|b1|i0|c0|p34;" pool:*fg-text* "}"))
+                      (cons 50 (pool:ucsang)))
+                (if (tblsearch "STYLE" pool:*fg-style*)
+                  (list (cons 7 pool:*fg-style*)))))
+     (setq out (entlast)))
+    (t
+     (setq fr  (pool:shframe)
+           ang (angle '(0.0 0.0) (pool:v* (cadr fr) -1.0)))
+     ;; a second pick from the first, rubber-banded like INSERT's
+     ;; rotation: the step runs from the wall toward it
+     (initget "Back Undo")
+     (setq a (getpoint p (strcat "\nPick the direction it runs into the pool"
+                                 " [Back] <square to the shallow wall>: ")))
+     (if lzd:ask (lzd:ask "Pick the direction it runs into the pool" a) a)
+     (pool:osdown)
+     (cond
+       ((member a '("Back" "Undo")) (setq out 'POOL-BACK))
+       (t
+        (if (and (listp a) a (> (distance p a) 1.0e-6)) (setq ang (angle p a)))
+        (setq name (if (= kind "4x8")
+                     (pool:fgblock pool:*fg-block8* 96.0)
+                     (pool:fgblock pool:*fg-block6* 72.0)))
+        (pool:fglayer pool:*lay-fg*)
+        (entmake (list '(0 . "INSERT") (cons 8 pool:*lay-pool*) (cons 2 name)
+                       (cons 10 (pool:ww (pool:ucsl p)))
+                       '(41 . 1.0) '(42 . 1.0) '(43 . 1.0)
+                       (cons 50 (+ ang (pool:ucsang)))))
+        (setq out (entlast))))))
+  (pool:osdown)
+  out)
+
+;; FG steps: as many pieces as the drafter wants, one at a time.  Back
+;; takes the last piece placed back up; with none placed it is Back to
+;; the steps question (POOL-BACK).
+(defun pool:fgsteps ( / placed kind e done out)
+  (while (not done)
+    (setq kind (pool:askkw "Fiberglass step to place" "4x6 4x8 Text Done"
+                           "4x6/4x8/Text/Done" "Done" t))
+    (cond
+      ((eq kind 'POOL-BACK)
+       (if placed
+         (progn
+           (if (entdel (car placed))
+             (princ "\nThe last piece is taken back up.")
+             (princ "\nThe last piece could not be taken back (a locked layer?)."))
+           (setq placed (cdr placed)))
+         (setq done t out 'POOL-BACK)))
+      ((= kind "Done") (setq done t))
+      (t
+       (setq e (pool:fgplace kind))
+       (if (and e (not (eq e 'POOL-BACK)))
+         (setq placed (cons e placed))))))
+  out)
 
 ;; The perimeter this run drew -- every LINE and ARC on the pool layer.
 ;; Only asked for with no bottom drawn, so no hopper line is among them.

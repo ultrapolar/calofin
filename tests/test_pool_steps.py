@@ -203,7 +203,7 @@ check("no steps, no hand-over", 'Handing' not in said(vm))
 
 print("== S7. no bottom: a box step outside the wall, PADDLE after ==")
 vm = fresh(PADDLE)
-vm.run('c:POOL', NOBOTTOM + ["Yes", 300.0, 96.0, "Back", 96.0, 36.0])
+vm.run('c:POOL', NOBOTTOM + ["Yes", "Custom", 300.0, 96.0, "Back", 96.0, 36.0])
 check("a width wider than the wall is refused",
       'wider than the straight wall' in said(vm))
 check("Back from the length re-asks the width",
@@ -228,7 +228,7 @@ check("PADDLE padded the step's two inside corners",
 
 print("== S8. no bottom: a full-width step takes the whole wall ==")
 vm = fresh()
-vm.run('c:POOL', NOBOTTOM + ["Yes", 240.0, 30.0])
+vm.run('c:POOL', NOBOTTOM + ["Yes", "Custom", 240.0, 30.0])
 check("the step's sides run on from the side walls",
       has_line(vm, (480.0, 0.0), (510.0, 0.0)) and
       has_line(vm, (510.0, 0.0), (510.0, 240.0)) and
@@ -236,6 +236,28 @@ check("the step's sides run on from the side walls",
 check("no stub of wall is left", not any(
     math.dist(*seg(vm, e)) < 0.02 for e in live(vm, 'LINE', 'POOL')))
 check("PADDLE not loaded is said", 'PADDLE is not loaded' in said(vm))
+
+print("== S8b. no bottom: the 4x6 and 4x8 sizes, 4x6 on Enter ==")
+for answer, wide in ((None, 72.0), ("4x8", 96.0)):
+    vm = fresh()
+    vm.run('c:POOL', NOBOTTOM + ["Yes", answer])
+    lo, hi = 120.0 - wide / 2, 120.0 + wide / 2
+    check("%s: a step 4' out by %d\" along the wall" % (answer or "Enter", wide),
+          has_line(vm, (528.0, lo), (528.0, hi)) and
+          has_line(vm, (480.0, lo), (528.0, lo)), repr(
+              [seg(vm, e) for e in live(vm, 'LINE', 'POOL')]))
+    check("%s: no lengths asked" % (answer or "Enter"),
+          not asked(vm, 'Step width') and not asked(vm, 'Step length'))
+vm = fresh()
+vm.run('c:POOL', ["Insquare", "Rectangle", (0.0, 0.0, 0.0), 480.0, 84.0,
+                  "Square", "No", "Yes", "4x8", "4x6"])
+check("a size wider than the wall is refused and asked again",
+      'A 4x8 step is wider' in said(vm) and len(asked(vm, 'Step size')) == 2)
+vm = fresh()
+vm.run('c:POOL', NOBOTTOM + ["Yes", "Back", "Yes", "Custom", "Back", "4x6"])
+check("Back walks size -> the yes/no, and width -> size",
+      len(asked(vm, 'Add a step outside')) == 2
+      and len(asked(vm, 'Step size')) == 3)
 
 print("== S9. a form run says nothing about steps: nothing is asked ==")
 vm = fresh()
@@ -251,6 +273,45 @@ vm.run('c:POOL', [(0.0, 0.0, 0.0), 480.0, 240.0, "Square", "No"])
 check("...and a form that carries the step draws it unasked",
       has_line(vm, (516.0, 72.0), (516.0, 168.0))
       and not asked(vm, 'shallow end'))
+
+print("== S11. FG steps: placed where picked, Back takes one back ==")
+vm = fresh()
+vm.run('c:POOL', HOPPER + [
+    "FGstep",
+    "4x6", (480.0, 120.0, 0.0), None,                  # Enter: square, inward
+    "4x8", (480.0, 40.0, 0.0), (400.0, 40.0, 0.0),     # picked direction
+    "Back",                                            # ...taken back up
+    "4x8", "Back",                                     # Back at the point
+    "Text", (400.0, 120.0, 0.0),
+    "Done"])
+ins = [e for e in live(vm, 'INSERT')]
+check("one FG step block stands", len(ins) == 1, repr(len(ins)))
+d = vm.entdata[ins[0]] if ins else []
+check("it is the shop's 4x6 block, on the POOL layer",
+      grp(d, 2) == "6' Straight FG Step" and grp(d, 8) == 'POOL')
+check("at the picked point, turned to run into the pool",
+      tuple(grp(d, 10)[:2]) == (480.0, 120.0)
+      and abs(grp(d, 50) - math.pi) < 1e-9, repr((grp(d, 10), grp(d, 50))))
+check("the 4x8 taken back is gone",
+      not any(grp(vm.entdata[e], 2) == "8' Straight FG Step"
+              for e in live(vm, 'INSERT')))
+check("a missing block is made: a U 4' deep, open on the wall side",
+      vm.loads('(tblsearch "BLOCK" "6\' Straight FG Step")') is not None)
+mt = [e for e in live(vm, 'MTEXT', 'FiberglassStep')]
+check("the label is on FiberglassStep, where it was picked",
+      len(mt) == 1 and tuple(grp(vm.entdata[mt[0]], 10)[:2]) == (400.0, 120.0))
+check("...and reads Fiberglass Step",
+      mt and 'Fiberglass Step' in grp(vm.entdata[mt[0]], 1))
+rec = vm.loads('(tblsearch "LAYER" "FGStep")') or []
+check("the FGStep layer is made yellow and dashed",
+      next((g.b for g in rec if isinstance(g, Dot) and g.a == 62), 0) == 2
+      and next((g.b for g in rec if isinstance(g, Dot) and g.a == 6), '')
+      != 'Continuous', repr(rec))
+check("no step routine was handed anything", 'Handing' not in said(vm))
+vm = fresh()
+vm.run('c:POOL', HOPPER + ["FGstep", "Back", "None"])
+check("Back at the first FG question re-asks the steps question",
+      len(asked(vm, 'Add steps at the shallow end')) == 2)
 
 print("== S10. Esc inside the step routine: POOL has nothing open ==")
 
