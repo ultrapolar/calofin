@@ -56,6 +56,7 @@ EXPECTED_FAILURES = {}
 #: current.
 SLOW_SECS = 20
 SLOW = {
+    "test_lazdiag_sweep.py": 25,   # 63 reports, each with THE MACHINE and its sections
     "test_olauto.py": 310, "test_fitabhd.py": 215,
     "test_pool_runtime.py": 185, "test_abhd_contingencies.py": 180,
     "test_pool_ruler.py": 150, "test_pool_form.py": 125,

@@ -163,6 +163,8 @@
                            ; last report ran, for the log's FAIL record
 (setq lzd:*geoext* nil)    ; (x0 y0 x1 y1) of the geometry a report copied,
                            ; for the oddities pass to judge a far-off pick by
+(setq lzd:*geolays* nil)   ; the layers that geometry lies on, for the
+                           ; report's layer section
 (setq lzd:*kind* nil)      ; "error", "selftest" or "lastrun" while a report
                            ; is being built: its title and its notes follow
 (setq lzd:*lastrun* nil)   ; the context of the last run that ENDED, kept
@@ -1198,7 +1200,7 @@
                       "   look at the code before the inputs)"))
     out))
 
-(defun lzd:report-lines (tool ver msg nents nsel nselp lays / out tail)
+(defun lzd:report-lines (tool ver msg nents nsel nselp / out tail)
   (setq out
     (list
       (lzd:title)
@@ -1252,7 +1254,7 @@
   ;; at, by name, and the settings a transcript can never show
   (setq out (append out
                     (lzd:section 'lzd:machine-lines nil)
-                    (lzd:section 'lzd:layer-lines (list lays))
+                    (lzd:section 'lzd:layer-lines (list lzd:*geolays*))
                     (lzd:section 'lzd:changed-lines nil)
                     (lzd:section 'lzd:loaded-lines nil)))
   (setq out (append out
@@ -1858,13 +1860,16 @@
         (setq nsel (1+ nsel))
         (foreach pr prims (if (lzd:written-p pr) (setq nselp (1+ nselp))))))
     (setq geo (append geo prims) nents (1+ nents) i (1+ i)))
+  ;; what the report's later sections read of the geometry: its extent,
+  ;; for the far-off pick, and its layers, for their state.  Globals,
+  ;; so lzd:report-lines keeps the six arguments its callers pass.
   (setq pts (lzd:pickpts)
-        lzd:*geoext* (lzd:extent geo)
+        lzd:*geoext*  (lzd:extent geo)
+        lzd:*geolays* (lzd:prim-layers geo)
         ext (lzd:extent (append geo pts))
         h   (lzd:textheight ext))
   (append geo pts (lzd:picklabels h)
-          (lzd:textblock (lzd:report-lines tool ver msg nents nsel nselp
-                                           (lzd:prim-layers geo))
+          (lzd:textblock (lzd:report-lines tool ver msg nents nsel nselp)
                          ext h)))
 
 ;; The report's first line, by what it is.  A run report written on
