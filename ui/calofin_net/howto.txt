@@ -610,6 +610,20 @@ What it asks, in order:
  6. The point the run ends at, or type its number
  7. Click a spot the run passes through
 
+== PERPMARKSTAMP ==
+PERPMARK with the distance stamped beside every mark as it is drawn.
+Every question is PERPMARK's; after each mark one more asks where to stamp the distance - Enter puts it at the mark's end, a click puts it there, Skip leaves it off, Back takes the mark away.
+What it asks, in order:
+ 1. Select the pool perimeter
+ 2. Click a spot inside the pool (an open wall only)
+ 3. Pick a survey point, or type its number
+ 4. Distance from the perimeter at Pt.
+ 5. Click where to stamp the distance for Pt.
+ 6. Draw a polyline through the marks?
+ 7. The point the run starts at, or type its number
+ 8. The point the run ends at, or type its number
+ 9. Dimension style - STANDARD INCHES or SIDE STANDARD?
+
 == PERPPTS ==
 Perpendicular offset points along a line or curve.
 What it asks, in order:

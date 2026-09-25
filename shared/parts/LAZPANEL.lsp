@@ -141,7 +141,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.66")
+(setq *lazpanel-version* "v3.67")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -422,6 +422,7 @@
     ("OSR"              "Restore my object snaps")
     ("PADDLE"           "Paddle pads")
     ("PERPMARK"         "Measured wall offsets")
+    ("PERPMARKSTAMP"    "Wall offsets, stamped")
     ("PERPPTS"          "Perpendicular points")
     ("POINTRENAMER"     "Renumber points in order")
     ("POOL"             "Pool layout")
@@ -544,6 +545,7 @@
     ("OSR" "Puts your object snaps back to the preset you chose in Options (LAZSET) - one word, no questions")
     ("PADDLE" "Paddle perimeter pads")
     ("PERPMARK" "Name a survey point, type what it measured: circle, perpendicular, dimension")
+    ("PERPMARKSTAMP" "PERPMARK with the distance stamped beside every mark as it is drawn")
     ("PERPPTS" "Perpendicular offset points along a line or curve")
     ("POINTRENAMER" "Hands the survey point numbers back out in perimeter order")
     ("POOL" "Full pool layout tool")
@@ -664,6 +666,7 @@
     ("OSR" "Puts your running object snaps back to the preset you chose - one word, no questions.\nChoose the preset once in Options (LAZSET): the Object snaps box ticks the same modes as AutoCAD's Drafting Settings, plus Object Snap On, and Use current takes whatever the drawing has ticked now. CALSET - Osnaps does the same at the command line.\nWith no preset saved, OSR puts back Endpoint, Midpoint, Center, Node, Quadrant, Intersection and Perpendicular, Object Snap on.")
     ("PADDLE" "Paddle perimeter pads.\nWhat it asks, in order:\n 1. Select objects\n 2. Close the gap the arrow points at with a zero fillet?")
     ("PERPMARK" "Name a survey point, type what it measured: circle, perpendicular, dimension.\nWhat it asks, in order:\n 1. Select the pool perimeter\n 2. Click a spot inside the pool\n 3. Pick a survey point, or type its number\n 4. Draw a polyline through the marks?\n 5. The point the run starts at, or type its number\n 6. The point the run ends at, or type its number\n 7. Click a spot the run passes through")
+    ("PERPMARKSTAMP" "PERPMARK with the distance stamped beside every mark as it is drawn.\nEvery question is PERPMARK's; after each mark one more asks where to stamp the distance - Enter puts it at the mark's end, a click puts it there, Skip leaves it off, Back takes the mark away.\nWhat it asks, in order:\n 1. Select the pool perimeter\n 2. Click a spot inside the pool (an open wall only)\n 3. Pick a survey point, or type its number\n 4. Distance from the perimeter at Pt.\n 5. Click where to stamp the distance for Pt.\n 6. Draw a polyline through the marks?\n 7. The point the run starts at, or type its number\n 8. The point the run ends at, or type its number\n 9. Dimension style - STANDARD INCHES or SIDE STANDARD?")
     ("PERPPTS" "Perpendicular offset points along a line or curve.\nWhat it asks, in order:\n 1. Select a line or polyline\n 2. Click to pick direction / offset side\n 3. Overall width\n 4. Select a boundary for the offsets\n 5. Do the offsets stop at the boundary, or run out to meet it?\n 6. Round - how many values (points) are required?\n 7. points means dimensions. Continue?\n 8. Length for point of , boundary at\n 9. Round - how should the points be joined?\n 10. Which segments are arcs (1 to , e.g. 1 3-5)? (B = back)\n 11. Overall width of the new polyline\n 12. Repeat on the new polyline?\n 13. Dimension style - STANDARD INCHES or SIDE STANDARD?")
     ("POINTRENAMER" "Hands the survey point numbers back out in perimeter order.\nWhat it asks, in order:\n 1. Select objects\n 2. Select the perimeter (Enter = the highlighted closed polyline on )\n 3. Pick the start point on the perimeter\n 4. Number the points which way around?\n 5. How far off the perimeter still counts as on it?\n 6. Start the numbering at")
     ("POOL" "Full pool layout tool.\nWhat it asks, in order:\n 1. Is the pool in-square or out-of-square\n 2. Pool shape\n 3. Insertion base point\n 4. Anything to record about the corners (radius / cut / not given)?\n 5. the outer corners\n 6. the inner corner E\n 7. Add pool bottom (hopper) detail?\n 8. Mirror the pool (flips the wing; deep end stays left)\n 9. Mark the dimension(s) that could not be held at their original value as \"Given\"\n 10. Select a Given dimension to switch ft-in/in (Enter when done)\n 11. the body corners A, B, C and D\n 12. the end-tip corners LT, LB, RT and RB\n 13. Bottom type\n 14. Hopper type (SIX = six-sided)\n 15. SIX-sided corners measured by\n 16. C - wall height (shallow depth)\n 17. D - deep end depth\n 18. C2 - depth where the shallow floor meets the break\n 19. ...and more, depending on what you pick along the way")
@@ -794,6 +797,7 @@
     ("OSR" "osnap object snap osmode restore reset preset endpoint midpoint running f3")
     ("PADDLE" "concave perimeter features pads blocks insert find")
     ("PERPMARK" "survey points wall offsets bench ledge gutter dimension")
+    ("PERPMARKSTAMP" "survey points wall offsets bench ledge gutter stamp text mtext distance dimstamp")
     ("PERPPTS" "perpendicular offset points line segments arc resize boundary limit meet")
     ("POINTRENAMER" "renumber sequence perimeter clockwise order callout survey number")
     ("POOL" "field measurements rectangle oval grecian lazy plan shape")
@@ -886,6 +890,7 @@
       "PERPPTS"
       "CPERPPTS"
       "PERPMARK"
+      "PERPMARKSTAMP"
       )
      ("Converters"
       ("Convert"
@@ -1094,6 +1099,7 @@
       "PERPPTS"
       "CPERPPTS"
       "PERPMARK"
+      "PERPMARKSTAMP"
       "DRONE"
       "TYDRN"
       "TYLERDRONESUITE"
@@ -5730,6 +5736,13 @@
      ("pm:*ruler-tick-frac*" "0.6" "the longest tick, same measure a fraction of the row spacing")
      ("pm:*ruler-ring-frac*" "0.26" "the ring round the current row, as a fraction of the row spacing a fraction of the row spacing")
      ("pm:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir..."))
+    ("PERPMARKSTAMP" "lisp/perpmarkstamp/PERPMARKSTAMP.lsp"
+     ("pms:*layer*" "\"TEXT\"" "layer the stamped MTEXT lands on. Created when the drawing lacks it; thawed, unlocked and switched on when...")
+     ("pms:*layer-color*" "7" "ACI colour that layer is CREATED with -- 7 is AutoCAD's own black-on-white/white-on-black swap. A number an...")
+     ("pms:*style*" "\"Attributes\"" "text style the stamp is written in. A drawing without it gets a plain variable-height style of that name ma...")
+     ("pms:*text-hgt*" "6.0" "MTEXT height of a stamp in. A drawing without it gets a plain variable-height style of that name made, and...")
+     ("pms:*text-width*" "0.0" "its defined (wrap) width; 0 is no wrap at all, so a distance can never break across two lines in. A drawing...")
+     ("pms:*line-space*" "1.0" "line space factor, at the \"at least\" spacing style wrap at all, so a distance can never break across two lines"))
     ("POINTRENAMER" "lisp/pointrenamer/POINTRENAMER.lsp"
      ("ptr:*pt-layer*" "\"POINTS\"" "layer whose blocks count as points ABPCHECK's definition of a survey point, unchanged, so the two tools nev...")
      ("ptr:*pt-block*" "\"ab_pt\"" "block name that counts wherever it sits ABPCHECK's definition of a survey point, unchanged, so the two tool...")
@@ -6377,9 +6390,9 @@
     ("lay-water" ("spa:*lay-water*" "spachk:*lay-water*"))
     ("layer" ("abf:*layer*" "cdo:*layer*" "cdc:*layer*"))
     ("layer" ("*mohamaddle-layer*" "*paddle-layer*" "upad:*layer*"))
-    ("layer" ("ds:*layer*" "dn:*layer*"))
-    ("layer-color" ("ad:*layer-color*" "cdo:*layer-color*" "cdc:*layer-color*" "ds:*layer-color*" "*mohamaddle-layer-color*" "*paddle-layer-color*"))
-    ("line-space" ("ds:*line-space*" "dn:*line-space*"))
+    ("layer" ("ds:*layer*" "dn:*layer*" "pms:*layer*"))
+    ("layer-color" ("ad:*layer-color*" "cdo:*layer-color*" "cdc:*layer-color*" "ds:*layer-color*" "*mohamaddle-layer-color*" "*paddle-layer-color*" "pms:*layer-color*"))
+    ("line-space" ("ds:*line-space*" "dn:*line-space*" "pms:*line-space*"))
     ("log-denom" ("abcdef:*log-denom*" "altabcdef:*log-denom*"))
     ("ltscale" ("hn:*ltscale*" "sf:*ltscale*"))
     ("ltype" ("hn:*ltype*" "sf:*ltype*"))
@@ -6475,7 +6488,7 @@
     ("split-default" ("cperp:*split-default*" "perp:*split-default*"))
     ("step" ("hn:*step*" "sf:*step*"))
     ("straight-r" ("*PF-STRAIGHT-R*" "*ABL-STRAIGHT-R*" "*CAB-STRAIGHT-R*" "*LH-STRAIGHT-R*"))
-    ("style" ("ds:*style*" "dn:*style*"))
+    ("style" ("ds:*style*" "dn:*style*" "pms:*style*"))
     ("style" ("abf:*style*" "cdo:*style*" "cdc:*style*"))
     ("style-order" ("*cchk-style-order*" "*dchk-style-order*" "*lfc-style-order*"))
     ("sugg-color" ("*cchk-sugg-color*" "*dchk-sugg-color*" "*lfc-sugg-color*"))
@@ -6487,8 +6500,9 @@
     ("tang-tol" ("*PF-TANG-TOL*" "*ABL-TANG-TOL*" "*CAB-TANG-TOL*" "fit:*tang-tol*" "*LH-TANG-TOL*"))
     ("taper-tag" ("spachk:*taper-tag*" "scv:*taper-tag*"))
     ("text-div" ("abcdef:*text-div*" "altabcdef:*text-div*"))
-    ("text-hgt" ("bp:*text-hgt*" "ds:*text-hgt*"))
+    ("text-hgt" ("bp:*text-hgt*" "ds:*text-hgt*" "pms:*text-hgt*"))
     ("text-min" ("abcdef:*text-min*" "altabcdef:*text-min*"))
+    ("text-width" ("ds:*text-width*" "pms:*text-width*"))
     ("th-div" ("spa:*th-div*" "scv:*th-div*"))
     ("th-min" ("spa:*th-min*" "scv:*th-min*"))
     ("thermotaper" ("spa:*thermotaper*" "scv:*thermotaper*"))

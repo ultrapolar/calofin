@@ -104,6 +104,12 @@ NO_PROMPT = {
     # says what it put back.  The preset is chosen in LAZSET / CALSET.
     # tests/test_osr.py drives it, its handler included.
     'OSR',
+    # every prompt is PERPMARK's, reached through the hook PERPMARK
+    # carries for it -- and PERPMARK is in another file this sweep never
+    # loads beside it, so it names the missing tool and stops.
+    # tests/test_perpmarkstamp.py loads both and drives every prompt,
+    # the Esc at the stamp prompt included.
+    'PERPMARKSTAMP',
 }
 #: the ActiveX surface the VM does not carry.  Empty now: PADDLE was
 #: the one entry, and the VM has carried vla-get-ActiveLayout/-Block,

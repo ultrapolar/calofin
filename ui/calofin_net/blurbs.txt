@@ -79,6 +79,7 @@ OLAUTO            Best-fit overlay of a new perimeter on the original, worst err
 OSR               Puts your object snaps back to the preset you chose in Options (LAZSET) - one word, no questions
 PADDLE            Paddle perimeter pads
 PERPMARK          Name a survey point, type what it measured: circle, perpendicular, dimension
+PERPMARKSTAMP     PERPMARK with the distance stamped beside every mark as it is drawn
 PERPPTS           Perpendicular offset points along a line or curve
 POINTRENAMER      Hands the survey point numbers back out in perimeter order
 POOL              Full pool layout tool

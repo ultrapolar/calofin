@@ -167,6 +167,23 @@
 ;;;   round ends or backs out of itself, and swept on every way out,
 ;;;   Esc included.  Its knobs are the pm:*ruler-* tunables.
 ;;;
+;;; A stamp after every mark -- the hook
+;;;   PERPMARKSTAMP is this command with one more question a mark: once
+;;;   the circle and the line are drawn it asks where to STAMP the
+;;;   distance, the way DIMSTAMP stamps one, and Enter puts the text at
+;;;   the far end of the mark.  It does not copy this file.  It hands
+;;;   this command a HOOK -- pm:run-hooked runs the round with a
+;;;   function called after every mark, given the distance, the mark's
+;;;   far end, the point's name and the spelling family -- and whatever
+;;;   the hook leaves in the drawing rides on the mark: Back and a
+;;;   re-mark take it away with the circle and the line, and the join
+;;;   leaves it standing, since it is drawing text and not a working
+;;;   mark.  The hook is read into the run and CLEARED as the run's
+;;;   first act, so a run that dies with it set cannot leave the next
+;;;   plain PERPMARK asking a question it never had.  The ruler is
+;;;   taken down before the hook asks, so a click of the hook's own
+;;;   cannot land on a row.
+;;;
 ;;; Properties
 ;;;   * Circles and lines land on layer "PERPMARK" (created if missing).
 ;;;     They are the run's working marks: keep them, turn the layer off,
@@ -196,7 +213,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.12")
+(setq *perpmark-version* "v1.13")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -896,6 +913,32 @@
 (defun pm:sysvars () '("CMDECHO" "CLAYER"))
 
 ;;; ----------------------------------------------------------------------
+;;;  The run hook
+;;;
+;;;  Not a knob: set by a caller for one run and consumed by it.  A
+;;;  function called after every mark is drawn, with four arguments --
+;;;  the distance in inches, the far end of the mark as a WCS (x y),
+;;;  the point's name as the prompts spell it ("Pt.17"), and T when the
+;;;  distance was typed in feet.  It returns the entities it left in
+;;;  the drawing for that mark, as a list (nil for none), which ride on
+;;;  the mark and are erased with it on Back and on a re-mark -- or
+;;;  CAL-BACK, which takes the mark away again at once, as Back at the
+;;;  next prompt would.  c:PERPMARK reads it into a local and clears it
+;;;  as its FIRST act, before anything can throw, so a run that dies
+;;;  cannot leave it set for the next plain run to find.
+;;; ----------------------------------------------------------------------
+
+(setq pm:*after-mark* nil)
+
+;; Run PERPMARK with HOOK called after every mark -- what PERPMARKSTAMP
+;; calls, and the one place the hook is set.  A caller may equally set
+;; pm:*after-mark* itself and call c:PERPMARK, which is what the tests
+;; do.
+(defun pm:run-hooked (hook)
+  (setq pm:*after-mark* hook)
+  (c:PERPMARK))
+
+;;; ----------------------------------------------------------------------
 ;;;  The marks
 ;;;
 ;;;  One mark is (station base offs dist circle line name ent):
@@ -909,6 +952,9 @@
 ;;;    ent      the survey point itself, which is the mark's IDENTITY:
 ;;;             picking that point again is a re-mark, and naming it at
 ;;;             a run end is naming this mark
+;;;    extras   what the run hook left in the drawing for this mark --
+;;;             PERPMARKSTAMP's stamp -- as a list of enames, erased
+;;;             with the mark; absent (nil) on a plain run
 ;;; ----------------------------------------------------------------------
 
 ;; A run end at a point that was never taped: it sits ON the wall, so
@@ -924,6 +970,7 @@
 (defun pm:m-line (m) (nth 5 m))
 (defun pm:m-name (m) (nth 6 m))
 (defun pm:m-ent (m) (nth 7 m))
+(defun pm:m-extras (m) (nth 8 m))
 
 ;; Which way a mark at BASE runs: square off the wall, into the pool.
 ;; SGN is the closed wall's own answer -- the sign that turns a tangent
@@ -1125,13 +1172,18 @@
                        (pm:cd-nm cand) (pm:cd-en cand))))))
 
 ;; MARKS with the one made at ENT taken out, its circle and its line
-;; erased with it.  Picking a point a second time is a correction, not a
-;; second mark: the sheet has one distance at that point.
-(defun pm:unmark (marks ent / out m)
+;; erased with it -- and whatever the run hook left for it, since a
+;; stamp of a distance that is being taken back is a stamp of nothing.
+;; Picking a point a second time is a correction, not a second mark:
+;; the sheet has one distance at that point.
+(defun pm:unmark (marks ent / out m e)
   (setq out '())
   (foreach m marks
     (if (eq (pm:m-ent m) ent)
-      (progn (pm:erase (pm:m-circle m)) (pm:erase (pm:m-line m)))
+      (progn
+        (pm:erase (pm:m-circle m))
+        (pm:erase (pm:m-line m))
+        (foreach e (pm:m-extras m) (pm:erase e)))
       (setq out (cons m out))))
   (reverse out))
 
@@ -1246,7 +1298,13 @@
                      sel en ed segs tot closed ctr pick cand cands loc
                      base tg nrm d ans marks stage done pts run s0 s1
                      m0 m1 way wayasked miss sty lay odim ndims npts m
-                     poly sgn rl rr lastd)
+                     poly sgn rl rr lastd hook extra)
+
+  ;; The run hook comes in FIRST and the global is cleared in the same
+  ;; breath, before the handler exists and before anything can throw:
+  ;; a hook a dead run left standing would make the next plain PERPMARK
+  ;; ask a question it never had.
+  (setq hook pm:*after-mark* pm:*after-mark* nil)
 
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
@@ -1425,7 +1483,25 @@
                                            lay)
                                   (pm:cd-nm cand) (pm:cd-en cand))
                             marks)
-                stage 3))))
+                stage 3)
+          ;; the run hook, when a caller set one: it gets the mark just
+          ;; drawn and asks its own question, with the ruler DOWN so a
+          ;; click of its own cannot land on a row.  What it leaves in
+          ;; the drawing rides on the mark, and CAL-BACK back from it
+          ;; takes the mark away again, as Back at the next prompt would
+          (if hook
+            (progn
+              (setq rl    (cal:ruler-off rl)
+                    extra (apply hook (list d (pm:m-offs (car marks))
+                                            (pm:ptname (pm:cd-nm cand))
+                                            (nth 1 rl))))
+              (if (eq extra 'CAL-BACK)
+                (progn
+                  (princ (strcat "\nStepping back one point - "
+                                 (pm:ptname (pm:cd-nm cand)) " undone."))
+                  (setq marks (pm:unmark marks (pm:cd-en cand))))
+                (setq marks (cons (append (car marks) (list extra))
+                                  (cdr marks)))))))))
 
       ;; --- 4. join them up? -------------------------------------------
       ((= stage 4)

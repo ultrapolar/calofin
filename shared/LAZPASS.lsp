@@ -8,7 +8,7 @@
 ;;; Nothing else needs loading, and it does not matter what folder
 ;;; you run it from - there are no sibling files to find.
 ;;;
-;;; 74 files, 215 commands:
+;;; 75 files, 217 commands:
 ;;;
 ;;;   ABCDEF  ABCDEFVER  ABCURCHECK  ABCURCHECKRESCUE  ABCURCHECKSCAN  ABCURCHECKVER
 ;;;   ABFIND  ABFINDVER  ABHD  ABHDCOVER  ABHDVER  ABLOBF
@@ -34,18 +34,19 @@
 ;;;   LINGUTTERSCAN  LINGUTTERVER  LINTXTCHK  LINTXTCHKVER  LITECOVERSCAN  LITELINFINSCAN
 ;;;   LITESPACHECKSCAN  LOBF  LOBFVER  MOHAMADDLE  MOHAMADDLEVER  NORMIESTEP
 ;;;   NORMIESTEPVER  OASIS  OASISVER  OLAUTO  OLAUTOVER  OSR
-;;;   OSRVER  PADDLE  PADDLEVER  PERPMARK  PERPMARKVER  PERPPTS
-;;;   PERPPTSVER  POINTRENAMER  POINTRENAMERVER  POOL  POOLCOVER  POOLDEMO
-;;;   POOLDEMOVER  POOLSIDE  POOLSIDEVER  POOLVER  SIMPABHD  SMARTFILLET
-;;;   SMARTFILLETVER  SOCONV  SOCONVVER  SORECONV  SPA  SPACHECK
-;;;   SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPACOVCREATE  SPACOVCREATEVER  SPAVER
-;;;   SQUAREUP  SQUAREUPVER  STAIRDIM  STOCKCOVER  STOCKCOVER-CFG  STOCKCOVERVER
-;;;   STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD  TUTORIALCORNERSTP  TUTORIALCOVERCHECK
-;;;   TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN  TUTORIALHEMISTEP  TUTORIALLINFINCHECK
-;;;   TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS  TUTORIALPOOL  TUTORIALSPA
-;;;   TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE  UPADOVER  UPADOVERVER
-;;;   VSCONV  VSCONVVER  VSRECONV  WCALST  WCALSTVER  XFTCONV
-;;;   XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT  XYPLOTVER
+;;;   OSRVER  PADDLE  PADDLEVER  PERPMARK  PERPMARKSTAMP  PERPMARKSTAMPVER
+;;;   PERPMARKVER  PERPPTS  PERPPTSVER  POINTRENAMER  POINTRENAMERVER  POOL
+;;;   POOLCOVER  POOLDEMO  POOLDEMOVER  POOLSIDE  POOLSIDEVER  POOLVER
+;;;   SIMPABHD  SMARTFILLET  SMARTFILLETVER  SOCONV  SOCONVVER  SORECONV
+;;;   SPA  SPACHECK  SPACHECKRESCUE  SPACHECKSCAN  SPACHECKVER  SPACOVCREATE
+;;;   SPACOVCREATEVER  SPAVER  SQUAREUP  SQUAREUPVER  STAIRDIM  STOCKCOVER
+;;;   STOCKCOVER-CFG  STOCKCOVERVER  STOCKLIST  TUTORIALABHD  TUTORIALADAB  TUTORIALAUTOBEAD
+;;;   TUTORIALCORNERSTP  TUTORIALCOVERCHECK  TUTORIALCOVERCHECKCLEAN  TUTORIALCPERPPTS  TUTORIALDIMCHECK  TUTORIALDIMSCAN
+;;;   TUTORIALHEMISTEP  TUTORIALLINFINCHECK  TUTORIALLINFINSCAN  TUTORIALNORMIESTEP  TUTORIALPADDLE  TUTORIALPERPPTS
+;;;   TUTORIALPOOL  TUTORIALSPA  TUTORIALSPACHECK  TYDRN  TYDRNVER  TYLERDRONESUITE
+;;;   UPADOVER  UPADOVERVER  VSCONV  VSCONVVER  VSRECONV  WCALST
+;;;   WCALSTVER  XFTCONV  XFTCONV-SETUP  XFTCONVVER  XFTRECONV  XYPLOT
+;;;   XYPLOTVER
 ;;;
 ;;; Included verbatim, in CALOFIN-LOADER.lsp's order, library first.
 ;;;
@@ -109431,6 +109432,23 @@
 ;;;   round ends or backs out of itself, and swept on every way out,
 ;;;   Esc included.  Its knobs are the pm:*ruler-* tunables.
 ;;;
+;;; A stamp after every mark -- the hook
+;;;   PERPMARKSTAMP is this command with one more question a mark: once
+;;;   the circle and the line are drawn it asks where to STAMP the
+;;;   distance, the way DIMSTAMP stamps one, and Enter puts the text at
+;;;   the far end of the mark.  It does not copy this file.  It hands
+;;;   this command a HOOK -- pm:run-hooked runs the round with a
+;;;   function called after every mark, given the distance, the mark's
+;;;   far end, the point's name and the spelling family -- and whatever
+;;;   the hook leaves in the drawing rides on the mark: Back and a
+;;;   re-mark take it away with the circle and the line, and the join
+;;;   leaves it standing, since it is drawing text and not a working
+;;;   mark.  The hook is read into the run and CLEARED as the run's
+;;;   first act, so a run that dies with it set cannot leave the next
+;;;   plain PERPMARK asking a question it never had.  The ruler is
+;;;   taken down before the hook asks, so a click of the hook's own
+;;;   cannot land on a row.
+;;;
 ;;; Properties
 ;;;   * Circles and lines land on layer "PERPMARK" (created if missing).
 ;;;     They are the run's working marks: keep them, turn the layer off,
@@ -109460,7 +109478,7 @@
 
 ;; Version banner: tools/release_lisp.py reads it to stamp the dated
 ;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
-(setq *perpmark-version* "v1.12")
+(setq *perpmark-version* "v1.13")
 
 ;;; ----------------------------------------------------------------------
 ;;;  Tunables
@@ -110160,6 +110178,32 @@
 (defun pm:sysvars () '("CMDECHO" "CLAYER"))
 
 ;;; ----------------------------------------------------------------------
+;;;  The run hook
+;;;
+;;;  Not a knob: set by a caller for one run and consumed by it.  A
+;;;  function called after every mark is drawn, with four arguments --
+;;;  the distance in inches, the far end of the mark as a WCS (x y),
+;;;  the point's name as the prompts spell it ("Pt.17"), and T when the
+;;;  distance was typed in feet.  It returns the entities it left in
+;;;  the drawing for that mark, as a list (nil for none), which ride on
+;;;  the mark and are erased with it on Back and on a re-mark -- or
+;;;  CAL-BACK, which takes the mark away again at once, as Back at the
+;;;  next prompt would.  c:PERPMARK reads it into a local and clears it
+;;;  as its FIRST act, before anything can throw, so a run that dies
+;;;  cannot leave it set for the next plain run to find.
+;;; ----------------------------------------------------------------------
+
+(setq pm:*after-mark* nil)
+
+;; Run PERPMARK with HOOK called after every mark -- what PERPMARKSTAMP
+;; calls, and the one place the hook is set.  A caller may equally set
+;; pm:*after-mark* itself and call c:PERPMARK, which is what the tests
+;; do.
+(defun pm:run-hooked (hook)
+  (setq pm:*after-mark* hook)
+  (c:PERPMARK))
+
+;;; ----------------------------------------------------------------------
 ;;;  The marks
 ;;;
 ;;;  One mark is (station base offs dist circle line name ent):
@@ -110173,6 +110217,9 @@
 ;;;    ent      the survey point itself, which is the mark's IDENTITY:
 ;;;             picking that point again is a re-mark, and naming it at
 ;;;             a run end is naming this mark
+;;;    extras   what the run hook left in the drawing for this mark --
+;;;             PERPMARKSTAMP's stamp -- as a list of enames, erased
+;;;             with the mark; absent (nil) on a plain run
 ;;; ----------------------------------------------------------------------
 
 ;; A run end at a point that was never taped: it sits ON the wall, so
@@ -110188,6 +110235,7 @@
 (defun pm:m-line (m) (nth 5 m))
 (defun pm:m-name (m) (nth 6 m))
 (defun pm:m-ent (m) (nth 7 m))
+(defun pm:m-extras (m) (nth 8 m))
 
 ;; Which way a mark at BASE runs: square off the wall, into the pool.
 ;; SGN is the closed wall's own answer -- the sign that turns a tangent
@@ -110389,13 +110437,18 @@
                        (pm:cd-nm cand) (pm:cd-en cand))))))
 
 ;; MARKS with the one made at ENT taken out, its circle and its line
-;; erased with it.  Picking a point a second time is a correction, not a
-;; second mark: the sheet has one distance at that point.
-(defun pm:unmark (marks ent / out m)
+;; erased with it -- and whatever the run hook left for it, since a
+;; stamp of a distance that is being taken back is a stamp of nothing.
+;; Picking a point a second time is a correction, not a second mark:
+;; the sheet has one distance at that point.
+(defun pm:unmark (marks ent / out m e)
   (setq out '())
   (foreach m marks
     (if (eq (pm:m-ent m) ent)
-      (progn (pm:erase (pm:m-circle m)) (pm:erase (pm:m-line m)))
+      (progn
+        (pm:erase (pm:m-circle m))
+        (pm:erase (pm:m-line m))
+        (foreach e (pm:m-extras m) (pm:erase e)))
       (setq out (cons m out))))
   (reverse out))
 
@@ -110510,7 +110563,13 @@
                      sel en ed segs tot closed ctr pick cand cands loc
                      base tg nrm d ans marks stage done pts run s0 s1
                      m0 m1 way wayasked miss sty lay odim ndims npts m
-                     poly sgn rl rr lastd)
+                     poly sgn rl rr lastd hook extra)
+
+  ;; The run hook comes in FIRST and the global is cleared in the same
+  ;; breath, before the handler exists and before anything can throw:
+  ;; a hook a dead run left standing would make the next plain PERPMARK
+  ;; ask a question it never had.
+  (setq hook pm:*after-mark* pm:*after-mark* nil)
 
   (defun *error* (msg)
     ;; user settings come back FIRST so nothing below can skip them
@@ -110689,7 +110748,25 @@
                                            lay)
                                   (pm:cd-nm cand) (pm:cd-en cand))
                             marks)
-                stage 3))))
+                stage 3)
+          ;; the run hook, when a caller set one: it gets the mark just
+          ;; drawn and asks its own question, with the ruler DOWN so a
+          ;; click of its own cannot land on a row.  What it leaves in
+          ;; the drawing rides on the mark, and CAL-BACK back from it
+          ;; takes the mark away again, as Back at the next prompt would
+          (if hook
+            (progn
+              (setq rl    (cal:ruler-off rl)
+                    extra (apply hook (list d (pm:m-offs (car marks))
+                                            (pm:ptname (pm:cd-nm cand))
+                                            (nth 1 rl))))
+              (if (eq extra 'CAL-BACK)
+                (progn
+                  (princ (strcat "\nStepping back one point - "
+                                 (pm:ptname (pm:cd-nm cand)) " undone."))
+                  (setq marks (pm:unmark marks (pm:cd-en cand))))
+                (setq marks (cons (append (car marks) (list extra))
+                                  (cdr marks)))))))))
 
       ;; --- 4. join them up? -------------------------------------------
       ((= stage 4)
@@ -110871,6 +110948,316 @@
 (if (not *calofin-quiet*)
   (princ (strcat "\nPERPMARK " *perpmark-version*
                  " loaded.  Type PERPMARK to run.")))
+(princ)
+
+
+;;; ======================================================================
+;;; >>> PERPMARKSTAMP.lsp
+;;; ======================================================================
+
+;;; ======================================================================
+;;; PERPMARKSTAMP.lsp  --  PERPMARK's round, with the distance stamped
+;;;                        beside every mark as it is drawn
+;;; ----------------------------------------------------------------------
+;;; For AutoCAD 2018 and later (plain AutoLISP, no external libraries).
+;;;
+;;; Commands:  PERPMARKSTAMP     PERPMARK, with a stamp after every mark
+;;;            PERPMARKSTAMPVER  print the loaded version
+;;; ======================================================================
+;;;
+;;; SHARED BUILD: requires CALOFIN-LIB.lsp (load via CALOFIN-LOADER.lsp).
+;;; Generic helpers live there under cal: - see STANDARDS.md.
+;;;
+;;; What it is for
+;;;   PERPMARK marks what the tape read at a survey point -- a circle of
+;;;   that radius and a line of that length square off the wall -- and
+;;;   only when the round is joined into a polyline does each line
+;;;   become a dimension that says the number.  A round that is NOT
+;;;   joined (a bench sketched in for a look, a gutter noted for the
+;;;   next drafter, the marks of a step kept as marks) leaves a circle
+;;;   and a line at every point and no number anywhere, so the drafter
+;;;   turned to DIMSTAMP and stamped each distance by hand, reading the
+;;;   sheet a second time to do it.
+;;;
+;;;   PERPMARKSTAMP is PERPMARK with that stamp folded in.  Every
+;;;   question is PERPMARK's, asked in PERPMARK's words, and after each
+;;;   mark is drawn there is one more:
+;;;
+;;;     Click where to stamp 3'-8" for Pt.17 [Skip/Back] <at the mark's end>:
+;;;
+;;;   Enter stamps the distance at the far end of the mark, where the
+;;;   tape reached; a click stamps it there instead; Skip stamps
+;;;   nothing for this mark; Back takes the mark away again, exactly as
+;;;   Back at the next point prompt would.  The stamp is DIMSTAMP's: an
+;;;   MTEXT on the TEXT layer in the Attributes style, 6" high, attached
+;;;   top left, ByLayer, upright in the current UCS, its fraction
+;;;   stacked the way the shop's own dimension text stacks one.  It is
+;;;   spelled the way the distance was TYPED -- 44 1/2" for one typed
+;;;   in inches, 3'-8 1/2" for one typed in feet -- since that is what
+;;;   the ruler beside the distance prompt was showing.
+;;;
+;;;   It does not copy PERPMARK.  PERPMARK carries a hook for exactly
+;;;   this -- pm:run-hooked runs the round with a function called after
+;;;   every mark -- and this file is that function and the command that
+;;;   installs it.  So it needs PERPMARK v1.13 or later loaded:
+;;;   APPLOADed alone without it, it says so and stops; in the LAZPASS
+;;;   build the two load together.
+;;;
+;;; What rides on the mark
+;;;   A stamp belongs to the mark it was made for.  Back at the next
+;;;   point prompt takes the last mark AND its stamp away; naming a
+;;;   point a second time replaces the mark and the stamp both; a Skip
+;;;   leaves a mark with no stamp, which is a plain PERPMARK mark.  When
+;;;   the round is joined into a polyline the circles go and the lines
+;;;   become dimensions, as in PERPMARK, and the stamps STAY: they are
+;;;   drawing text, not working marks, and the drafter who placed them
+;;;   meant them to be read.  A round answered No to the polyline keeps
+;;;   its marks and its stamps together.
+;;;
+;;;   One undo group, PERPMARK's: a single U takes the whole round back,
+;;;   stamps included.  Esc anywhere -- the stamp prompt included -- is
+;;;   PERPMARK's Esc: its settings back, its ruler down, its group
+;;;   closed, and the failure reported under PERPMARKSTAMP, whose
+;;;   LAZDIAG run PERPMARK's joined, with every answer from both.
+;;;
+;;; What it does not do
+;;;   * It stamps the DISTANCE and nothing else -- not the point number,
+;;;     not a letter.  DIMSTAMP is there for a label.
+;;;   * It does not move a stamp when its mark is replaced: a re-mark
+;;;     asks again, and the new answer is where the new stamp goes.
+;;;   * It does not read a stamp back.  The dimensions PERPMARK draws
+;;;     at the join are still the measurement of record; a stamp is the
+;;;     number written beside it.
+;;;
+;;; License: GPL-3.0-or-later
+;;; ======================================================================
+
+(vl-load-com)
+
+;; Version banner: tools/release_lisp.py reads it to stamp the dated
+;; REV twin in releases/ (vN.M -> _MMDDYY_REVNM).
+(setq *perpmarkstamp-version* "v1.0")
+
+;;; -------------------- tunables ----------------------------------------
+;;; What a stamp IS: the MTEXT properties the shop's dimension text
+;;; carries, the same knobs DIMSTAMP has under its own prefix.  Change
+;;; one and every later stamp takes it; change DIMSTAMP's to match, or
+;;; a stamp placed here and one placed there stop looking alike.
+
+(setq pms:*layer* "TEXT")           ; layer the stamped MTEXT lands on.
+                                    ; Created when the drawing lacks it;
+                                    ; thawed, unlocked and switched on
+                                    ; when it is there but unusable
+(setq pms:*layer-color* 7)          ; ACI colour that layer is CREATED
+                                    ; with -- 7 is AutoCAD's own
+                                    ; black-on-white/white-on-black
+                                    ; swap.  A number and never 'auto: a
+                                    ; layer record outlives the command
+                                    ; and colours everything ByLayer on
+                                    ; it for whoever opens the drawing
+                                    ; next.  The stamp itself is ByLayer
+(setq pms:*style* "Attributes")     ; text style the stamp is written
+                                    ; in.  A drawing without it gets a
+                                    ; plain variable-height style of
+                                    ; that name made, and is told so
+(setq pms:*text-hgt* 6.0)           ; MTEXT height of a stamp
+(setq pms:*text-width* 0.0)         ; its defined (wrap) width; 0 is no
+                                    ; wrap at all, so a distance can
+                                    ; never break across two lines
+(setq pms:*line-space* 1.0)         ; line space factor, at the "at
+                                    ; least" spacing style
+
+;;; ----------------------------------------------------------------------
+;;;  Library copies
+;;;  Copied from CALOFIN-LIB.lsp under this file's own prefix, so the
+;;;  standalone file loads alone -- see STANDARDS.md section 4.  The
+;;;  mirror swaps them back, so each must be the library's text.
+;;; ----------------------------------------------------------------------
+
+;;; ----------------------------------------------------------------------
+;;;  The stamp
+;;;  DIMSTAMP's MTEXT, written from a number rather than from typed
+;;;  text: the same layer, style, height, attachment and turn.
+;;; ----------------------------------------------------------------------
+
+;; The text style the stamps are written in.  A drawing that already
+;; has it keeps its own font and settings, untouched; one that does not
+;; gets a plain variable-height style of that name, and is told -- an
+;; entmake naming a style the drawing has not got is refused outright,
+;; so the alternative is a stamp that silently draws nothing.
+(defun pms:ensure-style (name)
+  (if (not (tblsearch "STYLE" name))
+    (progn
+      (entmakex (list '(0 . "STYLE") '(100 . "AcDbSymbolTableRecord")
+                      '(100 . "AcDbTextStyleTableRecord")
+                      (cons 2 name) '(70 . 0)
+                      '(40 . 0.0)            ; variable height: the
+                                             ; entity's own governs
+                      '(41 . 1.0) '(50 . 0.0) '(71 . 0) '(42 . 2.5)
+                      '(3 . "txt") '(4 . "")))
+      (princ (strcat "\nPERPMARKSTAMP: text style " name
+                     " was not in this drawing - a plain one was made"
+                     " so the stamps have a style to carry."))))
+  name)
+
+;; How far the current UCS is turned from the world X axis, so text
+;; reads along the UCS the drafter is drawing in.  Taken off the UCS X
+;; axis moved into the world -- not off UCSXDIR run back into the UCS,
+;; which is (1 0 0) there however far the UCS is turned, so it would
+;; always answer zero.  0 in the world UCS.
+(defun pms:ucsang ( / v)
+  (setq v (trans '(1.0 0.0 0.0) 1 0 T))
+  (atan (cadr v) (car v)))
+
+;; One MTEXT reading STR at the WORLD point PT, written the way the
+;; shop's dimension text is: the stamp style, unwrapped, upright in the
+;; UCS, attached top left at PT, ByLayer.  PT is WCS because both
+;; places a stamp can go arrive that way -- the mark's far end from
+;; PERPMARK's own geometry, a click through trans -- and entmake reads
+;; group 10 as WORLD.  Returns the ename.
+(defun pms:mtext (pt str)
+  (entmakex
+    (list '(0 . "MTEXT") '(100 . "AcDbEntity") (cons 8 pms:*layer*)
+          '(100 . "AcDbMText")
+          (cons 10 (list (car pt) (cadr pt) 0.0))
+          (cons 40 pms:*text-hgt*)
+          (cons 41 pms:*text-width*)    ; 0 = no wrap
+          '(71 . 1)                     ; attachment: top left
+          '(72 . 5)                     ; direction: by style
+          (cons 1 str)
+          (cons 7 pms:*style*)
+          (cons 50 (pms:ucsang))        ; upright in the UCS
+          '(73 . 1)                     ; line spacing: at least
+          (cons 44 pms:*line-space*))))
+
+;; The two spellings of DIST inches in the HASFEET family: PLAIN is
+;; what the prompt says (44 1/2"), DRAWN is what reaches the MTEXT,
+;; the fraction stacked at the size of the text around it.  Nothing
+;; but the drawn spelling is ever stamped, and nothing but the plain
+;; one is ever printed.
+(defun pms:plain (dist hasfeet)
+  (cal:spell-len (cal:len-eighths dist) hasfeet nil))
+
+(defun pms:drawn (dist hasfeet)
+  (cal:spell-len (cal:len-eighths dist) hasfeet T))
+
+;; Stamp DIST at the WORLD point PT -- the drawing content this whole
+;; file exists for.  The layer and the style are made good first, so a
+;; stamp can never be refused for want of either.  Returns the ename.
+(defun pms:stamp (pt dist hasfeet)
+  (cal:ensure-layer pms:*layer* pms:*layer-color*)
+  (pms:ensure-style pms:*style*)
+  (pms:mtext pt (pms:drawn dist hasfeet)))
+
+;;; ----------------------------------------------------------------------
+;;;  The hook
+;;; ----------------------------------------------------------------------
+
+;; What PERPMARK calls after every mark, through pm:run-hooked: DIST in
+;; inches, OFFS the far end of the mark as a WCS (x y), NAME the point
+;; as the prompts spell it, HASFEET T when the distance was typed in
+;; feet.  One question, and every way of answering it: Enter stamps at
+;; OFFS, a click stamps there, Skip stamps nothing, Back hands CAL-BACK
+;; back and PERPMARK takes the mark away.  Returns what it drew as a
+;; list -- one MTEXT -- or nil, or CAL-BACK; PERPMARK erases the list
+;; with the mark on Back and on a re-mark.
+;;
+;; The sentinel is PERPMARK's on purpose: the value is handed to
+;; PERPMARK, so it has to be PERPMARK's word for Back, and it travels
+;; to the library's with the twin exactly as PERPMARK's own does.
+(defun pms:after-mark (dist offs name hasfeet / txt pk out)
+  (setq txt (pms:plain dist hasfeet) out nil)
+  (initget "Skip Back Undo")
+  (setq pk (getpoint (strcat "\nClick where to stamp " txt " for " name
+                             " [Skip/Back] <at the mark's end>: ")))
+  (if lzd:ask (lzd:ask (getvar "LASTPROMPT") pk) pk)
+  (cond
+    ((null pk)
+     (setq out (list (pms:stamp offs dist hasfeet)))
+     (princ (strcat "\n  " txt " stamped at the end of the mark.")))
+    ((and (= (type pk) 'STR) (member pk '("Back" "Undo")))
+     (setq out 'CAL-BACK))
+    ((= (type pk) 'STR)                     ; Skip
+     (princ (strcat "\n  " name " not stamped.")))
+    (t
+     (setq out (list (pms:stamp (trans pk 1 0) dist hasfeet)))
+     (princ (strcat "\n  " txt " stamped."))))
+  out)
+
+;;; ----------------------------------------------------------------------
+;;;  The command
+;;; ----------------------------------------------------------------------
+
+(defun c:PERPMARKSTAMP (/ *error*)
+  ;; Nothing of this command's own to put back: the settings, the
+  ;; ruler and the undo group are PERPMARK's, and an Esc inside the run
+  ;; -- the stamp prompt included -- reaches PERPMARK's handler, which
+  ;; puts them back and reports under this command, whose LAZDIAG run
+  ;; PERPMARK's joined.  This handler is for a failure before or after
+  ;; the hand-over.
+  (defun *error* (msg)
+    (if (and msg (not (wcmatch (strcase msg)
+                               "*BREAK*,*CANCEL*,*QUIT*,*EXIT*")))
+      (princ (strcat "\nPERPMARKSTAMP error: " msg)))
+    (if lzd:report (lzd:report "PERPMARKSTAMP" *perpmarkstamp-version* msg))
+    (princ))
+
+  (if lzd:begin (lzd:begin "PERPMARKSTAMP" *perpmarkstamp-version*))
+  (cond
+    ;; pm:run-hooked arrived with PERPMARK v1.13: an older PERPMARK is
+    ;; loaded but cannot take the hook, and is told apart from none
+    ((not pm:run-hooked)
+     (princ (strcat "\nPERPMARKSTAMP: PERPMARK v1.13 or later is not"
+                    " loaded in this drawing - APPLOAD PERPMARK.lsp (or"
+                    " the whole LAZPASS.lsp build, which has both) and"
+                    " run PERPMARKSTAMP again.")))
+    (t
+     (princ (strcat "\nPERPMARKSTAMP " *perpmarkstamp-version*
+                    " - PERPMARK's round, with the distance stamped after"
+                    " every mark: Enter puts it at the mark's end, a click"
+                    " puts it there, Skip leaves it off."))
+     (pm:run-hooked 'pms:after-mark)))
+  (if lzd:end (lzd:end "PERPMARKSTAMP"))
+  (princ))
+
+(defun c:PERPMARKSTAMPVER ()
+  (princ (strcat "\nPERPMARKSTAMP " *perpmarkstamp-version*))
+  (princ))
+
+;; -------------------- self tests ---------------------------------------
+;; What LAZDIAG runs on the drafter's machine after this tool fails, and
+;; writes into the report: the tool's own helpers on inputs whose answers
+;; are KNOWN, so the report says whether the arithmetic was sound where
+;; it ran.  (label expression expected) passes when the value is equal
+;; to expected (to 1e-6); (label expression) passes when it is not nil,
+;; and the value is written down either way.  Nothing here may prompt,
+;; draw or (command): it is evaluated from inside *error*.
+;; tests/test_selftests.py runs every entry in the VM at both tiers.
+(defun pms:selftests ()
+  (list
+    (list "len-eighths rounds 44.5 inches to 356 eighths"
+          '(cal:len-eighths 44.5)  356)
+    (list "plain spelling of 44.5 typed in inches is 44 1/2 with the inch mark"
+          '(pms:plain 44.5 nil)  "44 1/2\"")
+    (list "plain spelling of 44.5 typed in feet is 3'-8 1/2"
+          '(pms:plain 44.5 T)  "3'-8 1/2\"")
+    (list "drawn spelling stacks the fraction at the text's own height, centred"
+          '(pms:drawn 44.5 nil)  "\\A1;44{\\H1.0000x;\\S1/2;}\"")
+    (list "a whole number of inches is drawn with no stack code at all"
+          '(pms:drawn 36.0 T)  "3'-0\"")))
+
+(foreach c '("PERPMARKSTAMP")
+  (setq *calofin-selftests*
+        (cons (cons c 'pms:selftests) *calofin-selftests*)))
+
+;; Quiet inside the whole build: LAZPASS.lsp and CALOFIN-LOADER.lsp set
+;; the flag while they load their members.  APPLOADed alone the flag
+;; is nil and this prints, which is the one time somebody wants to be
+;; told.
+(if (not *calofin-quiet*)
+  (princ (strcat "\nPERPMARKSTAMP " *perpmarkstamp-version*
+                 " loaded.  Type PERPMARKSTAMP to run (needs PERPMARK"
+                 " v1.13 or later loaded too).")))
 (princ)
 
 
@@ -133537,7 +133924,7 @@
 
 (vl-load-com)
 
-(setq *lazpanel-version* "v3.66")
+(setq *lazpanel-version* "v3.67")
 
 ;;; -------------------- tunables ----------------------------------------
 ;;;  Every knob in one place.  Each is a plain literal a person changes
@@ -133818,6 +134205,7 @@
     ("OSR"              "Restore my object snaps")
     ("PADDLE"           "Paddle pads")
     ("PERPMARK"         "Measured wall offsets")
+    ("PERPMARKSTAMP"    "Wall offsets, stamped")
     ("PERPPTS"          "Perpendicular points")
     ("POINTRENAMER"     "Renumber points in order")
     ("POOL"             "Pool layout")
@@ -133940,6 +134328,7 @@
     ("OSR" "Puts your object snaps back to the preset you chose in Options (LAZSET) - one word, no questions")
     ("PADDLE" "Paddle perimeter pads")
     ("PERPMARK" "Name a survey point, type what it measured: circle, perpendicular, dimension")
+    ("PERPMARKSTAMP" "PERPMARK with the distance stamped beside every mark as it is drawn")
     ("PERPPTS" "Perpendicular offset points along a line or curve")
     ("POINTRENAMER" "Hands the survey point numbers back out in perimeter order")
     ("POOL" "Full pool layout tool")
@@ -134060,6 +134449,7 @@
     ("OSR" "Puts your running object snaps back to the preset you chose - one word, no questions.\nChoose the preset once in Options (LAZSET): the Object snaps box ticks the same modes as AutoCAD's Drafting Settings, plus Object Snap On, and Use current takes whatever the drawing has ticked now. CALSET - Osnaps does the same at the command line.\nWith no preset saved, OSR puts back Endpoint, Midpoint, Center, Node, Quadrant, Intersection and Perpendicular, Object Snap on.")
     ("PADDLE" "Paddle perimeter pads.\nWhat it asks, in order:\n 1. Select objects\n 2. Close the gap the arrow points at with a zero fillet?")
     ("PERPMARK" "Name a survey point, type what it measured: circle, perpendicular, dimension.\nWhat it asks, in order:\n 1. Select the pool perimeter\n 2. Click a spot inside the pool\n 3. Pick a survey point, or type its number\n 4. Draw a polyline through the marks?\n 5. The point the run starts at, or type its number\n 6. The point the run ends at, or type its number\n 7. Click a spot the run passes through")
+    ("PERPMARKSTAMP" "PERPMARK with the distance stamped beside every mark as it is drawn.\nEvery question is PERPMARK's; after each mark one more asks where to stamp the distance - Enter puts it at the mark's end, a click puts it there, Skip leaves it off, Back takes the mark away.\nWhat it asks, in order:\n 1. Select the pool perimeter\n 2. Click a spot inside the pool (an open wall only)\n 3. Pick a survey point, or type its number\n 4. Distance from the perimeter at Pt.\n 5. Click where to stamp the distance for Pt.\n 6. Draw a polyline through the marks?\n 7. The point the run starts at, or type its number\n 8. The point the run ends at, or type its number\n 9. Dimension style - STANDARD INCHES or SIDE STANDARD?")
     ("PERPPTS" "Perpendicular offset points along a line or curve.\nWhat it asks, in order:\n 1. Select a line or polyline\n 2. Click to pick direction / offset side\n 3. Overall width\n 4. Select a boundary for the offsets\n 5. Do the offsets stop at the boundary, or run out to meet it?\n 6. Round - how many values (points) are required?\n 7. points means dimensions. Continue?\n 8. Length for point of , boundary at\n 9. Round - how should the points be joined?\n 10. Which segments are arcs (1 to , e.g. 1 3-5)? (B = back)\n 11. Overall width of the new polyline\n 12. Repeat on the new polyline?\n 13. Dimension style - STANDARD INCHES or SIDE STANDARD?")
     ("POINTRENAMER" "Hands the survey point numbers back out in perimeter order.\nWhat it asks, in order:\n 1. Select objects\n 2. Select the perimeter (Enter = the highlighted closed polyline on )\n 3. Pick the start point on the perimeter\n 4. Number the points which way around?\n 5. How far off the perimeter still counts as on it?\n 6. Start the numbering at")
     ("POOL" "Full pool layout tool.\nWhat it asks, in order:\n 1. Is the pool in-square or out-of-square\n 2. Pool shape\n 3. Insertion base point\n 4. Anything to record about the corners (radius / cut / not given)?\n 5. the outer corners\n 6. the inner corner E\n 7. Add pool bottom (hopper) detail?\n 8. Mirror the pool (flips the wing; deep end stays left)\n 9. Mark the dimension(s) that could not be held at their original value as \"Given\"\n 10. Select a Given dimension to switch ft-in/in (Enter when done)\n 11. the body corners A, B, C and D\n 12. the end-tip corners LT, LB, RT and RB\n 13. Bottom type\n 14. Hopper type (SIX = six-sided)\n 15. SIX-sided corners measured by\n 16. C - wall height (shallow depth)\n 17. D - deep end depth\n 18. C2 - depth where the shallow floor meets the break\n 19. ...and more, depending on what you pick along the way")
@@ -134190,6 +134580,7 @@
     ("OSR" "osnap object snap osmode restore reset preset endpoint midpoint running f3")
     ("PADDLE" "concave perimeter features pads blocks insert find")
     ("PERPMARK" "survey points wall offsets bench ledge gutter dimension")
+    ("PERPMARKSTAMP" "survey points wall offsets bench ledge gutter stamp text mtext distance dimstamp")
     ("PERPPTS" "perpendicular offset points line segments arc resize boundary limit meet")
     ("POINTRENAMER" "renumber sequence perimeter clockwise order callout survey number")
     ("POOL" "field measurements rectangle oval grecian lazy plan shape")
@@ -134282,6 +134673,7 @@
       "PERPPTS"
       "CPERPPTS"
       "PERPMARK"
+      "PERPMARKSTAMP"
       )
      ("Converters"
       ("Convert"
@@ -134490,6 +134882,7 @@
       "PERPPTS"
       "CPERPPTS"
       "PERPMARK"
+      "PERPMARKSTAMP"
       "DRONE"
       "TYDRN"
       "TYLERDRONESUITE"
@@ -139126,6 +139519,13 @@
      ("pm:*ruler-tick-frac*" "0.6" "the longest tick, same measure a fraction of the row spacing")
      ("pm:*ruler-ring-frac*" "0.26" "the ring round the current row, as a fraction of the row spacing a fraction of the row spacing")
      ("pm:*ruler-reach*" "6.0" "how far inboard of the spine, in row spacings, a click still counts as picking a row rather than as the fir..."))
+    ("PERPMARKSTAMP" "lisp/perpmarkstamp/PERPMARKSTAMP.lsp"
+     ("pms:*layer*" "\"TEXT\"" "layer the stamped MTEXT lands on. Created when the drawing lacks it; thawed, unlocked and switched on when...")
+     ("pms:*layer-color*" "7" "ACI colour that layer is CREATED with -- 7 is AutoCAD's own black-on-white/white-on-black swap. A number an...")
+     ("pms:*style*" "\"Attributes\"" "text style the stamp is written in. A drawing without it gets a plain variable-height style of that name ma...")
+     ("pms:*text-hgt*" "6.0" "MTEXT height of a stamp in. A drawing without it gets a plain variable-height style of that name made, and...")
+     ("pms:*text-width*" "0.0" "its defined (wrap) width; 0 is no wrap at all, so a distance can never break across two lines in. A drawing...")
+     ("pms:*line-space*" "1.0" "line space factor, at the \"at least\" spacing style wrap at all, so a distance can never break across two lines"))
     ("POINTRENAMER" "lisp/pointrenamer/POINTRENAMER.lsp"
      ("ptr:*pt-layer*" "\"POINTS\"" "layer whose blocks count as points ABPCHECK's definition of a survey point, unchanged, so the two tools nev...")
      ("ptr:*pt-block*" "\"ab_pt\"" "block name that counts wherever it sits ABPCHECK's definition of a survey point, unchanged, so the two tool...")
@@ -139773,9 +140173,9 @@
     ("lay-water" ("spa:*lay-water*" "spachk:*lay-water*"))
     ("layer" ("abf:*layer*" "cdo:*layer*" "cdc:*layer*"))
     ("layer" ("*mohamaddle-layer*" "*paddle-layer*" "upad:*layer*"))
-    ("layer" ("ds:*layer*" "dn:*layer*"))
-    ("layer-color" ("ad:*layer-color*" "cdo:*layer-color*" "cdc:*layer-color*" "ds:*layer-color*" "*mohamaddle-layer-color*" "*paddle-layer-color*"))
-    ("line-space" ("ds:*line-space*" "dn:*line-space*"))
+    ("layer" ("ds:*layer*" "dn:*layer*" "pms:*layer*"))
+    ("layer-color" ("ad:*layer-color*" "cdo:*layer-color*" "cdc:*layer-color*" "ds:*layer-color*" "*mohamaddle-layer-color*" "*paddle-layer-color*" "pms:*layer-color*"))
+    ("line-space" ("ds:*line-space*" "dn:*line-space*" "pms:*line-space*"))
     ("log-denom" ("abcdef:*log-denom*" "altabcdef:*log-denom*"))
     ("ltscale" ("hn:*ltscale*" "sf:*ltscale*"))
     ("ltype" ("hn:*ltype*" "sf:*ltype*"))
@@ -139871,7 +140271,7 @@
     ("split-default" ("cperp:*split-default*" "perp:*split-default*"))
     ("step" ("hn:*step*" "sf:*step*"))
     ("straight-r" ("*PF-STRAIGHT-R*" "*ABL-STRAIGHT-R*" "*CAB-STRAIGHT-R*" "*LH-STRAIGHT-R*"))
-    ("style" ("ds:*style*" "dn:*style*"))
+    ("style" ("ds:*style*" "dn:*style*" "pms:*style*"))
     ("style" ("abf:*style*" "cdo:*style*" "cdc:*style*"))
     ("style-order" ("*cchk-style-order*" "*dchk-style-order*" "*lfc-style-order*"))
     ("sugg-color" ("*cchk-sugg-color*" "*dchk-sugg-color*" "*lfc-sugg-color*"))
@@ -139883,8 +140283,9 @@
     ("tang-tol" ("*PF-TANG-TOL*" "*ABL-TANG-TOL*" "*CAB-TANG-TOL*" "fit:*tang-tol*" "*LH-TANG-TOL*"))
     ("taper-tag" ("spachk:*taper-tag*" "scv:*taper-tag*"))
     ("text-div" ("abcdef:*text-div*" "altabcdef:*text-div*"))
-    ("text-hgt" ("bp:*text-hgt*" "ds:*text-hgt*"))
+    ("text-hgt" ("bp:*text-hgt*" "ds:*text-hgt*" "pms:*text-hgt*"))
     ("text-min" ("abcdef:*text-min*" "altabcdef:*text-min*"))
+    ("text-width" ("ds:*text-width*" "pms:*text-width*"))
     ("th-div" ("spa:*th-div*" "scv:*th-div*"))
     ("th-min" ("spa:*th-min*" "scv:*th-min*"))
     ("thermotaper" ("spa:*thermotaper*" "scv:*thermotaper*"))
@@ -141118,16 +141519,17 @@
   "PADDLE" "TUTORIALPADDLE" "PADDLEVER" "MOHAMADDLE" "MOHAMADDLEVER" "UPADOVERVER"
   "UPADOVER" "LINGUTTER" "LINGUTTERSCAN" "LINGUTTERVER" "PERPPTSVER" "PERPPTS"
   "CPERPPTSVER" "CPERPPTS" "TUTORIALPERPPTS" "TUTORIALCPERPPTS" "PERPMARKVER" "PERPMARK"
-  "SMARTFILLET" "SMARTFILLETVER" "HONEFILLET" "HONEFILLETVER" "SPACHECKVER" "SPACHECKSCAN"
-  "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK" "SPACOVCREATE" "SPACOVCREATEVER"
-  "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER" "DRONE" "DRONEVER"
-  "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "SOCONV" "SORECONV" "SOCONVVER"
-  "VSCONV" "VSRECONV" "VSCONVVER" "G2MCONV" "G2MRECONV" "G2MCONVVER"
-  "WCALST" "WCALSTVER" "XFTCONV" "XFTRECONV" "XFTCONV-SETUP" "XFTCONVVER"
-  "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER" "LAZSPA" "LAZSPAVER"
-  "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER" "LAZFORMVER" "LAZPANEL"
-  "LAZPIN" "LAZHIDE" "LAZBUTTON" "LAZICON" "CALHELP" "CALSET"
-  "LAZSET" "LAZNAME" "LAZBACKUP" "LAZTUNE" "LAZPANELVER"
+  "PERPMARKSTAMP" "PERPMARKSTAMPVER" "SMARTFILLET" "SMARTFILLETVER" "HONEFILLET" "HONEFILLETVER"
+  "SPACHECKVER" "SPACHECKSCAN" "LITESPACHECKSCAN" "SPACHECK" "SPACHECKRESCUE" "TUTORIALSPACHECK"
+  "SPACOVCREATE" "SPACOVCREATEVER" "STOCKLIST" "STOCKCOVER-CFG" "STOCKCOVER" "STOCKCOVERVER"
+  "DRONE" "DRONEVER" "TYDRN" "TYLERDRONESUITE" "TYDRNVER" "SOCONV"
+  "SORECONV" "SOCONVVER" "VSCONV" "VSRECONV" "VSCONVVER" "G2MCONV"
+  "G2MRECONV" "G2MCONVVER" "WCALST" "WCALSTVER" "XFTCONV" "XFTRECONV"
+  "XFTCONV-SETUP" "XFTCONVVER" "XYPLOT" "XYPLOTVER" "CONSTELLATION" "CONSTELLATIONVER"
+  "LAZSPA" "LAZSPAVER" "LAZASCII" "LAZTXT" "LAZFORM" "LAZFORMCOVER"
+  "LAZFORMVER" "LAZPANEL" "LAZPIN" "LAZHIDE" "LAZBUTTON" "LAZICON"
+  "CALHELP" "CALSET" "LAZSET" "LAZNAME" "LAZBACKUP" "LAZTUNE"
+  "LAZPANELVER"
 ))
 
 (setq lazpass:*missing* nil)

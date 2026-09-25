@@ -200,6 +200,29 @@ and it keeps its dimension, because the measurement was still taken. A
 partial run is a perfectly ordinary thing to want; a measurement going
 quietly missing is not.
 
+### A stamp after every mark -- the hook
+
+`PERPMARKSTAMP` (`lisp/perpmarkstamp/`) is this command with one more
+question a mark: once the circle and the line are drawn it asks where
+to stamp the distance, the way `DIMSTAMP` stamps one, and Enter puts
+the text at the far end of the mark. It does not copy this file. It
+hands this command a **hook** -- `pm:run-hooked` runs the round with a
+function called after every mark, given the distance in inches, the
+mark's far end as a WCS `(x y)`, the point's name as the prompts spell
+it and `T` when the distance was typed in feet -- and whatever the hook
+leaves in the drawing rides on the mark as its `extras`: `Back` and a
+re-mark take it away with the circle and the line, and the join leaves
+it standing, since it is drawing text and not a working mark. A hook
+that hands back `PM-BACK` takes the mark away at once, as `Back` at the
+next prompt would.
+
+The hook is read into the run and **cleared as the run's first act**,
+before the handler exists and before anything can throw, so a run that
+dies with it set cannot leave the next plain `PERPMARK` asking a
+question it never had. The ruler is taken down before the hook asks,
+so a click of the hook's own cannot land on a row. A plain `PERPMARK`
+run never sets it and never sees it.
+
 ## Install & run
 
 `APPLOAD` `PERPMARK.lsp` (or the whole build, `shared/LAZPASS.lsp`),

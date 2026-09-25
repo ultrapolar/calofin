@@ -375,6 +375,24 @@ TOOLS = {
         # caller tests for it, so the sentinel moves with the helper
         'symbols': {'PM-BACK': 'CAL-BACK'},
     },
+    # PERPMARK's round with a stamp after every mark.  It installs a
+    # hook through pm:run-hooked and copies nothing of PERPMARK; what it
+    # carries of its own is the stamp -- DIMSTAMP's MTEXT written from a
+    # number -- so its library layer is the layer maker and the two
+    # length spellers.  The Back word it hands PERPMARK is PERPMARK's
+    # own sentinel, and moves to the library's with the twin as
+    # PERPMARK's does, or the grouped build's Back at the stamp prompt
+    # would take nothing away.
+    'PERPMARKSTAMP': {
+        'src': 'lisp/perpmarkstamp/PERPMARKSTAMP.lsp',
+        'swap': {
+            'pms:ensure-layer': 'cal:ensure-layer',
+            'pms:len-eighths': 'cal:len-eighths',
+            'pms:spell-len': 'cal:spell-len',
+        },
+        'drop_globals': [],
+        'symbols': {'PM-BACK': 'CAL-BACK'},
+    },
     'XYPLOT': {
         'src': 'lisp/xyplot/XYPLOT.lsp',
         'swap': {

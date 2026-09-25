@@ -170,6 +170,7 @@ namespace Calofin.Ribbon
                     new Entry("CPERPPTS", "Curved perp points", "PERPPTS for a curved run"),
                 }, true, true),
                 new Item(new Entry("PERPMARK", "Measured wall offsets", "Name a survey point, type what it measured: circle, perpendicular, dimension"), new Entry[0], false, false),
+                new Item(new Entry("PERPMARKSTAMP", "Wall offsets, stamped", "PERPMARK with the distance stamped beside every mark as it is drawn"), new Entry[0], false, false),
                 new Item(new Entry("DRONE", "Drone cleanup", "Drone cleanup routine"), new Entry[0], false, false),
                 new Item(new Entry("TYDRN", "Text + point tidy-up", "Text, pool-point and anchor cleanup in one pass"), new Entry[0], false, false),
                 new Item(new Entry("TYLERDRONESUITE", "Drone suite: tidy, pad, CDIM", "The whole drone trace in one - TYDRN, then PADDLE, then CDIM"), new Entry[0], false, false),
