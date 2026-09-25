@@ -969,7 +969,11 @@ def test_lisp_file_is_well_formed():
     depth = paren_depth(src)
     assert depth == 0, "lhd.lsp has %d unclosed paren(s)" % depth
     defined = set(re.findall(r"\(defun\s+((?:lh:|c:)[^\s(]+)", src))
-    called = set(re.findall(r"\((lh:[a-z0-9-]+)", src))
+    # a call, or a quoted name handed to something that calls it -- the
+    # self-test table's 'lh:selftests goes into *calofin-selftests* for
+    # LAZDIAG to run after a failure (check_lazdiag), and is a call site
+    # by another name
+    called = set(re.findall(r"[('](lh:[a-z0-9-]+)", src))
     missing = called - defined
     assert not missing, "lhd.lsp calls undefined: %s" % sorted(missing)
     dead = {d for d in defined - called if not d.startswith("c:")}

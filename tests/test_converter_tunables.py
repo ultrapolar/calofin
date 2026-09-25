@@ -156,6 +156,10 @@ def why(src, start):
 
 
 MARK = 'NOT A KNOB:'
+#: the self-test registry every file in the tree writes at load, under
+#: check_lazdiag's own (foreach c ...) form: LAZDIAG reads it after a
+#: failure to find the tool's table.  Not this tool's, not a setting.
+REGISTRY = '*calofin-selftests*'
 
 
 def not_a_knob(src, at):
@@ -233,7 +237,8 @@ for tool, path, banner, _readme in FILES:
     if tool not in BLOCKS:
         continue
     _src, _block, rest = BLOCKS[tool]
-    outside = [(n, s) for n, s, _e in assignments(rest) if n != banner]
+    outside = [(n, s) for n, s, _e in assignments(rest)
+               if n not in (banner, REGISTRY)]
     stray = [n for n, s in outside if not not_a_knob(rest, s)]
     check("%s: nothing settable outside it" % tool, not stray,
           "%r -- hoist it into the block, or say NOT A KNOB: and why"
@@ -243,7 +248,7 @@ for tool, path, banner, _readme in FILES:
               len(not_a_knob(rest, at)) > 20, repr(not_a_knob(rest, at)[:60]))
     check("%s: the one unmarked global outside it is the version" % tool,
           banner in [n for n, _s, _e in assignments(rest)],
-          repr([n for n, _s, _e in assignments(rest)]))
+          repr([n for n, _s, _e in assignments(rest) if n != REGISTRY]))
 
 print("== 5. every knob is a row in the README's Tunables table ==")
 
